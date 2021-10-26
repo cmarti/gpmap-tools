@@ -978,7 +978,7 @@ class SeqDEFT(SequenceSpace):
         xlims, ylims = axes.get_xlim(), axes.get_ylim()
         x = xlims[0] + 0.05 * (xlims[1]- xlims[0])
         y = ylims[0] + 0.9 * (ylims[1]- ylims[0])
-        axes.annotate(s='a* = {:.1f}'.format(a_star), xy=(x, y))
+        axes.annotate('a* = {:.1f}'.format(a_star), xy=(x, y))
         axes.set_xlabel(r'$log_{10}$ (a)')
         axes.set_ylabel('Out of sample log(L)')
     
