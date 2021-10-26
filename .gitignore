@@ -6,6 +6,12 @@
 # Node artifact files
 node_modules/
 dist/
+build/
+cache/*
+
+# Project pydev files
+.pydevproject
+.project
 
 # Compiled Java class files
 *.class
