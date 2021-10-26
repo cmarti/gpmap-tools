@@ -19,8 +19,8 @@ def main():
             'console_scripts': [
                 'fit_SeqDEFT = bin.fit_seqdeft:main',
             ]},
-        install_requires=['numpy', 'pandas', 'scipy', 'pysam', 
-                          'seaborn', 'matplotlib', 'pystan==2.19',
+        install_requires=['numpy', 'cython', 'pandas', 'scipy', 'pysam', 
+                          'seaborn', 'matplotlib', 'pystan==2.19', 'tqdm',
                           'statsmodels'],
         platforms='ALL',
         keywords=['genotype-phenotyp maps', 'fitness landscape'],
