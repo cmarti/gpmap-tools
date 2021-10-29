@@ -20,17 +20,16 @@ class SeqDEFTTests(unittest.TestCase):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
         data = pd.read_csv(fpath, index_col=0)
         
-        seqdeft = SeqDEFT(4, 4, P=2)
+        seqdeft = SeqDEFT(4, P=2)
         seqdeft.fit(data['counts'], resolution=0.1, max_a_max=1e6, num_a=50)
         assert(np.allclose(seqdeft.Q_star.sum(), 1))
+    
+    def test_seq_deft_cv_plot(self):
+        fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
+        data = pd.read_csv(fpath, index_col=0)
         
-        seqdeft.fit(data['counts'], resolution=0.5, max_a_max=1e6, num_a=None)
-        assert(np.allclose(seqdeft.Q_star.sum(), 1))
-        
-        seqdeft.fit(data['counts'], resolution=0.1, max_a_max=1e6,
-                    a_values=np.geomspace(10, 1e4))
-        assert(np.allclose(seqdeft.Q_star.sum(), 1))
-        
+        seqdeft = SeqDEFT(4, P=2)
+        seqdeft.fit(data['counts'], resolution=0.1, max_a_max=1e6, num_a=50)
         seqdeft.plot_summary(fname='data/test_seqdeft')
     
     def test_seq_deft_bin(self):
@@ -54,5 +53,5 @@ class SeqDEFTTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_bin']
+    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_cv_plot']
     unittest.main()

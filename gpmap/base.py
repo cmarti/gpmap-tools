@@ -38,7 +38,9 @@ class SequenceSpace(object):
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
                                        index=self.genotype_labels)
         self.subgraph_identity = sp.identity(self.n_alleles)
-        self.complete_subgraph_A = csr_matrix(np.ones((self.n_alleles, self.n_alleles))) - self.subgraph_identity
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.complete_subgraph_A = csr_matrix(np.ones((self.n_alleles, self.n_alleles))) - self.subgraph_identity
         self.log = log
         
     def get_m_k(self, k):
@@ -80,7 +82,9 @@ class SequenceSpace(object):
     def get_A_csr(self):
         self.get_adjacency_matrix()
         if not hasattr(self, 'A_csr'):
-            self.A_csr = self.A.tocsr()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                self.A_csr = self.A.tocsr()
         return(self.A_csr)
     
     def get_neighborhood_idxs(self, seq, max_distance=1):
@@ -120,15 +124,17 @@ class SequenceSpace(object):
         return(m)
 
     def _calc_adjacency(self, m=None, l=0):
-        if l == (self.length-1):
-            return(m)
-        
-        if m is None:
-            i = sp.identity(self.n_alleles)
-            m = csr_matrix(np.ones((self.n_alleles, self.n_alleles))) - i
-
-        i = sp.identity(m.shape[0])
-        m = self.istack_matrices(m, i)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if l == (self.length-1):
+                return(m)
+            
+            if m is None:
+                i = sp.identity(self.n_alleles)
+                m = csr_matrix(np.ones((self.n_alleles, self.n_alleles))) - i
+    
+            i = sp.identity(m.shape[0])
+            m = self.istack_matrices(m, i)
         return(self._calc_adjacency(m, l+1))
     
     def calc_adjacency(self):
@@ -163,7 +169,7 @@ class SequenceSpace(object):
             if i % k == 0:
                 msg = '\t{:.0f}% completed ({})'
                 self.report(msg.format((i)/self.n_genotypes*100, i))
-            
+        
         H = csr_matrix((values, (row_ids, col_ids)),
                         shape=(edge_i, self.n_genotypes))
         return(H)

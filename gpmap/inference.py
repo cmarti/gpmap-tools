@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import random
+import warnings
 from itertools import product, combinations
 from os.path import exists, join
 from tqdm import tqdm
@@ -23,6 +24,8 @@ from numpy.linalg.linalg import cholesky
 from gpmap.plot_utils import init_fig, savefig, arrange_plot
 from gpmap.settings import CACHE_DIR, U_MAX, PHI_LB, PHI_UB
 from gpmap.base import SequenceSpace, get_sparse_diag_matrix
+from scipy.special._logsumexp import logsumexp
+
 
 
 VC_STAN = '''
@@ -471,203 +474,139 @@ class SeqDEFT(SequenceSpace):
         self.data_dict = {'N': self.N,
                           'R': self.R}
     
-    def init_df_map(self):
-        self.df_map = pd.DataFrame(columns=['a', 'phi'])
+    def get_phi_0(self, options, scale_by):
+        if not hasattr(self, 'phi_0'):
+            self.phi_0 = self._fit(0, options=options, scale_by=scale_by)
+        return(self.phi_0)
     
-    def append_df_map(self, a, phi):
-        self.df_map = self.df_map.append({'a': a, 'phi': phi}, ignore_index=True)
-        
-    def calc_a_max(self, max_a_max=1e12, resolution=0.1, fac_max=0.1, options=None, scale_by=1):
+    def get_phi_inf(self, options, scale_by, gtol=1e-3):
+        if not hasattr(self, 'phi_inf'):
+            self.phi_inf = self._fit(np.inf, options=options,
+                                     scale_by=scale_by, gtol=gtol)
+        return(self.phi_inf)
+    
+    def calc_a_max(self, max_a_max=1e12, resolution=0.1, fac_max=1,
+                   options=None, scale_by=1, gtol=1e-3):
         a_max = self.s * fac_max
+        phi_inf = self.get_phi_inf(options, scale_by)
+        phi_max = self._fit(a_max, phi_initial=phi_inf, options=options,
+                            scale_by=scale_by, gtol=gtol)
+        distance = D_geo(phi_max, phi_inf)
         
-        self.report('Computing a_max = %f ...' % a_max)
-        phi_max = self.estimate_MAP_solution(a_max, phi_initial=self.phi_inf, options=options, scale_by=scale_by)
-        
-        self.report('... D_geo(Q_max, Q_inf) = %f' % D_geo(phi_max, self.phi_inf))
-        while D_geo(phi_max, self.phi_inf) > resolution and a_max < max_a_max:
+        while distance > resolution and a_max < max_a_max:
             a_max *= 10
-        
-            self.report('Computing a_max = %f ...' % a_max)
-            phi_max = self.estimate_MAP_solution(a_max, phi_initial=self.phi_inf, options=options, scale_by=scale_by)
+            phi_max = self._fit(a_max, phi_initial=phi_inf, options=options,
+                                scale_by=scale_by, gtol=gtol)
+            distance = D_geo(phi_max, phi_inf)
             
-            self.report('... D_geo(Q_max, Q_inf) = %f' % D_geo(phi_max, self.phi_inf))
-        return(a_max, phi_max)
+        return(a_max)
     
-    def calc_a_min(self, resolution=0.1, fac_min=1e-6, options=None, scale_by=1):
+    def calc_a_min(self, resolution=0.1, fac_min=1e-6, options=None, scale_by=1,
+                   gtol=1e-3):
         a_min = self.s * fac_min
-        self.report('Computing a_min = %f ...' % a_min)
-        phi_min = self.estimate_MAP_solution(a_min, phi_initial=self.phi_inf, options=options, scale_by=scale_by)
-        self.report('... D_geo(Q_min, Q_0) = %f' % D_geo(phi_min, self.phi_0))
-        while D_geo(phi_min, self.phi_0) > resolution:
+        phi_0 = self.get_phi_0(options, scale_by)
+        phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
+        phi_min = self._fit(a_min, phi_initial=self.phi_inf, options=options,
+                            scale_by=scale_by, gtol=gtol)
+        distance = D_geo(phi_min, phi_0)
+        
+        while distance > resolution:
             a_min /= 10
-            self.report('Computing a_min = %f ...' % a_min)
-            phi_min = self.estimate_MAP_solution(a_min, phi_initial=self.phi_inf, options=options, scale_by=scale_by)
-            self.report('... D_geo(Q_min, Q_0) = %f' % D_geo(phi_min, self.phi_0))
-            
-        return(a_min, phi_min)
+            phi_min = self._fit(a_min, phi_initial=phi_inf, options=options,
+                                scale_by=scale_by, gtol=gtol)
+            distance = D_geo(phi_min, phi_0)
+        return(a_min)
 
-    def find_a_bounds(self, max_a_max=1e12, resolution=0.1, fac_max=0.1, fac_min=1e-6, options=None, scale_by=1):
-        # Compute a = inf end
-        self.report('Computing a = inf ...')
-        self.phi_inf = self.estimate_MAP_solution(np.inf, options=options,
-                                                  scale_by=scale_by)
-        self.append_df_map(np.inf, self.phi_inf)
-        
-        self.report('Computing a = 0 ...')
-        self.phi_0 = self.estimate_MAP_solution(0, options=options,
-                                                scale_by=scale_by)
-        self.append_df_map(a=0, phi=self.phi_0)
-    
-        self.a_max, phi_max = self.calc_a_max(max_a_max, resolution, fac_max,
-                                              options, scale_by)
-        self.append_df_map(self.a_max, phi_max)
-        
-        self.a_min, phi_min = self.calc_a_min(resolution, fac_min, options,
-                                              scale_by)
-        self.append_df_map(self.a_min, phi_min)
+    def find_a_bounds(self, max_a_max=1e12, resolution=0.1, fac_max=0.1,
+                      fac_min=1e-6, options=None, scale_by=1, gtol=1e-3):
+        a_max = self.calc_a_max(max_a_max, resolution, fac_max, options, scale_by, gtol=gtol)
+        a_min = self.calc_a_min(resolution, fac_min, options, scale_by, gtol=gtol)
+        return(a_min, a_max)
 
-    def automatic_trace_MAP_curve(self, resolution=0.1, options=None, scale_by=1):
-        # Gross-partition the MAP curve
-        self.report('Gross-partitioning the MAP curve ...')
-        aa = np.geomspace(self.a_min, self.a_max, 10)
-        for i in range(len(aa)-2, 0, -1):
-            a = aa[i]
-            self.report('Computing a = %f ...' % a)
-            phi_a = self.estimate_MAP_solution(a, phi_initial=self.phi_inf, options=options, scale_by=scale_by)
-            self.append_df_map(a, phi_a)
-
-        # Fine-partition the MAP curve to achieve desired resolution
-        self.report('Fine-partitioning the MAP curve ...')
-        flag = True
-        while flag:
-            self.df_map = self.df_map.sort_values(by='a')
-            aa, phis = self.df_map['a'].values, self.df_map['phi'].values
-            flag = False
-            
-            for i in range(len(self.df_map)-1):
-                a_i, a_j = aa[i], aa[i+1]
-                phi_i, phi_j = phis[i], phis[i+1]
-                
-                if D_geo(phi_i, phi_j) > resolution:
-                    a = np.geomspace(a_i, a_j, 3)[1]
-                    self.report('Computing a = %f ...' % a)
-                    phi_a = self.estimate_MAP_solution(a, phi_initial=self.phi_inf,
-                                                       options=options, scale_by=scale_by)
-                    self.append_df_map(a, phi_a)
-                    flag = True
-                    
-    def geom_trace_MAP_curve(self, num_a=20, options=None, scale_by=1,
-                             a_values=None):
-        self.report('Partitioning the MAP curve into %d points ...' % num_a)
-        if a_values is None:
-            if not hasattr(self, 'a_min') or not hasattr(self, 'a_max'):
-                msg = 'Ensure either a values are provided '
-                msg += 'or boundaries are calculated'
-                raise ValueError(msg)
-            a_values = np.geomspace(self.a_min, self.a_max, num_a)
-            
-        for i, a in enumerate(a_values):
-            self.report('Computing a_%d = %f ...' % (i, a))
-            phi_a = self.estimate_MAP_solution(a, phi_initial=self.phi_inf,
-                                               options=options, scale_by=scale_by)
-            self.append_df_map(a, phi_a)
-    
-    def trace_MAP_curve(self, resolution=0.1, num_a=20, fac_max=0.1,
-                        fac_min=1e-6, options=None, scale_by=1, max_a_max=1e8,
-                        a_values=None):
-        self.init_df_map()
-        if a_values is None:
-            self.find_a_bounds(max_a_max=max_a_max, resolution=resolution,
-                               fac_max=fac_max, fac_min=fac_min, options=options,
-                               scale_by=scale_by)
-        
-        if num_a is None:
-            self.automatic_trace_MAP_curve(resolution=resolution, options=options,
-                                           scale_by=scale_by)
-        else:
-            self.geom_trace_MAP_curve(num_a=num_a, options=options,
-                                      scale_by=scale_by, a_values=a_values)
-    
-        self.df_map.sort_values(by='a', inplace=True)
-        self.df_map.reset_index(drop=True, inplace=True)
-    
     def counts_to_data_dict(self, counts):
         n = counts.sum()
         return({'N': n, 'R': counts / n})
     
     def fit(self, counts=None, cv_fold=5, seed=None, resolution=0.1, max_a_max=1e12, 
-            num_a=20, options=None, scale_by=1, fac_max=0.1, fac_min=1e-6, 
-            a_values=None):
+            num_a=20, options=None, scale_by=1, fac_max=0.1, fac_min=1e-6, gtol=1e-3):
         if seed is not None:
             np.random.seed(seed)
             
         if counts is not None:
             self.load_data(counts)
-        self.trace_MAP_curve(resolution=resolution, max_a_max=max_a_max,
-                             num_a=num_a, options=options, scale_by=scale_by,
-                             fac_min=fac_min, fac_max=fac_max, a_values=a_values)
-        self.compute_log_Ls(cv_fold)
+            
+        a_min, a_max = self.find_a_bounds(max_a_max, resolution, fac_max, fac_min,
+                                          options, scale_by, gtol=gtol)
+        phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
         
-        aa = self.df_map['a'].values
-        phis = self.df_map['phi'].values
-        log_Ls = self.df_map['log_L'].values
+        ll = self.compute_log_Ls(a_max, a_min, num_a, cv_fold, options,
+                                 scale_by, gtol=gtol)
+        self.a_star = ll.iloc[np.argmax(ll['log_likelihood']), :]['a']
         
-        self.a_star = aa[log_Ls.argmax()]
-        self.phi_star = phis[log_Ls.argmax()]
-        self.Q_star = np.exp(-self.phi_star) / np.sum(np.exp(-self.phi_star))
+        phi = self._fit(self.a_star, phi_initial=phi_inf, options=options,
+                        scale_by=scale_by, gtol=gtol)
+        
+        self.log_Q_star = -phi - logsumexp(-phi)
+        self.Q_star = np.exp(self.log_Q_star)
         assert(np.allclose(self.Q_star.sum(), 1))
     
     def L_opt(self, phi, p=0):
         return self.L.dot(phi) - p * self.n_alleles * phi
     
-    def estimate_MAP_solution(self, a, phi_initial=None, data_dict=None,
-                              method='L-BFGS-B', options=None, scale_by=1):
+    def get_phi_initial(self, phi_initial=None):
+        if phi_initial is None:
+            Q_initial = np.ones(self.n_genotypes) / self.n_genotypes
+            phi_initial = -np.log(Q_initial)
+        return(phi_initial)
+
+    def get_data(self, data_dict=None):
         # Get N and R
         if data_dict is None:
             N, R = self.N, self.R
         else: 
             N, R = data_dict['N'], data_dict['R']
+        return(N, R)
     
-        # Do scaling
-        a /= scale_by
-        N /= scale_by
+    def _fit_a_inf(self, N, R, phi_initial, method, options):
+        b_initial = self.D_kernel_basis_orth_sparse.T.dot(phi_initial)
+        res = minimize(fun=self.S_inf, jac=self.grad_S_inf, args=(N, R),
+                       x0=b_initial, method=method, options=options)
+        if not res.success:
+            self.report(res.message)
+        b_a = res.x
+        phi = self.D_kernel_basis_orth_sparse.dot(b_a)
+        return(phi)
     
-        # Set initial guess of phi if it is not provided
-        if phi_initial is None:
-            Q_initial = np.ones(self.n_genotypes) / self.n_genotypes
-            phi_initial = -np.log(Q_initial)
+    def _fit_a(self, N, R, a, phi_initial, method, options):
+        res = minimize(fun=self.S, jac=self.grad_S, args=(a,N,R),
+                       x0=phi_initial, method=method, options=options)
+        if not res.success:
+            self.report(res.message)
+        return(res.x)
     
-        # Find the MAP estimate of phi
+    def _fit(self, a, phi_initial=None, data_dict=None,
+             method='L-BFGS-B', options=None, scale_by=1, gtol=1e-3):
+        N, R = self.get_data(data_dict=data_dict)
+        a, N = a / scale_by, N / scale_by
+        phi_initial = self.get_phi_initial(phi_initial=phi_initial)
+        
+        if options is None:
+            options = {}
+        options['gtol'] = gtol
+        options['ftol'] = 0
+        
         if a == 0:
-    
             with np.errstate(divide='ignore'):
-                phi_a = -np.log(R)
-    
+                phi = -np.log(R)
         elif 0 < a < np.inf:
-            res = minimize(fun=self.S, jac=self.grad_S, args=(a,N,R),
-                           x0=phi_initial, method=method, options=options)
-            if not res.success:
-                self.report(res.message)
-            phi_a = res.x
-    
+            phi = self._fit_a(N, R, a, phi_initial, method, options)
         elif a == np.inf:
-            b_initial = self.D_kernel_basis_orth_sparse.T.dot(phi_initial)
-            res = minimize(fun=self.S_inf, jac=self.grad_S_inf, args=(N,R),
-                           x0=b_initial, method=method, options=options)
-            if not res.success:
-                self.report(res.message)
-            b_a = res.x
-            phi_a = self.D_kernel_basis_orth_sparse.dot(b_a)
-    
+            phi = self._fit_a_inf(N, R, phi_initial, method, options)
         else:
             raise(ValueError('"a" not in the right range.'))
     
-        # Undo scaling
-        a *= scale_by
-        N *= scale_by
-    
-        # Return
-        return phi_a
+        # a, N = a * scale_by, N *scale_by
+        return phi
     
     def calc_Q(self, phi):
         return(np.exp(-phi) / np.sum(np.exp(-phi)))
@@ -922,27 +861,36 @@ class SeqDEFT(SequenceSpace):
         return(np.exp(-phi) / np.sum(np.exp(-phi)))
     
     def calculate_cv_fold_logL(self, a, train, validation, phi,
-                               options=None, scale_by=1):
+                               options=None, scale_by=1, gtol=1e-3):
         data_dict = self.counts_to_data_dict(train)
-        phi = self.estimate_MAP_solution(a, phi_initial=phi, data_dict=data_dict,
-                                         options=options, scale_by=scale_by)
+        phi = self._fit(a, phi_initial=phi, data_dict=data_dict,
+                                         options=options, scale_by=scale_by,
+                                         gtol=gtol)
         Q = self.phi_to_Q(phi)
         logL = self.calc_log_likelihood(a, validation, Q)
         return(logL)
     
-    def compute_log_Ls(self, cv_fold=5, options=None, scale_by=1):
-        self.report('Running {} fold cross validation:'.format(cv_fold))
-        log_Lss = np.zeros([cv_fold,len(self.df_map)])
-        
-        for k, (train, validation) in enumerate(self.split_cv(cv_fold)):
-            self.report('\t# {}'.format(k))
+    def get_cv_iter(self, cv_fold, a_values):
+        for k, (train, validation) in enumerate(self.split_cv(cv_fold)):        
+            for i, a in enumerate(a_values):
+                yield(k, i, a, train, validation)   
     
-            for i in range(len(self.df_map)):
-                a, phi_a = self.df_map['a'].values[i], self.df_map['phi'].values[i]
-                log_Lss[k,i] = self.calculate_cv_fold_logL(a, train, validation, phi_a,
-                                                           options=options, scale_by=scale_by)
-        log_Ls = log_Lss.mean(axis=0)
-        self.df_map['log_L'] = log_Ls
+    def compute_log_Ls(self, a_max, a_min, num_a, cv_fold=5,
+                       options=None, scale_by=1, gtol=1e-3):
+        self.report('Running {} fold cross validation:'.format(cv_fold))
+        a_values = np.geomspace(a_min, a_max, num_a)
+        phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
+    
+        log_Lss = np.zeros([cv_fold, num_a])
+        cv_data = list(self.get_cv_iter(cv_fold, a_values))
+        for k, i, a, train, validation in tqdm(cv_data):    
+            log_Lss[k,i] = self.calculate_cv_fold_logL(a, train, validation, phi_inf,
+                                                       options=options, scale_by=scale_by,
+                                                       gtol=gtol)
+        
+        log_Ls = pd.DataFrame({'a': a_values, 'log_likelihood': log_Lss.mean(axis=0)})
+        self.log_Ls = log_Ls
+        return(log_Ls)
     
     def expand_counts(self):
         obs = []
@@ -967,8 +915,8 @@ class SeqDEFT(SequenceSpace):
             yield(train, validation) 
     
     def plot_a_optimization(self, axes):
-        aa = self.df_map['a'].values[1:-1]
-        log_Ls = self.df_map['log_L'].values[1:-1]
+        aa = self.log_Ls['a'].values
+        log_Ls = self.log_Ls['log_likelihood'].values
         
         a_star = aa[log_Ls.argmax()]
         max_log_L = log_Ls.max()
@@ -983,7 +931,12 @@ class SeqDEFT(SequenceSpace):
         axes.set_ylabel('Out of sample log(L)')
     
     def plot_density_vs_frequency(self, axes):
-        axes.scatter(np.log10(self.R), np.log10(self.Q_star),
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data = pd.DataFrame({'logR': np.log10(self.R),
+                                 'logQ': np.log10(self.Q_star)}).dropna()
+                                 
+        axes.scatter(data['logR'], data['logQ'],
                      color='black', s=5, alpha=0.4, zorder=2)
         xlims, ylims = axes.get_xlim(), axes.get_ylim()
         lims = min(xlims[0], ylims[0]), max(xlims[1], ylims[1])
@@ -1008,9 +961,10 @@ class SeqDEFT(SequenceSpace):
 
 
 def D_geo(phi1, phi2):
-    Q1 = np.exp(-phi1) / np.sum(np.exp(-phi1))
-    Q2 = np.exp(-phi2) / np.sum(np.exp(-phi2))
-    x = min(np.sum(np.sqrt(Q1 * Q2)), 1)
+    logQ1 = -phi1 - logsumexp(-phi1)
+    logQ2 = -phi2 - logsumexp(-phi2)
+    s = np.exp(logsumexp(0.5 * (logQ1 + logQ2)))
+    x = min(s, 1)
     return 2 * np.arccos(x)
 
 
