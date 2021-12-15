@@ -23,15 +23,15 @@ from scipy.sparse._matrix_io import save_npz, load_npz
 from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
-from base import SequenceSpace, get_sparse_diag_matrix
-from plot_utils import init_fig, savefig, arrange_plot, init_single_fig
-from settings import CACHE_DIR, PLOTS_DIR, CMAP
+from gpmap.base import SequenceSpace, get_sparse_diag_matrix
+from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig
+from gpmap.settings import CACHE_DIR, CMAP, PLOTS_DIR
 import warnings
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 
 class Visualization(SequenceSpace):
-    def __init__(self, length, n_alleles, ns=1,
+    def __init__(self, length, n_alleles=None, ns=1,
                  log=None, cache_prefix=None, alphabet_type='dna', 
                  label=None):
         self.init(length, n_alleles, log=log, alphabet_type=alphabet_type)
@@ -690,7 +690,7 @@ class Visualization(SequenceSpace):
     
     def plot_grid_eq_f(self, fname=None, fmin=None, fmax=None,
                        ncol=4, nrow=3, show_edges=True, size=5, cmap=CMAP,
-                       label=None, lw=0, n_components=3):
+                       label=None, lw=0, n_components=4):
         fname = self.get_fname_plot(suffix='ns', fname=fname)
         
         if fmin is None:
@@ -917,7 +917,8 @@ class Visualization(SequenceSpace):
                                counter=0, ylabel=None, xlabel=None, zlabel=None,
                                show_edges=True, size=5, force=False,
                                cmap=CMAP, label=None, lw=0, nframes=90,
-                               lims=None, size_factor=2, is_3d=True, z=3):
+                               lims=None, size_factor=2, is_3d=True, z=3,
+                               colors=None):
         thetas = np.linspace(0, 2*np.pi, nframes)
         
         fpaths = []
@@ -936,7 +937,7 @@ class Visualization(SequenceSpace):
             fig, axes = init_single_fig(colsize=3.5*size_factor,
                                  rowsize=3.2*size_factor, is_3d=is_3d)
             self.plot(axes, x=1, y=2, z=z if is_3d else None,
-                      show_edges=show_edges,
+                      show_edges=show_edges, colors=colors,
                       size=size, cmap=cmap, label=label,
                       force_coords=True, lw=lw, coords=c)
             arrange_plot(axes, xlims=lims, ylims=lims, zlims=lims,
@@ -970,7 +971,8 @@ class Visualization(SequenceSpace):
     def plot_rotation_movie(self, fdir=None,
                             show_edges=True, size=5, cmap=CMAP,
                             label=None, lw=0,  nframes=120, fps=20, lims=None,
-                            size_factor=2, force=False, z=3):
+                            size_factor=2, force=False, z=3,
+                            colors=None):
         self.report('Preparing frames for rotation movie')
         prefix, dpath = self.get_movie_dir(fdir=fdir, suffix='rotation_movie360')
         coords = self.get_nodes_coord(axis=[1, 2, 3])
@@ -982,7 +984,8 @@ class Visualization(SequenceSpace):
                                                      size_factor=size_factor,
                                                      force=force, z=z,
                                                      ylabel='Diffusion axis 2/3',
-                                                     zlabel='Diffusion axis 2/3')
+                                                     zlabel='Diffusion axis 2/3',
+                                                     colors=colors)
         self.save_movie(fpaths, prefix, fps, tlast=1, boomerang=False)
         
     

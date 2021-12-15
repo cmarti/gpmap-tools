@@ -7,6 +7,11 @@ BASE_DIR = abspath(join(dirname(__file__), '..'))
 CACHE_DIR = join(BASE_DIR, 'cache')
 BIN_DIR = join(BASE_DIR, 'bin')
 TEST_DATA_DIR = join(BASE_DIR, 'test', 'data')
+MODELING_DIR = join(BASE_DIR, 'models')
+MODELS_DIR = join(MODELING_DIR, 'compiled')
+CODE_DIR = join(MODELING_DIR, 'stan_code')
+
+PLOTS_DIR = '/home/martigo/repositories/rna/plots'
 
 # File paths
 PLOTS_FORMAT = 'png'

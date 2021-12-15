@@ -7,9 +7,9 @@ import mavenn as mv
 import logomaker
 from sklearn.isotonic import IsotonicRegression
 
-from plot_utils import init_fig, savefig, arrange_plot
-from settings import CACHE_DIR
-from visualization import Visualization
+from gpmap.plot_utils import init_fig, savefig, arrange_plot
+from gpmap.settings import CACHE_DIR
+from gpmap.visualization import Visualization
 
 
 class MaveNN(Visualization):
@@ -37,7 +37,7 @@ class MaveNN(Visualization):
     
     def fit_mavenn(self, seqs, f, gpmap_type, global_epistasis=True,
                    ge_heteroskedasticity_order=0, epochs=1000, early_stopping=False,
-                   regression_type='GE'):
+                   regression_type='GE', theta_regularization=1e-3):
         ge_type = 'nonlinear' if global_epistasis else 'linear'
         self.report('\tFitting {} - {} model'.format(gpmap_type, ge_type))
         model = mv.Model(L=self.length, alphabet=self.alphabet_type,
@@ -47,7 +47,8 @@ class MaveNN(Visualization):
                          regression_type=regression_type,
                          ge_heteroskedasticity_order=ge_heteroskedasticity_order,
                          ge_noise_model_type='SkewedT',
-                         Y=f.shape[1] if len(f.shape) > 1 else 2)
+                         Y=f.shape[1] if len(f.shape) > 1 else 2,
+                         theta_regularization=theta_regularization)
         model.set_data(x=seqs, y=f)
             
         model.fit(learning_rate=.0005, epochs=epochs, batch_size=2000,
@@ -62,9 +63,12 @@ class MaveNN(Visualization):
             self.fit_mavenn(seqs, f, gpmap_type, global_epistasis,
                             epochs=epochs, early_stopping=early_stopping)
     
-    def load_mavenn_model(self, gpmap_type, global_epistasis):
+    def load_mavenn_model(self, gpmap_type, global_epistasis, force=False):
         fpath = self.get_mavenn_model_fpath(gpmap_type, global_epistasis)
-        self.mavenn_model = mv.load(fpath)
+        if not hasattr(self, 'mavenn_model') or force:
+            self.mavenn_model = mv.load(fpath)
+        else:
+            self.report('Model was already loaded')
     
     def plot_information_history(self, axes, x_test, y_test):
         I_var = self.mavenn_model.I_variational(x=x_test, y=y_test)[0]
@@ -108,40 +112,64 @@ class MaveNN(Visualization):
                      ylims=ylims)
         self.plot_Rsq(axes, seqs, f)
     
-    def plot_global_epistasis(self, axes, seqs, f, add_isotonic=True,
-                              title='Global epistasis'):
-        phi = self.mavenn_model.x_to_phi(seqs)
+    def get_phi_grid(self, phi):
         phi_lim = [min(phi)-.5, max(phi)+.5]
         phi_grid = np.linspace(phi_lim[0], phi_lim[1], 1000)
+        return(phi_grid)
+    
+    def plot_global_epistasis_pred(self, axes, seqs):
+        phi = self.mavenn_model.x_to_phi(seqs)
+        phi_grid = self.get_phi_grid(phi)
         yhat_grid = self.mavenn_model.phi_to_yhat(phi_grid)
         
         # Compute 90% CI for each yhat
         q = [0.05, 0.95] #[0.16, 0.84]
         yqs_grid = self.mavenn_model.yhat_to_yq(yhat_grid, q=q)
         
-        # Plot predictions and CI
-        axes.scatter(phi, f, color='C0', s=5, alpha=1)
         axes.plot(phi_grid, yhat_grid, linewidth=2, color='C1',
                 label='$\hat{y} = g(\phi)$')
         axes.plot(phi_grid, yqs_grid[:, 0], linestyle='--', color='C1',
                   label='90% CI')
         axes.plot(phi_grid, yqs_grid[:, 1], linestyle='--', color='C1')
+    
+    def plot_isotonic(self, axes, seqs, f):
+        reg = IsotonicRegression()
+        phi = self.mavenn_model.x_to_phi(seqs)
+        phi_grid = self.get_phi_grid(phi)
+        reg.fit(phi, f)
+        pred = reg.predict(phi_grid)
+        axes.plot(phi_grid, pred, linewidth=2, color='black',
+                  label='Isotonic regression')
+    
+    def plot_global_epistasis(self, axes, seqs, f, add_isotonic=True,
+                              title='Global epistasis', ref_seq=None,
+                              color='C0' , alpha=1, add_pred=True):
+        phi = self.mavenn_model.x_to_phi(seqs)
+        phi_lim = [min(phi)-.5, max(phi)+.5]
+        
+        # Plot inferred phi and observed values
+        axes.scatter(phi, f, color=color, s=5, alpha=alpha, zorder=1)
+        if add_pred:
+            self.plot_global_epistasis_pred(axes, seqs)
+        
+        if ref_seq:
+            x, y = self.mavenn_model.x_to_phi(ref_seq), f[ref_seq]
+            axes.scatter(x, y, color='black', s=15, alpha=1, label=ref_seq,
+                         zorder=2, lw=1, edgecolor='white')
 
         # Plot isotonic regression to ensure convergence
         if add_isotonic:        
-            reg = IsotonicRegression()
-            reg.fit(phi, f)
-            pred = reg.predict(phi_grid)
-            axes.plot(phi_grid, pred, linewidth=2, color='black',
-                      label='Isotonic regression')
+            self.plot_isotonic(axes, seqs, f)
         
         arrange_plot(axes, xlims=phi_lim, xlabel='latent phenotype ($\phi$)',
                      ylabel='measurement ($y$)', title=title)
     
-    def figure_model(self, seqs, f, gpmap_type, global_epistasis):
+    def figure_model(self, seqs, f, gpmap_type, global_epistasis,
+                     logo=True, fname=None):
+        
         self.load_mavenn_model(gpmap_type, global_epistasis)
         
-        fig, subplots = init_fig(1, 4, colsize=4, rowsize=3.2)
+        fig, subplots = init_fig(1, 4 if logo else 3, colsize=4, rowsize=3.2)
         
         axes = subplots[0]
         self.plot_loss_history(axes)
@@ -150,13 +178,17 @@ class MaveNN(Visualization):
         self.plot_information_history(axes, seqs, f)
         
         axes = subplots[2]
-        self.plot_global_epistasis(axes, seqs, f, add_isotonic=True, title='')
+        self.plot_global_epistasis(axes, seqs, f, add_isotonic=True, title='',
+                                   ref_seq=None)
         self.plot_Rsq(axes, seqs, f)
         
-        axes = subplots[3]
-        self.plot_sequence_logo(axes)
+        if logo:
+            axes = subplots[3]
+            self.plot_sequence_logo(axes)
+    
+        if fname is None:
+            fname = '{}.{}.{}.fit'.format(self.cache_prefix, gpmap_type, global_epistasis)    
         
-        fname = '{}.{}.{}.fit'.format(self.cache_prefix, gpmap_type, global_epistasis)
         savefig(fig, fname)
     
     def figure_global_epistasis(self, seqs, f, add_isotonic=True,
@@ -187,7 +219,6 @@ class MaveNN(Visualization):
             axes = subplots[4][i]
             self.plot_pairwise_effects(axes)
             
-        
         fname = '{}.global_epistasis.fit'.format(self.cache_prefix)
         savefig(fig, fname)
     

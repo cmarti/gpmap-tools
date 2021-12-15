@@ -1,10 +1,13 @@
 #!/usr/bin/env python
+from os.path import join
+
 import seaborn as sns
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
-from gpmap.settings import PLOTS_FORMAT
+from gpmap.settings import PLOTS_FORMAT, PLOTS_DIR
+
 
 # Functions
 def init_fig(nrow=1, ncol=1, figsize=None, style='ticks',
@@ -27,7 +30,7 @@ def init_single_fig(figsize=None, style='ticks',
 
 
 def savefig(fig, fname, tight=True, fmt=PLOTS_FORMAT):
-    fpath = '{}.{}'.format(fname, fmt)
+    fpath = join(PLOTS_DIR, '{}.{}'.format(fname, fmt))
     if tight:
         fig.tight_layout()
     fig.savefig(fpath, format=fmt, dpi=240)

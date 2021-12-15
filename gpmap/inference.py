@@ -147,6 +147,12 @@ class VCregression(SequenceSpace):
         
         self.get_noise_diag_matrix()
         self.get_gt_to_data_matrix()
+        
+    def load_dataframe(self, df):
+        f_obs = df['mean'].values
+        variance = df['var'].values if 'var' in df.columns else None
+        seqs = df.index.values 
+        self.load_data(f_obs=f_obs, variance=variance, seqs=seqs)
     
     def get_obs(self, idx=None):
         if idx is None:
@@ -278,7 +284,8 @@ class VCregression(SequenceSpace):
             betas = 10 ** np.arange(-2, 6, .5)
             
         mses = []
-        for training_idx, validation_idx in tqdm(self.get_cv_indexes(nfolds)):
+        for training_idx, validation_idx in tqdm(self.get_cv_indexes(nfolds),
+                                                 total=nfolds):
             lambdas = self.solve_for_lambda(obs_idx=training_idx, betas=betas)
             rho, n = self.compute_empirical_rho(obs_idx=validation_idx)
             rho[0] -= np.mean(self.variance[validation_idx])
@@ -306,6 +313,7 @@ class VCregression(SequenceSpace):
         return(variance_components)
     
     def estimate_variance_components(self, regularize=False):
+        self.report('Estimating variance components')
         lambdas = self.estimate_lambdas(regularize=regularize)
         return(lambdas)
     
@@ -319,6 +327,7 @@ class VCregression(SequenceSpace):
 
     def estimate_f(self, lambdas):
         """compute the MAP"""
+        self.report('Estimating mean phenotypic values')
         L_powers_coeffs = self.calc_L_powers_coeffs(lambdas)
         self.gt2data = self.get_gt_to_data_matrix()
     
@@ -355,7 +364,7 @@ class VCregression(SequenceSpace):
         
         post_vars = []
         self.report("computing posterior variance")
-        for i in tqdm(range(self.n_genotypes)):
+        for i in tqdm(range(self.n_genotypes), total=self.n_genotypes):
             alph = cg(Kop, K_Bi[:, i])[0]
             post_vars.append(K_ii - np.sum(K_Bi[:, i] * alph))
     
@@ -447,6 +456,8 @@ class SeqDEFT(SequenceSpace):
                  with_kernel_basis=True, log=None):
         self.init(length, n_alleles=n_alleles, alphabet_type=alphabet_type, log=log)
         self.set_P(P)
+        
+        # Number of faces
         self.s = comb(self.length, P) * comb(self.n_alleles, 2) ** P * self.n_alleles ** (self.length - P)
         
         # Prepare D kernel basis
@@ -587,6 +598,9 @@ class SeqDEFT(SequenceSpace):
     def _fit(self, a, phi_initial=None, data_dict=None,
              method='L-BFGS-B', options=None, scale_by=1, gtol=1e-3):
         N, R = self.get_data(data_dict=data_dict)
+        
+        # Solution is the same if we scale these values: may be useful if 
+        # running into numerical problems
         a, N = a / scale_by, N / scale_by
         phi_initial = self.get_phi_initial(phi_initial=phi_initial)
         
@@ -615,7 +629,7 @@ class SeqDEFT(SequenceSpace):
         Dphi = phi.copy()
         for p in range(self.P):
             Dphi = self.L_opt(Dphi, p)
-        return Dphi/factorial(self.P)
+        return Dphi / factorial(self.P)
     
     def S(self, phi, a, N, R):
         S1 = a/(2*self.s) * np.sum(phi * self.D_opt(phi))
@@ -882,8 +896,8 @@ class SeqDEFT(SequenceSpace):
         phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
     
         log_Lss = np.zeros([cv_fold, num_a])
-        cv_data = list(self.get_cv_iter(cv_fold, a_values))
-        for k, i, a, train, validation in tqdm(cv_data):    
+        cv_data = self.get_cv_iter(cv_fold, a_values)
+        for k, i, a, train, validation in tqdm(cv_data, total=cv_fold * num_a):    
             log_Lss[k,i] = self.calculate_cv_fold_logL(a, train, validation, phi_inf,
                                                        options=options, scale_by=scale_by,
                                                        gtol=gtol)

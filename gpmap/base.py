@@ -22,7 +22,34 @@ def get_sparse_diag_matrix(values):
     return(m)
 
 
-class SequenceSpace(object):
+class BaseGPMap(object):
+    def set_alphabet_type(self, alphabet_type, n_alleles=None):
+        self.alphabet_type = alphabet_type
+        if isinstance(alphabet_type, list):
+            self.alphabet = self.alphabet_type
+        elif alphabet_type == 'dna':
+            self.alphabet = DNA_ALPHABET
+            self.complements = {'A': ['T'], 'T': ['A'],
+                                'G': ['C'], 'C': ['G']}
+        elif alphabet_type == 'rna':
+            self.alphabet = RNA_ALPHABET
+            self.complements = {'A': ['U'], 'U': ['A', 'G'],
+                                'G': ['C', 'U'], 'C': ['G']}
+        elif alphabet_type == 'protein':
+            self.alphabet = PROTEIN_ALPHABET
+        elif alphabet_type == 'custom':
+            if n_alleles is None:
+                raise ValueError('n_alleles must be provided for custom alphabet')
+            self.alphabet_type = range(n_alleles)
+        else:
+            raise ValueError('alphabet type not supported')
+        self.n_alleles = len(self.alphabet)
+    
+    def report(self, msg):
+        write_log(self.log, msg)
+
+
+class SequenceSpace(BaseGPMap):
     def init(self, length, n_alleles=None, alphabet_type='dna', log=None):
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
         self.length = length
@@ -49,25 +76,6 @@ class SequenceSpace(object):
     def get_genotype_labels(self):
         return(np.array([''.join([self.alphabet[a] for a in gt])
                          for gt in self.seqs]))
-    
-    def set_alphabet_type(self, alphabet_type, n_alleles=None):
-        self.alphabet_type = alphabet_type
-        if alphabet_type == 'dna':
-            self.alphabet = DNA_ALPHABET
-        elif alphabet_type == 'rna':
-            self.alphabet = RNA_ALPHABET
-        elif alphabet_type == 'protein':
-            self.alphabet = PROTEIN_ALPHABET
-        elif alphabet_type == 'custom':
-            if n_alleles is None:
-                raise ValueError('n_alleles must be provided for custom alphabet')
-            self.alphabet_type = range(n_alleles)
-        else:
-            raise ValueError('alphabet type not supported')
-        self.n_alleles = len(self.alphabet)
-    
-    def report(self, msg):
-        write_log(self.log, msg)
     
     def seq_to_pos(self, seq, coding_dict=None):
         if coding_dict is None:

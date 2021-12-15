@@ -1,11 +1,15 @@
 import itertools
 import sys
 import time
+import pystan
+
 from time import ctime
+from _pickle import dump, load
+from os.path import join, exists
 
 import numpy as np
 
-from gpmap.settings import NUCLEOTIDES, COMPLEMENT
+from gpmap.settings import NUCLEOTIDES, COMPLEMENT, MODELS_DIR, CODE_DIR
 
 
 def logit(p):
@@ -89,3 +93,29 @@ def get_seq(genome, chrom, start, end, strand):
         seq = reverse_complement(seq)
     
     return(seq.upper())
+
+
+def load_pickle(fpath):
+    with open(fpath, 'rb') as fhand:
+        data = load(fhand)
+    return(data)
+
+
+def write_pickle(data, fpath):
+    with open(fpath, 'wb') as fhand:
+        dump(data, fhand)
+    return(data)
+
+
+def get_model(model_label, recompile=False):
+    code_fpath = join(CODE_DIR, '{}.stan'.format(model_label))
+    compiled_fpath = join(MODELS_DIR, '{}.p'.format(model_label))
+
+    if not exists(compiled_fpath) or recompile:
+        # STAN model compilation
+        model = pystan.StanModel(file=code_fpath)
+        write_pickle(model, compiled_fpath)
+    else:
+        # Load stored model
+        model = load_pickle(compiled_fpath)
+    return(model)
