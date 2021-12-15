@@ -178,6 +178,7 @@ class ConvolutionalModel(BaseGPMap):
         data = {'x': seqs, 'y': y, 'yhat': logf,
                 'encoding': encoding,  'theta': theta,
                 'ref_seq': ref_seq,
+                'theta_labels': encoding[0].columns,
                 
                 'L': len(seqs[0]), 'F': n_features, 
                 'C': self.n_alleles, 'S': n_positions_filter
@@ -186,14 +187,14 @@ class ConvolutionalModel(BaseGPMap):
     
     def fit(self, data):
         X = np.stack(data['encoding'], axis=2).transpose([2, 0, 1])
-        
-        data = {'G': len(data['x']), 'F': data['F'], 'S': data['S'],
-                'X': X, 'log_gfp': data['y']}
-        self.estimates = self.model.optimizing(data)
+        stan_data = {'G': len(data['x']), 'F': data['F'], 'S': data['S'],
+                     'X': X, 'log_gfp': data['y']}
+        self.estimates = self.model.optimizing(stan_data)
         theta = self.estimates['theta']
         sigma = self.estimates['sigma']
         yhat = self.estimates['yhat']
-        results = {'theta': theta, 'sigma': sigma, 'yhat': yhat}
+        results = {'theta': theta, 'sigma': sigma, 'yhat': yhat,
+                   'theta_labels': data['encoding'][0].columns}
         return(results)
     
     def plot_y_distribution(self, data, axes, xlabel='Phenotype', islog=False):
@@ -201,15 +202,8 @@ class ConvolutionalModel(BaseGPMap):
         if islog:
             y = np.exp(y)
         sns.histplot(y, ax=axes)
-        arrange_plot(axes, xlabel=xlabel, ylabel='# genotypes')
-    
-    def plot_data_distribution(self, data, fname, xlabel='Phenotype'):
-        fig, subplots = init_fig(1, 2)
-        axes = subplots[0]
-        self.plot_y_distribution(data, axes, xlabel=xlabel)
-        axes = subplots[1]
-        self.plot_y_distribution(data, axes, xlabel=xlabel, islog=True)
-        savefig(fig, fname)
+        arrange_plot(axes, xlabel=xlabel, ylabel='# genotypes',
+                     title='Phenotype distribution')
     
     def plot_mut_eff(self, data, fit, axes):
         x, y = data['theta'][1:], fit['theta'][1:]
@@ -219,14 +213,50 @@ class ConvolutionalModel(BaseGPMap):
             except IndexError:
                 y = np.vstack([y] * x.shape[1]).transpose()
         
-        axes.scatter(x, y,
-                     s=10, lw=0.2, edgecolor='black')
+        axes.scatter(x, y, s=10, lw=0.2, edgecolor='black')
         xlims, ylims = axes.get_xlim(), axes.get_ylim() 
         lims = min(xlims[0], ylims[0]), max(xlims[1], ylims[1])
         axes.plot(lims, lims, lw=0.5, c='grey', linestyle='--')
         arrange_plot(axes, xlabel=r'$\theta_{real}$',
                      ylabel=r'$\hat\theta$', xlims=lims, ylims=lims,
                      title='Mutational effects')
+    
+    def theta_to_matrix(self, fit):
+        df = pd.DataFrame({'theta': fit['theta'][1:],
+                           'label': fit['theta_labels'][1:]})
+        df['pos'] = [int(x[1:-1]) for x in df['label']]
+        df['letter'] = [x[-1] for x in df['label']]
+        m = pd.pivot_table(df, index='letter', columns='pos',
+                           values='theta', fill_value=0)
+        return(m)
+    
+    def plot_theta_heatmap(self, fit, axes, label=r'$\theta$'):
+        m = self.theta_to_matrix(fit)
+        sns.heatmap(m, cmap='coolwarm', ax=axes, center=0,
+                    cbar_kws={'label': label})
+        arrange_plot(axes, ylabel='Allele', xlabel='Position')
+    
+    def plot_predictions(self, data, fit, axes, hist=False):
+        if hist:
+            sns.histplot(x=fit['yhat'], y=data['y'], cmap='Blues', ax=axes,
+                         cbar_kws={'label': '# genotypes'}, cbar=True)
+        else:
+            axes.scatter(fit['yhat'], data['y'],
+                         s=10, lw=0.2, edgecolor='black')
+        xlims, ylims = axes.get_xlim(), axes.get_ylim() 
+        lims = min(xlims[0], ylims[0]), max(xlims[1], ylims[1])
+        axes.plot(lims, lims, lw=0.5, c='grey', linestyle='--')
+        arrange_plot(axes, xlabel=r'$\hat{y}$',
+                     ylabel=r'$y$', xlims=lims, ylims=lims,
+                     title='Phenotypic values')
+    
+    def figure_data_distribution(self, data, fname, xlabel='Phenotype'):
+        fig, subplots = init_fig(1, 2)
+        axes = subplots[0]
+        self.plot_y_distribution(data, axes, xlabel=xlabel)
+        axes = subplots[1]
+        self.plot_y_distribution(data, axes, xlabel=xlabel, islog=True)
+        savefig(fig, fname)
     
 
 class AdditiveConvolutionalModel(ConvolutionalModel):

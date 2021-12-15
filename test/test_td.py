@@ -6,6 +6,9 @@ import numpy as np
 from gpmap.td import AdditiveConvolutionalModel, BPStacksConvolutionalModel
 from gpmap.plot_utils import init_fig, savefig
 from scipy.stats.stats import pearsonr
+from gpmap.settings import TEST_DATA_DIR
+from os.path import join
+from gpmap.utils import write_pickle, load_pickle
 
 
 class TDTests(unittest.TestCase):
@@ -59,10 +62,12 @@ class TDTests(unittest.TestCase):
         seqs = m.simulate_combinatorial_mutants(length=5)
         seqs = m.add_flanking_seqs(seqs, n_backgrounds=1)
         data = m.simulate_data(seqs, theta0=-5)
-        
         fit = m.fit(data)
         r = pearsonr(data['theta'].mean(1)[1:], fit['theta'][1:])[0]
         assert(r > 0.9)
+        
+        # write_pickle(fit, join(TEST_DATA_DIR, 'fit.pickle'))
+        # write_pickle(data, join(TEST_DATA_DIR, 'data.pickle'))
         
         # Test BP stacking energies model
         m = BPStacksConvolutionalModel(filter_size=4, template='AGGA')
@@ -73,12 +78,18 @@ class TDTests(unittest.TestCase):
         fit = m.fit(data)
         r = pearsonr(data['theta'].mean(1)[1:], fit['theta'][1:])[0]
         assert(r > 0.9)
+
+    def test_plots(self):
+        m = AdditiveConvolutionalModel(filter_size=4)
+        data = load_pickle(join(TEST_DATA_DIR, 'data.pickle'))
+        fit = load_pickle(join(TEST_DATA_DIR, 'fit.pickle'))
         
-        # Test plotting function
-        m.plot_data_distribution(data, fname='test_td')
-        fig, axes = init_fig(1, 1)
-        m.plot_mut_eff(data, fit, axes)
-        savefig(fig, 'mut_effs_sim_td')
+        fig, axes = init_fig(1, 4)
+        m.plot_y_distribution(data, axes[0])
+        m.plot_predictions(data, fit, axes[1], hist=True)
+        m.plot_mut_eff(data, fit, axes[2])
+        m.plot_theta_heatmap(fit, axes[3])
+        savefig(fig, 'test_td')
         
         
 if __name__ == '__main__':
