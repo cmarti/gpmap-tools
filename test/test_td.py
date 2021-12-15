@@ -3,7 +3,9 @@ import unittest
 
 import numpy as np
 
-from gpmap.td import AdditiveConvolutionalModel
+from gpmap.td import AdditiveConvolutionalModel, BPStacksConvolutionalModel
+from gpmap.plot_utils import init_fig, savefig
+from scipy.stats.stats import pearsonr
 
 
 class TDTests(unittest.TestCase):
@@ -50,6 +52,33 @@ class TDTests(unittest.TestCase):
         assert(data['L'] == 11)
         assert(data['F'] == 13)
         assert(data['C'] == 4)
+    
+    def test_fit(self):
+        np.random.seed(0)
+        m = AdditiveConvolutionalModel(filter_size=4)
+        seqs = m.simulate_combinatorial_mutants(length=5)
+        seqs = m.add_flanking_seqs(seqs, n_backgrounds=1)
+        data = m.simulate_data(seqs, theta0=-5)
+        
+        fit = m.fit(data)
+        r = pearsonr(data['theta'].mean(1)[1:], fit['theta'][1:])[0]
+        assert(r > 0.9)
+        
+        # Test BP stacking energies model
+        m = BPStacksConvolutionalModel(filter_size=4, template='AGGA')
+        seqs = m.simulate_combinatorial_mutants(length=5)
+        seqs = m.add_flanking_seqs(seqs, n_backgrounds=1)
+        data = m.simulate_data(seqs, theta0=-5)
+
+        fit = m.fit(data)
+        r = pearsonr(data['theta'].mean(1)[1:], fit['theta'][1:])[0]
+        assert(r > 0.9)
+        
+        # Test plotting function
+        m.plot_data_distribution(data, fname='test_td')
+        fig, axes = init_fig(1, 1)
+        m.plot_mut_eff(data, fit, axes)
+        savefig(fig, 'mut_effs_sim_td')
         
         
 if __name__ == '__main__':

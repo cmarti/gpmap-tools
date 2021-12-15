@@ -2,12 +2,15 @@ import itertools
 
 import numpy as np
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from scipy.linalg.decomp_cholesky import cholesky
 from scipy.special._logsumexp import logsumexp
 
 from gpmap.base import BaseGPMap
 from gpmap.utils import get_model
+from gpmap.plot_utils import arrange_plot, savefig, init_fig
 
 
 class ConvolutionalModel(BaseGPMap):
@@ -119,14 +122,19 @@ class ConvolutionalModel(BaseGPMap):
         return(L)
     
     def simulate_parameters(self, n_positions_filter, n_features, theta0, rho,
-                            position_variable=False):
+                            position_variable=False, position_seq_variable=False):
         pos = np.arange(n_positions_filter)
-        mu = theta0 - rho * np.abs(pos - pos.mean())    
+        
+        if position_variable:
+            mu = theta0 - rho * np.abs(pos - pos.mean())    
+        else:
+            mu = np.full(n_positions_filter, theta0)
+            
         theta = np.random.normal(0, 1, size=n_features)
         theta = np.vstack([theta] * n_positions_filter).T
         theta[0] = mu
         
-        if position_variable:
+        if position_seq_variable:
             a, r = 0.5, 1
             L_K = self.get_L_K(pos, a, r)
             theta[1:] += np.dot(L_K, np.random.normal(0, 1, size=theta[1:].shape).T).T
@@ -152,7 +160,8 @@ class ConvolutionalModel(BaseGPMap):
         return(encoding)
     
     def simulate_data(self, seqs, ref_seq=None, log_rt=0, background=0,
-                      theta0=0, rho=0.5, position_variable=False, sigma=0.2):
+                      theta0=0, rho=0.5, position_variable=False,
+                      position_seq_variable=False, sigma=0.2):
         if ref_seq is None:
             ref_seq = self.simulate_random_seqs(self.filter_size, n_seqs=1)[0]
             
@@ -161,7 +170,8 @@ class ConvolutionalModel(BaseGPMap):
         
         theta = self.simulate_parameters(n_positions_filter, n_features,
                                          theta0=theta0, rho=rho,
-                                         position_variable=position_variable)
+                                         position_variable=position_variable,
+                                         position_seq_variable=position_seq_variable)
         logf = self.calc_logf(encoding, theta, log_rt, background)
         y = logf + np.random.normal(0, sigma)
         
@@ -185,13 +195,46 @@ class ConvolutionalModel(BaseGPMap):
         yhat = self.estimates['yhat']
         results = {'theta': theta, 'sigma': sigma, 'yhat': yhat}
         return(results)
+    
+    def plot_y_distribution(self, data, axes, xlabel='Phenotype', islog=False):
+        y = data['y']
+        if islog:
+            y = np.exp(y)
+        sns.histplot(y, ax=axes)
+        arrange_plot(axes, xlabel=xlabel, ylabel='# genotypes')
+    
+    def plot_data_distribution(self, data, fname, xlabel='Phenotype'):
+        fig, subplots = init_fig(1, 2)
+        axes = subplots[0]
+        self.plot_y_distribution(data, axes, xlabel=xlabel)
+        axes = subplots[1]
+        self.plot_y_distribution(data, axes, xlabel=xlabel, islog=True)
+        savefig(fig, fname)
+    
+    def plot_mut_eff(self, data, fit, axes):
+        x, y = data['theta'][1:], fit['theta'][1:]
+        if x.shape != y.shape:
+            try:
+                x = np.vstack([x] * y.shape[1]).transpose()
+            except IndexError:
+                y = np.vstack([y] * x.shape[1]).transpose()
         
+        axes.scatter(x, y,
+                     s=10, lw=0.2, edgecolor='black')
+        xlims, ylims = axes.get_xlim(), axes.get_ylim() 
+        lims = min(xlims[0], ylims[0]), max(xlims[1], ylims[1])
+        axes.plot(lims, lims, lw=0.5, c='grey', linestyle='--')
+        arrange_plot(axes, xlabel=r'$\theta_{real}$',
+                     ylabel=r'$\hat\theta$', xlims=lims, ylims=lims,
+                     title='Mutational effects')
+    
 
 class AdditiveConvolutionalModel(ConvolutionalModel):
     def __init__(self, filter_size, alphabet_type='rna',
-                 n_alleles=4):
+                 n_alleles=4, model_label='conv0', recompile=False):
         self.set_parameters(filter_size=filter_size, alphabet_type=alphabet_type,
-                            n_alleles=n_alleles)
+                            n_alleles=n_alleles, 
+                            model_label=model_label, recompile=recompile)
     
     def seq_to_encoding(self, seq, wt):
         features = {wt: 1}
