@@ -55,13 +55,24 @@ class TDTests(unittest.TestCase):
         assert(data['L'] == 11)
         assert(data['F'] == 13)
         assert(data['C'] == 4)
-    
-    def test_fit(self):
-        np.random.seed(0)
-        m = AdditiveConvolutionalModel(filter_size=4)
+        
+        fpath = join(TEST_DATA_DIR, 'data.pickle')
+        if not exists(fpath):
+            write_pickle(data, fpath)
+        
+        m = BPStacksConvolutionalModel(filter_size=4, template='AGGA')
         seqs = m.simulate_combinatorial_mutants(length=5)
         seqs = m.add_flanking_seqs(seqs, n_backgrounds=1)
         data = m.simulate_data(seqs, theta0=-5)
+        
+        fpath = join(TEST_DATA_DIR, 'data.staks.pickle')
+        if not exists(fpath):
+            write_pickle(data, fpath)
+    
+    def test_fit(self):
+        fpath = join(TEST_DATA_DIR, 'data.pickle')
+        data = load_pickle(fpath)
+        m = AdditiveConvolutionalModel(filter_size=4)
         fit = m.fit(data)
         r = pearsonr(data['theta'].mean(1)[1:], fit['theta'][1:])[0]
         assert(r > 0.9)
@@ -70,16 +81,10 @@ class TDTests(unittest.TestCase):
         if not exists(fpath):
             write_pickle(fit, fpath)
             
-        fpath = join(TEST_DATA_DIR, 'data.pickle')
-        if not exists(fpath):
-            write_pickle(data, fpath)
-        
         # Test BP stacking energies model
+        fpath = join(TEST_DATA_DIR, 'data.pickle')
+        data = load_pickle(fpath)
         m = BPStacksConvolutionalModel(filter_size=4, template='AGGA')
-        seqs = m.simulate_combinatorial_mutants(length=5)
-        seqs = m.add_flanking_seqs(seqs, n_backgrounds=1)
-        data = m.simulate_data(seqs, theta0=-5)
-
         fit = m.fit(data)
         r = pearsonr(data['theta'].mean(1)[1:], fit['theta'][1:])[0]
         assert(r > 0.9)
