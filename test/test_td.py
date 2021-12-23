@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 import unittest
+from os.path import join, exists
 
 import numpy as np
+from scipy.stats.stats import pearsonr
 
 from gpmap.td import AdditiveConvolutionalModel, BPStacksConvolutionalModel
 from gpmap.plot_utils import init_fig, savefig
-from scipy.stats.stats import pearsonr
 from gpmap.settings import TEST_DATA_DIR
-from os.path import join
 from gpmap.utils import write_pickle, load_pickle
 
 
@@ -66,8 +66,13 @@ class TDTests(unittest.TestCase):
         r = pearsonr(data['theta'].mean(1)[1:], fit['theta'][1:])[0]
         assert(r > 0.9)
         
-        # write_pickle(fit, join(TEST_DATA_DIR, 'fit.pickle'))
-        # write_pickle(data, join(TEST_DATA_DIR, 'data.pickle'))
+        fpath = join(TEST_DATA_DIR, 'fit.pickle')
+        if not exists(fpath):
+            write_pickle(fit, fpath)
+            
+        fpath = join(TEST_DATA_DIR, 'data.pickle')
+        if not exists(fpath):
+            write_pickle(data, fpath)
         
         # Test BP stacking energies model
         m = BPStacksConvolutionalModel(filter_size=4, template='AGGA')
