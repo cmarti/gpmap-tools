@@ -3,7 +3,6 @@ import itertools
 import numpy as np
 import pandas as pd
 import seaborn as sns
-import matplotlib.pyplot as plt
 
 from scipy.linalg.decomp_cholesky import cholesky
 from scipy.special._logsumexp import logsumexp
@@ -159,6 +158,19 @@ class ConvolutionalModel(BaseGPMap):
         encoding = [self.get_encoding(seqs, ref_seq, frame=i) for i in positions]
         return(encoding)
     
+    def to_stan_data(self, seqs, y, ref_seq, encoding=None):
+        if encoding is None:
+            encoding = self.get_conv_encoding(seqs, ref_seq)
+        n_features = encoding[0].shape[1]
+        n_positions_filter = len(encoding)
+        
+        data = {'x': seqs, 'y': y,
+                'encoding': encoding,
+                'theta_labels': encoding[0].columns,
+                'L': len(seqs[0]), 'F': n_features, 
+                'C': self.n_alleles, 'S': n_positions_filter}
+        return(data)
+    
     def simulate_data(self, seqs, ref_seq=None, log_rt=0, background=0,
                       theta0=0, rho=0.5, position_variable=False,
                       position_seq_variable=False, sigma=0.2):
@@ -174,15 +186,10 @@ class ConvolutionalModel(BaseGPMap):
                                          position_seq_variable=position_seq_variable)
         logf = self.calc_logf(encoding, theta, log_rt, background)
         y = logf + np.random.normal(0, sigma)
+        data = self.to_stan_data(seqs, y, ref_seq, encoding=encoding)
+        data['yhat'] = logf
+        data['theta'] = theta
         
-        data = {'x': seqs, 'y': y, 'yhat': logf,
-                'encoding': encoding,  'theta': theta,
-                'ref_seq': ref_seq,
-                'theta_labels': encoding[0].columns,
-                
-                'L': len(seqs[0]), 'F': n_features, 
-                'C': self.n_alleles, 'S': n_positions_filter
-                }
         return(data)
     
     def fit(self, data):
