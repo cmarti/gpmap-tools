@@ -8,7 +8,7 @@ from scipy.stats.stats import pearsonr
 from gpmap.td import AdditiveConvolutionalModel, BPStacksConvolutionalModel
 from gpmap.plot_utils import init_fig, savefig
 from gpmap.settings import TEST_DATA_DIR
-from gpmap.utils import write_pickle, load_pickle
+from gpmap.utils import write_pickle
 
 
 class TDTests(unittest.TestCase):
@@ -49,18 +49,14 @@ class TDTests(unittest.TestCase):
     def test_sim_data(self):
         np.random.seed(0)
         m = AdditiveConvolutionalModel(filter_size=4)
-        seqs = m.simulate_random_seqs(length=5, n_seqs=10)
+        seqs = m.simulate_random_seqs(length=5, n_seqs=1500)
         seqs = m.add_flanking_seqs(seqs, n_backgrounds=2)
         data = m.simulate_data(seqs)
         assert(data['L'] == 11)
-        assert(data['F'] == 13)
+        assert(data['F'] == 12)
         assert(data['C'] == 4)
         
-        fpath = join(TEST_DATA_DIR, 'data.pickle')
-        if not exists(fpath):
-            write_pickle(data, fpath)
-        
-        m = BPStacksConvolutionalModel(filter_size=4, template='AGGA')
+        m = BPStacksConvolutionalModel(template='AGGA')
         seqs = m.simulate_combinatorial_mutants(length=5)
         seqs = m.add_flanking_seqs(seqs, n_backgrounds=1)
         data = m.simulate_data(seqs, theta0=-5)
@@ -70,36 +66,37 @@ class TDTests(unittest.TestCase):
             write_pickle(data, fpath)
     
     def test_fit(self):
-        fpath = join(TEST_DATA_DIR, 'data.pickle')
-        data = load_pickle(fpath)
-        m = AdditiveConvolutionalModel(filter_size=4)
+        # We need to get some range of variation in the phenotype for this to work
+        np.random.seed(0)
+        m = AdditiveConvolutionalModel(filter_size=4, recompile=False,
+                                       model_label='conv_sd')
+        seqs = m.simulate_random_seqs(length=5, n_seqs=2000)
+        seqs = m.add_flanking_seqs(seqs, n_backgrounds=1)
+        data = m.simulate_data(seqs, background=1)
         fit = m.fit(data)
-        r = pearsonr(data['theta'].mean(1)[1:], fit['theta'][1:])[0]
-        assert(r > 0.9)
-        
-        fpath = join(TEST_DATA_DIR, 'fit.pickle')
-        if not exists(fpath):
-            write_pickle(fit, fpath)
-            
-        # Test BP stacking energies model
-        fpath = join(TEST_DATA_DIR, 'data.pickle')
-        data = load_pickle(fpath)
-        m = BPStacksConvolutionalModel(filter_size=4, template='AGGA')
-        fit = m.fit(data)
-        r = pearsonr(data['theta'].mean(1)[1:], fit['theta'][1:])[0]
-        assert(r > 0.9)
-
-    def test_plots(self):
-        m = AdditiveConvolutionalModel(filter_size=4)
-        data = load_pickle(join(TEST_DATA_DIR, 'data.pickle'))
-        fit = load_pickle(join(TEST_DATA_DIR, 'fit.pickle'))
-        
-        fig, axes = init_fig(1, 4)
+        print(fit['mu'])
+        r = pearsonr(data['theta'].mean(1), fit['theta'])[0]
+         
+        fig, axes = init_fig(2, 3)
+        axes = axes.flatten()
         m.plot_y_distribution(data, axes[0])
-        m.plot_predictions(data, fit, axes[1], hist=True)
+        m.plot_predictions(fit, axes[1], hist=False)
         m.plot_mut_eff(data, fit, axes[2])
-        m.plot_theta_heatmap(fit, axes[3])
+        m.plot_mu(fit, axes[3])
+        axes[3].set_ylim((1.5, 2.5))
+        m.plot_theta_logo(fit, axes[4])
+        m.plot_theta_heatmap(fit, axes[5])
         savefig(fig, 'test_td')
+        assert(r > 0.9)
+        
+        # Test BP stacking energies model
+        np.random.seed(0)
+        m = BPStacksConvolutionalModel(template='AGGA')
+        data = m.simulate_data(seqs)
+        fit = m.fit(data)
+        r = pearsonr(data['theta'].mean(1), fit['theta'])[0]
+        # TODO: review why test does not work
+        assert(r > 0.9)
         
         
 if __name__ == '__main__':
