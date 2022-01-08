@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import warnings
 from itertools import product
 from os.path import exists, join
 
@@ -14,6 +15,7 @@ from tqdm import tqdm
 from Bio import motifs
 from Bio.Seq import Seq
 from matplotlib.collections import LineCollection
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 
 from scipy.sparse import identity
@@ -26,8 +28,6 @@ from scipy.special._logsumexp import logsumexp
 from gpmap.base import SequenceSpace, get_sparse_diag_matrix
 from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig
 from gpmap.settings import CACHE_DIR, CMAP, PLOTS_DIR
-import warnings
-from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 
 class Visualization(SequenceSpace):
