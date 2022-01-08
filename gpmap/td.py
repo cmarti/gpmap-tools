@@ -406,10 +406,10 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
     def get_possible_configurations(self, seqs):
         # Bulges need at least to bases at each side to allow counting some stacks
         # Limits also the number of useful configurations to take into account
+        bulge_positions = np.array([None])
         if self.allow_bulges:
-            bulge_positions = np.hstack([[None], np.arange(2, self.filter_size-1)])
-        else:
-            bulge_positions = np.array([None])
+            bulge_positions = np.hstack([bulge_positions,
+                                         np.arange(2, self.filter_size-1)])
         
         for bulge_pos in bulge_positions: 
             for pos in self.get_possible_positions(seqs, bulge=bulge_pos is not None):

@@ -120,5 +120,5 @@ class TDTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'TDTests.test_seq_features']
+    import sys;sys.argv = ['', 'TDTests']
     unittest.main()
