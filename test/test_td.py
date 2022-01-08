@@ -46,6 +46,26 @@ class TDTests(unittest.TestCase):
         assert(len(mutants) == 2*4**4)
         assert(len(mutants[0]) == 10)
     
+    def test_seq_features(self):
+        m = BPStacksConvolutionalModel(template='UCCU')
+        counts = m.seq_to_encoding('AGGAGG')
+        expected = {'UC|AG': 1, 'UC|GG': 0, 'CC|GG': 1, 'CU|GA': 1, 'CU|GG': 0}
+        assert(counts == expected)
+        
+        counts = m.get_conv_encoding(['AGAGAG'])
+        assert(len(counts) == 3)
+
+        # With bulges now        
+        m = BPStacksConvolutionalModel(template='UCCU', allow_bulges=True)
+        
+        counts = m.seq_to_encoding('AGAGAG', bulge_pos=2)
+        expected = {'UC|AG': 1, 'UC|GG': 0, 'CC|GG': 1, 'CU|GA': 1, 'CU|GG': 0,
+                    'bA': 1}
+        assert(counts == expected)
+        
+        counts = m.get_conv_encoding(['AGAGAG'])
+        assert(len(counts) == 5)
+    
     def test_sim_data(self):
         np.random.seed(0)
         m = AdditiveConvolutionalModel(filter_size=4)
@@ -100,5 +120,5 @@ class TDTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'TDTests']
+    import sys;sys.argv = ['', 'TDTests.test_seq_features']
     unittest.main()

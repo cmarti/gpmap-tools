@@ -169,13 +169,6 @@ class ConvolutionalModel(BaseGPMap):
             logf = logsumexp(np.vstack([np.full(log_ki_sum.shape, np.log(background)), logf]), axis=0)
         return(logf)
     
-    def get_conv_encoding(self, seqs, ref_seq):
-        length = len(seqs[0])
-        n_positions_filter = length - self.filter_size + 1
-        positions = np.arange(n_positions_filter)
-        encoding = [self.get_encoding(seqs, ref_seq=ref_seq, frame=i) for i in positions]
-        return(encoding)
-    
     def to_stan_data(self, seqs, y, ref_seq=None, encoding=None,
                      upstream='', downstream='', y_sd=None):
         seqs = self.embed_seqs(seqs, upstream=upstream, downstream=downstream)
@@ -348,12 +341,21 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
         full = full[cols]
         return(full)
     
+    def get_conv_encoding(self, seqs, ref_seq):
+        length = len(seqs[0])
+        n_positions_filter = length - self.filter_size + 1
+        positions = np.arange(n_positions_filter)
+        encoding = [self.get_encoding(seqs, ref_seq=ref_seq, frame=i) for i in positions]
+        return(encoding)
+    
     
 class BPStacksConvolutionalModel(ConvolutionalModel):
-    def __init__(self, template, model_label='conv0', recompile=False):
+    def __init__(self, template, allow_bulges=False,
+                 model_label='conv0', recompile=False):
         filter_size = len(template)
         self.set_parameters(filter_size=filter_size, alphabet_type='rna',
                             model_label=model_label, recompile=recompile)
+        self.allow_bulges = allow_bulges
         self.set_template_seq(template)
         
     def set_template_seq(self, template):
@@ -371,17 +373,49 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
         self.stacks = stacks
         self.template = template
         
-    def seq_to_encoding(self, seq):
+    def seq_to_encoding(self, seq, bulge_pos=None):
+        if bulge_pos is None:
+            target = seq
+            bulge = None
+        else:
+            bulge = seq[bulge_pos]
+            target = seq[:bulge_pos] + seq[bulge_pos+1:]
+            
         counts = self.stacks.copy()
         for i in range(self.filter_size - 1):
-            stack = '{}|{}'.format(self.template[i:i+2], seq[i:i+2])
+            stack = '{}|{}'.format(self.template[i:i+2], target[i:i+2])
             try:
                 counts[stack] += 1
             except KeyError:
                 continue
+        if bulge is not None:
+            counts['b{}'.format(bulge)] = 1
         return(counts)
     
-    def get_encoding(self, seqs, frame=0, **kwargs):
-        full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size])
+    def get_encoding(self, seqs, frame=0, bulge_pos=None, **kwargs):
+        full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size], bulge_pos=bulge_pos)
                              for seq in seqs], index=seqs)
         return(full)
+    
+    def get_possible_positions(self, seqs, bulge=False):
+        length = len(seqs[0])
+        n_positions_filter = length - self.filter_size + 1 - int(bulge)
+        positions = np.arange(n_positions_filter)
+        return(positions)
+    
+    def get_possible_configurations(self, seqs):
+        # Bulges need at least to bases at each side to allow counting some stacks
+        # Limits also the number of useful configurations to take into account
+        if self.allow_bulges:
+            bulge_positions = np.hstack([[None], np.arange(2, self.filter_size-1)])
+        else:
+            bulge_positions = np.array([None])
+        
+        for bulge_pos in bulge_positions: 
+            for pos in self.get_possible_positions(seqs, bulge=bulge_pos is not None):
+                yield(pos, bulge_pos)
+
+    def get_conv_encoding(self, seqs):
+        encoding = [self.get_encoding(seqs, frame=frame, bulge_pos=bulge_pos)
+                    for frame, bulge_pos in self.get_possible_configurations(seqs)]
+        return(encoding)
