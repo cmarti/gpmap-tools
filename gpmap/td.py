@@ -152,6 +152,7 @@ class ConvolutionalModel(BaseGPMap):
         log_ki = np.vstack([-(m + np.dot(features, t))
                             for features, t, m in zip(encoding, theta.T, mu)])
         log_ki_sum = logsumexp(log_ki, axis=0)
+        print(log_ki_sum, 'log_ki_sum')
         logf = theta0 + log_ki_sum
         
         if background > 0:
@@ -173,7 +174,7 @@ class ConvolutionalModel(BaseGPMap):
                      upstream='', downstream='', y_sd=None):
         seqs = self.embed_seqs(seqs, upstream=upstream, downstream=downstream)
         if encoding is None:
-            encoding = self.get_conv_encoding(seqs, ref_seq=ref_seq)
+            encoding = self.get_conv_encoding(seqs)
         n_features = encoding[0].shape[1]
         n_positions_filter = len(encoding)
         
@@ -192,7 +193,7 @@ class ConvolutionalModel(BaseGPMap):
         if ref_seq is None:
             ref_seq = self.simulate_random_seqs(self.filter_size, n_seqs=1)[0]
             
-        encoding = self.get_conv_encoding(seqs, ref_seq)
+        encoding = self.get_conv_encoding(seqs)
         n_positions_filter, n_features = len(encoding), encoding[0].shape[1]
         
         mu, theta = self.simulate_parameters(n_positions_filter, n_features,
@@ -227,8 +228,15 @@ class ConvolutionalModel(BaseGPMap):
         
         if 'background' in self.estimates:
             results['background'] = self.estimates['background']
-            
         return(results)
+    
+    def predict(self, seqs, fit):
+        encoding = self.get_conv_encoding(seqs)
+        theta = np.vstack([fit['theta']] * fit['mu'].shape[0]).T
+        print(encoding)
+        logf = self.calc_total_protein(encoding, fit['mu'], theta,
+                                       background=fit['background'])
+        return(logf)
     
     def plot_y_distribution(self, data, axes, xlabel='Phenotype', islog=False):
         y = data['y']
@@ -317,23 +325,23 @@ class ConvolutionalModel(BaseGPMap):
     
 
 class AdditiveConvolutionalModel(ConvolutionalModel):
-    def __init__(self, filter_size, alphabet_type='rna',
+    def __init__(self, filter_size, ref_seq, alphabet_type='rna',
                  n_alleles=4, model_label='conv0', recompile=False):
         self.set_parameters(filter_size=filter_size, alphabet_type=alphabet_type,
                             n_alleles=n_alleles, 
                             model_label=model_label, recompile=recompile)
+        self.ref_seq = ref_seq
     
-    def seq_to_encoding(self, seq, ref_seq):
+    def seq_to_encoding(self, seq):
         features = {}
         for i in range(min(len(seq), self.filter_size)):
             for nc in self.alphabet:
-                if nc != ref_seq[i]:
-                    features['{}{}{}'.format(ref_seq[i], i+1, nc)] = int(seq[i] == nc)
+                if nc != self.ref_seq[i]:
+                    features['{}{}{}'.format(self.ref_seq[i], i+1, nc)] = int(seq[i] == nc)
         return(features)
     
-    def get_encoding(self, seqs, ref_seq=None, frame=0):
-        full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size],
-                                                  ref_seq=ref_seq)
+    def get_encoding(self, seqs, frame=0):
+        full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size])
                              for seq in seqs], index=seqs)
         sorted_cols = sorted(full.columns[1:],
                              key=lambda x:(int(x[1:-1]), x[0], x[-1]))
@@ -341,11 +349,11 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
         full = full[cols]
         return(full)
     
-    def get_conv_encoding(self, seqs, ref_seq):
+    def get_conv_encoding(self, seqs):
         length = len(seqs[0])
         n_positions_filter = length - self.filter_size + 1
         positions = np.arange(n_positions_filter)
-        encoding = [self.get_encoding(seqs, ref_seq=ref_seq, frame=i) for i in positions]
+        encoding = [self.get_encoding(seqs, frame=i) for i in positions]
         return(encoding)
     
     

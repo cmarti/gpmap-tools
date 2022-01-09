@@ -117,6 +117,20 @@ class TDTests(unittest.TestCase):
         r = pearsonr(data['theta'].mean(1), fit['theta'])[0]
         # TODO: review why test does not work
         assert(r > 0.9)
+    
+    def test_predict(self):
+        np.random.seed(0)
+        m = AdditiveConvolutionalModel(filter_size=4, 
+                                       ref_seq='AGGA',
+                                       model_label='conv_sd')
+        seqs = m.simulate_random_seqs(length=5, n_seqs=2000)
+        seqs = m.add_flanking_seqs(seqs, n_backgrounds=1)
+        data = m.simulate_data(seqs, background=1)
+        fit = m.fit(data)
+        
+        seqs_pred = seqs[:2]
+        y = m.predict(seqs_pred, fit)
+        assert(y.shape[0] == 2)
         
         
 if __name__ == '__main__':
