@@ -149,10 +149,10 @@ class ConvolutionalModel(BaseGPMap):
         return(mu, theta)
     
     def calc_total_protein(self, encoding, mu, theta, theta0=0, background=0):
-        log_ki = np.vstack([-(m + np.dot(features, t))
-                            for features, t, m in zip(encoding, theta.T, mu)])
+        encoding, frames = encoding
+        log_ki = np.vstack([-(mu[frame] + np.dot(features, t))
+                            for features, t, frame in zip(encoding, theta.T, frames)])
         log_ki_sum = logsumexp(log_ki, axis=0)
-        print(log_ki_sum, 'log_ki_sum')
         logf = theta0 + log_ki_sum
         
         if background > 0:
@@ -170,31 +170,35 @@ class ConvolutionalModel(BaseGPMap):
             logf = logsumexp(np.vstack([np.full(log_ki_sum.shape, np.log(background)), logf]), axis=0)
         return(logf)
     
-    def to_stan_data(self, seqs, y, ref_seq=None, encoding=None,
+    def to_stan_data(self, seqs, y, encoding=None,
                      upstream='', downstream='', y_sd=None):
         seqs = self.embed_seqs(seqs, upstream=upstream, downstream=downstream)
         if encoding is None:
-            encoding = self.get_conv_encoding(seqs)
+            encoding, frames = self.get_conv_encoding(seqs)
+        else:
+            encoding, frames = encoding
+            
         n_features = encoding[0].shape[1]
         n_positions_filter = len(encoding)
         
         data = {'x': seqs, 'y': y,
                 'encoding': encoding,
                 'theta_labels': encoding[0].columns,
+                'positions': frames + 1,
+                
                 'L': len(seqs[0]), 'F': n_features, 
-                'C': self.n_alleles, 'S': n_positions_filter}
+                'C': self.n_alleles, 'S': n_positions_filter,
+                'P': np.unique(frames).shape[0]}
+        
         if y_sd is not None:
             data['log_gfp_sd'] = y_sd
         return(data)
     
-    def simulate_data(self, seqs, ref_seq=None, log_rt=0, background=0,
+    def simulate_data(self, seqs, log_rt=0, background=0,
                       theta0=2, rho=0.5, position_variable=False,
                       position_seq_variable=False, sigma=0.2):
-        if ref_seq is None:
-            ref_seq = self.simulate_random_seqs(self.filter_size, n_seqs=1)[0]
-            
         encoding = self.get_conv_encoding(seqs)
-        n_positions_filter, n_features = len(encoding), encoding[0].shape[1]
+        n_positions_filter, n_features = len(encoding[0]), encoding[0][0].shape[1]
         
         mu, theta = self.simulate_parameters(n_positions_filter, n_features,
                                              theta0=theta0, rho=rho,
@@ -202,7 +206,7 @@ class ConvolutionalModel(BaseGPMap):
                                              position_seq_variable=position_seq_variable)
         logf = self.calc_total_protein(encoding, mu, theta, log_rt, background)
         y = logf + np.random.normal(0, sigma)
-        data = self.to_stan_data(seqs, y, ref_seq, encoding=encoding)
+        data = self.to_stan_data(seqs, y, encoding=encoding)
         data['yhat'] = logf
         data['theta'] = theta
         
@@ -211,6 +215,9 @@ class ConvolutionalModel(BaseGPMap):
     def fit(self, data):
         X = np.stack(data['encoding'], axis=2).transpose([2, 0, 1])
         stan_data = {'G': len(data['x']), 'F': data['F'], 'S': data['S'],
+                     'P': data['P'],
+                     
+                     'positions': data['positions'],
                      'X': X, 'log_gfp': data['y']}
         if 'log_gfp_sd' in data:
             stan_data['log_gfp_sd'] = data['log_gfp_sd']
@@ -224,6 +231,7 @@ class ConvolutionalModel(BaseGPMap):
         df = pd.DataFrame({'theta': theta, 'label': labels})
         results = {'theta': theta, 'sigma': sigma, 'yhat': yhat,
                    'mu': mu, 'theta_labels': labels,
+                   'ki_sum': self.estimates['ki_sum'],
                    'df': df, 'y': data['y']}
         
         if 'background' in self.estimates:
@@ -232,8 +240,7 @@ class ConvolutionalModel(BaseGPMap):
     
     def predict(self, seqs, fit):
         encoding = self.get_conv_encoding(seqs)
-        theta = np.vstack([fit['theta']] * fit['mu'].shape[0]).T
-        print(encoding)
+        theta = np.vstack([fit['theta']] * len(encoding[0])).T
         logf = self.calc_total_protein(encoding, fit['mu'], theta,
                                        background=fit['background'])
         return(logf)
@@ -354,7 +361,7 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
         n_positions_filter = length - self.filter_size + 1
         positions = np.arange(n_positions_filter)
         encoding = [self.get_encoding(seqs, frame=i) for i in positions]
-        return(encoding)
+        return(encoding, positions)
     
     
 class BPStacksConvolutionalModel(ConvolutionalModel):
@@ -378,7 +385,13 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
                 for b2 in self.complements[dinc[1]]:
                     c.append(b1 + b2)
                     stacks['{}|{}'.format(dinc, c[-1])] = 0
+        
+        if self.allow_bulges:
+            for nc in self.alphabet:
+                stacks['b{}'.format(nc)] = 0
+        
         self.stacks = stacks
+        self.feature_names = sorted(stacks.keys()) 
         self.template = template
         
     def seq_to_encoding(self, seq, bulge_pos=None):
@@ -402,7 +415,7 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
     
     def get_encoding(self, seqs, frame=0, bulge_pos=None, **kwargs):
         full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size], bulge_pos=bulge_pos)
-                             for seq in seqs], index=seqs)
+                             for seq in seqs], index=seqs)[self.feature_names]
         return(full)
     
     def get_possible_positions(self, seqs, bulge=False):
@@ -424,6 +437,8 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
                 yield(pos, bulge_pos)
 
     def get_conv_encoding(self, seqs):
+        configurations = list(self.get_possible_configurations(seqs))
         encoding = [self.get_encoding(seqs, frame=frame, bulge_pos=bulge_pos)
-                    for frame, bulge_pos in self.get_possible_configurations(seqs)]
-        return(encoding)
+                    for frame, bulge_pos in configurations]
+        frames = np.array([frame for frame, bulge_pos in configurations])
+        return(encoding, frames)

@@ -89,6 +89,7 @@ class TDTests(unittest.TestCase):
         # We need to get some range of variation in the phenotype for this to work
         np.random.seed(0)
         m = AdditiveConvolutionalModel(filter_size=4, recompile=False,
+                                       ref_seq='AGGA',
                                        model_label='conv_sd')
         seqs = m.simulate_random_seqs(length=5, n_seqs=2000)
         seqs = m.add_flanking_seqs(seqs, n_backgrounds=1)
