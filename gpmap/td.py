@@ -315,12 +315,12 @@ class ConvolutionalModel(BaseGPMap):
         xlims, ylims = axes.get_xlim(), axes.get_ylim() 
         lims = min(xlims[0], ylims[0]), max(xlims[1], ylims[1])
         axes.plot(lims, lims, lw=0.5, c='grey', linestyle='--')
-        axes.text(xlims[0] + 0.1 * (xlims[1] - xlims[0]),
-                  ylims[0] + 0.9 * (ylims[1] - ylims[0]),
-                  'r={:.2f}'.format(r))
         arrange_plot(axes, xlabel=r'$\hat{y}$',
                      ylabel=r'$y$', xlims=lims, ylims=lims,
                      title='Phenotypic values')
+        axes.text(xlims[0] + 0.1 * (xlims[1] - xlims[0]),
+                  ylims[0] + 0.9 * (ylims[1] - ylims[0]),
+                  'r={:.2f}'.format(r))
     
     def figure_data_distribution(self, data, fname, xlabel='Phenotype'):
         fig, subplots = init_fig(1, 2)
@@ -365,12 +365,13 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
     
     
 class BPStacksConvolutionalModel(ConvolutionalModel):
-    def __init__(self, template, allow_bulges=False,
+    def __init__(self, template, allow_bulges=False, base_bulges=False,
                  model_label='conv0', recompile=False):
         filter_size = len(template)
         self.set_parameters(filter_size=filter_size, alphabet_type='rna',
                             model_label=model_label, recompile=recompile)
         self.allow_bulges = allow_bulges
+        self.base_bulges = base_bulges
         self.set_template_seq(template)
         
     def set_template_seq(self, template):
@@ -387,8 +388,11 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
                     stacks['{}|{}'.format(dinc, c[-1])] = 0
         
         if self.allow_bulges:
-            for nc in self.alphabet:
-                stacks['b{}'.format(nc)] = 0
+            if self.base_bulges:
+                for nc in self.alphabet:
+                    stacks['b{}'.format(nc)] = 0
+            else:
+                stacks['bulge'] = 0
         
         self.stacks = stacks
         self.feature_names = sorted(stacks.keys()) 
@@ -410,7 +414,10 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
             except KeyError:
                 continue
         if bulge is not None:
-            counts['b{}'.format(bulge)] = 1
+            if self.base_bulges:
+                counts['b{}'.format(bulge)] = 1
+            else:
+                counts['bulge'] = 1
         return(counts)
     
     def get_encoding(self, seqs, frame=0, bulge_pos=None, **kwargs):

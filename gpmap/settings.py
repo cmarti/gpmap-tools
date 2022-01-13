@@ -11,7 +11,7 @@ MODELING_DIR = join(BASE_DIR, 'models')
 MODELS_DIR = join(MODELING_DIR, 'compiled')
 CODE_DIR = join(MODELING_DIR, 'stan_code')
 
-PLOTS_DIR = '/home/martigo/repositories/rna/plots'
+PLOTS_DIR = '/home/cmarti/repositories/rna/plots'
 
 # File paths
 PLOTS_FORMAT = 'png'

@@ -199,15 +199,16 @@ class VCTests(unittest.TestCase):
     def test_stan_model(self):
         np.random.seed(1)
         sigma = 0.05
-        gpmap = VCregression(4, 4)
-        lambdas = np.array([0, 200, 20, 2, 0.2])
+        gpmap = VCregression(5, 4)
+        lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
         gpmap.simulate(lambdas, sigma)
         vc = gpmap.lambdas_to_variance(lambdas)
         print(vc)
-        fit = gpmap.stan_fit(sigma)
-        print(gpmap.lambdas_to_variance(fit['lambdas'].mean(0)))
+        fit = gpmap.stan_fit(sigma, recompile=False)
+        print(fit['lambdas'], fit['log_lambda_beta_inv'], fit['log_lambda0'])
+        print(gpmap.lambdas_to_variance(fit['lambdas']))
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests']
+    import sys;sys.argv = ['', 'VCTests.test_stan_model']
     unittest.main()
