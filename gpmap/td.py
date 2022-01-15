@@ -11,6 +11,7 @@ from scipy.stats.stats import pearsonr
 from gpmap.base import BaseGPMap
 from gpmap.utils import get_model
 from gpmap.plot_utils import arrange_plot, savefig, init_fig
+from scipy.stats._continuous_distns import norm
 
 
 class ConvolutionalModel(BaseGPMap):
@@ -212,8 +213,10 @@ class ConvolutionalModel(BaseGPMap):
                    if param in estimates}
         df = pd.DataFrame({'theta': results['theta'],
                            'label': data['theta_labels']})
+        loglikelihood = norm.logpdf(data['y'], results['yhat'], results['sigma']).sum()
         results.update({'theta_labels': data['theta_labels'],
-                        'df': df, 'y': data['y']})
+                        'df': df, 'y': data['y'], 'seqs': data['seqs'],
+                        'loglikelihood': loglikelihood})
 
         if not self.positional_effects:
             results['mu'] = np.array([results['mu']])
