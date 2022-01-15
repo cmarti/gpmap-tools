@@ -1,5 +1,6 @@
 import itertools
 
+import logomaker
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -10,7 +11,6 @@ from scipy.stats.stats import pearsonr
 from gpmap.base import BaseGPMap
 from gpmap.utils import get_model
 from gpmap.plot_utils import arrange_plot, savefig, init_fig
-import logomaker
 
 
 class ConvolutionalModel(BaseGPMap):
