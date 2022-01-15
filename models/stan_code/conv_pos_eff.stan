@@ -6,7 +6,7 @@ data {
 
   int<lower=1, upper=P> positions[S];
   matrix[G, F] X[S];              // One hot encoded sequence  
-  vector[G] log_gfp;              // phenotype measurements
+  vector[G] y;              // phenotype measurements
 }
 
 transformed data{
@@ -53,5 +53,5 @@ model {
     sigma ~ normal(0, 0.5); 
     
     // Likelihood
-    log_gfp ~ normal(yhat, sigma);
+    y ~ normal(yhat, sigma);
 }

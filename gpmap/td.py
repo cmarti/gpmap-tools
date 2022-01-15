@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from scipy.linalg.decomp_cholesky import cholesky
 from scipy.special._logsumexp import logsumexp
 from scipy.stats.stats import pearsonr
 
@@ -15,11 +14,24 @@ import logomaker
 
 
 class ConvolutionalModel(BaseGPMap):
+    def get_model_label(self):
+        if self.positional_effects:
+            model_label = 'conv_pos_eff'
+        else:
+            model_label = 'conv_fixed'
+        return(model_label)
+        
     def set_parameters(self, filter_size, alphabet_type='rna',
-                       n_alleles=4, model_label='conv0', recompile=False):
+                       n_filters=1, positional_effects=False,
+                       n_alleles=4, recompile=False):
         self.filter_size = filter_size
+        self.n_filters = n_filters
+        self.positional_effects = positional_effects
+        
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
-        self.model = get_model(model_label, recompile=recompile)
+        self.model = get_model(self.get_model_label(), recompile=recompile)
+        
+        self.params = ['mu', 'theta', 'sigma', 'yhat', 'log_ki', 'background']
             
     def simulate_random_seqs(self, length, n_seqs):
         if length is None or n_seqs is None:
@@ -109,140 +121,108 @@ class ConvolutionalModel(BaseGPMap):
             embedded.append(upstream + seq + downstream)
         return(embedded)
     
-    def add_flanking_seqs(self, seqs, n_backgrounds=1):
-        upstream = self.simulate_random_seqs(self.filter_size - 1, n_seqs=n_backgrounds)
-        downstream = self.simulate_random_seqs(self.filter_size - 1, n_seqs=n_backgrounds)
+    def add_flanking_seqs(self, seqs, n_backgrounds=1, flank_size=None):
+        if flank_size is None:
+            flank_size = self.filter_size - 1
+        upstream = self.simulate_random_seqs(flank_size, n_seqs=n_backgrounds)
+        downstream = self.simulate_random_seqs(flank_size, n_seqs=n_backgrounds)
         embedded = []
         for u, d in zip(upstream, downstream):
             embedded.extend(self.embed_seqs(seqs, u, d))
         return(embedded)
     
-    def get_L_K(self, x, a, r):
-        d = []
-        for x1 in x:
-            row = []
-            for x2 in x:
-                row.append(np.abs(x1 - x2))
-            d.append(row)
-        d = np.array(d)
-        K = a * np.exp(-d**2 / r)
-        L = cholesky(K + 1e-5 * np.eye(K.shape[0]))
-        return(L)
+    def fix_encoding(self, encoding):
+        features = np.unique(np.hstack([x.columns for x in encoding]))
+        xs = []
+        for x in encoding:
+            for feature in features:
+                if feature not in x.columns:
+                    x[feature] = 0
+            xs.append(x[features].fillna(0).astype(int))
+        return(xs)
     
-    def simulate_parameters(self, n_positions_filter, n_features, theta0, rho,
-                            position_variable=False, position_seq_variable=False):
-        pos = np.arange(n_positions_filter)
+    def simulate_parameters(self, encoding, mu_0, rho):
+        n_positions_filter = encoding['n_positions']
+        n_features = encoding['n_features']
         
-        if position_variable:
-            mu = theta0 - rho * np.abs(pos - pos.mean())    
-        else:
-            mu = np.full(n_positions_filter, theta0)
-            
         theta = np.random.normal(0, 1, size=n_features)
-        theta = np.vstack([theta] * n_positions_filter).T
+        if self.positional_effects:
+            pos = np.arange(n_positions_filter)
+            mu = mu_0 - rho * np.abs(pos - pos.mean())    
+        else:
+            mu = np.array([mu_0])
+        return({'mu': mu, 'theta': theta})
+    
+    def calc_total_log_protein(self, encoding, params):
+        log_ki = np.vstack([-(params['mu'][p] + np.dot(f, params['theta']))
+                            for f, p in zip(encoding['X'], encoding['positions'])])
+        log_ki_sum = logsumexp(log_ki, axis=0)
+        yhat = log_ki_sum
         
-        if position_seq_variable:
-            a, r = 0.5, 1
-            L_K = self.get_L_K(pos, a, r)
-            theta += np.dot(L_K, np.random.normal(0, 1, size=theta.shape).T).T
+        if params['background'] > 0:
+            background = np.full(log_ki_sum.shape, np.log(params['background']))
+            yhat = logsumexp(np.vstack([background, yhat]), axis=0)
             
-        return(mu, theta)
+        return(yhat)
     
-    def calc_total_protein(self, encoding, mu, theta, theta0=0, background=0):
-        encoding, frames = encoding
-        log_ki = np.vstack([-(mu[frame] + np.dot(features, t))
-                            for features, t, frame in zip(encoding, theta.T, frames)])
-        log_ki_sum = logsumexp(log_ki, axis=0)
-        logf = theta0 + log_ki_sum
-        
-        if background > 0:
-            logf = logsumexp(np.vstack([np.full(log_ki_sum.shape, np.log(background)), logf]), axis=0)
-        return(logf)
-    
-    def calc_translation_rate(self, encoding, mu, theta, theta0=0, background=0):
-        log_ki = np.vstack([-(m + np.dot(features, t))
-                            for features, t, m in zip(encoding, theta.T, mu)])
-        log_ki_sum = logsumexp(log_ki, axis=0)
-        v = np.vstack([np.ones(log_ki_sum.shape), log_ki_sum])
-        
-        logf = theta0 + log_ki_sum - logsumexp(v, axis=0)
-        if background > 0:
-            logf = logsumexp(np.vstack([np.full(log_ki_sum.shape, np.log(background)), logf]), axis=0)
-        return(logf)
-    
-    def to_stan_data(self, seqs, y, encoding=None,
-                     upstream='', downstream='', y_sd=None):
+    def to_stan_data(self, seqs, y, encoding=None, y_sd=None,
+                     upstream='', downstream=''):
         seqs = self.embed_seqs(seqs, upstream=upstream, downstream=downstream)
         if encoding is None:
-            encoding, frames = self.get_conv_encoding(seqs)
+            encoding = self.get_conv_encoding(seqs)
         else:
-            encoding, frames = encoding
+            encoding = encoding
             
-        n_features = encoding[0].shape[1]
-        n_positions_filter = len(encoding)
-        
-        data = {'x': seqs, 'y': y,
-                'encoding': encoding,
-                'theta_labels': encoding[0].columns,
-                'positions': frames + 1,
+        X = np.stack(encoding['X'], axis=2).transpose([2, 0, 1])
+        data = {'seqs': seqs, 'y': y, 'X': X,
+                'theta_labels': encoding['features'],
+                'positions': encoding['positions'] + 1,
                 
-                'L': len(seqs[0]), 'F': n_features, 
-                'C': self.n_alleles, 'S': n_positions_filter,
-                'P': np.unique(frames).shape[0]}
+                'L': len(seqs[0]), 'F': encoding['n_features'], 
+                'C': self.n_alleles, 'S': encoding['n_positions'],
+                'P': encoding['n_positions'], 'G': len(seqs)}
         
         if y_sd is not None:
-            data['log_gfp_sd'] = y_sd
+            data['y_sd'] = y_sd
         return(data)
     
-    def simulate_data(self, seqs, log_rt=0, background=0,
-                      theta0=2, rho=0.5, position_variable=False,
-                      position_seq_variable=False, sigma=0.2):
+    def simulate_data(self, seqs, theta_0=0, background=0,
+                      mu_0=2, rho=0.5, sigma=0.2):
         encoding = self.get_conv_encoding(seqs)
-        n_positions_filter, n_features = len(encoding[0]), encoding[0][0].shape[1]
+        params = self.simulate_parameters(encoding, mu_0=mu_0, rho=rho)
+        params['theta_0'] = theta_0
+        params['background'] = background
         
-        mu, theta = self.simulate_parameters(n_positions_filter, n_features,
-                                             theta0=theta0, rho=rho,
-                                             position_variable=position_variable,
-                                             position_seq_variable=position_seq_variable)
-        logf = self.calc_total_protein(encoding, mu, theta, log_rt, background)
-        y = logf + np.random.normal(0, sigma)
+        yhat = self.calc_total_log_protein(encoding, params)
+        y = np.random.normal(yhat, sigma)
+        
         data = self.to_stan_data(seqs, y, encoding=encoding)
-        data['yhat'] = logf
-        data['theta'] = theta
+        data['yhat'] = yhat
+        data['theta'] = params['theta']
+        data['mu'] = params['mu']
+        data['background'] = background
         
         return(data)
     
     def fit(self, data):
-        X = np.stack(data['encoding'], axis=2).transpose([2, 0, 1])
-        stan_data = {'G': len(data['x']), 'F': data['F'], 'S': data['S'],
-                     'P': data['P'],
-                     
-                     'positions': data['positions'],
-                     'X': X, 'log_gfp': data['y']}
-        if 'log_gfp_sd' in data:
-            stan_data['log_gfp_sd'] = data['log_gfp_sd']
+        input_data = {k: v for k, v in data.items()
+                      if k not in ['seqs', 'theta_labels']}
+        estimates = self.model.optimizing(input_data)
+        results = {param: estimates[param] for param in self.params
+                   if param in estimates}
+        df = pd.DataFrame({'theta': results['theta'],
+                           'label': data['theta_labels']})
+        results.update({'theta_labels': data['theta_labels'],
+                        'df': df, 'y': data['y']})
+
+        if not self.positional_effects:
+            results['mu'] = np.array([results['mu']])
             
-        self.estimates = self.model.optimizing(stan_data)
-        theta = self.estimates['theta']
-        sigma = self.estimates['sigma']
-        yhat = self.estimates['yhat']
-        mu = self.estimates['mu']
-        labels = data['encoding'][0].columns
-        df = pd.DataFrame({'theta': theta, 'label': labels})
-        results = {'theta': theta, 'sigma': sigma, 'yhat': yhat,
-                   'mu': mu, 'theta_labels': labels,
-                   'ki_sum': self.estimates['ki_sum'],
-                   'df': df, 'y': data['y']}
-        
-        if 'background' in self.estimates:
-            results['background'] = self.estimates['background']
         return(results)
     
     def predict(self, seqs, fit):
         encoding = self.get_conv_encoding(seqs)
-        theta = np.vstack([fit['theta']] * len(encoding[0])).T
-        logf = self.calc_total_protein(encoding, fit['mu'], theta,
-                                       background=fit['background'])
+        logf = self.calc_total_log_protein(encoding, fit)
         return(logf)
     
     def plot_y_distribution(self, data, axes, xlabel='Phenotype', islog=False):
@@ -332,28 +312,32 @@ class ConvolutionalModel(BaseGPMap):
     
 
 class AdditiveConvolutionalModel(ConvolutionalModel):
-    def __init__(self, filter_size, ref_seq, alphabet_type='rna',
-                 n_alleles=4, model_label='conv0', recompile=False):
+    def __init__(self, ref_seq, alphabet_type='rna',
+                 n_filters=1, positional_effects=False,
+                 n_alleles=4, recompile=False):
+        filter_size = len(ref_seq)
         self.set_parameters(filter_size=filter_size, alphabet_type=alphabet_type,
-                            n_alleles=n_alleles, 
-                            model_label=model_label, recompile=recompile)
+                            n_alleles=n_alleles, n_filters=n_filters,
+                            positional_effects=positional_effects,
+                            recompile=recompile)
         self.ref_seq = ref_seq
     
     def seq_to_encoding(self, seq):
         features = {}
-        for i in range(min(len(seq), self.filter_size)):
-            for nc in self.alphabet:
-                if nc != self.ref_seq[i]:
-                    features['{}{}{}'.format(self.ref_seq[i], i+1, nc)] = int(seq[i] == nc)
+        
+        if self.filter_size != len(seq):
+            raise ValueError('Sequence must have filter size')
+        
+        for i, (a1, a2) in enumerate(zip(self.ref_seq, seq)):
+            if a1 != a2:
+                features['{}{}{}'.format(a1, i+1, a2)] = 1
         return(features)
     
     def get_encoding(self, seqs, frame=0):
         full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size])
                              for seq in seqs], index=seqs)
-        sorted_cols = sorted(full.columns[1:],
-                             key=lambda x:(int(x[1:-1]), x[0], x[-1]))
-        cols = [full.columns[0]] + sorted_cols
-        full = full[cols]
+        sorted_cols = sorted(full.columns, key=lambda x:(int(x[1:-1]), x[0], x[-1]))
+        full = full[sorted_cols]
         return(full)
     
     def get_conv_encoding(self, seqs):
@@ -361,15 +345,24 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
         n_positions_filter = length - self.filter_size + 1
         positions = np.arange(n_positions_filter)
         encoding = [self.get_encoding(seqs, frame=i) for i in positions]
-        return(encoding, positions)
+        encoding = self.fix_encoding(encoding)
+        features = encoding[0].columns
+        
+        if not self.positional_effects:
+            positions = np.full(positions.shape, 0)
+        
+        return({'X': encoding, 'positions': positions,
+                'n_positions': n_positions_filter,
+                'features': features, 'n_features': features.shape[0]})
     
     
 class BPStacksConvolutionalModel(ConvolutionalModel):
     def __init__(self, template, allow_bulges=False, base_bulges=False,
-                 model_label='conv0', recompile=False):
+                 recompile=False, positional_effects=False):
         filter_size = len(template)
         self.set_parameters(filter_size=filter_size, alphabet_type='rna',
-                            model_label=model_label, recompile=recompile)
+                            positional_effects=positional_effects,
+                            recompile=recompile)
         self.allow_bulges = allow_bulges
         self.base_bulges = base_bulges
         self.set_template_seq(template)
@@ -448,4 +441,14 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
         encoding = [self.get_encoding(seqs, frame=frame, bulge_pos=bulge_pos)
                     for frame, bulge_pos in configurations]
         frames = np.array([frame for frame, bulge_pos in configurations])
-        return(encoding, frames)
+        
+        encoding = self.fix_encoding(encoding)
+        features = encoding[0].columns
+        
+        n_positions = np.unique(frames).shape[0]
+        if not self.positional_effects:
+            frames = np.full(frames.shape, 0)
+        
+        return({'X': encoding, 'positions': frames,
+                'n_positions': n_positions,
+                'features': features, 'n_features': features.shape[0]})
