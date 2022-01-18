@@ -132,6 +132,46 @@ class ConvolutionalModel(BaseGPMap):
             embedded.extend(self.embed_seqs(seqs, u, d))
         return(embedded)
     
+    def get_encoding(self, seqs, frame=0, bulge_pos=None):
+        full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size], bulge_pos=bulge_pos)
+                             for seq in seqs], index=seqs)[self.feature_names]
+        return(full)
+    
+    def get_possible_positions(self, seqs, bulge=False):
+        length = len(seqs[0])
+        n_positions_filter = length - self.filter_size + 1 - int(bulge)
+        positions = np.arange(n_positions_filter)
+        return(positions)
+    
+    def get_possible_configurations(self, seqs):
+        # Bulges need at least to bases at each side to allow counting some stacks
+        # Limits also the number of useful configurations to take into account
+        bulge_positions = np.array([None])
+        if self.allow_bulges:
+            bulge_positions = np.hstack([bulge_positions,
+                                         np.arange(2, self.filter_size-1)])
+        
+        for bulge_pos in bulge_positions: 
+            for pos in self.get_possible_positions(seqs, bulge=bulge_pos is not None):
+                yield(pos, bulge_pos)
+
+    def get_conv_encoding(self, seqs):
+        configurations = list(self.get_possible_configurations(seqs))
+        encoding = [self.get_encoding(seqs, frame=frame, bulge_pos=bulge_pos)
+                    for frame, bulge_pos in configurations]
+        frames = np.array([frame for frame, bulge_pos in configurations])
+        
+        encoding = self.fix_encoding(encoding)
+        features = encoding[0].columns
+        
+        n_positions = np.unique(frames).shape[0]
+        if not self.positional_effects:
+            frames = np.full(frames.shape, 0)
+        
+        return({'X': encoding, 'positions': frames,
+                'n_positions': n_positions,
+                'features': features, 'n_features': features.shape[0]})
+    
     def fix_encoding(self, encoding):
         features = np.unique(np.hstack([x.columns for x in encoding]))
         xs = []
@@ -317,12 +357,15 @@ class ConvolutionalModel(BaseGPMap):
 class AdditiveConvolutionalModel(ConvolutionalModel):
     def __init__(self, ref_seq, alphabet_type='rna',
                  n_filters=1, positional_effects=False,
+                 allow_bulges=False, base_bulges=False,
                  n_alleles=4, recompile=False):
         filter_size = len(ref_seq)
         self.set_parameters(filter_size=filter_size, alphabet_type=alphabet_type,
                             n_alleles=n_alleles, n_filters=n_filters,
                             positional_effects=positional_effects,
                             recompile=recompile)
+        self.allow_bulges = allow_bulges
+        self.base_bulges = base_bulges
         self.ref_seq = ref_seq
     
     def seq_to_encoding(self, seq):
@@ -415,43 +458,3 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
             else:
                 counts['bulge'] = 1
         return(counts)
-    
-    def get_encoding(self, seqs, frame=0, bulge_pos=None, **kwargs):
-        full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size], bulge_pos=bulge_pos)
-                             for seq in seqs], index=seqs)[self.feature_names]
-        return(full)
-    
-    def get_possible_positions(self, seqs, bulge=False):
-        length = len(seqs[0])
-        n_positions_filter = length - self.filter_size + 1 - int(bulge)
-        positions = np.arange(n_positions_filter)
-        return(positions)
-    
-    def get_possible_configurations(self, seqs):
-        # Bulges need at least to bases at each side to allow counting some stacks
-        # Limits also the number of useful configurations to take into account
-        bulge_positions = np.array([None])
-        if self.allow_bulges:
-            bulge_positions = np.hstack([bulge_positions,
-                                         np.arange(2, self.filter_size-1)])
-        
-        for bulge_pos in bulge_positions: 
-            for pos in self.get_possible_positions(seqs, bulge=bulge_pos is not None):
-                yield(pos, bulge_pos)
-
-    def get_conv_encoding(self, seqs):
-        configurations = list(self.get_possible_configurations(seqs))
-        encoding = [self.get_encoding(seqs, frame=frame, bulge_pos=bulge_pos)
-                    for frame, bulge_pos in configurations]
-        frames = np.array([frame for frame, bulge_pos in configurations])
-        
-        encoding = self.fix_encoding(encoding)
-        features = encoding[0].columns
-        
-        n_positions = np.unique(frames).shape[0]
-        if not self.positional_effects:
-            frames = np.full(frames.shape, 0)
-        
-        return({'X': encoding, 'positions': frames,
-                'n_positions': n_positions,
-                'features': features, 'n_features': features.shape[0]})
