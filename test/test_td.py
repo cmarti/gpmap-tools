@@ -128,6 +128,21 @@ class TDTests(unittest.TestCase):
         assert(r > 0.9)
         assert(np.abs(fit['mu'] - 2) < 0.2)
     
+    def test_fit_total_constant(self):
+        np.random.seed(0)
+        mu_0, theta_0 = 8, 2
+        m = AdditiveConvolutionalModel('AGGA', total_is_constant=True)
+        seqs = m.simulate_random_seqs(length=5, n_seqs=2000)
+        seqs = m.add_flanking_seqs(seqs, n_backgrounds=1, flank_size=2)
+        data = m.simulate_data(seqs, theta_0=theta_0, mu_0=mu_0,
+                               background=1, sigma=0.1)
+        fit = m.fit(data)
+        r = pearsonr(data['theta'], fit['theta'])[0]
+        
+        assert(r > 0.9)
+        assert(np.abs(fit['mu'] - mu_0) < 0.6)
+        assert(np.abs(fit['theta_0'] - theta_0) < 0.6)
+        
     def test_fit_additive_pos_eff(self):
         m = AdditiveConvolutionalModel('AGGA', positional_effects=True)
         seqs = m.simulate_random_seqs(length=5, n_seqs=2000)

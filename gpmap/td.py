@@ -17,22 +17,31 @@ from scipy.stats._continuous_distns import norm
 class ConvolutionalModel(BaseGPMap):
     def get_model_label(self):
         if self.positional_effects:
-            model_label = 'conv_pos_eff'
+            if self.total_is_constant:
+                model_label = 'conv_pos_eff_total_constant'
+            else:
+                model_label = 'conv_pos_eff'
         else:
-            model_label = 'conv_fixed'
+            if self.total_is_constant:
+                model_label = 'conv_fixed_total_constant'
+            else:
+                model_label = 'conv_fixed'
         return(model_label)
         
     def set_parameters(self, filter_size, alphabet_type='rna',
                        n_filters=1, positional_effects=False,
+                       total_is_constant=False,
                        n_alleles=4, recompile=False):
         self.filter_size = filter_size
         self.n_filters = n_filters
+        self.total_is_constant = total_is_constant
         self.positional_effects = positional_effects
         
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
         self.model = get_model(self.get_model_label(), recompile=recompile)
         
-        self.params = ['mu', 'theta', 'sigma', 'yhat', 'log_ki', 'background']
+        self.params = ['mu', 'theta', 'sigma', 'yhat', 'log_ki', 'background',
+                       'theta_0']
             
     def simulate_random_seqs(self, length, n_seqs):
         if length is None or n_seqs is None:
@@ -186,19 +195,25 @@ class ConvolutionalModel(BaseGPMap):
         n_positions_filter = encoding['n_positions']
         n_features = encoding['n_features']
         
+        theta_0 = np.random.normal(2, 1)
         theta = np.random.normal(0, 1, size=n_features)
         if self.positional_effects:
             pos = np.arange(n_positions_filter)
             mu = mu_0 - rho * np.abs(pos - pos.mean())    
         else:
             mu = np.array([mu_0])
-        return({'mu': mu, 'theta': theta})
+        return({'mu': mu, 'theta': theta, 'theta_0': theta_0})
     
     def calc_total_log_protein(self, encoding, params):
         log_ki = np.vstack([-(params['mu'][p] + np.dot(f, params['theta']))
                             for f, p in zip(encoding['X'], encoding['positions'])])
         log_ki_sum = logsumexp(log_ki, axis=0)
-        yhat = log_ki_sum
+        
+        if self.total_is_constant:
+            ki_sum = np.exp(log_ki_sum)
+            yhat = params['theta_0'] + log_ki_sum - np.log(1 + ki_sum)
+        else:
+            yhat = log_ki_sum
         
         if params['background'] > 0:
             background = np.full(log_ki_sum.shape, np.log(params['background']))
@@ -227,12 +242,13 @@ class ConvolutionalModel(BaseGPMap):
             data['y_sd'] = y_sd
         return(data)
     
-    def simulate_data(self, seqs, theta_0=0, background=0,
+    def simulate_data(self, seqs, theta_0=None, background=0,
                       mu_0=2, rho=0.5, sigma=0.2):
         encoding = self.get_conv_encoding(seqs)
         params = self.simulate_parameters(encoding, mu_0=mu_0, rho=rho)
-        params['theta_0'] = theta_0
         params['background'] = background
+        if theta_0 is not None:
+            params['theta_0'] = theta_0
         
         yhat = self.calc_total_log_protein(encoding, params)
         y = np.random.normal(yhat, sigma)
@@ -327,10 +343,11 @@ class ConvolutionalModel(BaseGPMap):
             axes.scatter(x, mu, lw=1, c=color, label=label)
             arrange_plot(axes, xlabel='Position', ylabel=r'$\mu$')
     
-    def plot_predictions(self, fit, axes, hist=False):
+    def plot_predictions(self, fit, axes, hist=False, vmax=None):
         if hist:
             sns.histplot(x=fit['yhat'], y=fit['y'], cmap='viridis', ax=axes,
-                         cbar_kws={'label': '# genotypes'}, cbar=True, vmax=200)
+                         cbar_kws={'label': '# genotypes'},
+                         cbar=True, vmax=vmax)
         else:
             axes.scatter(fit['yhat'], fit['y'],
                          s=10, lw=0.2, edgecolor='black')
@@ -357,11 +374,13 @@ class ConvolutionalModel(BaseGPMap):
 class AdditiveConvolutionalModel(ConvolutionalModel):
     def __init__(self, ref_seq, alphabet_type='rna',
                  n_filters=1, positional_effects=False,
+                 total_is_constant=False,
                  allow_bulges=False, base_bulges=False,
                  n_alleles=4, recompile=False):
         filter_size = len(ref_seq)
         self.set_parameters(filter_size=filter_size, alphabet_type=alphabet_type,
                             n_alleles=n_alleles, n_filters=n_filters,
+                            total_is_constant=total_is_constant,
                             positional_effects=positional_effects,
                             recompile=recompile)
         self.allow_bulges = allow_bulges
@@ -404,9 +423,11 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
     
 class BPStacksConvolutionalModel(ConvolutionalModel):
     def __init__(self, template, allow_bulges=False, base_bulges=False,
+                 total_is_constant=False,
                  recompile=False, positional_effects=False):
         filter_size = len(template)
         self.set_parameters(filter_size=filter_size, alphabet_type='rna',
+                            total_is_constant=total_is_constant,
                             positional_effects=positional_effects,
                             recompile=recompile)
         self.allow_bulges = allow_bulges
