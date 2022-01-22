@@ -3,6 +3,7 @@ data {
   int<lower=0> F;                 // number of features
   int<lower=0> S;                 // number of configurations
 
+  real alpha;                     // alpha
   matrix[G, F] X[S];              // One hot encoded sequence  
   vector[G] y;                    // phenotype measurements
 }
@@ -31,7 +32,7 @@ transformed parameters {
     }
     
     ki_sum = exp(log_ki) * ones;
-    yhat = log(background + exp(theta_0) * ki_sum ./ (1 + ki_sum));
+    yhat = log(background + exp(theta_0) * ki_sum ./ (1 + alpha * ki_sum));
 }
 
 

@@ -54,6 +54,21 @@ class TDTests(unittest.TestCase):
         encoding = m.get_conv_encoding(['AGGAGG'])
         assert(encoding['n_positions'] == 3)
         assert(np.all(encoding['positions'] == np.arange(3)))
+        
+        # With bulges now        
+        m = AdditiveConvolutionalModel(ref_seq='AGGA', allow_bulges=True)
+        counts = m.seq_to_encoding('AGAGA', bulge_pos=2)
+        assert(counts['b'] == 1)
+        
+        encoding = m.get_conv_encoding(['AGAGAG'])
+        assert(encoding['n_configurations'] == 5)
+        assert(encoding['n_positions'] == 3)
+        
+        # With position bulges        
+        m = AdditiveConvolutionalModel(ref_seq='AGGA', allow_bulges=True,
+                                       position_bulges=True)
+        counts = m.seq_to_encoding('AGAGA', bulge_pos=2)
+        assert(counts['b2'] == 1)
     
     def test_stacks_features(self):
         m = BPStacksConvolutionalModel(template='UCCU')
@@ -69,19 +84,19 @@ class TDTests(unittest.TestCase):
         m = BPStacksConvolutionalModel(template='UCCU', allow_bulges=True)
         counts = m.seq_to_encoding('AGAGAG', bulge_pos=2)
         expected = {'UC|AG': 1, 'UC|GG': 0, 'CC|GG': 1, 'CU|GA': 1, 'CU|GG': 0,
-                    'bulge': 1}
+                    'b': 1}
         assert(counts == expected)
         
         encoding = m.get_conv_encoding(['AGAGAG'])
-        assert(len(encoding['X']) == 5)
+        assert(encoding['n_configurations'] == 5)
         assert(encoding['n_positions'] == 3)
         
         # With base bulges
         m = BPStacksConvolutionalModel(template='UCCU', allow_bulges=True,
                                        base_bulges=True)
         counts = m.seq_to_encoding('AGAGAG', bulge_pos=2)
-        expected = {'UC|AG': 1, 'UC|GG': 0, 'CC|GG': 1, 'CU|GA': 1, 'CU|GG': 0,
-                    'bA': 1, 'bC': 0, 'bG': 0, 'bU': 0}
+        expected = {'bA': 1, 'bC': 0, 'bG': 0, 'bU': 0,
+                    'UC|AG': 1, 'UC|GG': 0, 'CC|GG': 1, 'CU|GA': 1, 'CU|GG': 0}
         assert(counts == expected)
         
         encoding = m.get_conv_encoding(['AGAGAG'])
@@ -131,13 +146,40 @@ class TDTests(unittest.TestCase):
     def test_fit_total_constant(self):
         np.random.seed(0)
         mu_0, theta_0 = 8, 2
-        m = AdditiveConvolutionalModel('AGGA', total_is_constant=True)
+        m = AdditiveConvolutionalModel('AGGA', alpha_type=1)
         seqs = m.simulate_random_seqs(length=5, n_seqs=2000)
         seqs = m.add_flanking_seqs(seqs, n_backgrounds=1, flank_size=2)
         data = m.simulate_data(seqs, theta_0=theta_0, mu_0=mu_0,
                                background=1, sigma=0.1)
         fit = m.fit(data)
         r = pearsonr(data['theta'], fit['theta'])[0]
+        
+        assert(r > 0.9)
+        assert(np.abs(fit['mu'] - mu_0) < 0.6)
+        assert(np.abs(fit['theta_0'] - theta_0) < 0.6)
+    
+    def test_fit_free_alpha(self):
+        np.random.seed(0)
+        mu_0, theta_0 = 3, 2
+        m = AdditiveConvolutionalModel('AGGA', alpha_type='free')
+        seqs = m.simulate_random_seqs(length=6, n_seqs=4000)
+        seqs = m.add_flanking_seqs(seqs, n_backgrounds=1, flank_size=2)
+        data = m.simulate_data(seqs, theta_0=theta_0, mu_0=mu_0,
+                               background=1, sigma=0.1)
+        
+        # m = AdditiveConvolutionalModel('AGGA', alpha_type=1)
+        fit = m.fit(data)
+        r = pearsonr(data['theta'], fit['theta'])[0]
+        
+        fig, axes = init_fig(2, 3)
+        axes = axes.flatten()
+        m.plot_y_distribution(data, axes[0])
+        m.plot_predictions(fit, axes[1], hist=True)
+        m.plot_mut_eff(data, fit, axes[2])
+        m.plot_mu(fit, axes[3])
+        m.plot_theta_logo(fit, axes[4])
+        m.plot_theta_heatmap(fit, axes[5])
+        savefig(fig, 'test_td')
         
         assert(r > 0.9)
         assert(np.abs(fit['mu'] - mu_0) < 0.6)
@@ -193,7 +235,7 @@ class TDTests(unittest.TestCase):
         data = m.simulate_data(seqs, background=1)
         fit = m.fit(data)
         
-        ypred = m.predict(seqs, fit)
+        ypred = m.predict(seqs, fit)['yhat']
         assert(np.allclose(ypred, fit['yhat']))
         
         
