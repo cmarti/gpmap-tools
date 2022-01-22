@@ -17,31 +17,57 @@ from scipy.stats._continuous_distns import norm
 class ConvolutionalModel(BaseGPMap):
     def get_model_label(self):
         if self.positional_effects:
-            if self.total_is_constant:
-                model_label = 'conv_pos_eff_total_constant'
-            else:
+            if self.alpha_type == 1:
+                model_label = 'conv_pos_eff_fixed_alpha'
+            elif self.alpha_type == 0:
                 model_label = 'conv_pos_eff'
-        else:
-            if self.total_is_constant:
-                model_label = 'conv_fixed_total_constant'
+            elif self.alpha_type == 'free':
+                model_label = 'conv_pos_eff_free_alpha'
             else:
+                raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
+            
+        else:
+            if self.alpha_type == 1:
+                model_label = 'conv_fixed_fixed_alpha'
+            elif self.alpha_type == 0:
                 model_label = 'conv_fixed'
+            elif self.alpha_type == 'free':
+                model_label = 'conv_fixed_free_alpha'
+            else:
+                raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
         return(model_label)
         
     def set_parameters(self, filter_size, alphabet_type='rna',
                        n_filters=1, positional_effects=False,
-                       total_is_constant=False,
-                       n_alleles=4, recompile=False):
+                       allow_bulges=False, base_bulges=False,
+                       position_bulges=False,
+                       alpha_type=0, n_alleles=4, recompile=False):
+        self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
+        
         self.filter_size = filter_size
         self.n_filters = n_filters
-        self.total_is_constant = total_is_constant
+        self.alpha_type = alpha_type
         self.positional_effects = positional_effects
         
-        self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
-        self.model = get_model(self.get_model_label(), recompile=recompile)
+        self.allow_bulges = allow_bulges
+        self.base_bulges = base_bulges
+        self.position_bulges = position_bulges
+        self.set_bulges_params()
         
+        self.model = get_model(self.get_model_label(), recompile=recompile)
         self.params = ['mu', 'theta', 'sigma', 'yhat', 'log_ki', 'background',
-                       'theta_0']
+                       'theta_0', 'log_alpha']
+        
+    def set_bulges_params(self):
+        if self.allow_bulges:
+            if self.base_bulges:
+                self.bulges_params = {'b{}'.format(a): 0 for a in self.alphabet}
+            elif self.position_bulges:
+                self.bulges_params = {'b{}'.format(a): 0 for a in range(2, self.filter_size-1)}
+            else:
+                self.bulges_params = {'b': 0}
+        else:
+            self.bulges_params = {}
             
     def simulate_random_seqs(self, length, n_seqs):
         if length is None or n_seqs is None:
@@ -141,9 +167,31 @@ class ConvolutionalModel(BaseGPMap):
             embedded.extend(self.embed_seqs(seqs, u, d))
         return(embedded)
     
+    def update_bulge_features(self, features, bulge, bulge_pos):
+        if bulge is not None:
+            if self.base_bulges:
+                features['b{}'.format(bulge)] = 1
+            elif self.position_bulges:
+                features['b{}'.format(bulge_pos)] = 1
+            else:
+                features['b'] = 1
+    
+    def get_target_and_bulge(self, seq, bulge_pos=None):
+        if bulge_pos is None:
+            target = seq
+            bulge = None
+        else:
+            bulge = seq[bulge_pos]
+            target = seq[:bulge_pos] + seq[bulge_pos+1:]
+        return(target, bulge)
+    
     def get_encoding(self, seqs, frame=0, bulge_pos=None):
-        full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size], bulge_pos=bulge_pos)
-                             for seq in seqs], index=seqs)[self.feature_names]
+        start = frame
+        end = start + self.filter_size + int(bulge_pos is not None)
+        full = pd.DataFrame([self.seq_to_encoding(seq[start:end], bulge_pos=bulge_pos)
+                             for seq in seqs], index=seqs)
+        if hasattr(self, 'feature_names'):
+            full = full[self.feature_names]
         return(full)
     
     def get_possible_positions(self, seqs, bulge=False):
@@ -179,6 +227,7 @@ class ConvolutionalModel(BaseGPMap):
         
         return({'X': encoding, 'positions': frames,
                 'n_positions': n_positions,
+                'n_configurations': len(configurations),
                 'features': features, 'n_features': features.shape[0]})
     
     def fix_encoding(self, encoding):
@@ -197,21 +246,22 @@ class ConvolutionalModel(BaseGPMap):
         
         theta_0 = np.random.normal(2, 1)
         theta = np.random.normal(0, 1, size=n_features)
+        alpha = np.exp(np.random.normal(-2, 1)) if self.alpha_type == 'free' else self.alpha_type
         if self.positional_effects:
             pos = np.arange(n_positions_filter)
             mu = mu_0 - rho * np.abs(pos - pos.mean())    
         else:
             mu = np.array([mu_0])
-        return({'mu': mu, 'theta': theta, 'theta_0': theta_0})
+        return({'mu': mu, 'theta': theta, 'theta_0': theta_0, 'alpha': alpha})
     
     def calc_total_log_protein(self, encoding, params):
         log_ki = np.vstack([-(params['mu'][p] + np.dot(f, params['theta']))
                             for f, p in zip(encoding['X'], encoding['positions'])])
         log_ki_sum = logsumexp(log_ki, axis=0)
         
-        if self.total_is_constant:
+        if self.alpha_type != 0:
             ki_sum = np.exp(log_ki_sum)
-            yhat = params['theta_0'] + log_ki_sum - np.log(1 + ki_sum)
+            yhat = params['theta_0'] + log_ki_sum - np.log(1 + params['alpha'] * ki_sum)
         else:
             yhat = log_ki_sum
         
@@ -219,7 +269,7 @@ class ConvolutionalModel(BaseGPMap):
             background = np.full(log_ki_sum.shape, np.log(params['background']))
             yhat = logsumexp(np.vstack([background, yhat]), axis=0)
             
-        return(yhat)
+        return({'yhat': yhat, 'log_ki': log_ki})
     
     def to_stan_data(self, seqs, y, encoding=None, y_sd=None,
                      upstream='', downstream=''):
@@ -235,11 +285,13 @@ class ConvolutionalModel(BaseGPMap):
                 'positions': encoding['positions'] + 1,
                 
                 'L': len(seqs[0]), 'F': encoding['n_features'], 
-                'C': self.n_alleles, 'S': encoding['n_positions'],
+                'C': self.n_alleles, 'S': encoding['n_configurations'],
                 'P': encoding['n_positions'], 'G': len(seqs)}
         
         if y_sd is not None:
             data['y_sd'] = y_sd
+        if self.alpha_type == 1:
+            data['alpha'] = 1
         return(data)
     
     def simulate_data(self, seqs, theta_0=None, background=0,
@@ -250,11 +302,11 @@ class ConvolutionalModel(BaseGPMap):
         if theta_0 is not None:
             params['theta_0'] = theta_0
         
-        yhat = self.calc_total_log_protein(encoding, params)
-        y = np.random.normal(yhat, sigma)
+        output = self.calc_total_log_protein(encoding, params)
+        y = np.random.normal(output['yhat'], sigma)
         
         data = self.to_stan_data(seqs, y, encoding=encoding)
-        data['yhat'] = yhat
+        data['yhat'] = output['yhat']
         data['theta'] = params['theta']
         data['mu'] = params['mu']
         data['background'] = background
@@ -276,13 +328,15 @@ class ConvolutionalModel(BaseGPMap):
 
         if not self.positional_effects:
             results['mu'] = np.array([results['mu']])
+        if 'log_alpha' in  results:
+            results['alpha'] = np.exp(results['log_alpha'])
             
         return(results)
     
     def predict(self, seqs, fit):
         encoding = self.get_conv_encoding(seqs)
-        logf = self.calc_total_log_protein(encoding, fit)
-        return(logf)
+        output = self.calc_total_log_protein(encoding, fit)
+        return(output)
     
     def plot_y_distribution(self, data, axes, xlabel='Phenotype', islog=False):
         y = data['y']
@@ -374,64 +428,48 @@ class ConvolutionalModel(BaseGPMap):
 class AdditiveConvolutionalModel(ConvolutionalModel):
     def __init__(self, ref_seq, alphabet_type='rna',
                  n_filters=1, positional_effects=False,
-                 total_is_constant=False,
+                 alpha_type=False, position_bulges=False,
                  allow_bulges=False, base_bulges=False,
                  n_alleles=4, recompile=False):
         filter_size = len(ref_seq)
         self.set_parameters(filter_size=filter_size, alphabet_type=alphabet_type,
                             n_alleles=n_alleles, n_filters=n_filters,
-                            total_is_constant=total_is_constant,
+                            alpha_type=alpha_type,
+                            allow_bulges=allow_bulges, base_bulges=base_bulges,
+                            position_bulges=position_bulges,
                             positional_effects=positional_effects,
                             recompile=recompile)
         self.allow_bulges = allow_bulges
         self.base_bulges = base_bulges
         self.ref_seq = ref_seq
     
-    def seq_to_encoding(self, seq):
-        features = {}
+    def seq_to_encoding(self, seq, bulge_pos=None):
+        features = self.bulges_params.copy()
+        target, bulge = self.get_target_and_bulge(seq, bulge_pos)
         
-        if self.filter_size != len(seq):
+        if self.filter_size != len(target):
             raise ValueError('Sequence must have filter size')
         
-        for i, (a1, a2) in enumerate(zip(self.ref_seq, seq)):
+        for i, (a1, a2) in enumerate(zip(self.ref_seq, target)):
             if a1 != a2:
                 features['{}{}{}'.format(a1, i+1, a2)] = 1
+    
+        self.update_bulge_features(features, bulge, bulge_pos)
+        
         return(features)
-    
-    def get_encoding(self, seqs, frame=0):
-        full = pd.DataFrame([self.seq_to_encoding(seq[frame:frame+self.filter_size])
-                             for seq in seqs], index=seqs)
-        sorted_cols = sorted(full.columns, key=lambda x:(int(x[1:-1]), x[0], x[-1]))
-        full = full[sorted_cols]
-        return(full)
-    
-    def get_conv_encoding(self, seqs):
-        length = len(seqs[0])
-        n_positions_filter = length - self.filter_size + 1
-        positions = np.arange(n_positions_filter)
-        encoding = [self.get_encoding(seqs, frame=i) for i in positions]
-        encoding = self.fix_encoding(encoding)
-        features = encoding[0].columns
-        
-        if not self.positional_effects:
-            positions = np.full(positions.shape, 0)
-        
-        return({'X': encoding, 'positions': positions,
-                'n_positions': n_positions_filter,
-                'features': features, 'n_features': features.shape[0]})
     
     
 class BPStacksConvolutionalModel(ConvolutionalModel):
     def __init__(self, template, allow_bulges=False, base_bulges=False,
-                 total_is_constant=False,
+                 alpha_type=False, position_bulges=False,
                  recompile=False, positional_effects=False):
         filter_size = len(template)
         self.set_parameters(filter_size=filter_size, alphabet_type='rna',
-                            total_is_constant=total_is_constant,
+                            alpha_type=alpha_type,
+                            allow_bulges=allow_bulges, base_bulges=base_bulges,
+                            position_bulges=position_bulges,
                             positional_effects=positional_effects,
                             recompile=recompile)
-        self.allow_bulges = allow_bulges
-        self.base_bulges = base_bulges
         self.set_template_seq(template)
         
     def set_template_seq(self, template):
@@ -446,36 +484,22 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
                 for b2 in self.complements[dinc[1]]:
                     c.append(b1 + b2)
                     stacks['{}|{}'.format(dinc, c[-1])] = 0
+        self.bulges_params.update(stacks)
         
-        if self.allow_bulges:
-            if self.base_bulges:
-                for nc in self.alphabet:
-                    stacks['b{}'.format(nc)] = 0
-            else:
-                stacks['bulge'] = 0
-        
-        self.stacks = stacks
-        self.feature_names = sorted(stacks.keys()) 
+        self.feature_names = sorted(self.bulges_params.keys()) 
         self.template = template
         
     def seq_to_encoding(self, seq, bulge_pos=None):
-        if bulge_pos is None:
-            target = seq
-            bulge = None
-        else:
-            bulge = seq[bulge_pos]
-            target = seq[:bulge_pos] + seq[bulge_pos+1:]
+        target, bulge = self.get_target_and_bulge(seq, bulge_pos)
             
-        counts = self.stacks.copy()
+        features = self.bulges_params.copy()
         for i in range(self.filter_size - 1):
             stack = '{}|{}'.format(self.template[i:i+2], target[i:i+2])
             try:
-                counts[stack] += 1
+                features[stack] += 1
             except KeyError:
                 continue
-        if bulge is not None:
-            if self.base_bulges:
-                counts['b{}'.format(bulge)] = 1
-            else:
-                counts['bulge'] = 1
-        return(counts)
+            
+        self.update_bulge_features(features, bulge, bulge_pos)
+        
+        return(features)
