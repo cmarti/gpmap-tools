@@ -22,7 +22,10 @@ class ConvolutionalModel(BaseGPMap):
             elif self.alpha_type == 0:
                 model_label = 'conv_pos_eff'
             elif self.alpha_type == 'free':
-                model_label = 'conv_pos_eff_free_alpha'
+                if self.intercept is not None and self.slope is not None:
+                    model_label = 'conv_pos_eff_free_alpha_known_cts'
+                else:
+                    model_label = 'conv_pos_eff_free_alpha'
             else:
                 raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
             
@@ -32,7 +35,10 @@ class ConvolutionalModel(BaseGPMap):
             elif self.alpha_type == 0:
                 model_label = 'conv_fixed'
             elif self.alpha_type == 'free':
-                model_label = 'conv_fixed_free_alpha'
+                if self.intercept is not None and self.slope is not None:
+                    model_label = 'conv_fixed_free_alpha_known_cts'
+                else:
+                    model_label = 'conv_fixed_free_alpha'
             else:
                 raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
         return(model_label)
@@ -40,6 +46,7 @@ class ConvolutionalModel(BaseGPMap):
     def set_parameters(self, filter_size, alphabet_type='rna',
                        n_filters=1, positional_effects=False,
                        allow_bulges=False, base_bulges=False,
+                       intercept=None, slope=None,
                        position_bulges=False,
                        alpha_type=0, n_alleles=4, recompile=False):
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
@@ -47,6 +54,8 @@ class ConvolutionalModel(BaseGPMap):
         self.filter_size = filter_size
         self.n_filters = n_filters
         self.alpha_type = alpha_type
+        self.intercept = intercept
+        self.slope = slope
         self.positional_effects = positional_effects
         
         self.allow_bulges = allow_bulges
@@ -56,7 +65,7 @@ class ConvolutionalModel(BaseGPMap):
         
         self.model = get_model(self.get_model_label(), recompile=recompile)
         self.params = ['mu', 'theta', 'sigma', 'yhat', 'log_ki', 'background',
-                       'theta_0', 'log_alpha']
+                       'theta_0', 'log_alpha', 'alpha']
         
     def set_bulges_params(self):
         if self.allow_bulges:
@@ -292,6 +301,11 @@ class ConvolutionalModel(BaseGPMap):
             data['y_sd'] = y_sd
         if self.alpha_type == 1:
             data['alpha'] = 1
+        
+        if self.intercept is not None and self.slope is not None:
+            data['intercept'] = self.intercept
+            data['slope'] = self.slope
+            
         return(data)
     
     def simulate_data(self, seqs, theta_0=None, background=0,
@@ -428,6 +442,7 @@ class ConvolutionalModel(BaseGPMap):
 class AdditiveConvolutionalModel(ConvolutionalModel):
     def __init__(self, ref_seq, alphabet_type='rna',
                  n_filters=1, positional_effects=False,
+                 intercept=None, slope=None,
                  alpha_type=False, position_bulges=False,
                  allow_bulges=False, base_bulges=False,
                  n_alleles=4, recompile=False):
@@ -435,6 +450,7 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
         self.set_parameters(filter_size=filter_size, alphabet_type=alphabet_type,
                             n_alleles=n_alleles, n_filters=n_filters,
                             alpha_type=alpha_type,
+                            intercept=intercept, slope=slope,
                             allow_bulges=allow_bulges, base_bulges=base_bulges,
                             position_bulges=position_bulges,
                             positional_effects=positional_effects,
@@ -461,11 +477,13 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
     
 class BPStacksConvolutionalModel(ConvolutionalModel):
     def __init__(self, template, allow_bulges=False, base_bulges=False,
+                 intercept=None, slope=None,
                  alpha_type=False, position_bulges=False,
                  recompile=False, positional_effects=False):
         filter_size = len(template)
         self.set_parameters(filter_size=filter_size, alphabet_type='rna',
                             alpha_type=alpha_type,
+                            intercept=intercept, slope=slope,
                             allow_bulges=allow_bulges, base_bulges=base_bulges,
                             position_bulges=position_bulges,
                             positional_effects=positional_effects,

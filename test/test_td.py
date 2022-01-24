@@ -184,6 +184,43 @@ class TDTests(unittest.TestCase):
         assert(r > 0.9)
         assert(np.abs(fit['mu'] - mu_0) < 0.6)
         assert(np.abs(fit['theta_0'] - theta_0) < 0.6)
+    
+    def test_fit_free_alpha_known_cts(self):
+        np.random.seed(0)
+        alpha = 0.1
+        intercept = 0.0028
+        slope = 0.6293
+        
+        mu_0 = 0
+        theta_0 = np.log(intercept * (1 - alpha) / slope)
+        
+        # Fixed positional effects
+        m = AdditiveConvolutionalModel('AGGA', alpha_type='free', 
+                                       intercept=intercept, slope=slope,
+                                       positional_effects=False)
+        seqs = m.simulate_random_seqs(length=6, n_seqs=4000)
+        seqs = m.add_flanking_seqs(seqs, n_backgrounds=1, flank_size=2)
+        m.alpha_type = alpha
+        data = m.simulate_data(seqs, theta_0=theta_0, mu_0=mu_0,
+                               background=0, sigma=0.1)
+        
+        fit = m.fit(data)
+        r = pearsonr(data['theta'], fit['theta'])[0]
+        
+        assert(np.abs(fit['alpha'] - alpha) < 0.05)
+        assert(r > 0.9)
+        
+        # variable positional effects
+        m = AdditiveConvolutionalModel('AGGA', alpha_type='free', 
+                                       intercept=intercept, slope=slope,
+                                       positional_effects=True)
+        data = m.simulate_data(seqs, theta_0=theta_0, mu_0=mu_0,
+                               background=0, sigma=0.1)
+        fit = m.fit(data)
+        r = pearsonr(data['theta'], fit['theta'])[0]
+        
+        assert(np.abs(fit['alpha'] - alpha) < 0.05)
+        assert(r > 0.9)
         
     def test_fit_additive_pos_eff(self):
         m = AdditiveConvolutionalModel('AGGA', positional_effects=True)
