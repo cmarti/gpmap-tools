@@ -14,70 +14,11 @@ from gpmap.plot_utils import arrange_plot, savefig, init_fig
 from scipy.stats._continuous_distns import norm
 
 
-class ConvolutionalModel(BaseGPMap):
-    def get_model_label(self):
-        if self.positional_effects:
-            if self.alpha_type == 1:
-                model_label = 'conv_pos_eff_fixed_alpha'
-            elif self.alpha_type == 0:
-                model_label = 'conv_pos_eff'
-            elif self.alpha_type == 'free':
-                if self.intercept is not None and self.slope is not None:
-                    model_label = 'conv_pos_eff_free_alpha_known_cts'
-                else:
-                    model_label = 'conv_pos_eff_free_alpha'
-            else:
-                raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
-            
-        else:
-            if self.alpha_type == 1:
-                model_label = 'conv_fixed_fixed_alpha'
-            elif self.alpha_type == 0:
-                model_label = 'conv_fixed'
-            elif self.alpha_type == 'free':
-                if self.intercept is not None and self.slope is not None:
-                    model_label = 'conv_fixed_free_alpha_known_cts'
-                else:
-                    model_label = 'conv_fixed_free_alpha'
-            else:
-                raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
-        return(model_label)
-        
-    def set_parameters(self, filter_size, alphabet_type='rna',
-                       n_filters=1, positional_effects=False,
-                       allow_bulges=False, base_bulges=False,
-                       intercept=None, slope=None,
-                       position_bulges=False,
-                       alpha_type=0, n_alleles=4, recompile=False):
-        self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
-        
-        self.filter_size = filter_size
-        self.n_filters = n_filters
-        self.alpha_type = alpha_type
-        self.intercept = intercept
-        self.slope = slope
-        self.positional_effects = positional_effects
-        
-        self.allow_bulges = allow_bulges
-        self.base_bulges = base_bulges
-        self.position_bulges = position_bulges
-        self.set_bulges_params()
-        
-        self.model = get_model(self.get_model_label(), recompile=recompile)
-        self.params = ['mu', 'theta', 'sigma', 'yhat', 'log_ki', 'background',
-                       'theta_0', 'log_alpha', 'alpha']
-        
-    def set_bulges_params(self):
-        if self.allow_bulges:
-            if self.base_bulges:
-                self.bulges_params = {'b{}'.format(a): 0 for a in self.alphabet}
-            elif self.position_bulges:
-                self.bulges_params = {'b{}'.format(a): 0 for a in range(2, self.filter_size-1)}
-            else:
-                self.bulges_params = {'b': 0}
-        else:
-            self.bulges_params = {}
-            
+class _ConvolutionalModel(BaseGPMap):
+    '''
+    This class has only methods for simulating sequences for experimental data
+    using different schemes
+    '''
     def simulate_random_seqs(self, length, n_seqs):
         if length is None or n_seqs is None:
             raise ValueError('length and n_seqs must be specified')
@@ -176,14 +117,95 @@ class ConvolutionalModel(BaseGPMap):
             embedded.extend(self.embed_seqs(seqs, u, d))
         return(embedded)
     
+    
+class ConvolutionalModel(_ConvolutionalModel):
+    def get_model_label(self):
+        if self.positional_effects:
+            if self.alpha_type == 1:
+                model_label = 'conv_pos_eff_fixed_alpha'
+            elif self.alpha_type == 0:
+                model_label = 'conv_pos_eff'
+            elif self.alpha_type == 'free':
+                if self.intercept is not None and self.slope is not None:
+                    model_label = 'conv_pos_eff_free_alpha_known_cts'
+                else:
+                    model_label = 'conv_pos_eff_free_alpha'
+            else:
+                raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
+            
+        else:
+            if self.alpha_type == 1:
+                model_label = 'conv_fixed_fixed_alpha'
+            elif self.alpha_type == 0:
+                model_label = 'conv_fixed'
+            elif self.alpha_type == 'free':
+                if self.intercept is not None and self.slope is not None:
+                    model_label = 'conv_fixed_free_alpha_known_cts'
+                else:
+                    model_label = 'conv_fixed_free_alpha'
+            else:
+                raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
+        return(model_label)
+        
+    def set_parameters(self, filter_size, alphabet_type='rna',
+                       n_filters=1, positional_effects=False,
+                       allow_bulges=False, base_bulges=False,
+                       intercept=None, slope=None,
+                       position_bulges=False,
+                       alpha_type=0, n_alleles=4, recompile=False):
+        self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
+        
+        self.filter_size = filter_size
+        self.n_filters = n_filters
+        self.alpha_type = alpha_type
+        self.intercept = intercept
+        self.slope = slope
+        self.positional_effects = positional_effects
+        
+        self.allow_bulges = allow_bulges
+        self.base_bulges = base_bulges
+        self.position_bulges = position_bulges
+        self.set_bulges_params()
+        
+        self.model = get_model(self.get_model_label(), recompile=recompile)
+        self.params = ['mu', 'theta', 'sigma', 'yhat', 'log_ki', 'background',
+                       'theta_0', 'log_alpha', 'alpha']
+    
+    def get_bulge_nc_and_pos(self):
+        for p in range(2, self.filter_size-1):
+            for a in self.alphabet:
+                yield(p, a)
+    
+    def set_bulges_params(self):
+        if self.allow_bulges:
+            if self.base_bulges:
+                if self.position_bulges:
+                    self.bulges_params = {'b{}{}'.format(p, a): 0
+                                          for p, a in self.get_bulge_nc_and_pos()}
+                else:
+                    self.bulges_params = {'b{}'.format(a): 0
+                                          for a in self.alphabet}
+            else:
+                if self.position_bulges:
+                    self.bulges_params = {'b{}'.format(a): 0
+                                          for a in range(2, self.filter_size-1)}
+                else:
+                    self.bulges_params = {'b': 0}
+        else:
+            self.bulges_params = {}
+            
     def update_bulge_features(self, features, bulge, bulge_pos):
         if bulge is not None:
             if self.base_bulges:
-                features['b{}'.format(bulge)] = 1
-            elif self.position_bulges:
-                features['b{}'.format(bulge_pos)] = 1
+                if self.position_bulges:
+                    features['b{}{}'.format(bulge_pos, bulge)] = 1
+                else:
+                    features['b{}'.format(bulge)] = 1
             else:
-                features['b'] = 1
+                if self.position_bulges:
+                    features['b{}'.format(bulge_pos)] = 1
+                else:
+                    features['b'] = 1
     
     def get_target_and_bulge(self, seq, bulge_pos=None):
         if bulge_pos is None:
@@ -378,6 +400,8 @@ class ConvolutionalModel(BaseGPMap):
     
     def theta_to_matrix(self, fit):
         df = fit['df']
+        rows = np.array([not x.startswith('b') for x in df['label']])
+        df = df.loc[rows, :]
         df['pos'] = [int(x[1:-1]) for x in df['label']]
         df['letter'] = [x[-1] for x in df['label']]
         m = pd.pivot_table(df, index='letter', columns='pos',

@@ -69,6 +69,18 @@ class TDTests(unittest.TestCase):
                                        position_bulges=True)
         counts = m.seq_to_encoding('AGAGA', bulge_pos=2)
         assert(counts['b2'] == 1)
+        
+        # With nucleotide bulges        
+        m = AdditiveConvolutionalModel(ref_seq='AGGA', allow_bulges=True,
+                                       position_bulges=False, base_bulges=True)
+        counts = m.seq_to_encoding('AGAGA', bulge_pos=2)
+        assert(counts['bA'] == 1)
+        
+        # With position and nucleotide bulges        
+        m = AdditiveConvolutionalModel(ref_seq='AGGA', allow_bulges=True,
+                                       position_bulges=True, base_bulges=True)
+        counts = m.seq_to_encoding('AGAGA', bulge_pos=2)
+        assert(counts['b2A'] == 1)
     
     def test_stacks_features(self):
         m = BPStacksConvolutionalModel(template='UCCU')
