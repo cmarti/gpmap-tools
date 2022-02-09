@@ -7,7 +7,7 @@ import pandas as pd
 import scipy.sparse as sp
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.dia import dia_matrix
-from numpy.linalg.linalg import matrix_power
+from numpy.linalg.linalg import matrix_power, norm
 from scipy.special._basic import comb
 from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 
@@ -40,7 +40,7 @@ class BaseGPMap(object):
         elif alphabet_type == 'custom':
             if n_alleles is None:
                 raise ValueError('n_alleles must be provided for custom alphabet')
-            self.alphabet_type = range(n_alleles)
+            self.alphabet = [str(x) for x in range(n_alleles)]
         else:
             raise ValueError('alphabet type not supported')
         self.n_alleles = len(self.alphabet)
@@ -148,12 +148,33 @@ class SequenceSpace(BaseGPMap):
     def calc_adjacency(self):
         self.A = self._calc_adjacency()
 
+    def calc_generalized_laplacian(self, probability):
+        self.calc_adjacency()
+        seq1 = self.seqs[self.A.row, :]
+        seq2 = self.seqs[self.A.col, :]
+        diff = seq1 != seq2
+        different_pos = np.argmax(diff, axis=1)
+        
+        values = np.array([np.sqrt(probability[s1[p], p] * probability[s2[p], p])
+                           for s1, s2, p in zip(seq1, seq2, different_pos)])
+        p = np.array([[probability[a, p] for p, a in enumerate(seq)] for seq in self.seqs])
+        
+        self.probability = np.exp(np.log(p).sum(1))
+        L = self.A.copy()
+        L.data = -values
+        diag = (1 - p).sum(1)
+        L.setdiag(diag)
+
+        self.L = L
+
     def calc_laplacian(self):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             self.calc_adjacency()
             self.L = -self.A.tocsr()
-        self.L.setdiag(self.length * (self.n_alleles - 1))
+        
+        diag = -self.L.sum(1).A[:, 0]
+        self.L.setdiag(diag)
 
     def calc_incidence_matrix(self):
         self.report('Calculating graph laplacian')
@@ -250,6 +271,24 @@ class SequenceSpace(BaseGPMap):
         for _ in range(self.length):
             powers.append(self.L.dot(powers[-1]))
         return(np.vstack(powers).T)
+
+    def calc_arnoldi_basis(self, v, ndim=None):
+        if ndim is None:
+            ndim = self.length + 1
+        
+        basis = [v / np.dot(v.T, v)]
+        for _ in range(1, ndim):
+            v_0 = basis[-1]
+            v_i = self.L.dot(v_0)
+            
+            for v_j in basis:
+                v_i = v_i - np.dot(v_i, v_j) * v_j
+            
+            print(len(basis), norm(v_i), norm(np.dot(np.vstack(basis), v_i)))
+            v_i = v_i / norm(v_i)
+            
+            basis.append(v_i)
+        return(np.vstack(basis).T)
     
     def calc_distance_matrix(self, i=None):
         if i == None:
