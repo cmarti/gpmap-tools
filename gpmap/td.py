@@ -120,31 +120,51 @@ class _ConvolutionalModel(BaseGPMap):
     
 class ConvolutionalModel(_ConvolutionalModel):
     def get_model_label(self):
-        if self.positional_effects:
-            if self.alpha_type == 1:
-                model_label = 'conv_pos_eff_fixed_alpha'
-            elif self.alpha_type == 0:
-                model_label = 'conv_pos_eff'
-            elif self.alpha_type == 'free':
-                if self.intercept is not None and self.slope is not None:
-                    model_label = 'conv_pos_eff_free_alpha_known_cts'
-                else:
-                    model_label = 'conv_pos_eff_free_alpha'
+        model_label = None
+        if self.multiple_backgrounds:
+            if self.variable_theta:
+                model_label = 'full_model'
             else:
-                raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
-            
+                if self.positional_effects:
+                    if self.allow_bulges:
+                        model_label = 'full_model.fixed.bulges'
+                    else:
+                        if self.n_filters > 1:
+                            model_label = 'full_model.fixed.n_filters'
+                        else:
+                            model_label = 'full_model.fixed'
+                else:
+                    model_label = 'full_model.fixed_pos'
         else:
-            if self.alpha_type == 1:
-                model_label = 'conv_fixed_fixed_alpha'
-            elif self.alpha_type == 0:
-                model_label = 'conv_fixed'
-            elif self.alpha_type == 'free':
-                if self.intercept is not None and self.slope is not None:
-                    model_label = 'conv_fixed_free_alpha_known_cts'
+            if self.positional_effects:
+                if self.alpha_type == 1:
+                    model_label = 'conv_pos_eff_fixed_alpha'
+                elif self.alpha_type == 0:
+                    model_label = 'conv_pos_eff'
+                elif self.alpha_type == 'free':
+                    if self.intercept is not None and self.slope is not None:
+                        model_label = 'conv_pos_eff_free_alpha_known_cts'
+                    else:
+                        model_label = 'conv_pos_eff_free_alpha'
                 else:
-                    model_label = 'conv_fixed_free_alpha'
+                    raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
+                
             else:
-                raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
+                if self.alpha_type == 1:
+                    model_label = 'conv_fixed_fixed_alpha'
+                elif self.alpha_type == 0:
+                    model_label = 'conv_fixed'
+                elif self.alpha_type == 'free':
+                    if self.intercept is not None and self.slope is not None:
+                        model_label = 'conv_fixed_free_alpha_known_cts'
+                    else:
+                        model_label = 'conv_fixed_free_alpha'
+                else:
+                    raise ValueError('alpha_type {} not allowed'.format(self.alpha_type))
+        print(model_label)
+        if model_label is None:
+            raise ValueError('Conditions not available')
+        
         return(model_label)
         
     def set_parameters(self, filter_size, alphabet_type='rna',
@@ -152,12 +172,17 @@ class ConvolutionalModel(_ConvolutionalModel):
                        allow_bulges=False, base_bulges=False,
                        intercept=None, slope=None,
                        position_bulges=False,
+                       selected_bulges_positions=None,
+                       multiple_backgrounds=False,
+                       variable_theta=False,
                        alpha_type=0, n_alleles=4, recompile=False):
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
         
         self.filter_size = filter_size
         self.n_filters = n_filters
         self.alpha_type = alpha_type
+        self.multiple_backgrounds = multiple_backgrounds
+        self.variable_theta = variable_theta
         self.intercept = intercept
         self.slope = slope
         self.positional_effects = positional_effects
@@ -165,14 +190,22 @@ class ConvolutionalModel(_ConvolutionalModel):
         self.allow_bulges = allow_bulges
         self.base_bulges = base_bulges
         self.position_bulges = position_bulges
+        self.selected_bulges_positions = selected_bulges_positions
         self.set_bulges_params()
         
         self.model = get_model(self.get_model_label(), recompile=recompile)
         self.params = ['mu', 'theta', 'sigma', 'yhat', 'log_ki', 'background',
                        'theta_0', 'log_alpha', 'alpha']
     
+    def get_bulges_positions(self):
+        if self.selected_bulges_positions is None:
+            selected_bulges_positions = np.arange(2, self.filter_size - 1)
+        else:
+            selected_bulges_positions = self.selected_bulges_positions
+        return(selected_bulges_positions)
+    
     def get_bulge_nc_and_pos(self):
-        for p in range(2, self.filter_size-1):
+        for p in self.get_bulges_positions():
             for a in self.alphabet:
                 yield(p, a)
     
@@ -188,7 +221,7 @@ class ConvolutionalModel(_ConvolutionalModel):
             else:
                 if self.position_bulges:
                     self.bulges_params = {'b{}'.format(a): 0
-                                          for a in range(2, self.filter_size-1)}
+                                          for a in self.get_bulges_positions()}
                 else:
                     self.bulges_params = {'b': 0}
         else:
@@ -237,7 +270,7 @@ class ConvolutionalModel(_ConvolutionalModel):
         bulge_positions = np.array([None])
         if self.allow_bulges:
             bulge_positions = np.hstack([bulge_positions,
-                                         np.arange(2, self.filter_size-1)])
+                                         self.get_bulges_positions()])
         
         for bulge_pos in bulge_positions: 
             for pos in self.get_possible_positions(seqs, bulge=bulge_pos is not None):
@@ -286,8 +319,13 @@ class ConvolutionalModel(_ConvolutionalModel):
         return({'mu': mu, 'theta': theta, 'theta_0': theta_0, 'alpha': alpha})
     
     def calc_total_log_protein(self, encoding, params):
-        log_ki = np.vstack([-(params['mu'][p] + np.dot(f, params['theta']))
-                            for f, p in zip(encoding['X'], encoding['positions'])])
+        if self.n_filters > 1:
+            log_ki = np.vstack([logsumexp(-(params['mu'][p] + np.dot(f, params['theta'])), axis=1)
+                                for f, p in zip(encoding['X'], encoding['positions'])])
+        else:
+            log_ki = np.vstack([-(params['mu'][p] + np.dot(f, params['theta']))
+                                for f, p in zip(encoding['X'], encoding['positions'])])
+            
         log_ki_sum = logsumexp(log_ki, axis=0)
         
         if self.alpha_type != 0:
@@ -310,14 +348,24 @@ class ConvolutionalModel(_ConvolutionalModel):
         else:
             encoding = encoding
             
+        bulge_idx = np.array([i+1 for i, f in enumerate(encoding['features'])
+                              if f.startswith('b')]).astype(int)
+        mut_idx = np.array([i+1 for i, f in enumerate(encoding['features'])
+                            if not f.startswith('b')]).astype(int)
+            
         X = np.stack(encoding['X'], axis=2).transpose([2, 0, 1])
         data = {'seqs': seqs, 'y': y, 'X': X,
                 'theta_labels': encoding['features'],
                 'positions': encoding['positions'] + 1,
+                'distances': encoding['positions'] + 1,
+                
+                'bulges_features': bulge_idx,
+                'mut_features': mut_idx,
                 
                 'L': len(seqs[0]), 'F': encoding['n_features'], 
                 'C': self.n_alleles, 'S': encoding['n_configurations'],
-                'P': encoding['n_positions'], 'G': len(seqs)}
+                'P': encoding['n_positions'], 'G': len(seqs),
+                'N': self.n_filters, 'B': bulge_idx.shape[0]}
         
         if y_sd is not None:
             data['y_sd'] = y_sd
@@ -328,6 +376,24 @@ class ConvolutionalModel(_ConvolutionalModel):
             data['intercept'] = self.intercept
             data['slope'] = self.slope
             
+        return(data)
+
+    def join_data(self, data_dict):
+        X = []
+        y = []
+        
+        for bc_data in data_dict.values():
+            X.append(bc_data['X'])
+            y.append(bc_data['y'])
+        
+        X = np.stack(X, axis=3).transpose([3, 0, 1, 2])
+        y = np.vstack(y).T
+        print(X.shape, y.shape)
+        data = bc_data.copy()
+        data['X'] = X
+        data['y'] = y
+        data['C'] = len(data_dict)
+        data['distances'] = bc_data['positions']
         return(data)
     
     def simulate_data(self, seqs, theta_0=None, background=0,
@@ -349,17 +415,18 @@ class ConvolutionalModel(_ConvolutionalModel):
         
         return(data)
     
-    def fit(self, data):
+    def fit(self, data, n_iter=2000):
         input_data = {k: v for k, v in data.items()
                       if k not in ['seqs', 'theta_labels']}
-        estimates = self.model.optimizing(input_data)
-        results = {param: estimates[param] for param in self.params
-                   if param in estimates}
-        df = pd.DataFrame({'theta': results['theta'],
-                           'label': data['theta_labels']})
+        results = self.model.optimizing(input_data, iter=n_iter)
+        # results = {param: estimates[param] for param in self.params
+        #            if param in estimates}
+        # df = pd.DataFrame({'theta': results['theta'],
+        #                    'label': data['theta_labels']})
         loglikelihood = norm.logpdf(data['y'], results['yhat'], results['sigma']).sum()
         results.update({'theta_labels': data['theta_labels'],
-                        'df': df, 'y': data['y'], 'seqs': data['seqs'],
+                        # 'df': df,
+                        'y': data['y'], 'seqs': data['seqs'],
                         'loglikelihood': loglikelihood})
 
         if not self.positional_effects:
@@ -398,9 +465,9 @@ class ConvolutionalModel(_ConvolutionalModel):
                      ylabel=r'$\hat\theta$', xlims=lims, ylims=lims,
                      title='Mutational effects')
     
-    def theta_to_matrix(self, fit):
+    def theta_to_matrix(self, fit, bulges=False):
         df = fit['df']
-        rows = np.array([not x.startswith('b') for x in df['label']])
+        rows = np.array([x.startswith('b') == bulges for x in df['label']])
         df = df.loc[rows, :]
         df['pos'] = [int(x[1:-1]) for x in df['label']]
         df['letter'] = [x[-1] for x in df['label']]
@@ -467,15 +534,21 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
     def __init__(self, ref_seq, alphabet_type='rna',
                  n_filters=1, positional_effects=False,
                  intercept=None, slope=None,
+                 multiple_backgrounds=False,
+                 variable_theta=False,
                  alpha_type=False, position_bulges=False,
                  allow_bulges=False, base_bulges=False,
+                 selected_bulges_positions=None,
                  n_alleles=4, recompile=False):
         filter_size = len(ref_seq)
         self.set_parameters(filter_size=filter_size, alphabet_type=alphabet_type,
                             n_alleles=n_alleles, n_filters=n_filters,
                             alpha_type=alpha_type,
+                            multiple_backgrounds=multiple_backgrounds,
+                            variable_theta=variable_theta,
                             intercept=intercept, slope=slope,
                             allow_bulges=allow_bulges, base_bulges=base_bulges,
+                            selected_bulges_positions=selected_bulges_positions,
                             position_bulges=position_bulges,
                             positional_effects=positional_effects,
                             recompile=recompile)
@@ -503,11 +576,13 @@ class BPStacksConvolutionalModel(ConvolutionalModel):
     def __init__(self, template, allow_bulges=False, base_bulges=False,
                  intercept=None, slope=None,
                  alpha_type=False, position_bulges=False,
+                 selected_bulges_positions=None,
                  recompile=False, positional_effects=False):
         filter_size = len(template)
         self.set_parameters(filter_size=filter_size, alphabet_type='rna',
                             alpha_type=alpha_type,
                             intercept=intercept, slope=slope,
+                            selected_bulges_positions=selected_bulges_positions,
                             allow_bulges=allow_bulges, base_bulges=base_bulges,
                             position_bulges=position_bulges,
                             positional_effects=positional_effects,
