@@ -207,8 +207,22 @@ class VCTests(unittest.TestCase):
         fit = gpmap.stan_fit(sigma, recompile=False)
         print(fit['lambdas'], fit['log_lambda_beta_inv'], fit['log_lambda0'])
         print(gpmap.lambdas_to_variance(fit['lambdas']))
-        
+    
+    def test_calc_generalized_laplacian(self):
+        gpmap = VCregression(2, 2, alphabet_type='custom')
+        p = np.array([[0.3, 0.5],
+                      [0.7, 0.5]])
+        gpmap.calc_generalized_laplacian(p)
+        L = np.array([[ 1.2, -0.5, -0.45825757, 0.],
+                      [-0.5,  1.2,  0.,  -0.45825757],
+                      [-0.45825757,  0.,   0.8, -0.5],
+                      [ 0., -0.45825757, -0.5, 0.8]])
+        assert(np.allclose(gpmap.L.todense(), L))
+        assert(np.allclose(gpmap.L.dot(np.sqrt(gpmap.probability)), 0))
+        l = np.linalg.eigvalsh(gpmap.L.todense())
+        assert(np.allclose(l,  [0, 1, 1, 2]))
+    
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_stan_model']
+    import sys;sys.argv = ['', 'VCTests']
     unittest.main()
