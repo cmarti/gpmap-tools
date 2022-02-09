@@ -2,21 +2,23 @@ data {
   int<lower=0> G;                 // number of genotypes
   int<lower=0> F;                 // number of features
   int<lower=0> S;                 // number of configurations
-  int<lower=0> P;                 // number of positions
 
-  int<lower=1, upper=P> positions[S];
+  vector[S] distances;
   matrix[G, F] X[S];              // One hot encoded sequence  
   vector[G] y;              // phenotype measurements
 }
 
 transformed data{
     vector[S] ones = rep_vector(1, S);
+    
+    real mean_dist = (max(distances) - min(distances)) / 2;
+    real dist_sd = (max(distances) - min(distances)) / 4;
 }
 
 parameters {
-    vector[P] mu_raw;
-    real mu_mean;
-    real<lower=0> mu_sd;
+    real mu_opt;
+    real opt_dist;
+    real<lower=0> mu_scale;
     
     vector[F] theta;
     
@@ -25,27 +27,27 @@ parameters {
 }
 
 transformed parameters {
-    matrix[G, S] log_ki;
-    vector[P] mu;
+    vector[S] mu;
+    vector[S] dd;
     
     vector[G] ki_sum;
     vector[G] yhat;
     
-    mu = mu_mean + mu_raw * mu_sd;
+    dd = distances - opt_dist;
+    mu = mu_opt + mu_scale * (dd .* dd);
     
-    for(i in 1:S){
-        log_ki[,i] = -(mu[positions[i]] + X[i] * theta);
-    }
+    ki_sum = rep_vector(0, G);
+    for(i in 1:S)
+        ki_sum = ki_sum + exp(-(mu[i] + X[i] * theta));
     
-    ki_sum = exp(log_ki) * ones;
     yhat = log(background + ki_sum);
 }
 
 
 model {
-    mu_mean ~ normal(0, 5);         // Prior on wt on each position
-    mu_sd ~ normal(0, 1);
-    mu_raw ~ std_normal();
+    mu_opt ~ normal(0, 5);                  // Prior on wt effect at the optimal distance
+    opt_dist ~ normal(mean_dist, dist_sd);  // Prior on optimal distance: centered in the observed values
+    mu_scale ~ exponential(1);
     
     theta ~ std_normal();           // Prior on mutational effects
 
