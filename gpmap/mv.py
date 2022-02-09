@@ -35,7 +35,7 @@ class MaveNN(Visualization):
         fpath = join(CACHE_DIR, fname)
         return(fpath)
     
-    def fit_mavenn(self, seqs, f, gpmap_type, global_epistasis=True,
+    def fit_mavenn(self, seqs, f, f_sigma=None, gpmap_type='additive', global_epistasis=True,
                    ge_heteroskedasticity_order=0, epochs=1000, early_stopping=False,
                    regression_type='GE', theta_regularization=1e-3):
         ge_type = 'nonlinear' if global_epistasis else 'linear'
@@ -46,12 +46,12 @@ class MaveNN(Visualization):
                          ge_nonlinearity_type=ge_type,
                          regression_type=regression_type,
                          ge_heteroskedasticity_order=ge_heteroskedasticity_order,
-                         ge_noise_model_type='SkewedT',
+                         ge_noise_model_type='Empirical' if f_sigma is not None else 'Gaussian',
                          Y=f.shape[1] if len(f.shape) > 1 else 2,
                          theta_regularization=theta_regularization)
-        model.set_data(x=seqs, y=f)
+        model.set_data(x=seqs, y=f, dy=f_sigma)
             
-        model.fit(learning_rate=.0005, epochs=epochs, batch_size=2000,
+        model.fit(learning_rate=.0005, epochs=epochs, batch_size=5000,
                   early_stopping=early_stopping, early_stopping_patience=5, 
                   linear_initialization=False)
         model.save(self.get_mavenn_model_fpath(gpmap_type, global_epistasis))
@@ -69,6 +69,9 @@ class MaveNN(Visualization):
             self.mavenn_model = mv.load(fpath)
         else:
             self.report('Model was already loaded')
+    
+    def predict(self, seqs):
+        return(self.mavenn_model.x_to_yhat(seqs))
     
     def plot_information_history(self, axes, x_test, y_test):
         I_var = self.mavenn_model.I_variational(x=x_test, y=y_test)[0]
@@ -91,6 +94,8 @@ class MaveNN(Visualization):
     
     def plot_sequence_logo(self, axes):
         theta_logo = self.mavenn_model.get_theta()['logomaker_df']
+        for c in theta_logo.columns:
+            theta_logo[c] = theta_logo[c] - theta_logo.mean(1)
         logomaker.Logo(theta_logo.fillna(0), ax=axes)
     
     def plot_Rsq(self, axes, seqs, f, xfactor=0.9, yfactor=0.9):
