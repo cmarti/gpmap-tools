@@ -21,7 +21,7 @@ def main():
             ]},
         install_requires=['numpy', 'cython', 'pandas', 'scipy', 'pysam', 
                           'seaborn', 'matplotlib', 'pystan==2.19', 'tqdm',
-                          'statsmodels'],
+                          'statsmodels', 'mavenn'],
         platforms='ALL',
         keywords=['genotype-phenotyp maps', 'fitness landscape'],
         classifiers=[
