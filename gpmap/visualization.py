@@ -126,19 +126,22 @@ class Visualization(SequenceSpace):
         if not (abs(m - m.T)> tol).nnz == 0:
             raise ValueError('Re-scaled transition matrix is not symmetric')
     
-    def calc_sparse_reweighted_transition_matrix(self, tol=1e-8, 
-                                                 cache_matrix=False):
-        self.report('Calculating re-weigthed symmetric transition matrix')
+    def calc_transition_matrix(self):
         A = self.get_adjacency_matrix()
         rows, cols = A.row, A.col
         delta_f = self.calc_delta_f(rows, cols)
-        
         size = (self.n_genotypes, self.n_genotypes)
         t = self.calc_transtition_rate_vector(delta_f)
         t = csr_matrix((t, (rows, cols)), shape=size)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             t.setdiag(-t.sum(1).A1)
+        return(t)
+        
+    def calc_sparse_reweighted_transition_matrix(self, tol=1e-8, 
+                                                 cache_matrix=False):
+        self.report('Calculating re-weigthed symmetric transition matrix')
+        t = self.calc_transition_matrix()
         t = self.diag_freq_sparse.dot(t).dot(self.diag_freq_inv_sparse)
         self.T = (t + t.T) / 2
         self.check_symmetric(self.T, tol=tol)
