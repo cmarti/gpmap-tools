@@ -323,6 +323,7 @@ class VCregression(SequenceSpace):
             seqs = self.genotype_labels[sel_idxs]
             
         self.load_data(f_obs, variance, seqs)
+        return(f)
     
     def calc_cov_dense(self, lambdas):
         covariance = np.dot(self.W_kd.T, lambdas)
