@@ -28,6 +28,7 @@ from scipy.special._logsumexp import logsumexp
 from gpmap.base import SequenceSpace, get_sparse_diag_matrix
 from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig
 from gpmap.settings import CACHE_DIR, CMAP, PLOTS_DIR
+from scipy.sparse.linalg.dsolve.linsolve import spsolve
 
 
 class Visualization(SequenceSpace):
@@ -112,49 +113,97 @@ class Visualization(SequenceSpace):
         self.report('\tExpected average function: {}'.format(self.fmean))
         return(self.fmean)
     
-    def calc_transtition_rate(self, delta_f):
+    def calc_rate(self, delta_f):
         S = self.ns * delta_f
         return(S / (1 - np.exp(-S)))
 
-    def calc_transtition_rate_vector(self, delta_f):
+    def calc_rate_vector(self, delta_f):
         rate = np.ones(delta_f.shape[0])
         idxs = np.isclose(delta_f, 0) == False
-        rate[idxs] = self.calc_transtition_rate(delta_f[idxs])
+        rate[idxs] = self.calc_rate(delta_f[idxs])
         return(rate)
     
     def check_symmetric(self, m, tol):
         if not (abs(m - m.T)> tol).nnz == 0:
-            raise ValueError('Re-scaled transition matrix is not symmetric')
+            raise ValueError('Re-scaled rate matrix is not symmetric')
     
-    def calc_transition_matrix(self):
+    def calc_rate_matrix(self):
         A = self.get_adjacency_matrix()
         rows, cols = A.row, A.col
         delta_f = self.calc_delta_f(rows, cols)
         size = (self.n_genotypes, self.n_genotypes)
-        t = self.calc_transtition_rate_vector(delta_f)
+        t = self.calc_rate_vector(delta_f)
         t = csr_matrix((t, (rows, cols)), shape=size)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             t.setdiag(-t.sum(1).A1)
         return(t)
         
-    def calc_sparse_reweighted_transition_matrix(self, tol=1e-8, 
+    def calc_sparse_reweighted_rate_matrix(self, tol=1e-8, 
                                                  cache_matrix=False):
-        self.report('Calculating re-weigthed symmetric transition matrix')
-        t = self.calc_transition_matrix()
-        t = self.diag_freq_sparse.dot(t).dot(self.diag_freq_inv_sparse)
+        self.report('Calculating re-weigthed symmetric rate matrix')
+        rate_matrix = self.calc_rate_matrix()
+        t = self.diag_freq_sparse.dot(rate_matrix).dot(self.diag_freq_inv_sparse)
         self.T = (t + t.T) / 2
         self.check_symmetric(self.T, tol=tol)
 
         if cache_matrix:
             self.save_sparse_matrix()
-            
+        
+        # Recalculate rate matrix after ensuring time reversible process
+        self.rate_matrix = self.diag_freq_inv_sparse.dot(self.T).dot(self.diag_freq_sparse)
+        
         return(self.T)
+    
+    def calc_committor_probability(self, genotypes1, genotypes2):
+        if np.intersect1d(genotypes1, genotypes2).shape[0] > 0:
+            raise ValueError('The two sets of genotypes cannot overlap')
+        
+        # Select (AUB)^c genotypes
+        idx = np.full(self.n_genotypes, True)
+        all_gts = np.hstack([genotypes1, genotypes2])
+        idx[self.genotype_idxs.loc[all_gts]] = False
+        no_ab_genotypes = np.where(idx)[0]
+        
+        # Select B genotypes
+        b_genotypes = self.genotype_idxs.loc[genotypes2]
+        
+        # Solve system Uq = v 
+        partial_rate_matrix = self.rate_matrix[no_ab_genotypes, :]
+        U = partial_rate_matrix[:, no_ab_genotypes]
+        v = -partial_rate_matrix[:, b_genotypes].sum(1)
+        q_reduced = spsolve(U, v)
+                
+        q = np.zeros(self.n_genotypes)
+        q[no_ab_genotypes] = q_reduced
+        q[b_genotypes] = 1
+        return(q)
+
+    def calc_genotypes_reactive_p(self, genotypes1, genotypes2):
+        q = self.calc_committor_probability(genotypes1, genotypes2)
+        log_stationary_freqs = self.log_genotypes_stationary_frequencies
+        
+        gt_log_p_reactive = log_stationary_freqs + np.log(q) + np.log(1-q)
+        log_p_reactive = logsumexp(gt_log_p_reactive)
+        gt_log_p_reactive = gt_log_p_reactive - log_p_reactive
+        
+        p_reactive = np.exp(log_p_reactive)
+        gt_p = np.exp(gt_log_p_reactive)
+        return(p_reactive, gt_p)
+    
+    def calc_edges_flow(self, genotypes1, genotypes2):
+        q = self.calc_committor_probability(genotypes1, genotypes2)
+        stationary_freqs = self.genotypes_stationary_frequencies
+        
+        i, j = self.get_neighbor_pairs()
+        rate_ij = self.calc_rate_vector(self.calc_delta_f(i, j))
+        flow = stationary_freqs[i] * (1-q)[i] * rate_ij * q[j]
+        return(flow)
     
     def save_sparse_matrix(self):
         if self.cache_prefix is not None:
             fpath = join(CACHE_DIR, '{}.T'.format(self.cache_prefix))
-            msg = 'Saving re-weighted transition matrix at {}'.format(fpath)
+            msg = 'Saving re-weighted rate matrix at {}'.format(fpath)
             self.report(msg)
             save_npz(fpath, self.T)
     
@@ -165,7 +214,7 @@ class Visualization(SequenceSpace):
             df = pd.read_csv(fpath, index_col=0)
             return(df)
         else:
-            self.report('Could not find transition matrix {}'.format(fpath))
+            self.report('Could not find rate matrix {}'.format(fpath))
     
     def _get_cache_fpath(self, label):
         fname = '{}.{}.csv'.format(self.cache_prefix, label)
@@ -189,29 +238,29 @@ class Visualization(SequenceSpace):
     def T_fpath(self):
         return(join(CACHE_DIR, '{}.T.npz'.format(self.cache_prefix)))
     
-    def load_sparse_reweighted_transition_matrix(self):
+    def load_sparse_reweighted_rate_matrix(self):
         if self.cache_prefix is not None:
             if exists(self.T_fpath):
-                msg = 'Loading re-weighted transition matrix from {}'
+                msg = 'Loading re-weighted rate matrix from {}'
                 self.report(msg.format(self.T_fpath))
                 
                 self.T = load_npz(self.T_fpath)
                 self.cached_T = True
             else:
-                self.report('Could not find transition matrix {}'.format(self.T_fpath))
+                self.report('Could not find rate matrix {}'.format(self.T_fpath))
     
-    def get_sparse_reweighted_transition_matrix(self, recalculate=False,
+    def get_sparse_reweighted_rate_matrix(self, recalculate=False,
                                                 cache_matrix=True):
         if recalculate:
-            self.calc_sparse_reweighted_transition_matrix(cache_matrix=cache_matrix)
+            self.calc_sparse_reweighted_rate_matrix(cache_matrix=cache_matrix)
         else:
             if hasattr(self, 'T'):
                 pass
             elif cache_matrix:
-                self.load_sparse_reweighted_transition_matrix()
+                self.load_sparse_reweighted_rate_matrix()
                 self.cached_T = True
             if not hasattr(self, 'T'):
-                self.calc_sparse_reweighted_transition_matrix(cache_matrix=cache_matrix)
+                self.calc_sparse_reweighted_rate_matrix(cache_matrix=cache_matrix)
 
     def calc_reweighting_diag_matrices(self):
         # New basis and re-weighting genotypes by frequency
@@ -229,7 +278,7 @@ class Visualization(SequenceSpace):
     def calc_eigendecomposition(self, n_components=10, tol=1e-12,
                                 cache_matrix=True):
         n_components = min(n_components, self.n_genotypes-1)
-        self.report('Calculating eigen-decomposition of re-weighted transition matrix')
+        self.report('Calculating eigen-decomposition of re-weighted rate matrix')
         self.calc_A_sparse()
         lambdas, q = eigsh(self.A_sparse, n_components, which='LM', tol=tol)
         self.n_components = n_components
@@ -332,7 +381,7 @@ class Visualization(SequenceSpace):
             self.tune_ns(stationary_function=meanf)
         self.calc_stationary_frequencies()
         self.calc_reweighting_diag_matrices()
-        self.get_sparse_reweighted_transition_matrix(recalculate=recalculate,
+        self.get_sparse_reweighted_rate_matrix(recalculate=recalculate,
                                                      cache_matrix=cache_matrix)
         self.get_eigendecomposition(n_components, tol=tol,
                                     recalculate=recalculate,

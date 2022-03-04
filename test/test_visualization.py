@@ -5,9 +5,9 @@ from os.path import join
 import numpy as np
 import pandas as pd
 
-from settings import DATA_DIR
-from visualization import Visualization, CodonFitnessLandscape
-from utils import LogTrack
+from gpmap.visualization import Visualization, CodonFitnessLandscape
+from gpmap.utils import LogTrack
+from gpmap.inference import VCregression
 
 
 class VisualizationTests(unittest.TestCase):
@@ -44,14 +44,38 @@ class VisualizationTests(unittest.TestCase):
         fmean = gpmap.tune_ns(stationary_function=1.5)
         assert(np.abs(fmean - 1.5) < 1e-4)
     
-    def test_calc_transition_p(self):
+    def test_calc_transition_path_stats(self):
+        np.random.seed(1)
+        alpha = 2
+        length = 3
+    
+        space = Visualization(length, n_alleles=alpha, alphabet_type='custom')
+        vc = VCregression(length, n_alleles=alpha, alphabet_type='custom')
+        f = vc.simulate([100, 10, 1, 0])
+        space.load_function(f)
+        
+        space.calc_stationary_frequencies()
+        space.calc_reweighting_diag_matrices()
+        space.get_sparse_reweighted_rate_matrix()
+        q = space.calc_committor_probability('000', '111')
+        
+        assert(np.all(q >= 0))
+        assert(np.all(q <= 1))
+    
+        p_reactive, gt_p = space.calc_genotypes_reactive_p('000', '010')
+        assert(np.allclose(p_reactive, 0.1330978))
+        assert(np.allclose(gt_p.sum(), 1))
+        
+        edges_flow = space.calc_edges_flow('000', '111')
+    
+    def test_calc_rate_p(self):
         gpmap = Visualization(2, 2, ns=1)
         gpmap.load_function([1.05, 1, 1, 1])
         gpmap.calc_stationary_frequencies()
         
-        # Calculate re-weighted transition matrix  
+        # Calculate re-weighted rate matrix  
         gpmap.calc_reweighting_diag_matrices()
-        t = gpmap.calc_sparse_reweighted_transition_matrix()
+        t = gpmap.calc_sparse_reweighted_rate_matrix()
         assert(t[3, 3] == -2)
         assert(t[0, 3] == 0)
         assert(np.all(gpmap.T.diagonal() < 0))
@@ -135,12 +159,12 @@ class VisualizationTests(unittest.TestCase):
                                  n_components=50, fmin=1)
     
     def test_gpmap_cache(self):
-        # Store transition matrix in cache file
+        # Store rate matrix in cache file
         gpmap = Visualization(2, 2, ns=1, cache_prefix='test')
         gpmap.load_function([1.01, 1, 1, 1.01])
         gpmap.calc_visualization(recalculate=True)
         
-        # Load now cached transition matrix
+        # Load now cached rate matrix
         log = LogTrack()
         gpmap = Visualization(2, 2, ns=1, cache_prefix='test', log=log)
         gpmap.load_function([1.01, 1, 1, 1.01])
