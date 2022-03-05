@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import plotly.graph_objects as go
 import logomaker
 
@@ -425,13 +426,13 @@ class Visualization(SequenceSpace):
         axes.set_ylabel(r'$\frac{-1}{\lambda_{k}}$',
                         fontsize=14)
 
-    def plot_edges(self, edges, axes):
+    def plot_edges(self, edges, axes, colors='grey', width=0.5):
         ndim = edges.shape[2]
         if ndim == 2:
-            ln_coll = LineCollection(edges, color='grey', linewidths=0.5,
+            ln_coll = LineCollection(edges, colors=colors, linewidths=width,
                                      alpha=0.2, zorder=1)
         elif ndim == 3:
-            ln_coll = Line3DCollection(edges, color='grey', linewidths=0.5,
+            ln_coll = Line3DCollection(edges, color=colors, linewidths=width,
                                        alpha=0.2, zorder=1)
         else:
             msg = 'Only 2 or 3 dimensions allowed: {} found'.format(ndim)
@@ -596,9 +597,11 @@ class Visualization(SequenceSpace):
     
     def plot(self, axes, x=1, y=2, z=None, show_edges=True, cmap=CMAP,
              label=None, show_labels=False, size=5, fontsize=6, colors=None,
+             edge_colors='grey', edge_widths=0.5,
              labels_subset=None, start=None, end=None, color_key=None,
              use_cmap=False, sort=True, reverse=False, lw=0, force_coords=True, 
-             prev_coords=None, highlight_local_maxima=False, coords=None):
+             prev_coords=None, highlight_local_maxima=False, coords=None,
+             genotypes1=None, genotypes2=None):
         
         axis = [x, y]
         if z is not None:
@@ -607,11 +610,22 @@ class Visualization(SequenceSpace):
         if coords is None:
             coords = self.get_nodes_coord(axis=axis, force=force_coords)
             coords = self.minimize_distance(coords, prev_coords)
+            
+        if genotypes1 is not None and genotypes2 is not None:
+            gt_p = self.calc_genotypes_reactive_p(genotypes1, genotypes2)[1]
+            flows = self.calc_edges_flow(genotypes1, genotypes2)
+            flows = flows / flows.max() + 0.01
+            edges_cmap = cm.get_cmap('binary')
+            edge_colors = edges_cmap(flows)
+            edge_widths = flows
+            colors = gt_p
+            label = 'Proportion of time spent in A-B reactive paths'
         
         if show_edges:
             edges = self.get_edges_coord(coords, force=force_coords)
-            self.plot_edges(edges, axes)
+            self.plot_edges(edges, axes, colors=edge_colors, width=edge_widths)
         
+        print(coords)
         self.plot_nodes(coords, axes, cmap, label, size_factor=size,
                         color_key=color_key, colors=colors,
                         use_cmap=use_cmap, sort=sort,
@@ -664,16 +678,19 @@ class Visualization(SequenceSpace):
                size=5, fontsize=6, labels_subset=None,
                start=0, end=None, color_key=None, colors=None, lw=0,
                force_coords=True, highlight_local_maxima=False,
-               x=1, y=2, z=None):
+               edge_colors='grey', edge_widths=0.5,
+               x=1, y=2, z=None, genotypes1=None, genotypes2=None):
         
         fig, axes = init_single_fig(figsize=(10, 7.6), is_3d=z is not None)
         self.report('Plotting landscape visualization')
         self.plot(axes, x=x, y=y, z=z, show_edges=show_edges,
                   cmap=cmap, label=label, show_labels=show_labels,
                   size=size, fontsize=fontsize, force_coords=force_coords,
-                  labels_subset=labels_subset, lw=lw,
+                  labels_subset=labels_subset, lw=lw, edge_colors=edge_colors,
+                  edge_widths=edge_widths, 
                   start=start, end=end, color_key=color_key, colors=colors,
-                  highlight_local_maxima=highlight_local_maxima)
+                  highlight_local_maxima=highlight_local_maxima,
+                  genotypes1=genotypes1, genotypes2=genotypes2)
         self.report('Saving plot')
         fname = self.get_fname_plot(suffix='visualization', fname=fname)
         savefig(fig, fname)

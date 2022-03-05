@@ -4,6 +4,7 @@ from os.path import join
 
 import numpy as np
 import pandas as pd
+import matplotlib.cm as cm
 
 from gpmap.visualization import Visualization, CodonFitnessLandscape
 from gpmap.utils import LogTrack
@@ -116,6 +117,25 @@ class VisualizationTests(unittest.TestCase):
         landscape.figure(fname='codon_landscape', size=40)
         landscape.figure(fname='codon_landscape_3d', size=40, z=3)
     
+    def test_visualize_reactive_paths(self):
+        np.random.seed(0)
+        landscape = CodonFitnessLandscape(add_variation=False)
+        landscape.calc_stationary_frequencies()
+        landscape.tune_ns(stationary_function=1.3)
+        landscape.calc_visualization(n_components=5, recalculate=True)
+        
+        gt1, gt2 = ['UCU', 'UCA', 'UCC', 'UCG'], ['AGU', 'AGC']
+        p, gt_p = landscape.calc_genotypes_reactive_p(gt1, gt2)
+        flows = landscape.calc_edges_flow(gt1, gt2)
+        flows = flows / flows.max() + 0.01
+        
+        cmap = cm.get_cmap('binary')
+        edge_colors = cmap(flows)
+        
+        landscape.figure(fname='reactive_path', size=40, colors=gt_p,
+                         cmap='Blues', edge_colors=edge_colors,
+                         edge_widths=0.2 + flows*2)
+    
     def test_laplacian(self):
         gpmap = Visualization(4, 2)
         gpmap.calc_laplacian()
@@ -226,5 +246,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=50, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests']
+    import sys;sys.argv = ['', 'VisualizationTests.test_visualize_reactive_paths']
     unittest.main()
