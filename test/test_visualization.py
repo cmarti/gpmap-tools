@@ -125,16 +125,8 @@ class VisualizationTests(unittest.TestCase):
         landscape.calc_visualization(n_components=5, recalculate=True)
         
         gt1, gt2 = ['UCU', 'UCA', 'UCC', 'UCG'], ['AGU', 'AGC']
-        p, gt_p = landscape.calc_genotypes_reactive_p(gt1, gt2)
-        flows = landscape.calc_edges_flow(gt1, gt2)
-        flows = flows / flows.max() + 0.01
-        
-        cmap = cm.get_cmap('binary')
-        edge_colors = cmap(flows)
-        
-        landscape.figure(fname='reactive_path', size=40, colors=gt_p,
-                         cmap='Blues', edge_colors=edge_colors,
-                         edge_widths=0.2 + flows*2)
+        landscape.figure(fname='reactive_path', size=40, cmap='Blues', 
+                         genotypes1=gt1, genotypes2=gt2)
     
     def test_laplacian(self):
         gpmap = Visualization(4, 2)

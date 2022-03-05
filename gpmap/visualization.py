@@ -27,7 +27,8 @@ from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
 from gpmap.base import SequenceSpace, get_sparse_diag_matrix
-from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig
+from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig,\
+    create_patches_legend
 from gpmap.settings import CACHE_DIR, CMAP, PLOTS_DIR
 from scipy.sparse.linalg.dsolve.linsolve import spsolve
 
@@ -465,17 +466,18 @@ class Visualization(SequenceSpace):
         coords, colors = coords[idx], colors[idx]
         return(coords, colors)
     
-    def plot_nodes_coords(self, axes, coords, colors, lw, size_factor, cmap):
+    def plot_nodes_coords(self, axes, coords, colors, lw, size_factor, cmap,
+                          label=None):
         ndim = coords.shape[1]
         if ndim == 2:
             sc = axes.scatter(coords[:, 0], coords[:, 1], c=colors,
                               linewidth=lw, s=size_factor, zorder=2,
-                              edgecolor='black', cmap=cmap)
+                              edgecolor='black', cmap=cmap, label=label)
         elif ndim == 3:
             sc = axes.scatter(coords[:, 0], coords[:, 1],
                               zs=coords[:, 2], c=colors,
                               linewidth=lw, s=size_factor, zorder=2,
-                              edgecolor='black', cmap=cmap, alpha=1)
+                              edgecolor='black', cmap=cmap, alpha=1, label=label)
         else:
             msg = 'Expected coords with dimension 2 or 3: {} found'.format(ndim)
             raise ValueError(msg)
@@ -617,7 +619,7 @@ class Visualization(SequenceSpace):
             flows = flows / flows.max() + 0.01
             edges_cmap = cm.get_cmap('binary')
             edge_colors = edges_cmap(flows)
-            edge_widths = flows
+            edge_widths = flows * 2 + 0.1
             colors = gt_p
             label = 'Proportion of time spent in A-B reactive paths'
         
@@ -625,13 +627,26 @@ class Visualization(SequenceSpace):
             edges = self.get_edges_coord(coords, force=force_coords)
             self.plot_edges(edges, axes, colors=edge_colors, width=edge_widths)
         
-        print(coords)
         self.plot_nodes(coords, axes, cmap, label, size_factor=size,
                         color_key=color_key, colors=colors,
                         use_cmap=use_cmap, sort=sort,
                         reverse=reverse, lw=lw,
                         highlight_local_maxima=highlight_local_maxima)
         
+        if genotypes1 is not None and genotypes2 is not None:
+            gts = self.genotype_idxs.loc[genotypes1]
+            self.plot_nodes_coords(axes, coords[gts],
+                                   colors='yellow', lw=2, size_factor=3*size,
+                                   cmap=cmap)
+            
+            gts = self.genotype_idxs.loc[genotypes2]
+            self.plot_nodes_coords(axes, coords[gts],
+                                   colors='orange', lw=2, size_factor=3*size,
+                                   cmap=cmap)
+            create_patches_legend(axes, 
+                                  colors_dict={'A': 'yellow', 'B': 'orange'},
+                                  loc=2, fontsize=14)
+            
         if show_labels:
             self.plot_labels(coords, axes, fontsize=fontsize,
                              labels_subset=labels_subset, start=start, end=end)
