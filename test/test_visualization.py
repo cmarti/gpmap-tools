@@ -125,8 +125,8 @@ class VisualizationTests(unittest.TestCase):
         landscape.calc_visualization(n_components=5, recalculate=True)
         
         gt1, gt2 = ['UCU', 'UCA', 'UCC', 'UCG'], ['AGU', 'AGC']
-        landscape.figure(fname='reactive_path', size=40, cmap='Blues', 
-                         genotypes1=gt1, genotypes2=gt2)
+        landscape.figure(fname='reactive_path', size=40, cmap='coolwarm', 
+                         genotypes1=gt1, genotypes2=gt2, figsize=(8, 6))
     
     def test_laplacian(self):
         gpmap = Visualization(4, 2)
@@ -238,5 +238,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=50, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests.test_visualize_reactive_paths']
+    import sys;sys.argv = ['', 'VisualizationTests']
     unittest.main()

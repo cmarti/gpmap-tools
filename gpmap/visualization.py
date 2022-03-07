@@ -467,17 +467,19 @@ class Visualization(SequenceSpace):
         return(coords, colors)
     
     def plot_nodes_coords(self, axes, coords, colors, lw, size_factor, cmap,
-                          label=None):
+                          label=None, vmin=None, vmax=None):
         ndim = coords.shape[1]
         if ndim == 2:
             sc = axes.scatter(coords[:, 0], coords[:, 1], c=colors,
                               linewidth=lw, s=size_factor, zorder=2,
-                              edgecolor='black', cmap=cmap, label=label)
+                              edgecolor='black', cmap=cmap, label=label,
+                              vmax=vmax, vmin=vmin)
         elif ndim == 3:
             sc = axes.scatter(coords[:, 0], coords[:, 1],
                               zs=coords[:, 2], c=colors,
                               linewidth=lw, s=size_factor, zorder=2,
-                              edgecolor='black', cmap=cmap, alpha=1, label=label)
+                              edgecolor='black', cmap=cmap, alpha=1, label=label,
+                              vmax=vmax, vmin=vmin)
         else:
             msg = 'Expected coords with dimension 2 or 3: {} found'.format(ndim)
             raise ValueError(msg)
@@ -487,13 +489,15 @@ class Visualization(SequenceSpace):
     def plot_nodes(self, coords, axes, cmap, label=None, size_factor=2.5,
                    colors=None, color_key=None, use_cmap=False,
                    sort=True, reverse=False, 
-                   lw=0, highlight_local_maxima=False):
+                   lw=0, highlight_local_maxima=False,
+                   vmax=None, vmin=None):
         colors = self.get_nodes_colors(color_key=color_key, colors=colors)
         if sort:
             coords, colors = self.sort_nodes(coords, colors, reverse=reverse)
         
         sc = self.plot_nodes_coords(axes, coords, colors,
-                                    lw=lw, size_factor=size_factor, cmap=cmap)
+                                    lw=lw, size_factor=size_factor, cmap=cmap,
+                                    vmax=vmax, vmin=vmin)
         
         if color_key is None or use_cmap:
             plt.colorbar(sc, ax=axes).set_label(label=self.get_cmap_label(label), size=14)
@@ -612,7 +616,8 @@ class Visualization(SequenceSpace):
         if coords is None:
             coords = self.get_nodes_coord(axis=axis, force=force_coords)
             coords = self.minimize_distance(coords, prev_coords)
-            
+
+        vmax, vmin = None, None            
         if genotypes1 is not None and genotypes2 is not None:
             gt_p = self.calc_genotypes_reactive_p(genotypes1, genotypes2)[1]
             flows = self.calc_edges_flow(genotypes1, genotypes2)
@@ -620,8 +625,11 @@ class Visualization(SequenceSpace):
             edges_cmap = cm.get_cmap('binary')
             edge_colors = edges_cmap(flows)
             edge_widths = flows * 2 + 0.1
-            colors = gt_p
-            label = 'Proportion of time spent in A-B reactive paths'
+            norm_factor = self.genotypes_stationary_frequencies[gt_p > 0].sum()
+            colors = np.log2(gt_p * norm_factor / self.genotypes_stationary_frequencies)
+            vmax = np.abs(colors).max()
+            vmin = -vmax
+            label = r'$log_{2} \left( \frac{m_i^{AB}}{\pi_{i} / \sum_{j \in (A \cup B)^c} \pi_j} \right)$'
         
         if show_edges:
             edges = self.get_edges_coord(coords, force=force_coords)
@@ -631,6 +639,7 @@ class Visualization(SequenceSpace):
                         color_key=color_key, colors=colors,
                         use_cmap=use_cmap, sort=sort,
                         reverse=reverse, lw=lw,
+                        vmax=vmax, vmin=vmin,
                         highlight_local_maxima=highlight_local_maxima)
         
         if genotypes1 is not None and genotypes2 is not None:
@@ -694,9 +703,10 @@ class Visualization(SequenceSpace):
                start=0, end=None, color_key=None, colors=None, lw=0,
                force_coords=True, highlight_local_maxima=False,
                edge_colors='grey', edge_widths=0.5,
-               x=1, y=2, z=None, genotypes1=None, genotypes2=None):
+               x=1, y=2, z=None, genotypes1=None, genotypes2=None,
+               figsize=(10, 7.6)):
         
-        fig, axes = init_single_fig(figsize=(10, 7.6), is_3d=z is not None)
+        fig, axes = init_single_fig(figsize=figsize, is_3d=z is not None)
         self.report('Plotting landscape visualization')
         self.plot(axes, x=x, y=y, z=z, show_edges=show_edges,
                   cmap=cmap, label=label, show_labels=show_labels,
