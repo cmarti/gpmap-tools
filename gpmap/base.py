@@ -49,11 +49,17 @@ class BaseGPMap(object):
             raise ValueError('alphabet type not supported')
         self.n_alleles = len(self.alphabet)
     
-    def extend_ambiguous_sequences(self, seq):
+    def extend_ambiguous_sequence(self, seq):
         """return list of all possible sequences given an ambiguous DNA input
         copied from https://www.biostars.org/p/260617/
         """
-        return [ list(map("".join, product(*map(self.ambiguous_values.get, seq)))) ]
+        return(list(map("".join, product(*map(self.ambiguous_values.get, seq)))))
+    
+    def extend_ambiguous_sequences(self, seqs):
+        extended = []
+        for seq in seqs:
+            extended.extend(self.extend_ambiguous_sequence(seq))
+        return(extended)
     
     def report(self, msg):
         write_log(self.log, msg)
