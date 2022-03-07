@@ -31,6 +31,7 @@ from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig,\
     create_patches_legend
 from gpmap.settings import CACHE_DIR, CMAP, PLOTS_DIR
 from scipy.sparse.linalg.dsolve.linsolve import spsolve
+from scipy.sparse.linalg.isolve.iterative import bicg, bicgstab
 
 
 class Visualization(SequenceSpace):
@@ -174,7 +175,12 @@ class Visualization(SequenceSpace):
         partial_rate_matrix = self.rate_matrix[no_ab_genotypes, :]
         U = partial_rate_matrix[:, no_ab_genotypes]
         v = -partial_rate_matrix[:, b_genotypes].sum(1)
-        q_reduced = spsolve(U, v)
+        # q_reduced = spsolve(U, v)
+        q_reduced, exitCode = bicgstab(U, v)
+        
+        if exitCode != 0 or np.any(q_reduced < 0) or np.any(q_reduced > 1):
+            msg = 'Uq = v solution was not properly found'
+            raise ValueError(msg)
                 
         q = np.zeros(self.n_genotypes)
         q[no_ab_genotypes] = q_reduced
@@ -201,6 +207,28 @@ class Visualization(SequenceSpace):
         rate_ij = self.calc_rate_vector(self.calc_delta_f(i, j))
         flow = stationary_freqs[i] * (1-q)[i] * rate_ij * q[j]
         return(flow)
+
+    def calc_edges_effective_flow(self, genotypes1, genotypes2):
+        q = self.calc_committor_probability(genotypes1, genotypes2)
+        stationary_freqs = self.genotypes_stationary_frequencies
+        
+        i, j = self.get_neighbor_pairs()
+        rate_ij = self.calc_rate_vector(self.calc_delta_f(i, j))
+        flow = stationary_freqs[i] * rate_ij * (q[j] - q[i])
+        flow[flow < 0] = 0
+        return(flow)
+    
+    def calc_evolutionary_rate(self, genotypes1, genotypes2):
+        flow = self.calc_edges_flow(genotypes1, genotypes2)
+        i, j = self.get_neighbor_pairs()
+        if len(genotypes1) > len(genotypes2):
+            sel_gts = set(genotypes2)
+            sel_idx = np.array([x in sel_gts for x in j])
+        else:
+            sel_gts = set(genotypes1)
+            sel_idx = np.array([x in sel_gts for x in i])
+        rate = flow[sel_idx].sum()
+        return(rate)
     
     def save_sparse_matrix(self):
         if self.cache_prefix is not None:
@@ -620,7 +648,7 @@ class Visualization(SequenceSpace):
         vmax, vmin = None, None            
         if genotypes1 is not None and genotypes2 is not None:
             gt_p = self.calc_genotypes_reactive_p(genotypes1, genotypes2)[1]
-            flows = self.calc_edges_flow(genotypes1, genotypes2)
+            flows = self.calc_edges_effective_flow(genotypes1, genotypes2)
             flows = flows / flows.max() + 0.01
             edges_cmap = cm.get_cmap('binary')
             edge_colors = edges_cmap(flows)

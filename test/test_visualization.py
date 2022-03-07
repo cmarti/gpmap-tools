@@ -69,6 +69,20 @@ class VisualizationTests(unittest.TestCase):
         
         edges_flow = space.calc_edges_flow('000', '111')
     
+    def test_calc_transition_path_stats_big(self):
+        np.random.seed(1)
+        alpha = 4
+        length = 9
+    
+        space = Visualization(length, n_alleles=alpha, alphabet_type='custom')
+        vc = VCregression(length, n_alleles=alpha, alphabet_type='custom')
+        f = vc.simulate([0, 10000, 1000, 100, 10, 1, 0, 0, 0, 0])
+        space.load_function(f)
+        space.calc_stationary_frequencies()
+        space.calc_reweighting_diag_matrices()
+        space.get_sparse_reweighted_rate_matrix()
+        space.calc_genotypes_reactive_p(['000000000'], ['123010122'])
+    
     def test_calc_rate_p(self):
         gpmap = Visualization(2, 2, ns=1)
         gpmap.load_function([1.05, 1, 1, 1])
