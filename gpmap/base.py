@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from itertools import product
 import warnings
-
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
@@ -14,6 +13,7 @@ from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 from gpmap.utils import write_log
 from gpmap.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                             MAX_GENOTYPES)
+from Bio.Data import IUPACData
 
 
 def get_sparse_diag_matrix(values):
@@ -31,19 +31,29 @@ class BaseGPMap(object):
             self.alphabet = DNA_ALPHABET
             self.complements = {'A': ['T'], 'T': ['A'],
                                 'G': ['C'], 'C': ['G']}
+            self.ambiguous_values = IUPACData.ambiguous_dna_values
         elif alphabet_type == 'rna':
             self.alphabet = RNA_ALPHABET
             self.complements = {'A': ['U'], 'U': ['A', 'G'],
                                 'G': ['C', 'U'], 'C': ['G']}
+            self.ambiguous_values = IUPACData.ambiguous_rna_values
         elif alphabet_type == 'protein':
             self.alphabet = PROTEIN_ALPHABET
         elif alphabet_type == 'custom':
             if n_alleles is None:
                 raise ValueError('n_alleles must be provided for custom alphabet')
             self.alphabet = [str(x) for x in range(n_alleles)]
+            self.ambiguous_values = {'*': ''.join(self.alphabet),
+                                     'N': ''.join(self.alphabet)}
         else:
             raise ValueError('alphabet type not supported')
         self.n_alleles = len(self.alphabet)
+    
+    def extend_ambiguous_sequences(self, seq):
+        """return list of all possible sequences given an ambiguous DNA input
+        copied from https://www.biostars.org/p/260617/
+        """
+        return [ list(map("".join, product(*map(self.ambiguous_values.get, seq)))) ]
     
     def report(self, msg):
         write_log(self.log, msg)
