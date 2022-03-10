@@ -7,6 +7,7 @@ from os.path import exists, join
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import plotly.graph_objects as go
@@ -30,8 +31,7 @@ from gpmap.base import SequenceSpace, get_sparse_diag_matrix
 from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig,\
     create_patches_legend
 from gpmap.settings import CACHE_DIR, CMAP, PLOTS_DIR
-from scipy.sparse.linalg.dsolve.linsolve import spsolve
-from scipy.sparse.linalg.isolve.iterative import bicg, bicgstab
+from scipy.sparse.linalg.isolve.iterative import bicgstab
 
 
 class Visualization(SequenceSpace):
@@ -158,24 +158,30 @@ class Visualization(SequenceSpace):
         
         return(self.T)
     
-    def calc_committor_probability(self, genotypes1, genotypes2):
-        if np.intersect1d(genotypes1, genotypes2).shape[0] > 0:
+    def get_AB_genotypes_idxs(self, genotypes1, genotypes2):
+        genotypes1 = self.extend_ambiguous_sequences(genotypes1)
+        genotypes2 = self.extend_ambiguous_sequences(genotypes2)
+        idx1 = self.genotype_idxs.loc[genotypes1].values
+        idx2 = self.genotype_idxs.loc[genotypes2].values
+        return(idx1, idx2)
+    
+    def calc_committor_probability(self, idx1, idx2):
+        if np.intersect1d(idx1, idx2).shape[0] > 0:
             raise ValueError('The two sets of genotypes cannot overlap')
         
         # Select (AUB)^c genotypes
         idx = np.full(self.n_genotypes, True)
-        all_gts = np.hstack([genotypes1, genotypes2])
-        idx[self.genotype_idxs.loc[all_gts]] = False
+        ab_gts = np.hstack([idx1, idx2])
+        idx[ab_gts] = False
         no_ab_genotypes = np.where(idx)[0]
         
         # Select B genotypes
-        b_genotypes = self.genotype_idxs.loc[genotypes2]
+        b_genotypes = idx2
         
         # Solve system Uq = v 
         partial_rate_matrix = self.rate_matrix[no_ab_genotypes, :]
         U = partial_rate_matrix[:, no_ab_genotypes]
         v = -partial_rate_matrix[:, b_genotypes].sum(1)
-        # q_reduced = spsolve(U, v)
         q_reduced, exitCode = bicgstab(U, v)
         
         if exitCode != 0 or np.any(q_reduced < 0) or np.any(q_reduced > 1):
@@ -187,10 +193,11 @@ class Visualization(SequenceSpace):
         q[b_genotypes] = 1
         return(q)
 
-    def calc_genotypes_reactive_p(self, genotypes1, genotypes2):
-        q = self.calc_committor_probability(genotypes1, genotypes2)
+    def calc_genotypes_reactive_p(self, idx1, idx2, q=None):
+        if not q:
+            q = self.calc_committor_probability(idx1, idx2)
+            
         log_stationary_freqs = self.log_genotypes_stationary_frequencies
-        
         gt_log_p_reactive = log_stationary_freqs + np.log(q) + np.log(1-q)
         log_p_reactive = logsumexp(gt_log_p_reactive)
         gt_log_p_reactive = gt_log_p_reactive - log_p_reactive
@@ -199,17 +206,20 @@ class Visualization(SequenceSpace):
         gt_p = np.exp(gt_log_p_reactive)
         return(p_reactive, gt_p)
     
-    def calc_edges_flow(self, genotypes1, genotypes2):
-        q = self.calc_committor_probability(genotypes1, genotypes2)
+    def calc_edges_flow(self, idx1, idx2, q=None):
+        if not q:
+            q = self.calc_committor_probability(idx1, idx2)
+            
         stationary_freqs = self.genotypes_stationary_frequencies
-        
         i, j = self.get_neighbor_pairs()
         rate_ij = self.calc_rate_vector(self.calc_delta_f(i, j))
         flow = stationary_freqs[i] * (1-q)[i] * rate_ij * q[j]
         return(flow)
 
-    def calc_edges_effective_flow(self, genotypes1, genotypes2):
-        q = self.calc_committor_probability(genotypes1, genotypes2)
+    def calc_edges_effective_flow(self, idx1, idx2, q=None):
+        if not q:
+            q = self.calc_committor_probability(idx1, idx2)
+            
         stationary_freqs = self.genotypes_stationary_frequencies
         
         i, j = self.get_neighbor_pairs()
@@ -218,17 +228,118 @@ class Visualization(SequenceSpace):
         flow[flow < 0] = 0
         return(flow)
     
-    def calc_evolutionary_rate(self, genotypes1, genotypes2):
-        flow = self.calc_edges_flow(genotypes1, genotypes2)
+    def calc_evolutionary_rate(self, idx1, idx2, q=None):
+        flow = self.calc_edges_flow(idx1, idx2, q=q)
         i, j = self.get_neighbor_pairs()
-        if len(genotypes1) > len(genotypes2):
-            sel_gts = set(genotypes2)
+        if idx1.shape[0] > idx2.shape[0]:
+            sel_gts = set(idx2)
             sel_idx = np.array([x in sel_gts for x in j])
         else:
-            sel_gts = set(genotypes1)
+            sel_gts = set(idx1)
             sel_idx = np.array([x in sel_gts for x in i])
         rate = flow[sel_idx].sum()
         return(rate)
+    
+    def sort_flows(self, i, j, flow):
+        sorted_idx = np.argsort(flow)
+        flow = flow[sorted_idx]
+        i = i[sorted_idx]
+        j = j[sorted_idx]
+        return(i, j, flow)
+    
+    def get_graph(self, i, j, a, b, m):
+        edgelist = list(zip(i[m:], j[m:]))
+        edgelist.extend([('a', y) for y in a])
+        edgelist.extend([(x, 'b') for x in b])
+        graph = nx.DiGraph(edgelist)
+        return(graph)
+    
+    def _calc_dynamic_bottleneck(self, i, j, a, b, eff_flow):
+        i, j, eff_flow = self.sort_flows(i, j, eff_flow)
+        left, right = 0, eff_flow.shape[0]
+        
+        if i[-1] in a and j[-1] in b:
+            return((i[-1], j[-1]), eff_flow[-1], 0)
+        
+        while right - left > 1:
+            m = int((right + left) / 2)
+            graph = self.get_graph(i, j, a, b, m)
+            if nx.has_path(graph, 'a', 'b'):
+                left = m
+            else:
+                right = m
+        
+        bottleneck = (i[left], j[left])
+        min_flow = eff_flow[left]
+        return(bottleneck, min_flow, m)
+    
+    def calc_dynamic_bottleneck(self, idx1, idx2):
+        eff_flow = self.calc_edges_effective_flow(idx1, idx2)
+        i, j = self.get_neighbor_pairs()
+        i, j, eff_flow = self.sort_flows(i, j, eff_flow)
+        return(self._calc_dynamic_bottleneck(i, j, idx1, idx2, eff_flow=eff_flow)[:2])
+    
+    def get_subgraph_partition(self, graph, node, flows_dict):
+        nodes = nx.node_connected_component(nx.Graph(graph), node)
+        subgraph = nx.DiGraph(graph.subgraph(nodes))
+        subgraph.remove_node(node)
+        i, j, flows = [], [], []
+        for s, t in subgraph.edges:
+            i.append(s)
+            j.append(t)
+            flows.append(flows_dict[(s, t)])
+        i, j, flows = self.sort_flows(np.array(i), np.array(j), np.array(flows))
+        return(i, j, flows)
+    
+    def get_left_and_right_graphs(self, i, j, a, b, m, flows_dict):
+        graph = self.get_graph(i, j, a, b, m)
+        left = self.get_subgraph_partition(graph, node='a', flows_dict=flows_dict)
+        right = self.get_subgraph_partition(graph, node='b', flows_dict=flows_dict)
+        return(left, right)
+
+    def get_flows_dict(self, i, j, a, b, flow):
+        flows = dict(zip(zip(i, j), flow))
+        for genotype in a:
+            flows[('a', genotype)] = np.sum(flow[i == genotype])
+        for genotype in b:
+            flows[(genotype, 'b')] = np.sum(flow[j == genotype])
+        return(flows)
+    
+    def _calc_representative_pathway(self, i, j, a, b, eff_flow=None):
+        if eff_flow is None:
+            eff_flow = self.calc_edges_effective_flow(a, b)
+        
+        i, j, eff_flow = self.sort_flows(i, j, eff_flow)
+        bottleneck = self._calc_dynamic_bottleneck(i, j, a, b, eff_flow=eff_flow)
+        b1, b2 = bottleneck[0]
+        m = bottleneck[-1]
+        flows_dict = self.get_flows_dict(i, j, a, b, eff_flow)
+        left, right = self.get_left_and_right_graphs(i, j, a, b, m, flows_dict)
+
+        if b1 in a:
+            left = [b1]
+        else:
+            left_i, left_j, left_flows = left
+            left = self._calc_representative_pathway(left_i, left_j, a, [b1], eff_flow=left_flows)
+        
+        if b2 in b:
+            right = [b2]
+        else:
+            right_i, right_j, right_flows = right
+            right = self._calc_representative_pathway(right_i, right_j, [b2], b,
+                                                      eff_flow=right_flows)
+        return(left + right)
+
+    def calc_representative_pathway(self, idx1, idx2, eff_flow=None):
+        if eff_flow is None:
+            eff_flow = self.calc_edges_effective_flow(idx1, idx2)
+        
+        i, j = self.get_neighbor_pairs()
+        min_flow = self._calc_dynamic_bottleneck(i, j, idx1, idx2, 
+                                                 eff_flow=eff_flow)[1]
+        path = self._calc_representative_pathway(i, j, a=idx1, b=idx2,
+                                                 eff_flow=eff_flow)
+        return(path, min_flow)
     
     def save_sparse_matrix(self):
         if self.cache_prefix is not None:

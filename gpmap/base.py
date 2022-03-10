@@ -45,6 +45,7 @@ class BaseGPMap(object):
             self.alphabet = [str(x) for x in range(n_alleles)]
             self.ambiguous_values = {'*': ''.join(self.alphabet),
                                      'N': ''.join(self.alphabet)}
+            self.ambiguous_values.update(dict(zip(self.alphabet, self.alphabet)))
         else:
             raise ValueError('alphabet type not supported')
         self.n_alleles = len(self.alphabet)
@@ -136,8 +137,10 @@ class SequenceSpace(BaseGPMap):
         return(self.A)
     
     def get_neighbor_pairs(self):
-        A = self.get_adjacency_matrix()
-        return(A.row, A.col)
+        if not hasattr(self, 'neighbor_pairs'):
+            A = self.get_adjacency_matrix()
+            self.neighbor_pairs = A.row, A.col
+        return(self.neighbor_pairs)
     
     def istack_matrices(self, m_diag, m_offdiag, module=sp):
         rows = []

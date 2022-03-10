@@ -69,6 +69,29 @@ class VisualizationTests(unittest.TestCase):
         
         edges_flow = space.calc_edges_flow('000', '111')
     
+    def test_calc_dynamic_bottleneck(self):
+        np.random.seed(1)
+        alpha = 2
+        length = 3
+    
+        space = Visualization(length, n_alleles=alpha, alphabet_type='custom')
+        vc = VCregression(length, n_alleles=alpha, alphabet_type='custom')
+        f = vc.simulate([100, 10, 1, 0])
+        space.load_function(f)
+        
+        space.calc_stationary_frequencies()
+        space.calc_reweighting_diag_matrices()
+        space.get_sparse_reweighted_rate_matrix()
+        idx1, idx2 = space.get_AB_genotypes_idxs(['000'], ['111'])
+        
+        bottleneck, min_flow = space.calc_dynamic_bottleneck(idx1, idx2)
+        assert(bottleneck == (4, 6))
+        assert(np.allclose(min_flow, 0.0020637))
+        
+        path, flow = space.calc_representative_pathway(idx1, idx2)
+        assert(np.all(path == [0, 4, 6, 7]))
+        assert(np.allclose(flow, 0.0020637))
+    
     def test_calc_transition_path_stats_big(self):
         np.random.seed(1)
         alpha = 4
@@ -252,5 +275,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=50, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests']
+    import sys;sys.argv = ['', 'VisualizationTests.test_calc_dynamic_bottleneck']
     unittest.main()
