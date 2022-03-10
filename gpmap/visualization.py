@@ -32,6 +32,7 @@ from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig,\
     create_patches_legend
 from gpmap.settings import CACHE_DIR, CMAP, PLOTS_DIR
 from scipy.sparse.linalg.isolve.iterative import bicgstab
+from networkx.algorithms.components.connected import number_connected_components
 
 
 class Visualization(SequenceSpace):
@@ -241,13 +242,15 @@ class Visualization(SequenceSpace):
         return(rate)
     
     def sort_flows(self, i, j, flow):
-        sorted_idx = np.argsort(flow)
-        flow = flow[sorted_idx]
-        i = i[sorted_idx]
-        j = j[sorted_idx]
+        if i.shape[0] > 1:
+            sorted_idx = np.argsort(flow)
+            flow = flow[sorted_idx]
+            i = i[sorted_idx]
+            j = j[sorted_idx]
         return(i, j, flow)
     
     def get_graph(self, i, j, a, b, m):
+        # print(i, j, a, b, m)
         edgelist = list(zip(i[m:], j[m:]))
         edgelist.extend([('a', y) for y in a])
         edgelist.extend([(x, 'b') for x in b])
@@ -279,22 +282,27 @@ class Visualization(SequenceSpace):
         i, j, eff_flow = self.sort_flows(i, j, eff_flow)
         return(self._calc_dynamic_bottleneck(i, j, idx1, idx2, eff_flow=eff_flow)[:2])
     
-    def get_subgraph_partition(self, graph, node, flows_dict):
-        nodes = nx.node_connected_component(nx.Graph(graph), node)
+    def get_subgraph_partition(self, graph, node):
+        g = nx.Graph(graph)
+        n = number_connected_components(g)
+        # if n != 2:
+        #     print(graph.edges)
+        #     msg = 'Number of components after bottleneck removal is {}'.format(n)
+        #     raise ValueError(msg)
+        nodes = nx.node_connected_component(g, node)
         subgraph = nx.DiGraph(graph.subgraph(nodes))
         subgraph.remove_node(node)
-        i, j, flows = [], [], []
+        i, j = [], []
         for s, t in subgraph.edges:
             i.append(s)
             j.append(t)
-            flows.append(flows_dict[(s, t)])
-        i, j, flows = self.sort_flows(np.array(i), np.array(j), np.array(flows))
-        return(i, j, flows)
+        # print('partition', i, j, node)
+        return(np.array(i), np.array(j))
     
-    def get_left_and_right_graphs(self, i, j, a, b, m, flows_dict):
+    def get_left_and_right_graphs(self, i, j, a, b, m):
         graph = self.get_graph(i, j, a, b, m)
-        left = self.get_subgraph_partition(graph, node='a', flows_dict=flows_dict)
-        right = self.get_subgraph_partition(graph, node='b', flows_dict=flows_dict)
+        left = self.get_subgraph_partition(graph, node='a')
+        right = self.get_subgraph_partition(graph, node='b')
         return(left, right)
 
     def get_flows_dict(self, i, j, a, b, flow):
@@ -305,41 +313,65 @@ class Visualization(SequenceSpace):
             flows[(genotype, 'b')] = np.sum(flow[j == genotype])
         return(flows)
     
-    def _calc_representative_pathway(self, i, j, a, b, eff_flow=None):
-        if eff_flow is None:
-            eff_flow = self.calc_edges_effective_flow(a, b)
-        
+    def _calc_representative_pathway(self, i, j, a, b, flows_dict):
+        # print(i, j)
+        eff_flow = np.array([flows_dict[(s, t)] for s, t in zip(i, j)])
         i, j, eff_flow = self.sort_flows(i, j, eff_flow)
         bottleneck = self._calc_dynamic_bottleneck(i, j, a, b, eff_flow=eff_flow)
         b1, b2 = bottleneck[0]
         m = bottleneck[-1]
-        flows_dict = self.get_flows_dict(i, j, a, b, eff_flow)
-        left, right = self.get_left_and_right_graphs(i, j, a, b, m, flows_dict)
+        left, right = self.get_left_and_right_graphs(i, j, a, b, m)
 
         if b1 in a:
             left = [b1]
         else:
-            left_i, left_j, left_flows = left
-            left = self._calc_representative_pathway(left_i, left_j, a, [b1], eff_flow=left_flows)
+            left_i, left_j = left
+            left = self._calc_representative_pathway(left_i, left_j, a, [b1],
+                                                     flows_dict=flows_dict)
         
         if b2 in b:
             right = [b2]
         else:
-            right_i, right_j, right_flows = right
+            right_i, right_j = right
             right = self._calc_representative_pathway(right_i, right_j, [b2], b,
-                                                      eff_flow=right_flows)
+                                                      flows_dict=flows_dict)
         return(left + right)
 
-    def calc_representative_pathway(self, idx1, idx2, eff_flow=None):
-        if eff_flow is None:
-            eff_flow = self.calc_edges_effective_flow(idx1, idx2)
-        
+    def calc_representative_pathway(self, idx1, idx2, flows_dict=None):
         i, j = self.get_neighbor_pairs()
+        eff_flows = None
+        
+        if flows_dict is None:
+            eff_flows = self.calc_edges_effective_flow(idx1, idx2)
+            flows_dict = self.get_flows_dict(i, j, idx1, idx2, eff_flows)
+        if eff_flows is None:
+            eff_flows = np.array([flows_dict[(s, t)] for s, t in zip(i, j)])
+        
         min_flow = self._calc_dynamic_bottleneck(i, j, idx1, idx2, 
-                                                 eff_flow=eff_flow)[1]
+                                                 eff_flow=eff_flows)[1]
         path = self._calc_representative_pathway(i, j, a=idx1, b=idx2,
-                                                 eff_flow=eff_flow)
+                                                 flows_dict=flows_dict)
         return(path, min_flow)
+    
+    def calc_representative_pathways(self, idx1, idx2, tol=1e-4):
+        i, j = self.get_neighbor_pairs()
+        eff_flows = self.calc_edges_effective_flow(idx1, idx2)
+        flows_dict = self.get_flows_dict(i, j, idx1, idx2, eff_flows)
+
+        total_flow = np.sum([flows_dict[('a', t)] for t in idx1])
+        flow_sum = 0
+        
+        while flow_sum < total_flow * (1 - tol):
+            eff_flows = np.array([flows_dict[(s, t)] for s, t in zip(i, j)])
+            path_flow = self._calc_dynamic_bottleneck(i, j, idx1, idx2, 
+                                                      eff_flow=eff_flows)[1]
+            path = self._calc_representative_pathway(i, j, a=idx1, b=idx2,
+                                                     flows_dict=flows_dict)
+            for s, t in zip(path, path[1:]):
+                flows_dict[(s, t)] -= path_flow
+            flow_sum += path_flow
+            flow_p = path_flow / total_flow
+            yield(path, path_flow, flow_p)
     
     def save_sparse_matrix(self):
         if self.cache_prefix is not None:

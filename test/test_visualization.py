@@ -91,6 +91,9 @@ class VisualizationTests(unittest.TestCase):
         path, flow = space.calc_representative_pathway(idx1, idx2)
         assert(np.all(path == [0, 4, 6, 7]))
         assert(np.allclose(flow, 0.0020637))
+        
+        for path, flow, p in space.calc_representative_pathways(idx1, idx2):
+            print(path, flow, p)
     
     def test_calc_transition_path_stats_big(self):
         np.random.seed(1)
