@@ -23,71 +23,66 @@ from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 from scipy.sparse import identity
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
-from scipy.sparse._matrix_io import save_npz, load_npz
 from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
+from scipy.sparse.linalg.isolve.iterative import bicgstab
 
 from gpmap.base import SequenceSpace, get_sparse_diag_matrix
-from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig,\
-    create_patches_legend
-from gpmap.settings import CACHE_DIR, CMAP, PLOTS_DIR
-from scipy.sparse.linalg.isolve.iterative import bicgstab
-from networkx.algorithms.components.connected import number_connected_components
+from gpmap.plot_utils import (init_fig, savefig, arrange_plot, init_single_fig,
+                              create_patches_legend)
+from gpmap.settings import CMAP, PLOTS_DIR
+from gpmap.utils import write_pickle, load_pickle
+
 
 
 class Visualization(SequenceSpace):
-    def __init__(self, length, n_alleles=None, ns=1,
-                 log=None, cache_prefix=None, alphabet_type='dna', 
-                 label=None):
-        self.init(length, n_alleles, log=log, alphabet_type=alphabet_type)
-        
-        self.cache_prefix = cache_prefix
-        self.cached_T = False
-        self.cached_eigenvectors = False
-        self.cached_eigenvalues = False
-        self.ns = ns
-        self.label = label
-        self.calc_adjacency()
+    def __init__(self, length=None, n_alleles=None, alphabet_type='dna',
+                 fpath=None, log=None):
+        if fpath is not None:
+            self.load(fpath)
+        elif length is not None:
+            self.init(length, n_alleles, log=log, alphabet_type=alphabet_type)
+            self.calc_adjacency()
+        else:
+            msg = 'Either sequence length or fpath with visualization data'
+            msg += ' should be provided'
+            raise ValueError(msg)
     
     def set_random_function(self, seed=None):
         if seed is not None:
             np.random.seed(seed)
-        self.load_function(f=np.random.normal(size=self.n_genotypes))
+        self.set_function(f=np.random.normal(size=self.n_genotypes))
     
-    def load_function(self, f, label=None):
+    def set_function(self, f, label=None):
         self.report('Loading function data')
         self.f = np.array(f)
-        self.label_function = label
+        self.label = label
     
-    def calc_delta_f(self, rows, cols):
+    def _calc_delta_f(self, rows, cols):
         return(self.f[cols] - self.f[rows])
     
-    def calc_average_function(self):
-        return(np.mean(self.f))
-    
-    def calc_stationary_frequencies(self, silent=False):
-        if not silent:
-            self.report('Calculating stationary frequencies')
-            
-        log_freqs = self.ns * self.f
+    def calc_stationary_frequencies(self, Ns, store_sqrt_diag_matrices=True):
+        log_freqs = Ns * self.f
         self.log_total = logsumexp(log_freqs)
         self.log_genotypes_stationary_frequencies = log_freqs - self.log_total
         freqs = np.exp(self.log_genotypes_stationary_frequencies)
         
         # Store equilibrium frequencies
         self.genotypes_stationary_frequencies = freqs
+        
+        if store_sqrt_diag_matrices:
+            sqrt_freqs = np.sqrt(self.genotypes_stationary_frequencies)
+            self.diag_freq = get_sparse_diag_matrix(sqrt_freqs) 
+            self.diag_freq_inv = get_sparse_diag_matrix(1 / sqrt_freqs)
+        
         return(freqs)
     
-    def get_stationary_frequencies(self):
-        if not hasattr(self, 'genotypes_stationary_frequencies'):
-            self.calc_stationary_frequencies(silent=True)
-        return(self.genotypes_stationary_frequencies)
-    
     def calc_stationary_function(self):
-        self.fmean = np.sum(self.f * self.get_stationary_frequencies())
+        self.fmean = np.sum(self.f * self.genotypes_stationary_frequencies)
         return(self.fmean)
     
-    def tune_ns(self, stationary_function=None, perc=None, tol=1e-8, maxiter=100):
+    def calc_Ns(self, stationary_function=None, perc=None, tol=1e-8, maxiter=100, 
+                max_attempts=10):
         if perc is not None:
             stationary_function = np.percentile(self.f, perc)
         elif stationary_function is None:
@@ -98,67 +93,186 @@ class Visualization(SequenceSpace):
         self.report(msg.format(stationary_function))
         
         def f(param):
-            self.ns = np.exp(param)
-            self.calc_stationary_frequencies(silent=True)
+            Ns = np.exp(param)
+            self.calc_stationary_frequencies(Ns, store_sqrt_diag_matrices=False)
             x = self.calc_stationary_function()
             rel_error = (stationary_function - x) ** 2
             return(rel_error)
         
-        for _ in range(10):
-            result = minimize(f, x0=self.ns, tol=tol,
+        for _ in range(max_attempts):
+            result = minimize(f, x0=0, tol=tol,
                               options={'maxiter': maxiter})
             if f(result.x[0]) < tol:
                 break
+        else:
+            msg = 'Could not find the Ns that yields the desired mean function'
+            raise ValueError(msg)
 
-        self.ns = np.exp(result.x[0])
-        self.calc_stationary_frequencies(silent=True)
-        self.calc_stationary_function()
-        self.report('\tOptimal Ns value: {}'.format(self.ns))
-        self.report('\tExpected average function: {}'.format(self.fmean))
-        return(self.fmean)
+        Ns = np.exp(result.x[0])
+        return(Ns)
     
-    def calc_rate(self, delta_f):
-        S = self.ns * delta_f
+    def _calc_rate(self, delta_f, Ns):
+        S = Ns * delta_f
         return(S / (1 - np.exp(-S)))
 
-    def calc_rate_vector(self, delta_f):
+    def _calc_rate_vector(self, delta_f, Ns):
         rate = np.ones(delta_f.shape[0])
         idxs = np.isclose(delta_f, 0) == False
-        rate[idxs] = self.calc_rate(delta_f[idxs])
+        rate[idxs] = self._calc_rate(delta_f[idxs], Ns)
         return(rate)
     
-    def check_symmetric(self, m, tol):
+    def _check_symmetric(self, m, tol):
         if not (abs(m - m.T)> tol).nnz == 0:
             raise ValueError('Re-scaled rate matrix is not symmetric')
     
-    def calc_rate_matrix(self):
-        A = self.get_adjacency_matrix()
-        rows, cols = A.row, A.col
-        delta_f = self.calc_delta_f(rows, cols)
+    def _ensure_time_reversibility(self, rate_matrix, tol=1e-8):
+        '''D_pi^{1/2} Q D_pi^{-1/2} has to be symmetric'''
+        self.report('Checking numerical time reversibility')
+        sandwich_rate_m = self.diag_freq.dot(rate_matrix).dot(self.diag_freq_inv)
+        sandwich_rate_m = (sandwich_rate_m + sandwich_rate_m.T) / 2
+        self._check_symmetric(sandwich_rate_m, tol=tol)
+        rate_matrix = self.diag_freq_inv.dot(sandwich_rate_m).dot(self.diag_freq)
+        return(rate_matrix, sandwich_rate_m)
+    
+    def calc_rate_matrix(self, Ns, tol=1e-8):
+        self.report('Calculating rate matrix with Ns={}'.format(Ns))
+        i, j = self.get_neighbor_pairs()
+        delta_f = self._calc_delta_f(i, j)
         size = (self.n_genotypes, self.n_genotypes)
-        t = self.calc_rate_vector(delta_f)
-        t = csr_matrix((t, (rows, cols)), shape=size)
+        rate_ij = self._calc_rate_vector(delta_f, Ns)
+        rate_matrix = csr_matrix((rate_ij, (i, j)), shape=size)
+        
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            t.setdiag(-t.sum(1).A1)
-        return(t)
-        
-    def calc_sparse_reweighted_rate_matrix(self, tol=1e-8, 
-                                                 cache_matrix=False):
-        self.report('Calculating re-weigthed symmetric rate matrix')
-        rate_matrix = self.calc_rate_matrix()
-        t = self.diag_freq_sparse.dot(rate_matrix).dot(self.diag_freq_inv_sparse)
-        self.T = (t + t.T) / 2
-        self.check_symmetric(self.T, tol=tol)
-
-        if cache_matrix:
-            self.save_sparse_matrix()
-        
-        # Recalculate rate matrix after ensuring time reversible process
-        self.rate_matrix = self.diag_freq_inv_sparse.dot(self.T).dot(self.diag_freq_sparse)
-        
-        return(self.T)
+            rate_matrix.setdiag(-rate_matrix.sum(1).A1)
     
+        rate_matrix, sandwich_rate_m = self._ensure_time_reversibility(rate_matrix, tol=tol)
+        self.Ns = Ns
+        self.rate_matrix = rate_matrix
+        self.sandwich_rate_matrix = sandwich_rate_m
+    
+    def _calc_sandwich_aux_matrix(self):
+        '''
+        This method calculates an auxiliary matrix to ensure that the calculated
+        eigenvalues are close to 0 to avoid numerical problems
+        '''
+        
+        self.report('Calculating A = I - 1/c * T for eigen-decomposition')
+        self.upper_bound_eigenvalue = np.abs(self.sandwich_rate_matrix).sum(1).max()
+        I = identity(self.n_genotypes) 
+        sandwich_aux_matrix = I + 1 / self.upper_bound_eigenvalue * self.sandwich_rate_matrix
+        return(sandwich_aux_matrix)
+    
+    def _check_eigendecomposition(self, matrix, eigenvalues, right_eigenvectors, tol=1e-3):
+        self.report('Testing eigendecomposition of T')
+        for i in range(self.n_components):
+            u = right_eigenvectors[:, i]
+            v1 = matrix.dot(u)
+            v2 = eigenvalues[i] * u
+            abs_err = np.mean(np.abs(v1 - v2)) 
+            if abs_err > tol:
+                msg = 'Numeric error in eigendecomposition: abs error = {:.5f}'
+                raise ValueError(msg)
+            
+        self.report('Eigendecomposition is correct')
+    
+    def calc_eigendecomposition(self, n_components=10, tol=1e-12, eig_tol=1e-3):
+        n_components = min(n_components, self.n_genotypes-1)
+        sandwich_aux_matrix = self._calc_sandwich_aux_matrix()
+        
+        self.report('Calculating {} eigenvalue-eigenvector pairs'.format(n_components))
+        lambdas, q = eigsh(sandwich_aux_matrix, n_components, which='LM', tol=tol)
+        
+        # Reverse order
+        lambdas = lambdas[::-1]
+        q = np.fliplr(q)
+        
+        # Store results
+        self.n_components = n_components
+        self.eigenvalues = self.upper_bound_eigenvalue * (lambdas - 1)
+        self.left_eigenvectors = self.diag_freq.dot(q)
+        self.right_eigenvectors = self.diag_freq_inv.dot(q)
+        self._check_eigendecomposition(self.rate_matrix,
+                                       self.eigenvalues,
+                                       self.right_eigenvectors,
+                                       tol=eig_tol)
+
+    def _calc_log_decay_rates(self):
+        return(np.log(-1 / (self.eigenvalues[:-1])[::-1]))
+    
+    def _calc_projection(self):
+        self.report('Scaling projection axis')
+        projection = []
+        for i in range(self.n_components):
+            eigenvalue = self.eigenvalues[i]
+            right_eigenvector = self.right_eigenvectors[:, i]
+            
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                projection.append(right_eigenvector / np.sqrt(-eigenvalue))
+                
+        self.projection = np.vstack(projection)
+        self.log_decay_rates = self._calc_log_decay_rates()
+        
+    def calc_visualization(self, Ns=None, meanf=None, n_components=10,
+                           tol=1e-9, eig_tol=1e-3):
+        if Ns is None and meanf is None:
+            msg = 'Either Ns or the expected mean function in equilibrium '
+            msg += 'is required to calculate the rate matrix'
+            raise ValueError(msg)
+        
+        if meanf is not None:
+            Ns = self.calc_Ns(stationary_function=meanf)
+            
+        self.calc_stationary_frequencies(Ns)
+        self.calc_rate_matrix(Ns, tol=tol)
+        self.calc_eigendecomposition(n_components, tol=tol, eig_tol=eig_tol)
+        self._calc_projection()
+    
+    def save(self, fpath):
+        attrs = ['Ns', 'projection', 'log_decay_rates', 'f',
+                 'genotypes_stationary_frequencies', 'n_alleles', 'length',
+                 'alphabet_type']
+        data = {attr: getattr(self, attr) for attr in attrs}
+        write_pickle(data, fpath)
+        
+    def load(self, fpath, log=None):
+        data = load_pickle(fpath)
+        self.init(data['length'], data['n_alleles'],
+                  alphabet_type=data['alphabet_type'], log=log)
+        for attr, value in data.items():
+            setattr(self, attr, value)
+    
+    def filter_genotypes(self, selected_genotypes):
+        # TODO: Think whether to keep this method and re-write
+        self.selected_genotypes = selected_genotypes
+        self.T = self.T[selected_genotypes, :]
+        self.T = self.T[:, selected_genotypes]
+        
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            self.T.setdiag(0)
+            A = self.A.tocsr()
+            A = A[selected_genotypes, :]
+            A = A[:, selected_genotypes]
+            self.A = A.tocoo()
+            
+            d = -self.T.sum(1).A1
+            self.T.setdiag(d)
+        
+        if hasattr(self, 'projection'):
+            self.projection = self.projection[:, selected_genotypes]
+            
+        self.f = self.f[selected_genotypes]
+        self.genotype_labels = self.genotype_labels[selected_genotypes]
+        self.seqs = [seq for k, seq in zip(selected_genotypes, self.seqs) if k]
+        self.n_genotypes = self.f.shape[0]
+    
+    
+    '''
+    Transition path theory methods
+    '''
+        
     def get_AB_genotypes_idxs(self, genotypes1, genotypes2):
         genotypes1 = self.extend_ambiguous_sequences(genotypes1)
         genotypes2 = self.extend_ambiguous_sequences(genotypes2)
@@ -166,7 +280,7 @@ class Visualization(SequenceSpace):
         idx2 = self.genotype_idxs.loc[genotypes2].values
         return(idx1, idx2)
     
-    def calc_committor_probability(self, idx1, idx2):
+    def calc_committor_probability(self, idx1, idx2, tol=1e-12):
         if np.intersect1d(idx1, idx2).shape[0] > 0:
             raise ValueError('The two sets of genotypes cannot overlap')
         
@@ -183,7 +297,7 @@ class Visualization(SequenceSpace):
         partial_rate_matrix = self.rate_matrix[no_ab_genotypes, :]
         U = partial_rate_matrix[:, no_ab_genotypes]
         v = -partial_rate_matrix[:, b_genotypes].sum(1)
-        q_reduced, exitCode = bicgstab(U, v)
+        q_reduced, exitCode = bicgstab(U, v, atol=tol)
         
         if exitCode != 0 or np.any(q_reduced < 0) or np.any(q_reduced > 1):
             msg = 'Uq = v solution was not properly found'
@@ -199,7 +313,9 @@ class Visualization(SequenceSpace):
             q = self.calc_committor_probability(idx1, idx2)
             
         log_stationary_freqs = self.log_genotypes_stationary_frequencies
-        gt_log_p_reactive = log_stationary_freqs + np.log(q) + np.log(1-q)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            gt_log_p_reactive = log_stationary_freqs + np.log(q) + np.log(1-q)
         log_p_reactive = logsumexp(gt_log_p_reactive)
         gt_log_p_reactive = gt_log_p_reactive - log_p_reactive
         
@@ -213,7 +329,7 @@ class Visualization(SequenceSpace):
             
         stationary_freqs = self.genotypes_stationary_frequencies
         i, j = self.get_neighbor_pairs()
-        rate_ij = self.calc_rate_vector(self.calc_delta_f(i, j))
+        rate_ij = self._calc_rate_vector(self._calc_delta_f(i, j))
         flow = stationary_freqs[i] * (1-q)[i] * rate_ij * q[j]
         return(flow)
 
@@ -224,7 +340,7 @@ class Visualization(SequenceSpace):
         stationary_freqs = self.genotypes_stationary_frequencies
         
         i, j = self.get_neighbor_pairs()
-        rate_ij = self.calc_rate_vector(self.calc_delta_f(i, j))
+        rate_ij = self._calc_rate_vector(self._calc_delta_f(i, j))
         flow = stationary_freqs[i] * rate_ij * (q[j] - q[i])
         flow[flow < 0] = 0
         return(flow)
@@ -250,19 +366,23 @@ class Visualization(SequenceSpace):
         return(i, j, flow)
     
     def get_graph(self, i, j, a, b, m):
-        # print(i, j, a, b, m)
-        edgelist = list(zip(i[m:], j[m:]))
+        if i.shape[0] > 1:
+            edgelist = list(zip(i[m:], j[m:]))
+        else:
+            edgelist = []
         edgelist.extend([('a', y) for y in a])
         edgelist.extend([(x, 'b') for x in b])
         graph = nx.DiGraph(edgelist)
         return(graph)
     
-    def _calc_dynamic_bottleneck(self, i, j, a, b, eff_flow):
-        i, j, eff_flow = self.sort_flows(i, j, eff_flow)
+    def _calc_dynamic_bottleneck(self, i, j, a, b, eff_flow, sort_edges=True):
+        if sort_edges:
+            i, j, eff_flow = self.sort_flows(i, j, eff_flow)
+            
         left, right = 0, eff_flow.shape[0]
         
         if i[-1] in a and j[-1] in b:
-            return((i[-1], j[-1]), eff_flow[-1], 0)
+            return((i[-1], j[-1]), eff_flow[-1], eff_flow.shape[0]+1)
         
         while right - left > 1:
             m = int((right + left) / 2)
@@ -272,37 +392,44 @@ class Visualization(SequenceSpace):
             else:
                 right = m
         
-        bottleneck = (i[left], j[left])
+        # Check in case of ties with adjacent edge
+        if nx.has_path(graph, 'a', 'b'):
+            graph.remove_edge(i[left], j[left]) 
+            if nx.has_path(graph, 'a', 'b'):
+                left += 1
+                right += 1
+                    
+        bottleneck = (i[left], j[left]) 
         min_flow = eff_flow[left]
-        return(bottleneck, min_flow, m)
+        
+        return(bottleneck, min_flow, right)
     
     def calc_dynamic_bottleneck(self, idx1, idx2):
         eff_flow = self.calc_edges_effective_flow(idx1, idx2)
         i, j = self.get_neighbor_pairs()
         i, j, eff_flow = self.sort_flows(i, j, eff_flow)
-        return(self._calc_dynamic_bottleneck(i, j, idx1, idx2, eff_flow=eff_flow)[:2])
+        return(self._calc_dynamic_bottleneck(i, j, idx1, idx2, eff_flow=eff_flow,
+                                             sort_edges=False)[:2])
     
-    def get_subgraph_partition(self, graph, node):
-        g = nx.Graph(graph)
-        n = number_connected_components(g)
-        # if n != 2:
-        #     print(graph.edges)
-        #     msg = 'Number of components after bottleneck removal is {}'.format(n)
-        #     raise ValueError(msg)
-        nodes = nx.node_connected_component(g, node)
-        subgraph = nx.DiGraph(graph.subgraph(nodes))
+    def get_subgraph_partition(self, graph, digraph, node):
+        if nx.has_path(graph, 'a', 'b'):
+            msg = 'Path between source and sink found. There may be numerical '
+            msg += 'errors when calculating the committor probabilities'
+            raise ValueError(msg)
+        nodes = nx.node_connected_component(graph, node)
+        subgraph = nx.DiGraph(digraph.subgraph(nodes))
         subgraph.remove_node(node)
         i, j = [], []
         for s, t in subgraph.edges:
             i.append(s)
             j.append(t)
-        # print('partition', i, j, node)
         return(np.array(i), np.array(j))
     
     def get_left_and_right_graphs(self, i, j, a, b, m):
-        graph = self.get_graph(i, j, a, b, m)
-        left = self.get_subgraph_partition(graph, node='a')
-        right = self.get_subgraph_partition(graph, node='b')
+        digraph = self.get_graph(i, j, a, b, m)
+        graph = nx.Graph(digraph)
+        left = self.get_subgraph_partition(graph, digraph, node='a')
+        right = self.get_subgraph_partition(graph, digraph, node='b')
         return(left, right)
 
     def get_flows_dict(self, i, j, a, b, flow):
@@ -314,7 +441,9 @@ class Visualization(SequenceSpace):
         return(flows)
     
     def _calc_representative_pathway(self, i, j, a, b, flows_dict):
-        # print(i, j)
+        if i.shape[0] == 0 or j.shape[0] == 0:
+            return([])
+        
         eff_flow = np.array([flows_dict[(s, t)] for s, t in zip(i, j)])
         i, j, eff_flow = self.sort_flows(i, j, eff_flow)
         bottleneck = self._calc_dynamic_bottleneck(i, j, a, b, eff_flow=eff_flow)
@@ -328,7 +457,6 @@ class Visualization(SequenceSpace):
             left_i, left_j = left
             left = self._calc_representative_pathway(left_i, left_j, a, [b1],
                                                      flows_dict=flows_dict)
-        
         if b2 in b:
             right = [b2]
         else:
@@ -353,15 +481,18 @@ class Visualization(SequenceSpace):
                                                  flows_dict=flows_dict)
         return(path, min_flow)
     
-    def calc_representative_pathways(self, idx1, idx2, tol=1e-4):
+    def calc_representative_pathways(self, idx1, idx2, max_missing_flow_p=1e-4,
+                                     max_paths=None):
         i, j = self.get_neighbor_pairs()
         eff_flows = self.calc_edges_effective_flow(idx1, idx2)
         flows_dict = self.get_flows_dict(i, j, idx1, idx2, eff_flows)
 
         total_flow = np.sum([flows_dict[('a', t)] for t in idx1])
-        flow_sum = 0
+        flow_sum, flow_cum_p = 0, 0
+        n_paths = 0
+        min_total_flow_p = 1 - max_missing_flow_p
         
-        while flow_sum < total_flow * (1 - tol):
+        while flow_cum_p < min_total_flow_p:
             eff_flows = np.array([flows_dict[(s, t)] for s, t in zip(i, j)])
             path_flow = self._calc_dynamic_bottleneck(i, j, idx1, idx2, 
                                                       eff_flow=eff_flows)[1]
@@ -370,200 +501,40 @@ class Visualization(SequenceSpace):
             for s, t in zip(path, path[1:]):
                 flows_dict[(s, t)] -= path_flow
             flow_sum += path_flow
+            flow_cum_p = flow_sum / total_flow
             flow_p = path_flow / total_flow
+            
             yield(path, path_flow, flow_p)
-    
-    def save_sparse_matrix(self):
-        if self.cache_prefix is not None:
-            fpath = join(CACHE_DIR, '{}.T'.format(self.cache_prefix))
-            msg = 'Saving re-weighted rate matrix at {}'.format(fpath)
-            self.report(msg)
-            save_npz(fpath, self.T)
-    
-    def _load_csv(self, label):
-        fpath = self._get_cache_fpath(label)
-        if exists(fpath):
-            self.report('Loading {} from {}'.format(label, fpath))
-            df = pd.read_csv(fpath, index_col=0)
-            return(df)
-        else:
-            self.report('Could not find rate matrix {}'.format(fpath))
-    
-    def _get_cache_fpath(self, label):
-        fname = '{}.{}.csv'.format(self.cache_prefix, label)
-        fpath = join(CACHE_DIR, fname)
-        return(fpath)
-    
-    def load_eigendecomposition(self):
-        self.report('Loading eigendecomposition')
-        u = self._load_csv('right_eigenvectors')
-        l = self._load_csv('eigenvalues')
-
-        if u is None or l is None:
-            raise ValueError('Error loading eigendecomposition: check tmp files')
-        self.right_eigenvectors = u.values
-        self.eigenvalues = l.values[:, 0]
-        self.n_components = l.shape[0]
-        self.cached_eigenvectors = True
-        self.cached_eigenvalues = True
-
-    @property
-    def T_fpath(self):
-        return(join(CACHE_DIR, '{}.T.npz'.format(self.cache_prefix)))
-    
-    def load_sparse_reweighted_rate_matrix(self):
-        if self.cache_prefix is not None:
-            if exists(self.T_fpath):
-                msg = 'Loading re-weighted rate matrix from {}'
-                self.report(msg.format(self.T_fpath))
-                
-                self.T = load_npz(self.T_fpath)
-                self.cached_T = True
-            else:
-                self.report('Could not find rate matrix {}'.format(self.T_fpath))
-    
-    def get_sparse_reweighted_rate_matrix(self, recalculate=False,
-                                                cache_matrix=True):
-        if recalculate:
-            self.calc_sparse_reweighted_rate_matrix(cache_matrix=cache_matrix)
-        else:
-            if hasattr(self, 'T'):
-                pass
-            elif cache_matrix:
-                self.load_sparse_reweighted_rate_matrix()
-                self.cached_T = True
-            if not hasattr(self, 'T'):
-                self.calc_sparse_reweighted_rate_matrix(cache_matrix=cache_matrix)
-
-    def calc_reweighting_diag_matrices(self):
-        # New basis and re-weighting genotypes by frequency
-        sqrt_freqs = np.sqrt(self.genotypes_stationary_frequencies)
-        self.diag_freq_sparse = get_sparse_diag_matrix(sqrt_freqs) 
-        self.diag_freq_inv_sparse = get_sparse_diag_matrix(1 / sqrt_freqs)
-    
-    def calc_A_sparse(self):
-        self.report('Calculating A = I - 1/c * T for eigen-decomposition')
-        self.c = np.abs(self.T).sum(1).max()
-        self.report('\tc = {:.3f}'.format(self.c))
-        I_sparse = identity(self.n_genotypes) 
-        self.A_sparse = I_sparse + 1 / self.c * self.T
-    
-    def calc_eigendecomposition(self, n_components=10, tol=1e-12,
-                                cache_matrix=True):
-        n_components = min(n_components, self.n_genotypes-1)
-        self.report('Calculating eigen-decomposition of re-weighted rate matrix')
-        self.calc_A_sparse()
-        lambdas, q = eigsh(self.A_sparse, n_components, which='LM', tol=tol)
-        self.n_components = n_components
-        self.eigenvalues = self.c * (lambdas - 1)
-        self.q = q
-        self.left_eigenvectors = self.diag_freq_sparse.dot(q)
-        self.right_eigenvectors = self.diag_freq_inv_sparse.dot(q)
-        if cache_matrix:
-            self.save_eigendecomposition()
-    
-    def _save_eigenvalues(self):
-        df = pd.DataFrame({'eigenvalues': self.eigenvalues})
-        fpath = self._get_cache_fpath('eigenvalues')
-        self.report('Saving eigenvalues at {}'.format(fpath))
-        df.to_csv(fpath)
-    
-    def _save_right_eigenvectors(self):
-        df = pd.DataFrame(self.right_eigenvectors)
-        fpath = self._get_cache_fpath('right_eigenvectors')
-        self.report('Saving eigenvectors at {}'.format(fpath))
-        df.to_csv(fpath)
-    
-    def save_eigendecomposition(self):
-        if self.cache_prefix is not None:
-            self._save_eigenvalues()
-            self._save_right_eigenvectors()
-    
-    def check_eigendecomposition(self, tol=1e-3):
-        self.report('Testing eigendecomposition of T')
-        T = self.diag_freq_inv_sparse.dot(self.T).dot(self.diag_freq_sparse)
-        for i in range(self.eigenvalues.shape[0]):
-            u = self.right_eigenvectors[:, i]
-            v1 = T.dot(u)
-            v2 = self.eigenvalues[i] * u
-            abs_err = np.mean(np.abs(v1 - v2)) 
-            if abs_err > tol:
-                msg = 'Numeric error in eigendecomposition: abs error = {:.5f}'
-                self.report(msg.format(abs_err))
-                raise ValueError()
-        self.report('Eigendecomposition is correct')
-    
-    def get_eigendecomposition(self, n_components=10, tol=1e-9,
-                               recalculate=False, cache_matrix=True, save=True):
-        if not recalculate and not hasattr(self, 'eigenvalues') and self.cache_prefix is not None:
-            try:
-                self.load_eigendecomposition()
-                self.check_eigendecomposition()
-            except ValueError:
-                msg ='Loaded eigenvectors are not eigenvectors of T: '
-                msg += 'they will be recalculated'
-                self.report(msg)
-                recalculate = True
-        else:
-            recalculate = True
-                
-        if recalculate:
-            self.calc_eigendecomposition(n_components=n_components, tol=tol,
-                                         cache_matrix=cache_matrix)
-            if save:
-                self.save_eigendecomposition()
-    
-    def get_rescaled_projection(self):
-        self.report('Scaling projection axis')
-        projection = []
-        for i in range(1, self.n_components + 1):
-            eigenvalue = self.eigenvalues[-i]
-            right_eigenvector = self.right_eigenvectors[:, -i]
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                projection.append(right_eigenvector / np.sqrt(-eigenvalue))
-        self.projection = np.vstack(projection)
-        
-    def filter_genotypes(self, selected_genotypes):
-        self.selected_genotypes = selected_genotypes
-        self.T = self.T[selected_genotypes, :]
-        self.T = self.T[:, selected_genotypes]
-        
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            self.T.setdiag(0)
-            A = self.A.tocsr()
-            A = A[selected_genotypes, :]
-            A = A[:, selected_genotypes]
-            self.A = A.tocoo()
+            n_paths += 1
             
-            d = -self.T.sum(1).A1
-            self.T.setdiag(d)
-        
-        if hasattr(self, 'projection'):
-            self.projection = self.projection[:, selected_genotypes]
+            if max_paths is not None and n_paths >= max_paths:
+                break
             
-        self.f = self.f[selected_genotypes]
-        self.genotype_labels = self.genotype_labels[selected_genotypes]
-        self.seqs = [seq for k, seq in zip(selected_genotypes, self.seqs) if k]
-        self.n_genotypes = self.f.shape[0]
-    
-    def calc_visualization(self, meanf=None, n_components=100, tol=1e-9, recalculate=False,
-                           cache_matrix=True, save=True):
-        if meanf is not None:
-            self.tune_ns(stationary_function=meanf)
-        self.calc_stationary_frequencies()
-        self.calc_reweighting_diag_matrices()
-        self.get_sparse_reweighted_rate_matrix(recalculate=recalculate,
-                                                     cache_matrix=cache_matrix)
-        self.get_eigendecomposition(n_components, tol=tol,
-                                    recalculate=recalculate,
-                                    cache_matrix=cache_matrix,
-                                    save=save)
-        self.get_rescaled_projection()
-    
-    def calc_log_decay_rates(self):
-        return(np.log(-1 / (self.eigenvalues[:-1])[::-1]))
+    def calc_jump_transition_matrix(self, a, b):
+        i, j = self.get_neighbor_pairs()
+        delta_f = self._calc_delta_f(i, j)
+        size = (self.n_genotypes, self.n_genotypes)
+        rates = self._calc_rate_vector(delta_f)
+        t = csr_matrix((rates, (i, j)), shape=size)
+        rowsums = t.sum(1).A1
+        
+        q = self.calc_committor_probability(a, b)
+        p_ij = rates / rowsums[i]
+        
+        
+        not_start_at_a = np.array([x not in a for x in i])
+        start_at_b = np.array([x in b for x in i])
+        p_ij[start_at_b] = 0
+        p_ij[not_start_at_a] = p_ij[not_start_at_a] * q[j][not_start_at_a] / q[i][not_start_at_a]
+        
+        # Add absorbing probabilities at b
+        i = np.append(i, b)
+        j = np.append(j, b)
+        p_ij = np.append(p_ij, np.ones(b.shape[0]))
+        
+        # Make sparse jump matrix
+        jump_matrix = csr_matrix((p_ij, (i, j)), shape=size)
+        return(jump_matrix)
     
     '''
     Plotting methods
@@ -577,14 +548,17 @@ class Visualization(SequenceSpace):
                 self.nodes = self.projection[axis].transpose()
         return(self.nodes)
     
-    def _calc_edges_coord(self, coords):
+    def _calc_edges_coord(self, coords, avoid_dups=False):
         i, j = self.get_neighbor_pairs()
+        if avoid_dups:
+            s = np.where(j > i)[0]
+            i, j = i[s], j[s]
         edges = np.stack([coords[i], coords[j]], axis=2).transpose((0, 2, 1))
         return(edges)
     
-    def get_edges_coord(self, coords, force=False):
+    def get_edges_coord(self, coords, force=False, avoid_dups=False):
         if not hasattr(self, 'edges') or force:
-            self.edges = self._calc_edges_coord(coords)
+            self.edges = self._calc_edges_coord(coords, avoid_dups=avoid_dups)
         return(self.edges)
     
     def plot_eigenvalues(self, axes):
@@ -773,12 +747,14 @@ class Visualization(SequenceSpace):
             axes.set_zlabel('Diffusion Axis {}'.format(z), fontsize=14)
     
     def plot(self, axes, x=1, y=2, z=None, show_edges=True, cmap=CMAP,
+             edges_cmap='binary',
              label=None, show_labels=False, size=5, fontsize=6, colors=None,
              edge_colors='grey', edge_widths=0.5,
              labels_subset=None, start=None, end=None, color_key=None,
              use_cmap=False, sort=True, reverse=False, lw=0, force_coords=True, 
              prev_coords=None, highlight_local_maxima=False, coords=None,
-             genotypes1=None, genotypes2=None):
+             genotypes1=None, genotypes2=None, dominant_paths=False,
+             max_paths=20):
         
         axis = [x, y]
         if z is not None:
@@ -788,22 +764,43 @@ class Visualization(SequenceSpace):
             coords = self.get_nodes_coord(axis=axis, force=force_coords)
             coords = self.minimize_distance(coords, prev_coords)
 
-        vmax, vmin = None, None            
+        vmax, vmin = None, None
+        avoid_dups = True  
         if genotypes1 is not None and genotypes2 is not None:
-            gt_p = self.calc_genotypes_reactive_p(genotypes1, genotypes2)[1]
-            flows = self.calc_edges_effective_flow(genotypes1, genotypes2)
+            idx1, idx2 = self.get_AB_genotypes_idxs(genotypes1, genotypes2)
+            gt_p = self.calc_genotypes_reactive_p(idx1, idx2)[1]
+            flows = self.calc_edges_effective_flow(idx1, idx2)
             flows = flows / flows.max() + 0.01
-            edges_cmap = cm.get_cmap('binary')
+            edges_cmap = cm.get_cmap(edges_cmap)
             edge_colors = edges_cmap(flows)
-            edge_widths = flows * 2 + 0.1
+            if not dominant_paths:
+                edge_widths = flows * 2 + 0.1
             norm_factor = self.genotypes_stationary_frequencies[gt_p > 0].sum()
-            colors = np.log2(gt_p * norm_factor / self.genotypes_stationary_frequencies)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                colors = np.log2(gt_p * norm_factor / self.genotypes_stationary_frequencies)
             vmax = np.abs(colors).max()
             vmin = -vmax
             label = r'$log_{2} \left( \frac{m_i^{AB}}{\pi_{i} / \sum_{j \in (A \cup B)^c} \pi_j} \right)$'
+            avoid_dups = False
         
         if show_edges:
-            edges = self.get_edges_coord(coords, force=force_coords)
+            if dominant_paths:
+                paths = self.calc_representative_pathways(idx1, idx2, max_paths=max_paths)
+                i, j, c = [], [], []
+                for path, _, p in paths:
+                    for s, t in zip(path, path[1:]):
+                        i.append(s)
+                        j.append(t)
+                        c.append(p)
+                c = np.array(c)
+                c = c / c.max()
+                edges = np.stack([coords[i], coords[j]], axis=2).transpose((0, 2, 1))
+                edge_colors = edges_cmap(c) 
+            else:
+                edges = self.get_edges_coord(coords, force=force_coords,
+                                             avoid_dups=avoid_dups)
+                
             self.plot_edges(edges, axes, colors=edge_colors, width=edge_widths)
         
         self.plot_nodes(coords, axes, cmap, label, size_factor=size,
@@ -814,13 +811,11 @@ class Visualization(SequenceSpace):
                         highlight_local_maxima=highlight_local_maxima)
         
         if genotypes1 is not None and genotypes2 is not None:
-            gts = self.genotype_idxs.loc[genotypes1]
-            self.plot_nodes_coords(axes, coords[gts],
+            self.plot_nodes_coords(axes, coords[idx1],
                                    colors='yellow', lw=2, size_factor=3*size,
                                    cmap=cmap)
             
-            gts = self.genotype_idxs.loc[genotypes2]
-            self.plot_nodes_coords(axes, coords[gts],
+            self.plot_nodes_coords(axes, coords[idx2],
                                    colors='orange', lw=2, size_factor=3*size,
                                    cmap=cmap)
             create_patches_legend(axes, 
@@ -851,7 +846,10 @@ class Visualization(SequenceSpace):
     
     def get_cmap_label(self, label=None):
         if label is None:
-            return(self.label_function)
+            if hasattr(self, 'label'):
+                return(self.label)
+            else:
+                return('Fitness')
         else:
             return(label)
     
@@ -869,24 +867,25 @@ class Visualization(SequenceSpace):
     '''
     
     def figure(self, fname=None, show_edges=True,
-               cmap=CMAP, label=None, show_labels=False,
+               cmap=CMAP, edges_cmap='binary', label=None, show_labels=False,
                size=5, fontsize=6, labels_subset=None,
                start=0, end=None, color_key=None, colors=None, lw=0,
                force_coords=True, highlight_local_maxima=False,
                edge_colors='grey', edge_widths=0.5,
                x=1, y=2, z=None, genotypes1=None, genotypes2=None,
-               figsize=(10, 7.6)):
+               dominant_paths=False, max_paths=20, figsize=(10, 7.6)):
         
         fig, axes = init_single_fig(figsize=figsize, is_3d=z is not None)
         self.report('Plotting landscape visualization')
         self.plot(axes, x=x, y=y, z=z, show_edges=show_edges,
-                  cmap=cmap, label=label, show_labels=show_labels,
+                  cmap=cmap, edges_cmap=edges_cmap, label=label, show_labels=show_labels,
                   size=size, fontsize=fontsize, force_coords=force_coords,
                   labels_subset=labels_subset, lw=lw, edge_colors=edge_colors,
-                  edge_widths=edge_widths, 
+                  edge_widths=edge_widths, dominant_paths=dominant_paths,
                   start=start, end=end, color_key=color_key, colors=colors,
                   highlight_local_maxima=highlight_local_maxima,
-                  genotypes1=genotypes1, genotypes2=genotypes2)
+                  genotypes1=genotypes1, genotypes2=genotypes2,
+                  max_paths=max_paths)
         self.report('Saving plot')
         fname = self.get_fname_plot(suffix='visualization', fname=fname)
         savefig(fig, fname)
@@ -1024,12 +1023,13 @@ class Visualization(SequenceSpace):
     Interactive plotting methods
     '''
     
-    def get_plotly_edges(self, coords, force_coords=True):
+    def get_plotly_edges(self, coords, force_coords=True, avoid_dups=True):
         ndim = coords.shape[1]
         edge_x = []
         edge_y = []
         edge_z = []
-        edges = self.get_edges_coord(coords, force=force_coords)
+        edges = self.get_edges_coord(coords, force=force_coords,
+                                     avoid_dups=avoid_dups)
         for node1, node2 in zip(edges[:, 0, :], edges[:, 1, :]):
             edge_x.extend([node1[0], node2[0], None])
             edge_y.extend([node1[1], node2[1], None])
@@ -1255,7 +1255,7 @@ class Visualization(SequenceSpace):
         
     
 class CodonFitnessLandscape(Visualization):
-    def __init__(self, ns=1,
+    def __init__(self,
                  sel_codons=['UCU', 'UCA', 'UCC', 'UCG', 'AGU', 'AGC'],
                  add_variation=False, log=None):
         self.init(3, 4, log=log, alphabet_type='rna')
@@ -1263,7 +1263,6 @@ class CodonFitnessLandscape(Visualization):
         self.cached_T = False
         self.cached_eigenvectors = False
         self.cached_eigenvalues = False
-        self.ns = ns
         self.label = 'codon_landscape'
         self.stop_codons = ['UGA', 'UAA', 'UAG']
         self.alleles = ['A', 'C', 'G', 'U']
@@ -1286,4 +1285,4 @@ class CodonFitnessLandscape(Visualization):
         fitness = np.array(fitness)
         if self.add_variation:
             fitness = fitness + 1 / 10 * np.random.normal(size=len(fitness))
-        self.load_function(fitness)
+        self.set_function(fitness)

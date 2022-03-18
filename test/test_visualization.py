@@ -4,11 +4,11 @@ from os.path import join
 
 import numpy as np
 import pandas as pd
-import matplotlib.cm as cm
 
 from gpmap.visualization import Visualization, CodonFitnessLandscape
 from gpmap.utils import LogTrack
 from gpmap.inference import VCregression
+from gpmap.settings import TEST_DATA_DIR
 
 
 class VisualizationTests(unittest.TestCase):
@@ -27,23 +27,51 @@ class VisualizationTests(unittest.TestCase):
             assert('A' in seq)
         
     def test_calc_stationary_frequencies(self):
-        gpmap = Visualization(2, 2, ns=2)
-        gpmap.load_function([2, 1, 1, 1])
-        gpmap.calc_stationary_frequencies()
-        fmean = gpmap.tune_ns(stationary_function=1.5)
+        gpmap = Visualization(2, 2)
+        gpmap.set_function([2, 1, 1, 1])
+        Ns = gpmap.calc_Ns(stationary_function=1.5)
+        gpmap.calc_stationary_frequencies(Ns)
+        fmean = gpmap.calc_stationary_function()
         
         # Ensure optimization works well
         assert(np.abs(fmean - 1.5) < 1e-4)
         
-        # Ensure Ns has been updated in the object
-        assert(gpmap.ns != 2)
-        
         # Try in a bigger landscape
-        gpmap = Visualization(8, 4, ns=2)
+        gpmap = Visualization(8, 4)
         gpmap.set_random_function()
-        gpmap.calc_stationary_frequencies()
-        fmean = gpmap.tune_ns(stationary_function=1.5)
+        Ns = gpmap.calc_Ns(stationary_function=1.5)
+        gpmap.calc_stationary_frequencies(Ns)
+        fmean = gpmap.calc_stationary_function()
         assert(np.abs(fmean - 1.5) < 1e-4)
+        assert(np.all(gpmap.genotypes_stationary_frequencies > 0))
+        assert(np.allclose(np.sum(gpmap.genotypes_stationary_frequencies), 1))
+    
+    def test_codon_landscape(self):
+        np.random.seed(0)
+        landscape = CodonFitnessLandscape(add_variation=True)
+        landscape.calc_visualization(Ns=1, n_components=5)
+        landscape.figure(fname='codon_landscape', size=40)
+        landscape.figure(fname='codon_landscape_3d', size=40, z=3)
+
+        # Test whether saving the projections works        
+        fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
+        landscape.save(fpath)
+        landscape = Visualization(fpath=fpath)
+        landscape.figure(fname='codon_landscape', size=40)
+    
+    def test_big_landscape(self):
+        log = LogTrack()
+        np.random.seed(1)
+        length = 10
+        lambdas = np.array([0, 1e6, 1e5, 1e4,
+                            1e3, 1e2, 1e1, 1e0,
+                            1e-1, 1e-2, 1e-3]) #, 1e-4, 1e-5])
+    
+        vc = VCregression(length, n_alleles=4)
+        gpmap = Visualization(length, log=log)
+        gpmap.set_function(vc.simulate(lambdas))
+        gpmap.calc_visualization(Ns=1)
+        gpmap.save(join(TEST_DATA_DIR, 'random.pkl'))
     
     def test_calc_transition_path_stats(self):
         np.random.seed(1)
@@ -70,6 +98,105 @@ class VisualizationTests(unittest.TestCase):
         edges_flow = space.calc_edges_flow('000', '111')
     
     def test_calc_dynamic_bottleneck(self):
+        space = Visualization(3, n_alleles=2, alphabet_type='custom')
+        
+        # Normal conditions easy path
+        i = np.array([0, 0, 1, 1, 2, 4, 5, 5])
+        j = np.array([1, 5, 2, 4, 3, 3, 2, 4])
+        flow = np.array([1, 1, 0.9, 0.1, 1.1, 0.9, 0.2, 0.8])
+        a = [0]
+        b = [3]
+        
+        bottleneck, flow, m = space._calc_dynamic_bottleneck(i, j, a, b, flow)
+        assert(bottleneck == (1, 2))
+        assert(flow == 0.9)
+        assert(m == 4)
+        
+        # Change the order of the edges with the same flow now
+        i = np.array([0, 0, 1, 2, 4, 5, 5, 1])
+        j = np.array([1, 5, 4, 3, 3, 2, 4, 2])
+        flow = np.array([1, 1, 0.1, 1.1, 0.9, 0.2, 0.8, 0.9])
+        a = [0]
+        b = [3]
+        
+        bottleneck, flow, m = space._calc_dynamic_bottleneck(i, j, a, b, flow)
+        assert(bottleneck == (1, 2))
+        assert(flow == 0.9)
+        assert(m == 5)
+        
+        # Simple graph
+        i = np.array([0, 0, 1])
+        j = np.array([1, 2, 2])
+        flow = np.array([2, 1, 2.5])
+        a = [0]
+        b = [2]
+        
+        bottleneck, flow, m = space._calc_dynamic_bottleneck(i, j, a, b, flow)
+        assert(bottleneck == (0, 1))
+        assert(flow == 2)
+        assert(m == 2)
+        
+        # Single edge graph
+        i = np.array([0])
+        j = np.array([1])
+        flow = np.array([1])
+        a = [0]
+        b = [1]
+        
+        bottleneck, flow, m = space._calc_dynamic_bottleneck(i, j, a, b, flow)
+        assert(bottleneck == (0, 1))
+        assert(flow == 1)
+        assert(m == 2)
+        
+        # Specific case when bottleneck is the last edge
+        i = np.array([4, 2])
+        j = np.array([3, 3])
+        flow = np.array([0.9, 1.1])
+        a = [2]
+        b = [3]
+        
+        bottleneck, flow, m = space._calc_dynamic_bottleneck(i, j, a, b, flow)
+        assert(bottleneck == (2, 3))
+        assert(flow == 1.1)
+        assert(m == 3)
+        
+    def test_calc_representative_path(self):
+        space = Visualization(3, n_alleles=2, alphabet_type='custom')
+        
+        # Trivial path graph
+        i = np.array([0, 1, 2])
+        j = np.array([1, 2, 3])
+        flow = np.array([1, 1, 1])
+        a = [0]
+        b = [3]
+        
+        flow_dict = space.get_flows_dict(i, j, a, b, flow)
+        path = space._calc_representative_pathway(i, j, a, b, flow_dict)
+        assert(path == [0, 1, 2, 3])
+        
+        # Normal conditions easy path
+        i = np.array([0, 0, 1, 1, 2, 4, 5, 5])
+        j = np.array([1, 5, 2, 4, 3, 3, 2, 4])
+        flow = np.array([1, 1, 0.9, 0.1, 1.1, 0.9, 0.2, 0.8])
+        a = [0]
+        b = [3]
+        
+        flow_dict = space.get_flows_dict(i, j, a, b, flow)
+        path = space._calc_representative_pathway(i, j, a, b, flow_dict)
+        assert(path == [0, 1, 2, 3])
+        
+        # Simple graph
+        i = np.array([0, 0, 1])
+        j = np.array([1, 2, 2])
+        flow = np.array([2, 1, 2.5])
+        a = [0]
+        b = [2]
+        
+        flow_dict = space.get_flows_dict(i, j, a, b, flow)
+        path = space._calc_representative_pathway(i, j, a, b, flow_dict)
+        assert(path == [0, 1, 2])
+    
+    def test_calc_representative_paths(self):
         np.random.seed(1)
         alpha = 2
         length = 3
@@ -92,7 +219,33 @@ class VisualizationTests(unittest.TestCase):
         assert(np.all(path == [0, 4, 6, 7]))
         assert(np.allclose(flow, 0.0020637))
         
-        for path, flow, p in space.calc_representative_pathways(idx1, idx2):
+        paths = list(space.calc_representative_pathways(idx1, idx2))
+        assert(len(paths) == 6)
+        assert(np.allclose(sum([p[2] for p in paths]), 1))
+    
+    def test_calc_representative_path_big(self):
+        np.random.seed(1)
+        alpha = 3
+        length = 4
+    
+        space = Visualization(length, n_alleles=alpha, alphabet_type='custom')
+        vc = VCregression(length, n_alleles=alpha, alphabet_type='custom')
+        f = vc.simulate([0, 1000, 100, 10, 1])
+        space.load_function(f)
+        
+        space.calc_stationary_frequencies()
+        space.calc_reweighting_diag_matrices()
+        space.get_sparse_reweighted_rate_matrix()
+        space.calc_visualization()
+        idx1 = np.array([np.argmin(space.projection[1])])
+        idx2 = np.array([np.argmax(space.projection[1])]) 
+        
+        print(idx1, idx2)
+        idx1, idx2 = space.get_AB_genotypes_idxs(['0100'], ['1111'])
+        
+        # path, flow = space.calc_representative_pathway(idx1, idx2)
+        for path, flow, p in space.calc_representative_pathways(idx1, idx2,
+                                                                max_missing_flow_p=0.1):
             print(path, flow, p)
     
     def test_calc_transition_path_stats_big(self):
@@ -108,6 +261,26 @@ class VisualizationTests(unittest.TestCase):
         space.calc_reweighting_diag_matrices()
         space.get_sparse_reweighted_rate_matrix()
         space.calc_genotypes_reactive_p(['000000000'], ['123010122'])
+        
+    def test_calc_jump_matrix(self):
+        np.random.seed(1)
+        alpha = 2
+        length = 2
+    
+        space = Visualization(length, n_alleles=alpha, alphabet_type='custom')
+        f = np.array([0, 1, 0.5, 1.5])
+        space.load_function(f)
+        a, b = space.get_AB_genotypes_idxs(['00'], ['11'])
+        space.calc_stationary_frequencies()
+        space.calc_reweighting_diag_matrices()
+        space.get_stationary_rate_matrix()
+        jump_matrix = space.calc_jump_transition_matrix(a, b)
+        
+        m = np.array([[0, 0.55454956, 0.44545044, 0],
+                      [0, 0, 0, 1],
+                      [0, 0, 0, 1],
+                      [0, 0, 0, 1]])
+        assert(np.allclose(jump_matrix.todense(), m))
     
     def test_calc_rate_p(self):
         gpmap = Visualization(2, 2, ns=1)
@@ -145,28 +318,21 @@ class VisualizationTests(unittest.TestCase):
         landscape.plot_interactive_3d(fname='test_interactive_3d', show_edges=True,
                                       force_coords=True)
     
-    def test_codon_landscape(self):
-        np.random.seed(0)
-        landscape = CodonFitnessLandscape(add_variation=False)
-        landscape.calc_stationary_frequencies()
-        landscape.tune_ns(stationary_function=1.93)
-        assert(np.all(landscape.genotypes_stationary_frequencies > 0))
-        assert(np.allclose(np.sum(landscape.genotypes_stationary_frequencies), 1))
-
-        landscape.calc_visualization(n_components=5, recalculate=True)
-        landscape.figure(fname='codon_landscape', size=40)
-        landscape.figure(fname='codon_landscape_3d', size=40, z=3)
-    
     def test_visualize_reactive_paths(self):
         np.random.seed(0)
-        landscape = CodonFitnessLandscape(add_variation=False)
+        landscape = CodonFitnessLandscape(add_variation=True)
         landscape.calc_stationary_frequencies()
         landscape.tune_ns(stationary_function=1.3)
         landscape.calc_visualization(n_components=5, recalculate=True)
         
         gt1, gt2 = ['UCU', 'UCA', 'UCC', 'UCG'], ['AGU', 'AGC']
         landscape.figure(fname='reactive_path', size=40, cmap='coolwarm', 
-                         genotypes1=gt1, genotypes2=gt2, figsize=(8, 6))
+                         genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
+                         dominant_paths=False)
+        landscape.figure(fname='reactive_path', size=40, cmap='coolwarm', 
+                         genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
+                         dominant_paths=True, edge_widths=2,
+                         edges_cmap='Greens')
     
     def test_laplacian(self):
         gpmap = Visualization(4, 2)
@@ -210,23 +376,6 @@ class VisualizationTests(unittest.TestCase):
         landscape.plot_grid_eq_f(fname='codon_landscape.ns', size=40,
                                  n_components=50, fmin=1)
     
-    def test_gpmap_cache(self):
-        # Store rate matrix in cache file
-        gpmap = Visualization(2, 2, ns=1, cache_prefix='test')
-        gpmap.load_function([1.01, 1, 1, 1.01])
-        gpmap.calc_visualization(recalculate=True)
-        
-        # Load now cached rate matrix
-        log = LogTrack()
-        gpmap = Visualization(2, 2, ns=1, cache_prefix='test', log=log)
-        gpmap.load_function([1.01, 1, 1, 1.01])
-        gpmap.calc_visualization(recalculate=False)
-        
-        # Ensure it T was loaded from file
-        assert(gpmap.cached_T)
-        assert(gpmap.cached_eigenvectors)
-        assert(gpmap.cached_eigenvalues)
-        
     def test_get_edges(self):
         landscape = Visualization(length=3, n_alleles=4)
         landscape.set_random_function(0)
@@ -278,5 +427,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=50, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests.test_calc_dynamic_bottleneck']
+    import sys;sys.argv = ['', 'VisualizationTests']
     unittest.main()
