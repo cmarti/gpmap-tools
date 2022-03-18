@@ -4,6 +4,7 @@ import warnings
 from itertools import product
 from os.path import exists, join
 
+import torch
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -172,23 +173,40 @@ class Visualization(SequenceSpace):
             abs_err = np.mean(np.abs(v1 - v2)) 
             if abs_err > tol:
                 msg = 'Numeric error in eigendecomposition: abs error = {:.5f}'
-                raise ValueError(msg)
+                raise ValueError(msg.format(abs_err))
             
         self.report('Eigendecomposition is correct')
     
     def calc_eigendecomposition(self, n_components=10, tol=1e-12, eig_tol=1e-3):
         n_components = min(n_components, self.n_genotypes-1)
+        self.n_components = n_components
         sandwich_aux_matrix = self._calc_sandwich_aux_matrix()
+        
+        # torch.cuda.empty_cache()
+        # Acoo = sandwich_aux_matrix.tocoo()
+        # Apt = torch.sparse.FloatTensor(torch.LongTensor([Acoo.row.tolist(), Acoo.col.tolist()]),
+        #                                torch.FloatTensor(Acoo.data))
+        #
+        # self.report('Calculating {} eigenvalue-eigenvector pairs'.format(n_components))
+        # lambdas, q = torch.lobpcg(Apt, k=n_components, largest=True)
+        # self.report('Done')
+        # lambdas = lambdas.cpu().detach().numpy()
+        # q = q.cpu().detach().numpy()
+        # torch.cuda.empty_cache()
+        # self._check_eigendecomposition(sandwich_aux_matrix,
+        #                                lambdas,
+        #                                q,
+        #                                tol=eig_tol)
         
         self.report('Calculating {} eigenvalue-eigenvector pairs'.format(n_components))
         lambdas, q = eigsh(sandwich_aux_matrix, n_components, which='LM', tol=tol)
+        self.report('Done')
         
         # Reverse order
         lambdas = lambdas[::-1]
         q = np.fliplr(q)
         
         # Store results
-        self.n_components = n_components
         self.eigenvalues = self.upper_bound_eigenvalue * (lambdas - 1)
         self.left_eigenvectors = self.diag_freq.dot(q)
         self.right_eigenvectors = self.diag_freq_inv.dot(q)
@@ -198,7 +216,7 @@ class Visualization(SequenceSpace):
                                        tol=eig_tol)
 
     def _calc_log_decay_rates(self):
-        return(np.log(-1 / (self.eigenvalues[:-1])[::-1]))
+        return(np.log(-1 / self.eigenvalues[1:]))
     
     def _calc_projection(self):
         self.report('Scaling projection axis')
@@ -214,15 +232,16 @@ class Visualization(SequenceSpace):
         self.projection = np.vstack(projection)
         self.log_decay_rates = self._calc_log_decay_rates()
         
-    def calc_visualization(self, Ns=None, meanf=None, n_components=10,
+    def calc_visualization(self, Ns=None, meanf=None, 
+                           perc_function=None, n_components=10,
                            tol=1e-9, eig_tol=1e-3):
-        if Ns is None and meanf is None:
-            msg = 'Either Ns or the expected mean function in equilibrium '
-            msg += 'is required to calculate the rate matrix'
+        if Ns is None and meanf is None and perc_function is None:
+            msg = 'Either Ns or the expected mean function or its percentile '
+            msg += 'in equilibrium is required to calculate the rate matrix'
             raise ValueError(msg)
         
-        if meanf is not None:
-            Ns = self.calc_Ns(stationary_function=meanf)
+        if meanf is not None or perc_function is not None:
+            Ns = self.calc_Ns(stationary_function=meanf, perc=perc_function)
             
         self.calc_stationary_frequencies(Ns)
         self.calc_rate_matrix(Ns, tol=tol)

@@ -8,7 +8,8 @@ import pandas as pd
 from gpmap.visualization import Visualization, CodonFitnessLandscape
 from gpmap.utils import LogTrack
 from gpmap.inference import VCregression
-from gpmap.settings import TEST_DATA_DIR
+from gpmap.settings import TEST_DATA_DIR, BIN_DIR
+from subprocess import check_call
 
 
 class VisualizationTests(unittest.TestCase):
@@ -62,16 +63,40 @@ class VisualizationTests(unittest.TestCase):
     def test_big_landscape(self):
         log = LogTrack()
         np.random.seed(1)
-        length = 10
+        length = 11
         lambdas = np.array([0, 1e6, 1e5, 1e4,
                             1e3, 1e2, 1e1, 1e0,
-                            1e-1, 1e-2, 1e-3]) #, 1e-4, 1e-5])
+                            1e-1, 1e-2, 1e-3, 0]) #, 1e-4, 1e-5])
+        # lambdas = np.array([0, 100, 10, 1, 0.1])
     
-        vc = VCregression(length, n_alleles=4)
+        log.write('Simulate data')
+        vc = VCregression(length, n_alleles=4, log=log)
         gpmap = Visualization(length, log=log)
         gpmap.set_function(vc.simulate(lambdas))
-        gpmap.calc_visualization(Ns=1)
-        gpmap.save(join(TEST_DATA_DIR, 'random.pkl'))
+        gpmap.calc_visualization(meanf=2, n_components=5)
+        gpmap.save(join(TEST_DATA_DIR, 'random.{}.pkl'.format(length)))
+    
+    def test_calc_visualization_bin(self):
+        bin_fpath = join(BIN_DIR, 'calc_visualization.py')
+        np.random.seed(1)
+        length = 4
+        lambdas = np.array([0, 100, 10, 1, 0.1])
+    
+        # Test help
+        cmd = [sys.executable, bin_fpath, '-h']
+        check_call(cmd)
+    
+        # Simulate landscape
+        vc = VCregression(length, n_alleles=4)
+        data = pd.DataFrame({'function': vc.simulate(lambdas)},
+                            index=vc.genotype_labels)
+        fpath = join(TEST_DATA_DIR, 'small_landscape.csv')
+        data.to_csv(fpath)
+        
+        # Calc visualization
+        out_fpath = join(TEST_DATA_DIR, 'small_landscape.pkl') 
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90']
+        check_call(cmd)
     
     def test_calc_transition_path_stats(self):
         np.random.seed(1)
