@@ -97,6 +97,12 @@ class VisualizationTests(unittest.TestCase):
         out_fpath = join(TEST_DATA_DIR, 'small_landscape.pkl') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90']
         check_call(cmd)
+        
+        # Plot visualization
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        plot_fpath = join(TEST_DATA_DIR, 'small_landscape.png') 
+        cmd = [sys.executable, bin_fpath, out_fpath, '-o', plot_fpath]
+        check_call(cmd)
     
     def test_calc_transition_path_stats(self):
         np.random.seed(1)

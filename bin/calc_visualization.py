@@ -4,7 +4,6 @@ import argparse
 import pandas as pd
 
 from gpmap.utils import LogTrack
-from gpmap.inference import SeqDEFT
 from gpmap.visualization import Visualization
 
         

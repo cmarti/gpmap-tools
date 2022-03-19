@@ -47,8 +47,8 @@ def write_log(log, msg):
         log.write(msg)
 
 
-def generate_possible_sequences(l):
-    for seq in itertools.product(NUCLEOTIDES, repeat=l):
+def generate_possible_sequences(l, alphabet=NUCLEOTIDES):
+    for seq in itertools.product(alphabet, repeat=l):
         yield(''.join(seq))
 
 

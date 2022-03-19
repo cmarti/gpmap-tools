@@ -19,6 +19,7 @@ def main():
             'console_scripts': [
                 'fit_SeqDEFT = bin.fit_seqdeft:main',
                 'calc_visualization = bin.calc_visualization:main',
+                'plot_visualization = bin.plot_visualization:main',
             ]},
         install_requires=['numpy', 'cython', 'pandas', 'scipy', 'pysam', 
                           'seaborn', 'matplotlib', 'pystan==2.19', 'tqdm',

@@ -4,7 +4,6 @@ import warnings
 from itertools import product
 from os.path import exists, join
 
-import torch
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -256,6 +255,7 @@ class Visualization(SequenceSpace):
         write_pickle(data, fpath)
         
     def load(self, fpath, log=None):
+        self.report('Loading visualization data from {}'.format(fpath))
         data = load_pickle(fpath)
         self.init(data['length'], data['n_alleles'],
                   alphabet_type=data['alphabet_type'], log=log)
@@ -885,7 +885,7 @@ class Visualization(SequenceSpace):
     Full figure methods
     '''
     
-    def figure(self, fname=None, show_edges=True,
+    def figure(self, fpath=None, fname=None, show_edges=True,
                cmap=CMAP, edges_cmap='binary', label=None, show_labels=False,
                size=5, fontsize=6, labels_subset=None,
                start=0, end=None, color_key=None, colors=None, lw=0,
@@ -906,7 +906,12 @@ class Visualization(SequenceSpace):
                   genotypes1=genotypes1, genotypes2=genotypes2,
                   max_paths=max_paths)
         self.report('Saving plot')
-        fname = self.get_fname_plot(suffix='visualization', fname=fname)
+        
+        if fpath is None:
+            fname = self.get_fname_plot(suffix='visualization', fname=fname)
+        else:
+            fpath = fname
+            
         savefig(fig, fname)
     
     def plot_grid_allele(self, fname=None, show_edges=True,
@@ -991,12 +996,11 @@ class Visualization(SequenceSpace):
         
         coords = None
         for i, (eq_f, axes, axes_eig) in enumerate(zip(eq_fs, subplots, subplots2)):
-            self.calc_visualization(meanf=eq_f, n_components=n_components,
-                                    recalculate=True, cache_matrix=False)
+            self.calc_visualization(meanf=eq_f, n_components=n_components)
             self.plot_eigenvalues(axes_eig)
             axes_eig.set_title('Stationary f = {:.2f}'.format(eq_f))
             
-            coords = self.plot(axes, x=2, y=3, show_edges=show_edges,
+            coords = self.plot(axes, x=1, y=2, show_edges=show_edges,
                                size=size, cmap=cmap, label=label,
                                force_coords=True, lw=lw,
                                prev_coords=coords)
@@ -1060,14 +1064,15 @@ class Visualization(SequenceSpace):
         else:
             return(edge_x, edge_y, edge_z)
     
-    def save_plotly(self, fig, fname=None):
+    def save_plotly(self, fig, fname=None, fpath=None):
         if fname is None:
             fig.show()
         else:
-            fpath = join(PLOTS_DIR, '{}.html'.format(fname))
+            if fpath is None:
+                fpath = join(PLOTS_DIR, '{}.html'.format(fname))
             fig.write_html(fpath)
     
-    def plot_interactive_2d(self, colorlabel='Function', fname=None,
+    def plot_interactive_2d(self, colorlabel='Function', fname=None, fpath=None,
                             cmap=CMAP, show_edges=True, color=None,
                             force_coords=True):
         '''Inspired by https://plotly.com/python/network-graphs/'''
@@ -1106,9 +1111,9 @@ class Visualization(SequenceSpace):
                            template='simple_white', title="Landscape visualization",
                            xaxis_title="Diffusion axis 1", yaxis_title="Diffusion axis 2")
         fig = go.Figure(data=traces, layout=layout)
-        self.save_plotly(fig, fname=fname)
+        self.save_plotly(fig, fname=fname, fpath=fpath)
     
-    def plot_interactive_3d(self, colorlabel=None, fname=None,
+    def plot_interactive_3d(self, colorlabel=None, fname=None, fpath=None,
                             cmap=CMAP, show_edges=True, color=None,
                             force_coords=True, z=3):
         '''Inspired by https://plotly.com/python/v3/3d-network-graph/'''
@@ -1149,7 +1154,7 @@ class Visualization(SequenceSpace):
                                       zaxis=axis.update(dict(title="Diffusion axis 3"))),
                            template='simple_white', title="Landscape visualization")
         fig = go.Figure(data=traces, layout=layout)
-        self.save_plotly(fig, fname=fname)
+        self.save_plotly(fig, fname=fname, fpath=fpath)
     
     '''
     Movies methods
