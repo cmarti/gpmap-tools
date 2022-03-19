@@ -912,7 +912,7 @@ class Visualization(SequenceSpace):
         if fpath is None:
             fname = self.get_fname_plot(suffix='visualization', fname=fname)
         else:
-            fpath = fname
+            fname = fpath
             
         savefig(fig, fname)
     
