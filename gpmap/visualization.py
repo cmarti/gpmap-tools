@@ -39,7 +39,7 @@ class Visualization(SequenceSpace):
     def __init__(self, length=None, n_alleles=None, alphabet_type='dna',
                  fpath=None, log=None):
         if fpath is not None:
-            self.load(fpath)
+            self.load(fpath, log=log)
         elif length is not None:
             self.init(length, n_alleles, log=log, alphabet_type=alphabet_type)
             self.calc_adjacency()
