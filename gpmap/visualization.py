@@ -255,6 +255,8 @@ class Visualization(SequenceSpace):
         write_pickle(data, fpath)
         
     def load(self, fpath, log=None):
+        if log is not None:
+            self.log = log
         self.report('Loading visualization data from {}'.format(fpath))
         data = load_pickle(fpath)
         self.init(data['length'], data['n_alleles'],
