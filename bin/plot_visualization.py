@@ -16,7 +16,7 @@ def main():
     input_group.add_argument('input', help=help_msg)
 
     viz_group = parser.add_argument_group('Plotting options')
-    viz_group.add_argument('-l', '--label', default=None, type=float,
+    viz_group.add_argument('-l', '--label', default=None,
                            help='Function label to show on colorbar')
     viz_group.add_argument('--edges', default=False, action='store_true',
                            help='Plot edges connecting neighboring genotypes')
