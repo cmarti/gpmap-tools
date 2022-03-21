@@ -100,8 +100,9 @@ class VisualizationTests(unittest.TestCase):
         
         # Plot visualization
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        plot_fpath = join(TEST_DATA_DIR, 'small_landscape.png') 
-        cmd = [sys.executable, bin_fpath, out_fpath, '-o', plot_fpath]
+        plot_fpath = join(TEST_DATA_DIR, 'small_landscape') 
+        cmd = [sys.executable, bin_fpath, out_fpath, '-o', plot_fpath,
+               '--edges']
         check_call(cmd)
     
     def test_calc_transition_path_stats(self):
@@ -447,15 +448,17 @@ class VisualizationTests(unittest.TestCase):
         np.random.seed(0)
     
         landscape = CodonFitnessLandscape(add_variation=True)
-        landscape.calc_visualization()
-        landscape.plot_rotation_movie(fdir='codon_rotation',
+        landscape.calc_visualization(Ns=1)
+        dpath = join(TEST_DATA_DIR, 'rotation_movie')
+        landscape.plot_rotation_movie(dpath=dpath, nframes=60,
                                       lims=(-2, 2), force=True)
     
     def test_ns_movie(self):
         np.random.seed(0)
-        landscape = CodonFitnessLandscape(add_variation=False)
-        landscape.plot_ns_movie(fdir='codon_ns', nframes=120, fmax=1.64,
-                                n_components=50, force=True)
+        landscape = CodonFitnessLandscape(add_variation=True)
+        dpath = join(TEST_DATA_DIR, 'ns_movie')
+        landscape.plot_ns_movie(dpath, nframes=60, fmax=1.64,
+                                n_components=20, force=True)
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'VisualizationTests']

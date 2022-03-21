@@ -30,7 +30,7 @@ from scipy.sparse.linalg.isolve.iterative import bicgstab
 from gpmap.base import SequenceSpace, get_sparse_diag_matrix
 from gpmap.plot_utils import (init_fig, savefig, arrange_plot, init_single_fig,
                               create_patches_legend)
-from gpmap.settings import CMAP, PLOTS_DIR
+from gpmap.settings import CMAP
 from gpmap.utils import write_pickle, load_pickle
 
 
@@ -1192,7 +1192,6 @@ class Visualization(SequenceSpace):
             fpath = join(dpath, '{}.png'.format(counter))
             fpaths.append(fpath)
             c = self.rotate_coords(coords, thetas=[theta] * len(axis), axis=axis)
-            counter += 1
             
             if exists(fpath) and not force:
                 continue
@@ -1206,6 +1205,7 @@ class Visualization(SequenceSpace):
             arrange_plot(axes, xlims=lims, ylims=lims, zlims=lims,
                          xlabel=xlabel, ylabel=ylabel, zlabel=zlabel)
             savefig(fig, join(dpath, '{}'.format(counter)))
+            counter += 1
             
         return(fpaths, c)
     
@@ -1249,7 +1249,7 @@ class Visualization(SequenceSpace):
                                                      ylabel='Diffusion axis 2/3',
                                                      zlabel='Diffusion axis 2/3',
                                                      colors=colors)
-        self.save_movie(fpaths, fps, tlast=1, boomerang=False)
+        self.save_movie(fpaths, dpath, fps, tlast=1, boomerang=False)
         
     
 class CodonFitnessLandscape(Visualization):

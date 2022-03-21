@@ -11,8 +11,6 @@ MODELING_DIR = join(BASE_DIR, 'models')
 MODELS_DIR = join(MODELING_DIR, 'compiled')
 CODE_DIR = join(MODELING_DIR, 'stan_code')
 
-PLOTS_DIR = '/home/martigo/repositories/rna/plots'
-
 # File paths
 PLOTS_FORMAT = 'png'
 
@@ -29,6 +27,6 @@ ALPHABET_N_ALLELES = {'dna': len(DNA_ALPHABET),
                       'protein': PROTEIN_ALPHABET}
 
 CMAP = 'viridis'
-MAX_GENOTYPES = 5e6
+MAX_GENOTYPES = 2e7
 U_MAX = 500
 PHI_UB, PHI_LB = 100, 0
