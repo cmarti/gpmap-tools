@@ -1,12 +1,10 @@
 #!/usr/bin/env python
-from os.path import join
-
 import seaborn as sns
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
-from gpmap.settings import PLOTS_FORMAT, PLOTS_DIR
+from gpmap.settings import PLOTS_FORMAT
 
 
 # Functions
@@ -175,13 +173,3 @@ class FigGrid(object):
 
     def savefig(self, fname):
         savefig(self.fig, fname, tight=False)
-        
-        
-def plot_eigenvalues(axes, df_visual, n_components):
-    x = range(1, n_components)
-    print(df_visual['eigenvalue'].values[1:])
-    y = 1 / abs(df_visual['eigenvalue'].values[1:])
-    axes.scatter(x, y, color='blue', s=15)
-    axes.plot(x, y, color='blue')
-    axes.set_xlabel('k', fontsize=14)
-    axes.set_ylabel('1 / |Eigenvalue|', fontsize=14)
