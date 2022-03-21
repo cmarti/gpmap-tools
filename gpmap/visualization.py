@@ -858,13 +858,6 @@ class Visualization(SequenceSpace):
         arrange_plot(axes, xlabel=label, ylabel='Number of genotypes',
                      xlims=xlims)
     
-    def get_fname_plot(self, suffix, fname=None):
-        if fname is None:
-            if self.label is None:
-                raise ValueError('Landscape label or fname must be provided')
-            fname = '{}.{}'.format(self.label, suffix)
-        return(fname)
-    
     def get_cmap_label(self, label=None):
         if label is None:
             if hasattr(self, 'label'):
@@ -876,9 +869,9 @@ class Visualization(SequenceSpace):
     
     def get_eq_functions(self, fmin, fmax, n):
         if fmin is None:
-            fmin = self.f.mean() + 0.2 * (self.f.max() - self.f.mean())
+            fmin = self.f.mean() + 0.1 * (self.f.max() - self.f.mean())
         if fmax is None:
-            fmax = self.f.mean() + 0.8 * (self.f.max() - self.f.mean())
+            fmax = self.f.mean() + 0.9 * (self.f.max() - self.f.mean())
             
         eq_fs = np.linspace(fmin, fmax, n)
         return(eq_fs)
@@ -887,7 +880,7 @@ class Visualization(SequenceSpace):
     Full figure methods
     '''
     
-    def figure(self, fpath=None, fname=None, show_edges=True,
+    def figure(self, fpath=None, show_edges=True,
                cmap=CMAP, edges_cmap='binary', label=None, show_labels=False,
                size=5, fontsize=6, labels_subset=None,
                start=0, end=None, color_key=None, colors=None, lw=0,
@@ -908,17 +901,10 @@ class Visualization(SequenceSpace):
                   genotypes1=genotypes1, genotypes2=genotypes2,
                   max_paths=max_paths)
         self.report('Saving plot')
-        
-        if fpath is None:
-            fname = self.get_fname_plot(suffix='visualization', fname=fname)
-        else:
-            fname = fpath
-            
-        savefig(fig, fname)
+        savefig(fig, fpath)
     
-    def plot_grid_allele(self, fname=None, show_edges=True,
+    def plot_grid_allele(self, fpath, show_edges=True,
                          color='orange', size=5, lw=0):
-        fname = self.get_fname_plot(suffix='alleles', fname=fname)
         
         fig, subplots = init_fig(self.n_alleles, self.length, colsize=3, rowsize=2.7)
         
@@ -944,12 +930,11 @@ class Visualization(SequenceSpace):
                 axes.text(x, y, '{}{}'.format(allele, j+1), ha='center')
                 force_coords = False
         
-        self.report('Saving plot at {}'.format(fname))
-        savefig(fig, fname)
+        self.report('Saving plot at {}'.format(fpath))
+        savefig(fig, fpath)
     
-    def plot_grid_shifting_motifs(self, motif, fname=None, show_edges=True,
+    def plot_grid_shifting_motifs(self, motif, fpath, show_edges=True,
                                   color='orange', size=5, lw=0):
-        fname = self.get_fname_plot(suffix=motif, fname=fname)
         motif_length = len(motif)
         n_plots = self.length - motif_length + 1
         
@@ -975,13 +960,12 @@ class Visualization(SequenceSpace):
                 axes.text(x_pos, y_pos, '{}{}'.format(motif, i+1), ha='center')
                 force_coords = False
         
-        self.report('Saving plot at {}'.format(fname))
-        savefig(fig, fname)
+        self.report('Saving plot at {}'.format(fpath))
+        savefig(fig, fpath)
     
-    def plot_grid_eq_f(self, fname=None, fmin=None, fmax=None,
+    def plot_grid_eq_f(self, fpath, fmin=None, fmax=None,
                        ncol=4, nrow=3, show_edges=True, size=5, cmap=CMAP,
                        label=None, lw=0, n_components=4):
-        fname = self.get_fname_plot(suffix='ns', fname=fname)
         
         if fmin is None:
             fmin = self.f.mean() + 0.05 * (self.f.max() - self.f.mean())
@@ -1020,15 +1004,13 @@ class Visualization(SequenceSpace):
                 axes_eig.set_xlabel('')
                 axes_eig.set_xticks([])
         
-        self.report('Saving plot at {}'.format(fname))
-        savefig(fig, fname)
-        savefig(fig2, fname + '.eig')
+        self.report('Saving plot at {}'.format(fpath))
+        savefig(fig, fpath)
+        savefig(fig2, fpath + '.eig')
     
-    def plot_complete(self, fname=None, show_edges=True,
+    def plot_complete(self, fpath, show_edges=True,
                       cmap=CMAP, label=None, show_labels=False, size=6,
                       lw=0, fmt='png'):
-        fname = self.get_fname_plot(suffix='complete', fname=fname)
-        
         fig, subplots = init_fig(3, 2, colsize=5, rowsize=3.8)
         self.plot_eigenvalues(subplots[0][0])
         self.plot_function_distrib(subplots[1][0], label=label)
@@ -1041,8 +1023,8 @@ class Visualization(SequenceSpace):
         self.plot(subplots[2][1], x=3, y=4, show_edges=show_edges,
                   cmap=cmap, label=label, show_labels=show_labels,
                   size=size, force_coords=True, lw=lw)
-        self.report('Saving plot at {}'.format(fname))
-        savefig(fig, fname, fmt=fmt)
+        self.report('Saving plot at {}'.format(fpath))
+        savefig(fig, fpath, fmt=fmt)
     
     '''
     Interactive plotting methods
@@ -1066,21 +1048,19 @@ class Visualization(SequenceSpace):
         else:
             return(edge_x, edge_y, edge_z)
     
-    def save_plotly(self, fig, fname=None, fpath=None):
-        if fname is None:
+    def save_plotly(self, fig, fpath=None):
+        if fpath is None:
             fig.show()
         else:
-            if fpath is None:
-                fpath = join(PLOTS_DIR, '{}.html'.format(fname))
+            fpath = '{}.html'.format(fpath)
             fig.write_html(fpath)
     
-    def plot_interactive_2d(self, colorlabel='Function', fname=None, fpath=None,
+    def plot_interactive_2d(self, fpath, colorlabel='Function',
                             cmap=CMAP, show_edges=True, color=None,
                             force_coords=True):
         '''Inspired by https://plotly.com/python/network-graphs/'''
         
         self.report('Make interactive landscape visualization')
-        fname = self.get_fname_plot(suffix='interactive', fname=fname)
         
         # Create nodes plot
         if color is None:
@@ -1113,16 +1093,15 @@ class Visualization(SequenceSpace):
                            template='simple_white', title="Landscape visualization",
                            xaxis_title="Diffusion axis 1", yaxis_title="Diffusion axis 2")
         fig = go.Figure(data=traces, layout=layout)
-        self.save_plotly(fig, fname=fname, fpath=fpath)
+        self.save_plotly(fig, fpath=fpath)
     
-    def plot_interactive_3d(self, colorlabel=None, fname=None, fpath=None,
+    def plot_interactive_3d(self, colorlabel=None, fpath=None,
                             cmap=CMAP, show_edges=True, color=None,
                             force_coords=True, z=3):
         '''Inspired by https://plotly.com/python/v3/3d-network-graph/'''
         
         self.report('Make interactive landscape visualization')
         colorlabel = self.get_cmap_label(colorlabel)
-        fname = self.get_fname_plot(suffix='interactive3d', fname=fname)
         
         # Create nodes plot
         if color is None:
@@ -1156,21 +1135,18 @@ class Visualization(SequenceSpace):
                                       zaxis=axis.update(dict(title="Diffusion axis 3"))),
                            template='simple_white', title="Landscape visualization")
         fig = go.Figure(data=traces, layout=layout)
-        self.save_plotly(fig, fname=fname, fpath=fpath)
+        self.save_plotly(fig, fpath=fpath)
     
     '''
     Movies methods
     '''
     
-    def get_movie_dir(self, fdir, suffix):
-        prefix = self.get_fname_plot(suffix=suffix, fname=fdir)
-        dpath = join(PLOTS_DIR, prefix) 
-        
+    def get_movie_dir(self, dpath):
         if not exists(dpath):
             os.makedirs(dpath)
-        return(prefix, dpath)
+        return(dpath)
     
-    def create_ns_frames(self, prefix, dpath, fmin=None, fmax=None,
+    def create_ns_frames(self, dpath, fmin=None, fmax=None,
                          show_edges=True, size=5, cmap=CMAP,
                          label=None, lw=0, n_components=50,
                          nframes=120, force=False):
@@ -1179,15 +1155,12 @@ class Visualization(SequenceSpace):
         fpaths = []
         coords = None
         for i, eq_f in tqdm(list(enumerate(eq_fs))):
-            fname = '{}/{}'.format(prefix, i)
             fpath = join(dpath, '{}.png'.format(i))
             fpaths.append(fpath)
             if exists(fpath) and not force:
                 continue
             
-            self.tune_ns(eq_f)
-            self.calc_visualization(n_components=n_components, recalculate=True,
-                                    cache_matrix=False, save=False)
+            self.calc_visualization(meanf=eq_f, n_components=n_components)
             
             fig, subplots = init_fig(1, 2, colsize=3.5, rowsize=3.2)
             
@@ -1200,11 +1173,11 @@ class Visualization(SequenceSpace):
                                size=size, cmap=cmap, label=label,
                                force_coords=True, lw=lw, prev_coords=coords)
             subplots[1].set_title('Stationary f = {:.2f}'.format(eq_f))
-            savefig(fig, fname)
+            savefig(fig, join(dpath, '{}'.format(i)))
             
         return(fpaths, coords)
 
-    def create_rotation_frames(self, prefix, dpath, coords, axis=['x'],
+    def create_rotation_frames(self, dpath, coords, axis=['x'],
                                counter=0, ylabel=None, xlabel=None, zlabel=None,
                                show_edges=True, size=5, force=False,
                                cmap=CMAP, label=None, lw=0, nframes=90,
@@ -1219,7 +1192,6 @@ class Visualization(SequenceSpace):
             fpath = join(dpath, '{}.png'.format(counter))
             fpaths.append(fpath)
             c = self.rotate_coords(coords, thetas=[theta] * len(axis), axis=axis)
-            fname = '{}/{}'.format(prefix, counter)
             counter += 1
             
             if exists(fpath) and not force:
@@ -1233,7 +1205,7 @@ class Visualization(SequenceSpace):
                       force_coords=True, lw=lw, coords=c)
             arrange_plot(axes, xlims=lims, ylims=lims, zlims=lims,
                          xlabel=xlabel, ylabel=ylabel, zlabel=zlabel)
-            savefig(fig, fname)
+            savefig(fig, join(dpath, '{}'.format(counter)))
             
         return(fpaths, c)
     
@@ -1241,33 +1213,33 @@ class Visualization(SequenceSpace):
         fpaths += [fpaths[-1]] * (tlast * fps)
         return(fpaths)
     
-    def save_movie(self, fpaths, prefix, fps, tlast=0, boomerang=False):
+    def save_movie(self, fpaths, dpath, fps, tlast=0, boomerang=False):
         fpaths = self.extend_last_frame(fpaths, tlast, fps)
         if boomerang:
             fpaths = fpaths + fpaths[::-1]
         clip = ImageSequenceClip(fpaths, fps=fps)
-        clip.write_videofile(join(PLOTS_DIR, '{}.mp4'.format(prefix)))
+        clip.write_videofile('{}.mp4'.format(dpath))
     
-    def plot_ns_movie(self, fdir=None, fmin=None, fmax=None,
+    def plot_ns_movie(self, dpath, fmin=None, fmax=None,
                       show_edges=True, size=5, cmap=CMAP,
                       label=None, lw=0, n_components=50,
                       nframes=120, fps=20, boomerang=False, force=False):
-        prefix, dpath = self.get_movie_dir(fdir=fdir, suffix='ns_movie')
-        fpaths, _ = self.create_ns_frames(prefix, dpath, fmin=fmin, fmax=fmax,
+        dpath = self.get_movie_dir(dpath)
+        fpaths, _ = self.create_ns_frames(dpath, fmin=fmin, fmax=fmax,
                                           show_edges=show_edges, size=size, cmap=cmap,
                                           label=label, lw=lw, n_components=n_components,
                                           nframes=nframes, force=force)
-        self.save_movie(fpaths, prefix, fps, tlast=1, boomerang=boomerang)
+        self.save_movie(fpaths, dpath, fps, tlast=1, boomerang=boomerang)
         
-    def plot_rotation_movie(self, fdir=None,
+    def plot_rotation_movie(self, dpath,
                             show_edges=True, size=5, cmap=CMAP,
                             label=None, lw=0,  nframes=120, fps=20, lims=None,
                             size_factor=2, force=False, z=3,
                             colors=None):
         self.report('Preparing frames for rotation movie')
-        prefix, dpath = self.get_movie_dir(fdir=fdir, suffix='rotation_movie360')
+        dpath = self.get_movie_dir(dpath=dpath)
         coords = self.get_nodes_coord(axis=[1, 2, 3])
-        fpaths, coords = self.create_rotation_frames(prefix=prefix, dpath=dpath,
+        fpaths, coords = self.create_rotation_frames(dpath=dpath,
                                                      coords=coords, lims=lims,
                                                      show_edges=show_edges,
                                                      size=size, cmap=cmap, label=label,
@@ -1277,7 +1249,7 @@ class Visualization(SequenceSpace):
                                                      ylabel='Diffusion axis 2/3',
                                                      zlabel='Diffusion axis 2/3',
                                                      colors=colors)
-        self.save_movie(fpaths, prefix, fps, tlast=1, boomerang=False)
+        self.save_movie(fpaths, fps, tlast=1, boomerang=False)
         
     
 class CodonFitnessLandscape(Visualization):

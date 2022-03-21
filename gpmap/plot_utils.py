@@ -29,8 +29,8 @@ def init_single_fig(figsize=None, style='ticks',
     return(fig, axes)
 
 
-def savefig(fig, fname, tight=True, fmt=PLOTS_FORMAT):
-    fpath = join(PLOTS_DIR, '{}.{}'.format(fname, fmt))
+def savefig(fig, fpath, tight=True, fmt=PLOTS_FORMAT):
+    fpath = '{}.{}'.format(fpath, fmt)
     if tight:
         fig.tight_layout()
     fig.savefig(fpath, format=fmt, dpi=240)
