@@ -139,7 +139,11 @@ class SequenceSpace(BaseGPMap):
     def get_neighbor_pairs(self):
         if not hasattr(self, 'neighbor_pairs'):
             A = self.get_adjacency_matrix()
-            self.neighbor_pairs = A.row, A.col
+            try:
+                self.neighbor_pairs = A.row, A.col
+            except AttributeError:
+                A = A.tocoo()
+                self.neighbor_pairs = A.row, A.col
         return(self.neighbor_pairs)
     
     def istack_matrices(self, m_diag, m_offdiag, module=sp):
@@ -153,12 +157,13 @@ class SequenceSpace(BaseGPMap):
     def _calc_adjacency(self, m=None, l=0):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            if l == (self.length-1):
-                return(m)
             
             if m is None:
                 i = sp.identity(self.n_alleles)
                 m = csr_matrix(np.ones((self.n_alleles, self.n_alleles))) - i
+            
+            if l == (self.length-1):
+                return(m)
     
             i = sp.identity(m.shape[0])
             m = self.istack_matrices(m, i)

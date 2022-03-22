@@ -13,6 +13,17 @@ from subprocess import check_call
 
 
 class VisualizationTests(unittest.TestCase):
+    def test_adjacency_matrix(self):
+        space = Visualization(1, alphabet_type='dna')
+        A = space.get_adjacency_matrix().todense()
+        assert(np.all(np.diag(A) == 0))
+        assert(np.all(A + np.eye(4) == 1))
+        
+        space = Visualization(2, 2, alphabet_type='custom')
+        A = space.get_adjacency_matrix().todense()
+        assert(np.all(np.diag(A) == 0))
+        assert(np.all(A + np.eye(4) + np.fliplr(np.eye(4)) == 1))
+            
     def test_get_neighbors(self):
         space = Visualization(3, 4, alphabet_type='rna')
         seq = 'AAA'
@@ -295,24 +306,35 @@ class VisualizationTests(unittest.TestCase):
         space.calc_genotypes_reactive_p(['000000000'], ['123010122'])
         
     def test_calc_jump_matrix(self):
-        np.random.seed(1)
-        alpha = 2
-        length = 2
+        Ns = 1
     
-        space = Visualization(length, n_alleles=alpha, alphabet_type='custom')
+        space = Visualization(length=1)
         f = np.array([0, 1, 0.5, 1.5])
-        space.load_function(f)
-        a, b = space.get_AB_genotypes_idxs(['00'], ['11'])
-        space.calc_stationary_frequencies()
-        space.calc_reweighting_diag_matrices()
-        space.get_stationary_rate_matrix()
-        jump_matrix = space.calc_jump_transition_matrix(a, b)
+        space.set_function(f)
+        a, b = space.get_AB_genotypes_idxs(['A'], ['T'])
+        space.calc_stationary_frequencies(Ns)
+        space.calc_rate_matrix(Ns)
+        jump_matrix = space.calc_jump_transition_matrix(a, b).todense()
         
-        m = np.array([[0, 0.55454956, 0.44545044, 0],
-                      [0, 0, 0, 1],
-                      [0, 0, 0, 1],
+        m = np.array([[0, 0.33071192, 0.26564942, 0.40363866],
+                      [0, 0, 0.29082531, 0.70917469],
+                      [0, 0.35427277, 0, 0.64572723],
                       [0, 0, 0, 1]])
-        assert(np.allclose(jump_matrix.todense(), m))
+        assert(np.allclose(jump_matrix, m))
+    
+    def test_calc_exp_n_returns(self):
+        np.random.seed(1)
+        Ns = 5
+    
+        space = Visualization(length=1)
+        f = np.array([0, 1, 1, 0])
+        space.set_function(f)
+        a, b = space.get_AB_genotypes_idxs(['A'], ['T'])
+        space.calc_stationary_frequencies(Ns)
+        space.calc_rate_matrix(Ns)
+        exp_return_times = space.calc_exp_n_returns(a, b)
+        m = exp_return_times / (1 + exp_return_times)
+        assert(np.allclose(m, [0, 0.87698151, 0.87698151, 0]))
     
     def test_calc_rate_p(self):
         gpmap = Visualization(2, 2, ns=1)
@@ -353,18 +375,20 @@ class VisualizationTests(unittest.TestCase):
     def test_visualize_reactive_paths(self):
         np.random.seed(0)
         landscape = CodonFitnessLandscape(add_variation=True)
-        landscape.calc_stationary_frequencies()
-        landscape.tune_ns(stationary_function=1.3)
-        landscape.calc_visualization(n_components=5, recalculate=True)
+        Ns = landscape.calc_Ns(stationary_function=1.3)
+        landscape.calc_stationary_frequencies(Ns)
+        landscape.calc_visualization(Ns, n_components=5)
         
         gt1, gt2 = ['UCU', 'UCA', 'UCC', 'UCG'], ['AGU', 'AGC']
-        landscape.figure(fname='reactive_path', size=40, cmap='coolwarm', 
-                         genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
-                         dominant_paths=False)
-        landscape.figure(fname='reactive_path', size=40, cmap='coolwarm', 
+        fpath = join(TEST_DATA_DIR, 'reactive_path')
+        # landscape.figure(fpath=fpath, size=40, cmap='coolwarm', 
+        #                  genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
+        #                  dominant_paths=False, p_reactive_paths=True)
+        
+        landscape.figure(fpath=fpath, size=40, cmap='coolwarm', 
                          genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
                          dominant_paths=True, edge_widths=2,
-                         edges_cmap='Greens')
+                         edges_cmap='Greens', p_reactive_paths=True)
     
     def test_laplacian(self):
         gpmap = Visualization(4, 2)
@@ -461,5 +485,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=20, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests']
+    import sys;sys.argv = ['', 'VisualizationTests.test_calc_exp_n_returns']
     unittest.main()

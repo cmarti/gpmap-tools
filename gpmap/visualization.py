@@ -22,6 +22,7 @@ from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
 
 from scipy.sparse import identity
 from scipy.sparse.csr import csr_matrix
+from scipy.sparse.linalg import inv
 from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
@@ -350,7 +351,7 @@ class Visualization(SequenceSpace):
             
         stationary_freqs = self.genotypes_stationary_frequencies
         i, j = self.get_neighbor_pairs()
-        rate_ij = self._calc_rate_vector(self._calc_delta_f(i, j))
+        rate_ij = self._calc_rate_vector(self._calc_delta_f(i, j), self.Ns)
         flow = stationary_freqs[i] * (1-q)[i] * rate_ij * q[j]
         return(flow)
 
@@ -361,7 +362,7 @@ class Visualization(SequenceSpace):
         stationary_freqs = self.genotypes_stationary_frequencies
         
         i, j = self.get_neighbor_pairs()
-        rate_ij = self._calc_rate_vector(self._calc_delta_f(i, j))
+        rate_ij = self._calc_rate_vector(self._calc_delta_f(i, j), self.Ns)
         flow = stationary_freqs[i] * rate_ij * (q[j] - q[i])
         flow[flow < 0] = 0
         return(flow)
@@ -535,7 +536,7 @@ class Visualization(SequenceSpace):
         i, j = self.get_neighbor_pairs()
         delta_f = self._calc_delta_f(i, j)
         size = (self.n_genotypes, self.n_genotypes)
-        rates = self._calc_rate_vector(delta_f)
+        rates = self._calc_rate_vector(delta_f, self.Ns)
         t = csr_matrix((rates, (i, j)), shape=size)
         rowsums = t.sum(1).A1
         
@@ -556,6 +557,35 @@ class Visualization(SequenceSpace):
         # Make sparse jump matrix
         jump_matrix = csr_matrix((p_ij, (i, j)), shape=size)
         return(jump_matrix)
+    
+    def calc_exp_n_returns(self, a, b):
+        jump_matrix = self.calc_jump_transition_matrix(a, b)
+        I = identity(self.n_genotypes)
+        M = (I - jump_matrix).tocsc()
+        
+        # Select (AUB)^c genotypes
+        idx = np.full(self.n_genotypes, True)
+        ab_gts = np.hstack([a, b])
+        idx[ab_gts] = False
+        no_ab_genotypes = np.where(idx)[0]
+        M = M[no_ab_genotypes, :][:, no_ab_genotypes]
+        
+        exp_return_times = np.zeros(self.n_genotypes)
+        exp_return_times[no_ab_genotypes] = inv(M).diagonal() - 1
+        return(exp_return_times)
+    
+    def calc_genotypes_logp_path(self, a, b):
+        exp_return_times = self.calc_exp_n_returns(a, b)
+        p_return = exp_return_times / (1 + exp_return_times)
+        
+        i, j = self.get_neighbor_pairs()
+        flow = self.calc_edges_flow(a, b)
+        flow_matrix = csr_matrix((flow, (i, j)),
+                                 shape=(self.n_genotypes, self.n_genotypes))
+        genotypes_flow = flow_matrix.A.sum(1)
+        genotypes_logp = np.log(genotypes_flow) - np.log(genotypes_flow.max()) + np.log(1 - p_return)
+        return(genotypes_logp)
+    
     
     '''
     Plotting methods
@@ -647,7 +677,7 @@ class Visualization(SequenceSpace):
                               edgecolor='black', cmap=cmap, alpha=1, label=label,
                               vmax=vmax, vmin=vmin)
         else:
-            msg = 'Expected coords with dimension 2 or 3: {} found'.format(ndim)
+            msg = 'Expected coords with dimension 2 or 3: {} found'.format(coords.shape)
             raise ValueError(msg)
         
         return(sc)
@@ -775,7 +805,7 @@ class Visualization(SequenceSpace):
              use_cmap=False, sort=True, reverse=False, lw=0, force_coords=True, 
              prev_coords=None, highlight_local_maxima=False, coords=None,
              genotypes1=None, genotypes2=None, dominant_paths=False,
-             max_paths=20):
+             max_paths=20, p_reactive_paths=False):
         
         axis = [x, y]
         if z is not None:
@@ -789,20 +819,29 @@ class Visualization(SequenceSpace):
         avoid_dups = True  
         if genotypes1 is not None and genotypes2 is not None:
             idx1, idx2 = self.get_AB_genotypes_idxs(genotypes1, genotypes2)
-            gt_p = self.calc_genotypes_reactive_p(idx1, idx2)[1]
             flows = self.calc_edges_effective_flow(idx1, idx2)
             flows = flows / flows.max() + 0.01
             edges_cmap = cm.get_cmap(edges_cmap)
             edge_colors = edges_cmap(flows)
             if not dominant_paths:
                 edge_widths = flows * 2 + 0.1
-            norm_factor = self.genotypes_stationary_frequencies[gt_p > 0].sum()
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                colors = np.log2(gt_p * norm_factor / self.genotypes_stationary_frequencies)
-            vmax = np.abs(colors).max()
-            vmin = -vmax
-            label = r'$log_{2} \left( \frac{m_i^{AB}}{\pi_{i} / \sum_{j \in (A \cup B)^c} \pi_j} \right)$'
+
+            if p_reactive_paths:
+                colors = np.exp(self.calc_genotypes_logp_path(idx1, idx2))
+                colors[np.hstack([idx1, idx2])] = -np.inf
+                label = r'$log(Proportion of paths going through genotype)$'
+                c = colors[np.logical_and(np.isfinite(colors), colors < 1)]
+                vmax = c.max()
+                vmin = c.min()
+            else:            
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    gt_p = self.calc_genotypes_reactive_p(idx1, idx2)[1]
+                    norm_factor = self.genotypes_stationary_frequencies[gt_p > 0].sum()
+                    colors = np.log2(gt_p * norm_factor / self.genotypes_stationary_frequencies)
+                label = r'$log_{2} \left( \frac{m_i^{AB}}{\pi_{i} / \sum_{j \in (A \cup B)^c} \pi_j} \right)$'
+                vmax = np.abs(colors).max()
+                vmin = -vmax
             avoid_dups = False
         
         if show_edges:
@@ -835,7 +874,6 @@ class Visualization(SequenceSpace):
             self.plot_nodes_coords(axes, coords[idx1],
                                    colors='yellow', lw=2, size_factor=3*size,
                                    cmap=cmap)
-            
             self.plot_nodes_coords(axes, coords[idx2],
                                    colors='orange', lw=2, size_factor=3*size,
                                    cmap=cmap)
@@ -887,7 +925,8 @@ class Visualization(SequenceSpace):
                force_coords=True, highlight_local_maxima=False,
                edge_colors='grey', edge_widths=0.5,
                x=1, y=2, z=None, genotypes1=None, genotypes2=None,
-               dominant_paths=False, max_paths=20, figsize=(10, 7.6)):
+               dominant_paths=False, p_reactive_paths=False,
+               max_paths=20, figsize=(10, 7.6)):
         
         fig, axes = init_single_fig(figsize=figsize, is_3d=z is not None)
         self.report('Plotting landscape visualization')
@@ -899,7 +938,7 @@ class Visualization(SequenceSpace):
                   start=start, end=end, color_key=color_key, colors=colors,
                   highlight_local_maxima=highlight_local_maxima,
                   genotypes1=genotypes1, genotypes2=genotypes2,
-                  max_paths=max_paths)
+                  max_paths=max_paths, p_reactive_paths=p_reactive_paths)
         self.report('Saving plot')
         savefig(fig, fpath)
     
