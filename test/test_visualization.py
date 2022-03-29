@@ -82,13 +82,13 @@ class VisualizationTests(unittest.TestCase):
     def test_2codon_landscape(self):
         fpath = join(TEST_DATA_DIR, '2codon.landscape.csv')
         data = pd.read_csv(fpath, index_col=0)
-        #
-        # fig_fpath = join(TEST_DATA_DIR, '2aa.landscape')
-        # landscape = Visualization(2, alphabet_type='protein')
-        # landscape.set_function(data['log_binding'])
-        # landscape.calc_visualization(meanf=1, n_components=5)
-        # landscape.figure(fpath=fig_fpath, highlight_genotypes=['LG', 'CA', 'AA', 'CG', 'GM', 'FG'])
-        # landscape.plot_interactive_2d(fpath=fig_fpath)
+        
+        fig_fpath = join(TEST_DATA_DIR, '2aa.landscape')
+        landscape = Visualization(2, alphabet_type='protein')
+        landscape.set_function(data['log_binding'])
+        landscape.calc_visualization(meanf=1, n_components=5)
+        landscape.figure(fpath=fig_fpath, highlight_genotypes=['LG', 'CA', 'AA', 'CG', 'GM', 'FG'])
+        landscape.figure(fpath=fig_fpath, interactive=True)
 
         fig_fpath = join(TEST_DATA_DIR, '2codon.landscape')
         landscape = Visualization(6)
@@ -97,14 +97,7 @@ class VisualizationTests(unittest.TestCase):
         landscape.figure(fpath=fig_fpath, highlight_genotypes=['LG', 'CA', 'AA', 'CG', 'GM', 'FG'],
                          is_prot=True, sort_by=3)
         landscape.figure(fpath=fig_fpath, interactive=True, is_prot=True, z=None)
-        
-        #
-        # # Test whether saving the projections works        
-        # fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
-        # landscape.save(fpath)
-        # landscape = Visualization(fpath=fpath)
-        # landscape.figure(fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
-        #                  palette='Set1')
+        landscape.figure(fpath=fig_fpath, interactive=True, is_prot=True, z=3)
     
     def test_plotting(self):
         fpath = join(TEST_DATA_DIR, 'codon_landscape')
@@ -161,16 +154,23 @@ class VisualizationTests(unittest.TestCase):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
         fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
         plot_fpath = join(TEST_DATA_DIR, 'codon_landscape') 
-        cmd = [sys.executable, bin_fpath, fpath, '-o', plot_fpath,
-               '--edges']
+        
+        # Test bin
+        cmd = [sys.executable, bin_fpath, '-h']
         check_call(cmd)
         
-        # Highlighting peaks
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
-        plot_fpath = join(TEST_DATA_DIR, 'codon_landscape') 
+        # Test visualization
+        cmd = [sys.executable, bin_fpath, fpath, '-o', plot_fpath, '--edges']
+        check_call(cmd)
+        
+        # Highlighting peaks in nucleotide sequence
         cmd = [sys.executable, bin_fpath, fpath, '-o', plot_fpath,
                '--edges', '-g', 'UCN,AGY']
+        check_call(cmd)
+        
+        # Highlighting coding sequence
+        cmd = [sys.executable, bin_fpath, fpath, '-o', plot_fpath,
+               '--edges', '-g', 'S,L', '--protein_seq', '-l', 'log(binding)']
         check_call(cmd)
     
     def test_calc_transition_path_stats(self):
@@ -562,5 +562,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=20, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests.test_2codon_landscape']
+    import sys;sys.argv = ['', 'VisualizationTests.test_plot_visualization_bin']
     unittest.main()

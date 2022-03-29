@@ -9,9 +9,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import networkx as nx
-import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-import plotly.graph_objects as go
 
 from tqdm import tqdm
 from Bio import motifs
@@ -826,40 +824,6 @@ class Visualization(SequenceSpace):
                 
         return(coords)
         
-        
-    def plot_ns_mean_function(self, ns_min, ns_max, axes=None,
-                              ylabel='Mean fitness', fname=None):
-        ns_values = np.linspace(ns_min, ns_max, 51)
-        fmean = []
-        for ns in ns_values:
-            self.set_ns(ns)
-            self.calc_stationary_frequencies(silent=True)
-            fmean.append(self.calc_stationary_function())
-        
-        if axes is None:
-            if fname is None:
-                raise ValueError('Either axes or fname must be provided')
-            fig, axes = init_fig(1, 1)
-        else:
-            fig = None
-            
-        axes.plot(ns_values, fmean, lw=1, c='purple')
-        arrange_plot(axes, xlims=(ns_min, ns_max), xlabel=r'$N_{e}s$',
-                     ylabel=ylabel)
-        
-        if fig is not None:
-            savefig(fig, fname)
-    
-    def minimize_distance(self, coords, prev_coords=None):
-        
-        if prev_coords is not None:
-            test_coords = [np.vstack([v * s for v, s in zip(coords.T, scalars)]).T
-                           for scalars in product([1, -1], repeat=coords.shape[1])]
-            distances = [np.sqrt(np.sum((c - prev_coords) ** 2, 1)).mean(0)
-                         for c in test_coords]
-            coords = test_coords[np.argmin(distances)]
-        return(coords)
-
     def _rotate_coords(self, coords, theta, axis):
         if axis == 'x':
             m = np.array([[1, 0, 0],
@@ -909,109 +873,12 @@ class Visualization(SequenceSpace):
         if z is not None:
             axes.set_zlabel('Diffusion Axis {}'.format(z), fontsize=14)
     
-    def _plot(self, axes, x=1, y=2, z=None, show_edges=True, cmap=CMAP,
-             edges_cmap='binary',
-             label=None, size=5, fontsize=6, colors=None,
-             edge_colors='grey', edge_widths=0.5,
-             start=None, end=None, color_key=None,
-             use_cmap=False, sort=True, reverse=False, lw=0, force_coords=True, 
-             prev_coords=None, highlight_local_maxima=False, coords=None,
-             genotypes1=None, genotypes2=None, dominant_paths=False,
-             max_paths=20, p_reactive_paths=False):
-        
-        axis = [x, y]
-        if z is not None:
-            axis.append(z)
-
-        if coords is None:
-            coords = self._get_nodes_coord(axis=axis, force=force_coords)
-            coords = self.minimize_distance(coords, prev_coords)
-
-        vmax, vmin = None, None
-        avoid_dups = True  
-        if genotypes1 is not None and genotypes2 is not None:
-            a, b = self.get_AB_genotypes_idxs(genotypes1, genotypes2)
-            flows = self.calc_edges_effective_flow(a, b)
-            flows = flows / flows.max() + 0.01
-            edges_cmap = cm.get_cmap(edges_cmap)
-            edge_colors = edges_cmap(flows)
-            if not dominant_paths:
-                edge_widths = flows * 2 + 0.1
-
-            if p_reactive_paths:
-                colors = np.exp(self.calc_genotypes_logp_path(a, b))
-                colors[np.hstack([a, b])] = -np.inf
-                label = r'$log(Proportion of paths going through genotype)$'
-                c = colors[np.logical_and(np.isfinite(colors), colors < 1)]
-                vmax = c.max()
-                vmin = c.min()
-            else:            
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    gt_p = self.calc_gt_p_time_reactive_path(a, b)[1]
-                    norm_factor = self.genotypes_stationary_frequencies[gt_p > 0].sum()
-                    colors = np.log2(gt_p * norm_factor / self.genotypes_stationary_frequencies)
-                label = r'$log_{2} \left( \frac{m_i^{AB}}{\pi_{i} / \sum_{j \in (A \cup B)^c} \pi_j} \right)$'
-                vmax = np.abs(colors).max()
-                vmin = -vmax
-            avoid_dups = False
-        
-        if show_edges:
-            if dominant_paths:
-                paths = self.calc_representative_pathways(a, b, max_paths=max_paths)
-                i, j, c = [], [], []
-                for path, _, p in paths:
-                    for s, t in zip(path, path[1:]):
-                        i.append(s)
-                        j.append(t)
-                        c.append(p)
-                c = np.array(c)
-                c = c / c.max()
-                edges = np.stack([coords[i], coords[j]], axis=2).transpose((0, 2, 1))
-                edge_colors = edges_cmap(c) 
-            else:
-                edges = self._get_nodes_coord(coords, force=force_coords,
-                                             avoid_dups=avoid_dups)
-                
-            self.plot_edges(edges, axes, colors=edge_colors, width=edge_widths)
-        
-        self.plot_nodes(coords, axes, cmap, label, size_factor=size,
-                        color_key=color_key, colors=colors,
-                        use_cmap=use_cmap, sort=sort,
-                        reverse=reverse, lw=lw,
-                        vmax=vmax, vmin=vmin,
-                        highlight_local_maxima=highlight_local_maxima)
-        
-        if genotypes1 is not None and genotypes2 is not None:
-            self.plot_nodes_coords(axes, coords[a],
-                                   colors='yellow', lw=2, size_factor=3*size,
-                                   cmap=cmap)
-            self.plot_nodes_coords(axes, coords[b],
-                                   colors='orange', lw=2, size_factor=3*size,
-                                   cmap=cmap)
-            create_patches_legend(axes, 
-                                  colors_dict={'A': 'yellow', 'B': 'orange'},
-                                  loc=2, fontsize=14)
-            
-        self.add_axis_labels(axes, x, y, z)
-                
-        return(coords)
-
     def plot_function_distrib(self, axes, label):    
         sns.distplot(self.f, bins=30, hist=True, kde=False, color='purple',
                      ax=axes)
         xlims = min(self.f), max(self.f)
         arrange_plot(axes, xlabel=label, ylabel='Number of genotypes',
                      xlims=xlims)
-    
-    def get_cmap_label(self, label=None):
-        if label is None:
-            if hasattr(self, 'label'):
-                return(self.label)
-            else:
-                return('Fitness')
-        else:
-            return(label)
     
     def get_eq_functions(self, fmin, fmax, n):
         if fmin is None:
