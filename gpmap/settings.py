@@ -26,6 +26,9 @@ ALPHABET_N_ALLELES = {'dna': len(DNA_ALPHABET),
                       'rna': RNA_ALPHABET,
                       'protein': PROTEIN_ALPHABET}
 
+PROT_AMBIGUOUS_VALUES = {'X': ''.join(PROTEIN_ALPHABET)}
+PROT_AMBIGUOUS_VALUES.update(dict(zip(PROTEIN_ALPHABET, PROTEIN_ALPHABET)))
+
 CMAP = 'viridis'
 MAX_GENOTYPES = 2e7
 U_MAX = 500

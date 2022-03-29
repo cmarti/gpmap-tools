@@ -12,7 +12,7 @@ from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 
 from gpmap.utils import write_log
 from gpmap.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
-                            MAX_GENOTYPES)
+                            MAX_GENOTYPES, PROT_AMBIGUOUS_VALUES)
 from Bio.Data import IUPACData
 
 
@@ -20,6 +20,10 @@ def get_sparse_diag_matrix(values):
     n_genotypes = values.shape[0]
     m = dia_matrix((values, np.array([0])), shape=(n_genotypes, n_genotypes))
     return(m)
+
+
+def extend_ambigous_seq(seq, mapping):
+    return(list(map("".join, product(*map(mapping.get, seq)))))
 
 
 class BaseGPMap(object):
@@ -38,13 +42,14 @@ class BaseGPMap(object):
                                 'G': ['C', 'U'], 'C': ['G']}
             self.ambiguous_values = IUPACData.ambiguous_rna_values
         elif alphabet_type == 'protein':
+            self.ambiguous_values = PROT_AMBIGUOUS_VALUES
             self.alphabet = PROTEIN_ALPHABET
+            
         elif alphabet_type == 'custom':
             if n_alleles is None:
                 raise ValueError('n_alleles must be provided for custom alphabet')
             self.alphabet = [str(x) for x in range(n_alleles)]
-            self.ambiguous_values = {'*': ''.join(self.alphabet),
-                                     'N': ''.join(self.alphabet)}
+            self.ambiguous_values = {'X': ''.join(self.alphabet)}
             self.ambiguous_values.update(dict(zip(self.alphabet, self.alphabet)))
         else:
             raise ValueError('alphabet type not supported')
@@ -54,7 +59,7 @@ class BaseGPMap(object):
         """return list of all possible sequences given an ambiguous DNA input
         copied from https://www.biostars.org/p/260617/
         """
-        return(list(map("".join, product(*map(self.ambiguous_values.get, seq)))))
+        return(extend_ambigous_seq(seq, self.ambiguous_values))
     
     def extend_ambiguous_sequences(self, seqs):
         extended = []
@@ -93,6 +98,9 @@ class SequenceSpace(BaseGPMap):
     def get_genotype_labels(self):
         return(np.array([''.join([self.alphabet[a] for a in gt])
                          for gt in self.seqs]))
+    
+    def get_genotype_labels_idx(self, genotypes):
+        return(self.genotype_idxs.loc[genotypes].values)
     
     def seq_to_pos(self, seq, coding_dict=None):
         if coding_dict is None:

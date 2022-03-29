@@ -18,6 +18,10 @@ def main():
     viz_group = parser.add_argument_group('Plotting options')
     viz_group.add_argument('-l', '--label', default=None,
                            help='Function label to show on colorbar')
+    help_msg = 'Comma separated list of IUPAC codes to highlight genotypes'
+    viz_group.add_argument('-g', '--genotypes', default=None, 
+                           help=help_msg)
+    
     viz_group.add_argument('--edges', default=False, action='store_true',
                            help='Plot edges connecting neighboring genotypes')
     viz_group.add_argument('--interactive', default=False, action='store_true',
@@ -34,6 +38,8 @@ def main():
     data_fpath = parsed_args.input
     
     label = parsed_args.label
+    genotypes = parsed_args.genotypes
+    
     show_edges = parsed_args.edges
     interactive = parsed_args.interactive
     plot3d = parsed_args.plot3d
@@ -43,7 +49,11 @@ def main():
     log = LogTrack()
     log.write('Start analysis')
     landscape = Visualization(fpath=data_fpath, log=log)
-    landscape.label = label
+
+    if genotypes is not None:
+        genotypes = str(genotypes).split(',')
+    print(genotypes)
+    
     if interactive:
         if plot3d:
             landscape.plot_interactive_3d(show_edges=show_edges,
@@ -56,8 +66,9 @@ def main():
             landscape.figure(fpath=out_fpath, x=1, y=2, z=3, show_edges=show_edges,
                              label=label)
         else:
+            
             landscape.figure(fpath=out_fpath, x=1, y=2, show_edges=show_edges,
-                             label=label)
+                             nodes_cmap_label=label, highlight_genotypes=genotypes)
     
     log.finish()
 

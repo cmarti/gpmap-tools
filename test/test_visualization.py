@@ -10,9 +10,16 @@ from gpmap.utils import LogTrack
 from gpmap.inference import VCregression
 from gpmap.settings import TEST_DATA_DIR, BIN_DIR
 from subprocess import check_call
+from gpmap.plot_utils import init_fig, savefig
+from gpmap.plot import plot_nodes, plot_edges
 
 
 class VisualizationTests(unittest.TestCase):
+    def test_translate(self):
+        v = Visualization(6, alphabet_type='dna')
+        prot = v.get_protein_seq()
+        assert(prot.shape[0] == v.n_genotypes)
+    
     def test_adjacency_matrix(self):
         space = Visualization(1, alphabet_type='dna')
         A = space.get_adjacency_matrix().todense()
@@ -59,31 +66,72 @@ class VisualizationTests(unittest.TestCase):
         assert(np.allclose(np.sum(gpmap.genotypes_stationary_frequencies), 1))
     
     def test_codon_landscape(self):
-        np.random.seed(0)
-        landscape = CodonFitnessLandscape(add_variation=True)
+        fig_fpath = join(TEST_DATA_DIR, 'codon_landscape')
+        landscape = CodonFitnessLandscape(add_variation=True, seed=0)
         landscape.calc_visualization(Ns=1, n_components=5)
-        landscape.figure(fname='codon_landscape', size=40)
-        landscape.figure(fname='codon_landscape_3d', size=40, z=3)
+        landscape.figure(fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
+                         palette='Set1')
 
         # Test whether saving the projections works        
         fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
         landscape.save(fpath)
         landscape = Visualization(fpath=fpath)
-        landscape.figure(fname='codon_landscape', size=40)
+        landscape.figure(fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
+                         palette='Set1')
+        
+    def test_2codon_landscape(self):
+        fpath = join(TEST_DATA_DIR, '2codon.landscape.csv')
+        data = pd.read_csv(fpath, index_col=0)
+        #
+        # fig_fpath = join(TEST_DATA_DIR, '2aa.landscape')
+        # landscape = Visualization(2, alphabet_type='protein')
+        # landscape.set_function(data['log_binding'])
+        # landscape.calc_visualization(meanf=1, n_components=5)
+        # landscape.figure(fpath=fig_fpath, highlight_genotypes=['LG', 'CA', 'AA', 'CG', 'GM', 'FG'])
+        # landscape.plot_interactive_2d(fpath=fig_fpath)
+
+        fig_fpath = join(TEST_DATA_DIR, '2codon.landscape')
+        landscape = Visualization(6)
+        landscape.set_function(data['log_binding'], codon_table='Standard')
+        landscape.calc_visualization(meanf=1, n_components=5)
+        landscape.figure(fpath=fig_fpath, highlight_genotypes=['LG', 'CA', 'AA', 'CG', 'GM', 'FG'],
+                         is_prot=True, sort_by=3)
+        landscape.figure(fpath=fig_fpath, interactive=True, is_prot=True, z=None)
+        
+        #
+        # # Test whether saving the projections works        
+        # fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
+        # landscape.save(fpath)
+        # landscape = Visualization(fpath=fpath)
+        # landscape.figure(fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
+        #                  palette='Set1')
+    
+    def test_plotting(self):
+        fpath = join(TEST_DATA_DIR, 'codon_landscape')
+        landscape = CodonFitnessLandscape(add_variation=True, seed=0)
+        landscape.calc_visualization(Ns=1, n_components=5)
+        nodes_df = landscape.nodes_df
+        edges_df = landscape.edges_df
+        
+        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
+        plot_nodes(axes, nodes_df, size='f', color='white', lw=0.2)
+        plot_edges(axes, nodes_df, edges_df)
+        savefig(fig, fpath)
     
     def test_big_landscape(self):
         log = LogTrack()
         np.random.seed(1)
-        length = 11
+        length = 8
         lambdas = np.array([0, 1e6, 1e5, 1e4,
                             1e3, 1e2, 1e1, 1e0,
-                            1e-1, 1e-2, 1e-3, 0]) #, 1e-4, 1e-5])
+                            1e-1]) #, 1e-2, 1e-3, 0]) #, 1e-4, 1e-5])
         # lambdas = np.array([0, 100, 10, 1, 0.1])
     
         log.write('Simulate data')
         vc = VCregression(length, n_alleles=4, log=log)
         gpmap = Visualization(length, log=log)
         gpmap.set_function(vc.simulate(lambdas))
+        gpmap.calc_visualization(meanf=2, n_components=5)
         gpmap.calc_visualization(meanf=2, n_components=5)
         gpmap.save(join(TEST_DATA_DIR, 'random.{}.pkl'.format(length)))
     
@@ -108,12 +156,21 @@ class VisualizationTests(unittest.TestCase):
         out_fpath = join(TEST_DATA_DIR, 'small_landscape.pkl') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90']
         check_call(cmd)
-        
-        # Plot visualization
+    
+    def test_plot_visualization_bin(self):    
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        plot_fpath = join(TEST_DATA_DIR, 'small_landscape') 
-        cmd = [sys.executable, bin_fpath, out_fpath, '-o', plot_fpath,
+        fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
+        plot_fpath = join(TEST_DATA_DIR, 'codon_landscape') 
+        cmd = [sys.executable, bin_fpath, fpath, '-o', plot_fpath,
                '--edges']
+        check_call(cmd)
+        
+        # Highlighting peaks
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
+        plot_fpath = join(TEST_DATA_DIR, 'codon_landscape') 
+        cmd = [sys.executable, bin_fpath, fpath, '-o', plot_fpath,
+               '--edges', '-g', 'UCN,AGY']
         check_call(cmd)
     
     def test_calc_transition_path_stats(self):
@@ -372,6 +429,26 @@ class VisualizationTests(unittest.TestCase):
         landscape.plot_interactive_3d(fname='test_interactive_3d', show_edges=True,
                                       force_coords=True)
     
+    def test_transition_path_objects(self):
+        landscape = CodonFitnessLandscape(add_variation=True, seed=0)
+        gt1, gt2 = ['UCU', 'UCA', 'UCC', 'UCG'], ['AGU', 'AGC']
+        
+        Ns = landscape.calc_Ns(stationary_function=1.3)
+        landscape.calc_stationary_frequencies(Ns)
+        landscape.calc_rate_matrix(Ns)
+        
+        tpt = landscape.calc_transition_path_objects(gt1, gt2)
+        print(tpt['bottleneck'])
+        print(tpt['dom_paths_edges'])
+        tpt['bottleneck']['n'] = 1
+        print(tpt['bottleneck'].groupby('mutation')['n', 'flow_p'].sum().sort_values('flow_p'))
+        print(tpt['bottleneck']['flow_p'].sum())
+        
+        max_entropy = np.log(1/tpt['bottleneck'].shape[0])
+        print(-max_entropy + np.sum(tpt['bottleneck']['flow_p'] * np.log(tpt['bottleneck']['flow_p'])))
+        print(tpt['dom_paths_edges'].groupby('flow_p').count().reset_index().groupby('i')['flow_p'].sum())
+        
+    
     def test_visualize_reactive_paths(self):
         np.random.seed(0)
         landscape = CodonFitnessLandscape(add_variation=True)
@@ -485,5 +562,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=20, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests.test_calc_exp_n_returns']
+    import sys;sys.argv = ['', 'VisualizationTests.test_2codon_landscape']
     unittest.main()
