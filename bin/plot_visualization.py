@@ -93,7 +93,7 @@ def main():
     log = LogTrack()
     log.write('Start analysis')
     
-    log.write('Reading genotype data')
+    log.write('Reading genotype data from {}'.format(nodes_fpath))
     nodes_df = pd.read_csv(nodes_fpath, index_col=0)
     
     if edges_fpath is not None:

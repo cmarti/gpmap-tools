@@ -21,6 +21,7 @@ def main():
                 'calc_visualization = bin.calc_visualization:main',
                 'plot_visualization = bin.plot_visualization:main',
                 'plot_decay_rates = bin.plot_decay_rates:main',
+                'filter_genotypes = bin.filter_genotypes:main',
             ]},
         install_requires=['numpy', 'cython', 'pandas', 'scipy', 'pysam', 
                           'seaborn', 'matplotlib', 'tqdm', 'logomaker',
