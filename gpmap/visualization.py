@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import os
 import warnings
-from itertools import product
 from os.path import exists, join
 
 import logomaker
@@ -1028,7 +1027,7 @@ def filter_genotypes(nodes_df, genotypes, edges_df=None):
         m = csr_matrix((edges_df.index, (edges_df['i'], edges_df['j'])),
                        shape=(size, size))
         m = m[nodes_df['index'], :][:, nodes_df['index']].tocoo()
-        edges_df = edges_df.iloc[m.data, :]
+        edges_df = edges_df.iloc[m.data, :].copy()
         edges_df['i'] = m.row
         edges_df['j'] = m.col
         return(nodes_df, edges_df)

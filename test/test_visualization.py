@@ -5,15 +5,15 @@ from os.path import join
 import numpy as np
 import pandas as pd
 
-from gpmap.visualization import Visualization, CodonFitnessLandscape,\
-    filter_genotypes
+from gpmap.visualization import (Visualization, CodonFitnessLandscape,
+                                 filter_genotypes)
 from gpmap.utils import LogTrack
 from gpmap.inference import VCregression
 from gpmap.settings import TEST_DATA_DIR, BIN_DIR
 from subprocess import check_call
 from gpmap.plot_utils import init_fig, savefig
-from gpmap.plot import plot_nodes, plot_edges, figure_visualization,\
-    plot_decay_rates
+from gpmap.plot import (plot_nodes, plot_edges, figure_visualization,
+                        plot_decay_rates)
 
 
 class VisualizationTests(unittest.TestCase):
