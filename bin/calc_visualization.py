@@ -25,6 +25,13 @@ def main():
     options_group.add_argument('-a', '--n_alleles', default=None,
                                help='Number of alleles to use for custom alphabet')
     
+    coding_group = parser.add_argument_group('Coding options')
+    coding_group.add_argument('-C', '--use_coding_sequence', default=False,
+                              action='store_true',
+                              help='Use codon model for visualization of protein landscape')
+    coding_group.add_argument('-c', '--codon_table', default='Standard',
+                              help='NCBI Codon table to use for equivalence (Standard)')
+    
     viz_group = parser.add_argument_group('Visualization options')
     viz_group.add_argument('-k', '--n_components', default=5, type=int,
                            help='Number of eigenvectors to compute (5)')
@@ -55,20 +62,25 @@ def main():
     percentile_function = parsed_args.percentile_function
     out_fpath = parsed_args.output
     
+    use_coding_sequence = parsed_args.use_coding_sequence
+    codon_table = parsed_args.codon_table if use_coding_sequence else None
+    
     # Load counts data
     log = LogTrack()
     log.write('Start analysis')
     data = pd.read_csv(data_fpath, index_col=0)
     length = len(data.index[0])
+    if use_coding_sequence:
+        length = length * 3
 
     # Load annotation data
     gpmap = Visualization(length, alphabet_type=alphabet_type,
                           n_alleles=n_alleles, log=log)
-    gpmap.set_function(data.iloc[:, 0])
+    gpmap.set_function(data.iloc[:, 0], codon_table=codon_table)
     gpmap.calc_visualization(Ns=Ns, meanf=mean_function,
                              perc_function=percentile_function,
                              n_components=n_components)
-    gpmap.save(out_fpath)
+    gpmap.write_tables(out_fpath)
     
     log.finish()
 

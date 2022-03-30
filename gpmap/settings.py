@@ -1,4 +1,5 @@
 from os.path import join, abspath, dirname
+from Bio.Data import IUPACData
 
 VERSION = '0.1.0'
 
@@ -28,6 +29,12 @@ ALPHABET_N_ALLELES = {'dna': len(DNA_ALPHABET),
 
 PROT_AMBIGUOUS_VALUES = {'X': ''.join(PROTEIN_ALPHABET)}
 PROT_AMBIGUOUS_VALUES.update(dict(zip(PROTEIN_ALPHABET, PROTEIN_ALPHABET)))
+DNA_AMBIGUOUS_VALUES = IUPACData.ambiguous_dna_values
+RNA_AMBIGUOUS_VALUES = IUPACData.ambiguous_rna_values
+
+AMBIGUOUS_VALUES = {'dna': DNA_AMBIGUOUS_VALUES,
+                    'rna': RNA_AMBIGUOUS_VALUES,
+                    'protein': PROT_AMBIGUOUS_VALUES}
 
 CMAP = 'viridis'
 MAX_GENOTYPES = 2e7

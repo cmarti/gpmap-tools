@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import networkx as nx
-import matplotlib.cm as cm
 
 from tqdm import tqdm
 from Bio import motifs
@@ -24,14 +23,10 @@ from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 from scipy.sparse.linalg.isolve.iterative import bicgstab
 
-from gpmap.base import (SequenceSpace, get_sparse_diag_matrix,
-                        extend_ambigous_seq)
-from gpmap.plot_utils import (init_fig, savefig, arrange_plot, init_single_fig,
-                              create_patches_legend)
-from gpmap.settings import CMAP, PROT_AMBIGUOUS_VALUES
+from gpmap.base import SequenceSpace, get_sparse_diag_matrix
+from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig
+from gpmap.settings import CMAP
 from gpmap.utils import write_pickle, load_pickle
-from gpmap.plot import (plot_nodes, plot_edges, minimize_nodes_distance,
-                        get_edges_coords, plot_interactive)
 
 
 class Visualization(SequenceSpace):
@@ -228,8 +223,8 @@ class Visualization(SequenceSpace):
                                        self.right_eigenvectors,
                                        tol=eig_tol)
 
-    def _calc_log_decay_rates(self):
-        return(np.log(-1 / self.eigenvalues[1:]))
+    def _calc_decay_rates(self):
+        return(-1 / self.eigenvalues[1:])
     
     def _calc_projection(self):
         self.report('Scaling projection axis')
@@ -242,13 +237,21 @@ class Visualization(SequenceSpace):
                 warnings.simplefilter("ignore")
                 projection.append(right_eigenvector / np.sqrt(-eigenvalue))
                 
+        colnames = [str(x) for x in np.arange(1, len(projection))]
         self.nodes_df = pd.DataFrame(np.vstack(projection[1:]).T,
                                      index=self.genotype_labels,
-                                     columns=np.arange(1, len(projection)))
+                                     columns=colnames)
+        self.nodes_df['f'] = self.f
+        self.nodes_df['stationary_freq'] = self.genotypes_stationary_frequencies
+        
         i, j = self._get_edges()
         self.edges_df = pd.DataFrame({'i': i, 'j': j})
-        self.nodes_df['f'] = self.f
-        self.log_decay_rates = self._calc_log_decay_rates()
+        
+        if hasattr(self, 'prot'):
+            self.nodes_df['protein'] = self.prot
+        decay_rates = self._calc_decay_rates()
+        k = np.arange(1, decay_rates.shape[0] + 1)
+        self.decay_df = pd.DataFrame({'k': k, 'decay_rates': decay_rates})
         
     def calc_visualization(self, Ns=None, meanf=None, 
                            perc_function=None, n_components=10,
@@ -272,6 +275,12 @@ class Visualization(SequenceSpace):
                  'alphabet_type']
         data = {attr: getattr(self, attr) for attr in attrs}
         write_pickle(data, fpath)
+    
+    def write_tables(self, prefix):
+        self.nodes_df.to_csv('{}.nodes.csv'.format(prefix))
+        self.edges_df.to_csv('{}.edges.csv'.format(prefix), index=False)
+        self.decay_df.to_csv('{}.decay_rates.csv'.format(prefix),
+                             index=False)
         
     def load(self, fpath, log=None):
         self.log = log
@@ -673,157 +682,6 @@ class Visualization(SequenceSpace):
     '''
     Plotting methods
     '''
-    def get_nodes_df_highlight(self, nodes_df, genotype_groups, is_prot=False):
-        groups_dict = {}
-        if is_prot:
-            if not hasattr(self, 'prot'):
-                msg = 'Protein sequence attribute not found'
-                raise ValueError(msg)
-            if 'prot' not in nodes_df.columns:
-                nodes_df['prot'] = self.prot.loc[nodes_df.index]
-            
-            for group in genotype_groups:
-                for seq in extend_ambigous_seq(group, PROT_AMBIGUOUS_VALUES):
-                    groups_dict[seq] = group
-            nodes_df['group'] = [groups_dict.get(x, None)
-                                 for x in nodes_df['prot']]
-        else:
-            nodes_df['group'] = np.nan
-
-            for group in genotype_groups:
-                genotype_labels = self.extend_ambiguous_sequence(group)
-                nodes_df.loc[genotype_labels, 'group'] = group
-        nodes_df = nodes_df.dropna()
-        return(nodes_df)
-        
-    def highlight_genotype_groups(self, axes, nodes_df, genotype_groups,
-                                  x=1, y=2, z=None, size=50, edgecolor='black',
-                                  lw=1, palette='colorblind', legendloc=1,
-                                  fontsize=12, is_prot=False):
-        nodes_df = self.get_nodes_df_highlight(nodes_df, genotype_groups,
-                                               is_prot=is_prot)
-        
-        plot_nodes(axes, nodes_df, x=x, y=y, z=z, color='group', size=size,
-                   palette=palette, edgecolor=edgecolor, lw=lw,
-                   fontsize=fontsize, legendloc=legendloc)
-        
-    def plot(self, axes, nodes_df, edges_df=None, x=1, y=2, z=None,
-             nodes_color='f', nodes_size=2.5, nodes_cmap='viridis', nodes_alpha=1,
-             nodes_min_size=1, nodes_max_size=40,
-             nodes_edgecolor='black', nodes_lw=0, 
-             nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
-             edges_color='grey', edges_width=0.5, edges_cmap='binary',
-             edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
-             sort_nodes=True, ascending=False, sort_by=None,
-             fontsize=12, prev_nodes_df=None):
-        
-        if prev_nodes_df is not None:
-            axis = [x, y] if z is None else [x, y, z]
-            nodes_df = minimize_nodes_distance(nodes_df, prev_nodes_df, axis)
-        
-        plot_nodes(axes, nodes_df=nodes_df, x=x, y=y, z=z,
-                   color=nodes_color, size=nodes_size, cmap=nodes_cmap, 
-                   alpha=nodes_alpha, zorder=2, max_size=nodes_max_size,
-                   min_size=nodes_min_size,
-                   edgecolor=nodes_edgecolor, lw=nodes_lw,
-                   label=None, clabel=nodes_cmap_label,
-                   sort=sort_nodes, sort_by=sort_by, ascending=ascending, 
-                   vmax=nodes_vmax, vmin=nodes_vmin, fontsize=fontsize,
-                   subset=None)
-        
-        if edges_df is not None:
-            plot_edges(axes, nodes_df, edges_df, x=x, y=y, z=z,
-                       color=edges_color, width=edges_width, cmap=edges_cmap,
-                       alpha=edges_alpha, zorder=1, avoid_dups=True,
-                       max_width=edges_max_width, min_width=edges_min_width)
-
-        
-        
-    def _plot(self, axes, x=1, y=2, z=None, show_edges=True, cmap=CMAP,
-             edges_cmap='binary',
-             label=None, size=5, fontsize=6, colors=None,
-             edge_colors='grey', edge_widths=0.5,
-             start=None, end=None, color_key=None,
-             use_cmap=False, sort=True, reverse=False, lw=0, force_coords=True, 
-             prev_coords=None, highlight_local_maxima=False, coords=None,
-             genotypes1=None, genotypes2=None, dominant_paths=False,
-             max_paths=20, p_reactive_paths=False):
-        
-
-        if coords is None:
-            coords = self._get_nodes_coord(axis=axis, force=force_coords)
-            coords = self.minimize_distance(coords, prev_coords)
-
-        vmax, vmin = None, None
-        avoid_dups = True  
-        if genotypes1 is not None and genotypes2 is not None:
-            a, b = self.get_AB_genotypes_idxs(genotypes1, genotypes2)
-            flows = self.calc_edges_effective_flow(a, b)
-            flows = flows / flows.max() + 0.01
-            edges_cmap = cm.get_cmap(edges_cmap)
-            edge_colors = edges_cmap(flows)
-            if not dominant_paths:
-                edge_widths = flows * 2 + 0.1
-
-            if p_reactive_paths:
-                colors = np.exp(self.calc_genotypes_logp_path(a, b))
-                colors[np.hstack([a, b])] = -np.inf
-                label = r'$log(Proportion of paths going through genotype)$'
-                c = colors[np.logical_and(np.isfinite(colors), colors < 1)]
-                vmax = c.max()
-                vmin = c.min()
-            else:            
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    gt_p = self.calc_gt_p_time_reactive_path(a, b)[1]
-                    norm_factor = self.genotypes_stationary_frequencies[gt_p > 0].sum()
-                    colors = np.log2(gt_p * norm_factor / self.genotypes_stationary_frequencies)
-                label = r'$log_{2} \left( \frac{m_i^{AB}}{\pi_{i} / \sum_{j \in (A \cup B)^c} \pi_j} \right)$'
-                vmax = np.abs(colors).max()
-                vmin = -vmax
-            avoid_dups = False
-        
-        if show_edges:
-            if dominant_paths:
-                paths = self.calc_representative_pathways(a, b, max_paths=max_paths)
-                i, j, c = [], [], []
-                for path, _, p in paths:
-                    for s, t in zip(path, path[1:]):
-                        i.append(s)
-                        j.append(t)
-                        c.append(p)
-                c = np.array(c)
-                c = c / c.max()
-                edges = np.stack([coords[i], coords[j]], axis=2).transpose((0, 2, 1))
-                edge_colors = edges_cmap(c) 
-            else:
-                edges = self._get_nodes_coord(coords, force=force_coords,
-                                             avoid_dups=avoid_dups)
-                
-            self.plot_edges(edges, axes, colors=edge_colors, width=edge_widths)
-        
-        self.plot_nodes(coords, axes, cmap, label, size_factor=size,
-                        color_key=color_key, colors=colors,
-                        use_cmap=use_cmap, sort=sort,
-                        reverse=reverse, lw=lw,
-                        vmax=vmax, vmin=vmin,
-                        highlight_local_maxima=highlight_local_maxima)
-        
-        if genotypes1 is not None and genotypes2 is not None:
-            self.plot_nodes_coords(axes, coords[a],
-                                   colors='yellow', lw=2, size_factor=3*size,
-                                   cmap=cmap)
-            self.plot_nodes_coords(axes, coords[b],
-                                   colors='orange', lw=2, size_factor=3*size,
-                                   cmap=cmap)
-            create_patches_legend(axes, 
-                                  colors_dict={'A': 'yellow', 'B': 'orange'},
-                                  loc=2, fontsize=14)
-            
-        self.add_axis_labels(axes, x, y, z)
-                
-        return(coords)
-        
     def _rotate_coords(self, coords, theta, axis):
         if axis == 'x':
             m = np.array([[1, 0, 0],
@@ -867,12 +725,6 @@ class Visualization(SequenceSpace):
             
         sns.despine(ax=axes)
 
-    def add_axis_labels(self, axes, x, y, z):
-        axes.set_xlabel('Diffusion Axis {}'.format(x), fontsize=14)
-        axes.set_ylabel('Diffusion Axis {}'.format(y), fontsize=14)
-        if z is not None:
-            axes.set_zlabel('Diffusion Axis {}'.format(z), fontsize=14)
-    
     def plot_function_distrib(self, axes, label):    
         sns.distplot(self.f, bins=30, hist=True, kde=False, color='purple',
                      ax=axes)
@@ -892,61 +744,6 @@ class Visualization(SequenceSpace):
     '''
     Full figure methods
     '''
-    
-    def figure(self, fpath=None, show_edges=True, x=1, y=2, z=None,
-               nodes_color='f', nodes_size=None, nodes_cmap='viridis', nodes_alpha=1,
-               nodes_min_size=1, nodes_max_size=40,
-               nodes_edgecolor='black', nodes_lw=0, 
-               nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
-               edges_color='grey', edges_width=0.5, edges_cmap='binary',
-               edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
-               sort_nodes=True, sort_by=None, ascending=True,
-               fontsize=12, prev_nodes_df=None,
-               highlight_genotypes=None, is_prot=False,
-               highlight_size=200, palette='colorblind',
-               # genotypes1=None, genotypes2=None,
-               # dominant_paths=False, p_reactive_paths=False,
-               # max_paths=20,
-               figsize=(10, 7.6), interactive=False
-               ):
-        self.report('Plotting landscape visualization')
-        edges_df = self.edges_df if show_edges else None 
-        if nodes_size is None:
-            nodes_size = 15 if z is None else 4 if interactive else 50
-        
-        if interactive:
-            text = self.prot if is_prot else self.genotype_labels
-            plot_interactive(self.nodes_df, edges_df=edges_df, fpath=fpath,
-                             x=x, y=y, z=z,
-                             nodes_color=nodes_color, nodes_size=nodes_size,
-                             cmap=nodes_cmap, nodes_cmap_label=nodes_cmap_label,
-                             edges_width=edges_width, edges_color=edges_color,
-                             text=text)
-        else:
-            fig, axes = init_single_fig(figsize=figsize, is_3d=z is not None)
-            self.plot(axes, nodes_df=self.nodes_df, edges_df=edges_df,
-                      x=x, y=y, z=z,
-                      nodes_color=nodes_color, nodes_size=nodes_size,
-                      nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
-                      nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
-                      nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
-                      nodes_cmap_label=nodes_cmap_label, nodes_vmin=nodes_vmin,
-                      nodes_vmax=nodes_vmax,
-                      edges_color=edges_color, edges_width=edges_width,
-                      edges_cmap=edges_cmap,
-                      edges_alpha=edges_alpha, edges_max_width=edges_max_width,
-                      edges_min_width=edges_min_width, 
-                      sort_nodes=sort_nodes, sort_by=sort_by, ascending=ascending,
-                      fontsize=fontsize,
-                      prev_nodes_df=prev_nodes_df)
-            
-            if highlight_genotypes is not None:
-                self.highlight_genotype_groups(axes, self.nodes_df, highlight_genotypes,
-                                               is_prot=is_prot, x=x, y=y, z=z,
-                                               size=highlight_size, palette=palette)
-            self.report('Saving plot')
-            savefig(fig, fpath)
-    
     def plot_grid_allele(self, fpath, show_edges=True,
                          color='orange', size=5, lw=0):
         
@@ -958,7 +755,7 @@ class Visualization(SequenceSpace):
                 allele = self.alphabet[i]
                 axes = subplots[i][j]
                 
-                self.plot(axes, x=2, y=3, show_edges=show_edges,
+                self.plot(axes, x='2', y='3', show_edges=show_edges,
                           size=size, force_coords=force_coords, sort=True, lw=lw,
                           color_key=lambda x: color if x[j] == allele else 'lightgrey')
                 if i < self.n_alleles - 1:

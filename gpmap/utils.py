@@ -10,6 +10,7 @@ from os.path import join, exists
 import numpy as np
 
 from gpmap.settings import NUCLEOTIDES, COMPLEMENT, MODELS_DIR, CODE_DIR
+from Bio.Seq import Seq
 
 
 def logit(p):
@@ -119,3 +120,9 @@ def get_model(model_label, recompile=False):
         # Load stored model
         model = load_pickle(compiled_fpath)
     return(model)
+
+
+def translante_seqs(seqs, codon_table='Standard'):
+    prot_genotypes = np.array([str(Seq(seq).translate(table=codon_table))
+                               for seq in seqs])
+    return(prot_genotypes)

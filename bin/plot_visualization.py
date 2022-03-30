@@ -4,7 +4,7 @@ import argparse
 import pandas as pd
 
 from gpmap.utils import LogTrack
-from gpmap.visualization import Visualization
+from gpmap.plot import figure_visualization
 
         
 def main():
@@ -14,8 +14,8 @@ def main():
     # Create arguments
     parser = argparse.ArgumentParser(description=description)
     input_group = parser.add_argument_group('Input')
-    help_msg = 'Pickle file containing calc_visualization output'
-    input_group.add_argument('input', help=help_msg)
+    help_msg = 'CSV file containing nodes coordinates and attributes'
+    input_group.add_argument('nodes', help=help_msg)
 
     nodes_group = parser.add_argument_group('Nodes options')
     nodes_group.add_argument('-nc', '--nodes_color', default='f',
@@ -32,8 +32,8 @@ def main():
                              help='Sort nodes for plotting in ascending order')
     
     edges_group = parser.add_argument_group('Edges options')
-    edges_group.add_argument('--edges', default=False, action='store_true',
-                             help='Plot edges connecting neighboring genotypes')
+    edges_group.add_argument('-e', '--edges', default=None,
+                             help='CSV files containing edges data for plotting')
     edges_group.add_argument('-ec', '--edges_color', default='grey',
                              help='Edges color (grey)')
     edges_group.add_argument('-ea', '--edges_alpha', default=0.1, type=float,
@@ -51,11 +51,11 @@ def main():
     help_msg = 'Comma separated list of IUPAC codes to highlight genotypes'
     highlight_group.add_argument('-g', '--genotypes', default=None, 
                            help=help_msg)
+    highlight_group.add_argument('-A', '--alphabet_type', default='dna',
+                                 help='Alphabet type [dna, rna, protein, custom] (dna)')
     help_msg = 'Sequences to highlight are the encoded protein sequences'
     highlight_group.add_argument('--protein_seq', default=False, action='store_true', 
                                  help=help_msg)
-    highlight_group.add_argument('-c', '--codon_table', default='Standard', 
-                                 help='NCBI Codon table to use for translation (Standard)')
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True,
@@ -63,7 +63,7 @@ def main():
 
     # Parse arguments
     parsed_args = parser.parse_args()
-    data_fpath = parsed_args.input
+    nodes_fpath = parsed_args.nodes
     
     nodes_color = parsed_args.nodes_color
     label = parsed_args.label
@@ -72,42 +72,51 @@ def main():
     sort_by = parsed_args.sort_by
     ascending = parsed_args.ascending
     
-    show_edges = parsed_args.edges
+    edges_fpath = parsed_args.edges
     edges_color = parsed_args.edges_color
     edges_alpha = parsed_args.edges_alpha
     edges_width = parsed_args.edges_width
     
-    axis = [int(x) for x in parsed_args.axis.split(',')]
+    axis = parsed_args.axis.split(',')
     if len(axis) == 2:
         axis.append(None)
     x, y, z = axis
     interactive = parsed_args.interactive
     
     genotypes = parsed_args.genotypes
+    alphabet_type = parsed_args.alphabet_type
     is_prot = parsed_args.protein_seq
-    codon_table = parsed_args.codon_table
     
     out_fpath = parsed_args.output
     
-    # Load counts data
+    # Load data
     log = LogTrack()
     log.write('Start analysis')
-    landscape = Visualization(fpath=data_fpath, log=log)
-    if is_prot:
-        landscape.prot = pd.Series(landscape.get_protein_seq(table=codon_table),
-                                   index=landscape.genotype_labels)
-
+    
+    log.write('Reading genotype data')
+    nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+    
+    if edges_fpath is not None:
+        log.write('Reading edges data from {}'.format(edges_fpath))
+        edges_df = pd.read_csv(edges_fpath)
+    else:
+        log.write('No edges provided for plotting')
+        edges_df = None
+    
     if genotypes is not None:
         genotypes = str(genotypes).split(',')
     
-    landscape.figure(fpath=out_fpath, x=x, y=y, z=z, 
-                     nodes_color=nodes_color, nodes_cmap=nodes_cmap, 
-                     nodes_size=nodes_size, nodes_cmap_label=label,
-                     show_edges=show_edges, edges_color=edges_color,
-                     edges_width=edges_width, edges_alpha=edges_alpha,
-                     sort_by=sort_by, ascending=ascending, sort_nodes=True,
-                     highlight_genotypes=genotypes,
-                     is_prot=is_prot, interactive=interactive)
+    log.write('Plot visualization')
+    figure_visualization(nodes_df, edges_df=edges_df,
+                         fpath=out_fpath, x=x, y=y, z=z, 
+                         nodes_color=nodes_color, nodes_cmap=nodes_cmap, 
+                         nodes_size=nodes_size, nodes_cmap_label=label,
+                         edges_color=edges_color,
+                         edges_width=edges_width, edges_alpha=edges_alpha,
+                         sort_by=sort_by, ascending=ascending, sort_nodes=True,
+                         highlight_genotypes=genotypes,
+                         is_prot=is_prot, interactive=interactive,
+                         alphabet_type=alphabet_type)
     
     log.finish()
 
