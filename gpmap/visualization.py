@@ -1017,3 +1017,20 @@ class CodonFitnessLandscape(Visualization):
                 np.random.seed(self.seed)
             fitness = fitness + 1 / 10 * np.random.normal(size=len(fitness))
         self.set_function(fitness)
+
+
+def filter_genotypes(nodes_df, genotypes, edges_df=None):
+    size = nodes_df.shape[0]
+    nodes_df['index'] = np.arange(size)
+    nodes_df = nodes_df.loc[genotypes, :]
+    
+    if edges_df is not None:
+        m = csr_matrix((edges_df.index, (edges_df['i'], edges_df['j'])),
+                       shape=(size, size))
+        m = m[nodes_df['index'], :][:, nodes_df['index']].tocoo()
+        edges_df = edges_df.iloc[m.data, :]
+        edges_df['i'] = m.row
+        edges_df['j'] = m.col
+        return(nodes_df, edges_df)
+    else:
+        return(nodes_df)

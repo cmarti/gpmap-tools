@@ -5,7 +5,8 @@ from os.path import join
 import numpy as np
 import pandas as pd
 
-from gpmap.visualization import Visualization, CodonFitnessLandscape
+from gpmap.visualization import Visualization, CodonFitnessLandscape,\
+    filter_genotypes
 from gpmap.utils import LogTrack
 from gpmap.inference import VCregression
 from gpmap.settings import TEST_DATA_DIR, BIN_DIR
@@ -100,6 +101,19 @@ class VisualizationTests(unittest.TestCase):
         
         fpath = join(TEST_DATA_DIR, 'codon_landscape.decay_rates')
         plot_decay_rates(decay_df, fpath=fpath)
+    
+    def test_filter_genotypes(self):
+        prefix = join(TEST_DATA_DIR, 'codon_landscape')
+        nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
+        edges_df = pd.read_csv('{}.edges.csv'.format(prefix))
+        
+        nodes_df, edges_df = filter_genotypes(nodes_df, nodes_df['f'] > 0.2,
+                                              edges_df=edges_df)
+        
+        fig_fpath = join(TEST_DATA_DIR, 'codon_landscape.filtered')
+        figure_visualization(nodes_df, edges_df, nodes_size=50,
+                             fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
+                             palette='Set1', alphabet_type='rna')
         
     def test_2codon_landscape(self):
         fpath = join(TEST_DATA_DIR, '2codon.landscape.csv')
@@ -117,7 +131,7 @@ class VisualizationTests(unittest.TestCase):
         
         fig_fpath = join(TEST_DATA_DIR, '2codon.landscape')
         landscape = Visualization(6)
-        landscape.set_function(data['log_binding'], codon_table='Standard')
+        landscape.set_function(data['log_binding'], codon_table='11')
         landscape.calc_visualization(meanf=1, n_components=5)
         figure_visualization(landscape.nodes_df, landscape.edges_df,
                              fpath=fig_fpath, z='3', interactive=True, is_prot=True,
@@ -587,5 +601,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=20, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests.test_plot_visualization_bin']
+    import sys;sys.argv = ['', 'VisualizationTests.test_filter_genotypes']
     unittest.main()

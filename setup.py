@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 from setuptools import setup, find_packages
-from gpmap.settings import VERSION
 
+VERSION = '0.1.0'
 
 def main():
     description = 'Tools for inference and visualization of genotype-phenotype'
@@ -23,8 +23,8 @@ def main():
                 'plot_decay_rates = bin.plot_decay_rates:main',
             ]},
         install_requires=['numpy', 'cython', 'pandas', 'scipy', 'pysam', 
-                          'seaborn', 'matplotlib', 'pystan==2.19', 'tqdm',
-                          'statsmodels', 'mavenn'],
+                          'seaborn', 'matplotlib', 'tqdm', 'logomaker',
+                          'statsmodels', 'biopython'],
         platforms='ALL',
         keywords=['genotype-phenotyp maps', 'fitness landscape'],
         classifiers=[
