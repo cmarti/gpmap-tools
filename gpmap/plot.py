@@ -11,8 +11,11 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
-from gpmap.settings import PLOTS_FORMAT
+from gpmap.settings import PLOTS_FORMAT, PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
 from itertools import product
+from gpmap.utils import translante_seqs
+from gpmap.base import extend_ambigous_seq
+from gpmap.plot_utils import init_fig
 
 
 # Functions
@@ -191,16 +194,28 @@ class FigGrid(object):
         savefig(self.fig, fname, tight=False)
 
 
-def plot_decay_rates(axes, decay_rates):
-    k = np.arange(1 ,decay_rates.shape[0] + 1)
-    axes.plot(k, decay_rates, linewidth=1, color='purple')
-    axes.scatter(k, decay_rates, s=15, c='purple')
+def plot_decay_rates(decay_df, axes=None, fpath=None):
+    if axes is None and fpath is None:
+        msg = 'Either axes or fpath argument must be provided'
+        raise ValueError(msg)
+    
+    fig = None
+    if axes is None:
+        fig, axes = init_fig(1, 1, colsize=4, rowsize=3)
+    
+    axes.plot(decay_df['k'], decay_df['decay_rates'],
+              linewidth=1, color='purple')
+    axes.scatter(decay_df['k'], decay_df['decay_rates'],
+                 s=15, c='purple')
     axes.set(yscale='log')
-    axes.set_xlabel(r'Eigenvalue order $k$', fontsize=14)
-    axes.set_ylabel(r'$\frac{-1}{\lambda_{k}}$', fontsize=14)
+    axes.set_xlabel(r'Eigenvalue order $k$')
+    axes.set_ylabel(r'Decay rate $\frac{-1}{\lambda_{k}}$')
+    
+    if fig is not None:
+        savefig(fig, fpath)
 
 
-def get_edges_coords(nodes_df, edges_df, x=1, y=2, z=None, avoid_dups=False):
+def get_edges_coords(nodes_df, edges_df, x='1', y='2', z=None, avoid_dups=False):
     if avoid_dups:
         s = np.where(edges_df['j'] > edges_df['i'])[0]
         edges_df = edges_df.iloc[s, :]
@@ -215,7 +230,7 @@ def get_edges_coords(nodes_df, edges_df, x=1, y=2, z=None, avoid_dups=False):
     return(edges_coords)
     
 
-def plot_edges(axes, nodes_df, edges_df, x=1, y=2, z=None,
+def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
                color='grey', width=0.5, cmap='binary',
                alpha=0.1, zorder=1, avoid_dups=False,
                max_width=1, min_width=0.1):
@@ -259,7 +274,7 @@ def minimize_nodes_distance(nodes_df1, nodes_df2, axis):
     return(nodes_df1)
 
 
-def plot_nodes(axes, nodes_df, x=1, y=2, z=None,
+def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                color='f', size=2.5, cmap='viridis', palette='Set1',
                alpha=1, zorder=2, max_size=40, min_size=1,
                edgecolor='black', lw=0,
@@ -324,6 +339,75 @@ def plot_nodes(axes, nodes_df, x=1, y=2, z=None,
     axes.set_ylabel('Diffusion axis {}'.format(y), fontsize=fontsize)
 
 
+def get_nodes_df_highlight(nodes_df, genotype_groups, is_prot=False,
+                           alphabet_type='dna', codon_table='Standard'):
+    # TODO: force protein to be in the table if we want to do highlight
+    # protein subsequences to decouple the genetic code from plotting as 
+    # it is key to visualization and should not be changed afterwards
+    groups_dict = {}
+    if is_prot:
+        if 'protein' not in nodes_df.columns:
+            nodes_df['protein'] = translante_seqs(nodes_df.index,
+                                                  codon_table=codon_table)
+        
+        for group in genotype_groups:
+            for seq in extend_ambigous_seq(group, PROT_AMBIGUOUS_VALUES):
+                groups_dict[seq] = group
+        nodes_df['group'] = [groups_dict.get(x, None) for x in nodes_df['protein']]
+    else:
+        nodes_df['group'] = np.nan
+        for group in genotype_groups:
+            genotype_labels = extend_ambigous_seq(group, AMBIGUOUS_VALUES[alphabet_type])
+            nodes_df.loc[genotype_labels, 'group'] = group
+    nodes_df = nodes_df.dropna()
+    return(nodes_df)
+    
+def highlight_genotype_groups(axes, nodes_df, genotype_groups,
+                              x='1', y='2', z=None, size=50, edgecolor='black',
+                              lw=1, palette='colorblind', legendloc=1,
+                              fontsize=12, is_prot=False,
+                              alphabet_type='dna', codon_table='Standard'):
+    nodes_df = get_nodes_df_highlight(nodes_df, genotype_groups,
+                                      alphabet_type=alphabet_type,
+                                      codon_table=codon_table,
+                                      is_prot=is_prot)
+    
+    plot_nodes(axes, nodes_df, x=x, y=y, z=z, color='group', size=size,
+               palette=palette, edgecolor=edgecolor, lw=lw,
+               fontsize=fontsize, legendloc=legendloc)
+
+
+def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
+                       nodes_color='f', nodes_size=2.5, nodes_cmap='viridis', nodes_alpha=1,
+                       nodes_min_size=1, nodes_max_size=40,
+                       nodes_edgecolor='black', nodes_lw=0, 
+                       nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
+                       edges_color='grey', edges_width=0.5, edges_cmap='binary',
+                       edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
+                       sort_nodes=True, ascending=False, sort_by=None,
+                       fontsize=12, prev_nodes_df=None):
+    
+    if prev_nodes_df is not None:
+        axis = [x, y] if z is None else [x, y, z]
+        nodes_df = minimize_nodes_distance(nodes_df, prev_nodes_df, axis)
+    
+    plot_nodes(axes, nodes_df=nodes_df, x=x, y=y, z=z,
+               color=nodes_color, size=nodes_size, cmap=nodes_cmap, 
+               alpha=nodes_alpha, zorder=2, max_size=nodes_max_size,
+               min_size=nodes_min_size,
+               edgecolor=nodes_edgecolor, lw=nodes_lw,
+               label=None, clabel=nodes_cmap_label,
+               sort=sort_nodes, sort_by=sort_by, ascending=ascending, 
+               vmax=nodes_vmax, vmin=nodes_vmin, fontsize=fontsize,
+               subset=None)
+    
+    if edges_df is not None:
+        plot_edges(axes, nodes_df, edges_df, x=x, y=y, z=z,
+                   color=edges_color, width=edges_width, cmap=edges_cmap,
+                   alpha=edges_alpha, zorder=1, avoid_dups=True,
+                   max_width=edges_max_width, min_width=edges_min_width)
+
+
 def get_plotly_edges(nodes_df, edges_df, x=1, y=2, z=None,
                      avoid_dups=True):
     edge_x = []
@@ -340,7 +424,7 @@ def get_plotly_edges(nodes_df, edges_df, x=1, y=2, z=None,
     return(edge_x, edge_y, edge_z)
 
 
-def plot_interactive(nodes_df, edges_df=None, fpath=None, x=1, y=2, z=None,
+def plot_interactive(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
                      nodes_color='f', nodes_size=4,
                      cmap='viridis', nodes_cmap_label='Function',
                      edges_width=0.5, edges_color='#888', edges_alpha=0.2,
@@ -395,4 +479,55 @@ def plot_interactive(nodes_df, edges_df=None, fpath=None, x=1, y=2, z=None,
                       scene=scene)
     
     save_plotly(fig, fpath=fpath)
+
+
+def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
+                         nodes_color='f', nodes_size=None, nodes_cmap='viridis',
+                         nodes_alpha=1, nodes_min_size=1, nodes_max_size=40,
+                         nodes_edgecolor='black', nodes_lw=0, 
+                         nodes_cmap_label='Function',
+                         nodes_vmin=None, nodes_vmax=None,
+                         edges_color='grey', edges_width=0.5, edges_cmap='binary',
+                         edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
+                         sort_nodes=True, sort_by=None, ascending=True,
+                         fontsize=12, prev_nodes_df=None,
+                         highlight_genotypes=None, is_prot=False,
+                         highlight_size=200, palette='colorblind',
+                         figsize=(10, 7.6), interactive=False, 
+                         alphabet_type=None):
     
+    if nodes_size is None:
+        nodes_size = 15 if z is None else 4 if interactive else 50
+    
+    if interactive:
+        text = nodes_df['protein'] if is_prot else nodes_df.index
+        plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
+                         x=x, y=y, z=z,
+                         nodes_color=nodes_color, nodes_size=nodes_size,
+                         cmap=nodes_cmap, nodes_cmap_label=nodes_cmap_label,
+                         edges_width=edges_width, edges_color=edges_color,
+                         text=text)
+    else:
+        fig, axes = init_single_fig(figsize=figsize, is_3d=z is not None)
+        plot_visualization(axes, nodes_df=nodes_df, edges_df=edges_df,
+                           x=x, y=y, z=z,
+                           nodes_color=nodes_color, nodes_size=nodes_size,
+                           nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
+                           nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
+                           nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
+                           nodes_cmap_label=nodes_cmap_label, nodes_vmin=nodes_vmin,
+                           nodes_vmax=nodes_vmax,
+                           edges_color=edges_color, edges_width=edges_width,
+                           edges_cmap=edges_cmap,
+                           edges_alpha=edges_alpha, edges_max_width=edges_max_width,
+                           edges_min_width=edges_min_width, 
+                           sort_nodes=sort_nodes, sort_by=sort_by, ascending=ascending,
+                           fontsize=fontsize,
+                           prev_nodes_df=prev_nodes_df)
+        
+        if highlight_genotypes is not None:
+            highlight_genotype_groups(axes, nodes_df, highlight_genotypes,
+                                      is_prot=is_prot, x=x, y=y, z=z,
+                                      alphabet_type=alphabet_type,
+                                      size=highlight_size, palette=palette)
+        savefig(fig, fpath)

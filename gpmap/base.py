@@ -12,8 +12,8 @@ from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 
 from gpmap.utils import write_log
 from gpmap.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
-                            MAX_GENOTYPES, PROT_AMBIGUOUS_VALUES)
-from Bio.Data import IUPACData
+                            MAX_GENOTYPES, PROT_AMBIGUOUS_VALUES,
+                            DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
 
 
 def get_sparse_diag_matrix(values):
@@ -35,12 +35,12 @@ class BaseGPMap(object):
             self.alphabet = DNA_ALPHABET
             self.complements = {'A': ['T'], 'T': ['A'],
                                 'G': ['C'], 'C': ['G']}
-            self.ambiguous_values = IUPACData.ambiguous_dna_values
+            self.ambiguous_values = DNA_AMBIGUOUS_VALUES
         elif alphabet_type == 'rna':
             self.alphabet = RNA_ALPHABET
             self.complements = {'A': ['U'], 'U': ['A', 'G'],
                                 'G': ['C', 'U'], 'C': ['G']}
-            self.ambiguous_values = IUPACData.ambiguous_rna_values
+            self.ambiguous_values = RNA_AMBIGUOUS_VALUES
         elif alphabet_type == 'protein':
             self.ambiguous_values = PROT_AMBIGUOUS_VALUES
             self.alphabet = PROTEIN_ALPHABET

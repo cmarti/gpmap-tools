@@ -11,7 +11,8 @@ from gpmap.inference import VCregression
 from gpmap.settings import TEST_DATA_DIR, BIN_DIR
 from subprocess import check_call
 from gpmap.plot_utils import init_fig, savefig
-from gpmap.plot import plot_nodes, plot_edges
+from gpmap.plot import plot_nodes, plot_edges, figure_visualization,\
+    plot_decay_rates
 
 
 class VisualizationTests(unittest.TestCase):
@@ -65,40 +66,6 @@ class VisualizationTests(unittest.TestCase):
         assert(np.all(gpmap.genotypes_stationary_frequencies > 0))
         assert(np.allclose(np.sum(gpmap.genotypes_stationary_frequencies), 1))
     
-    def test_codon_landscape(self):
-        fig_fpath = join(TEST_DATA_DIR, 'codon_landscape')
-        landscape = CodonFitnessLandscape(add_variation=True, seed=0)
-        landscape.calc_visualization(Ns=1, n_components=5)
-        landscape.figure(fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
-                         palette='Set1')
-
-        # Test whether saving the projections works        
-        fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
-        landscape.save(fpath)
-        landscape = Visualization(fpath=fpath)
-        landscape.figure(fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
-                         palette='Set1')
-        
-    def test_2codon_landscape(self):
-        fpath = join(TEST_DATA_DIR, '2codon.landscape.csv')
-        data = pd.read_csv(fpath, index_col=0)
-        
-        fig_fpath = join(TEST_DATA_DIR, '2aa.landscape')
-        landscape = Visualization(2, alphabet_type='protein')
-        landscape.set_function(data['log_binding'])
-        landscape.calc_visualization(meanf=1, n_components=5)
-        landscape.figure(fpath=fig_fpath, highlight_genotypes=['LG', 'CA', 'AA', 'CG', 'GM', 'FG'])
-        landscape.figure(fpath=fig_fpath, interactive=True)
-
-        fig_fpath = join(TEST_DATA_DIR, '2codon.landscape')
-        landscape = Visualization(6)
-        landscape.set_function(data['log_binding'], codon_table='Standard')
-        landscape.calc_visualization(meanf=1, n_components=5)
-        landscape.figure(fpath=fig_fpath, highlight_genotypes=['LG', 'CA', 'AA', 'CG', 'GM', 'FG'],
-                         is_prot=True, sort_by=3)
-        landscape.figure(fpath=fig_fpath, interactive=True, is_prot=True, z=None)
-        landscape.figure(fpath=fig_fpath, interactive=True, is_prot=True, z=3)
-    
     def test_plotting(self):
         fpath = join(TEST_DATA_DIR, 'codon_landscape')
         landscape = CodonFitnessLandscape(add_variation=True, seed=0)
@@ -110,22 +77,69 @@ class VisualizationTests(unittest.TestCase):
         plot_nodes(axes, nodes_df, size='f', color='white', lw=0.2)
         plot_edges(axes, nodes_df, edges_df)
         savefig(fig, fpath)
-    
+        
+    def test_codon_landscape(self):
+        fig_fpath = join(TEST_DATA_DIR, 'codon_landscape')
+        landscape = CodonFitnessLandscape(add_variation=True, seed=0)
+        landscape.calc_visualization(Ns=1, n_components=25)
+        figure_visualization(landscape.nodes_df, landscape.edges_df,
+                             fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
+                             palette='Set1', alphabet_type='rna')
+
+        # Test whether saving the projections works        
+        prefix = join(TEST_DATA_DIR, 'codon_landscape')
+        landscape.write_tables(prefix)
+        
+        nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
+        edges_df = pd.read_csv('{}.edges.csv'.format(prefix))
+        decay_df = pd.read_csv('{}.decay_rates.csv'.format(prefix))
+        
+        figure_visualization(nodes_df, edges_df, nodes_size=50,
+                             fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
+                             palette='Set1', alphabet_type='rna')
+        
+        fpath = join(TEST_DATA_DIR, 'codon_landscape.decay_rates')
+        plot_decay_rates(decay_df, fpath=fpath)
+        
+    def test_2codon_landscape(self):
+        fpath = join(TEST_DATA_DIR, '2codon.landscape.csv')
+        data = pd.read_csv(fpath, index_col=0)
+        
+        fig_fpath = join(TEST_DATA_DIR, '2aa.landscape')
+        landscape = Visualization(2, alphabet_type='protein')
+        landscape.set_function(data['log_binding'])
+        landscape.calc_visualization(meanf=1, n_components=5)
+        figure_visualization(landscape.nodes_df, landscape.edges_df,
+                             fpath=fig_fpath, z='3', interactive=True)
+        figure_visualization(landscape.nodes_df, landscape.edges_df, fpath=fig_fpath,
+                             highlight_genotypes=['LG', 'CA', 'AA', 'GM', 'FG'],
+                             alphabet_type='protein')
+        
+        fig_fpath = join(TEST_DATA_DIR, '2codon.landscape')
+        landscape = Visualization(6)
+        landscape.set_function(data['log_binding'], codon_table='Standard')
+        landscape.calc_visualization(meanf=1, n_components=5)
+        figure_visualization(landscape.nodes_df, landscape.edges_df,
+                             fpath=fig_fpath, z='3', interactive=True, is_prot=True,
+                             highlight_genotypes=['LG', 'CA', 'AA', 'GM', 'FG'],
+                             alphabet_type='protein')
+        figure_visualization(landscape.nodes_df, landscape.edges_df, fpath=fig_fpath,
+                             highlight_genotypes=['LG', 'CA', 'AA', 'GM', 'FG'],
+                             alphabet_type='protein', is_prot=True)
+        
     def test_big_landscape(self):
         log = LogTrack()
         np.random.seed(1)
         length = 8
         lambdas = np.array([0, 1e6, 1e5, 1e4,
                             1e3, 1e2, 1e1, 1e0,
-                            1e-1]) #, 1e-2, 1e-3, 0]) #, 1e-4, 1e-5])
-        # lambdas = np.array([0, 100, 10, 1, 0.1])
+                            1e-1])
     
         log.write('Simulate data')
         vc = VCregression(length, n_alleles=4, log=log)
         gpmap = Visualization(length, log=log)
         gpmap.set_function(vc.simulate(lambdas))
-        gpmap.calc_visualization(meanf=2, n_components=5)
-        gpmap.calc_visualization(meanf=2, n_components=5)
+        gpmap.calc_visualization(meanf=2, n_components=10)
         gpmap.save(join(TEST_DATA_DIR, 'random.{}.pkl'.format(length)))
     
     def test_calc_visualization_bin(self):
@@ -152,7 +166,9 @@ class VisualizationTests(unittest.TestCase):
     
     def test_plot_visualization_bin(self):    
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        fpath = join(TEST_DATA_DIR, 'codon_landscape.pkl')
+        nodes_fpath = join(TEST_DATA_DIR, 'codon_landscape.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'codon_landscape.edges.csv')
+        decay_fpath = join(TEST_DATA_DIR, 'codon_landscape.decay_rates.csv')
         plot_fpath = join(TEST_DATA_DIR, 'codon_landscape') 
         
         # Test bin
@@ -160,17 +176,26 @@ class VisualizationTests(unittest.TestCase):
         check_call(cmd)
         
         # Test visualization
-        cmd = [sys.executable, bin_fpath, fpath, '-o', plot_fpath, '--edges']
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath]
         check_call(cmd)
         
         # Highlighting peaks in nucleotide sequence
-        cmd = [sys.executable, bin_fpath, fpath, '-o', plot_fpath,
-               '--edges', '-g', 'UCN,AGY']
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-g', 'UCN,AGY', '-A', 'rna']
         check_call(cmd)
         
         # Highlighting coding sequence
-        cmd = [sys.executable, bin_fpath, fpath, '-o', plot_fpath,
-               '--edges', '-g', 'S,L', '--protein_seq', '-l', 'log(binding)']
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath,
+               '-g', 'S,L', '--protein_seq', '-l', 'log(binding)',
+               '-A', 'protein']
+        check_call(cmd)
+        
+        # Screeplot for decay rates
+        bin_fpath = join(BIN_DIR, 'plot_decay_rates.py')
+        plot_fpath = join(TEST_DATA_DIR, 'codon_landscape.decay_rates') 
+        cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
         check_call(cmd)
     
     def test_calc_transition_path_stats(self):
