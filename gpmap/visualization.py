@@ -178,37 +178,20 @@ class Visualization(SequenceSpace):
             v2 = eigenvalues[i] * u
             abs_err = np.mean(np.abs(v1 - v2)) 
             if abs_err > tol:
-                msg = 'Numeric error in eigendecomposition: abs error = {:.5f}'
-                raise ValueError(msg.format(abs_err))
+                msg = 'Numeric error in eigendecomposition: abs error = {:.5f} > {:.5f}'
+                raise ValueError(msg.format(abs_err, tol))
             
         self.report('Eigendecomposition is correct')
     
-    def calc_eigendecomposition(self, n_components=10, tol=1e-12, eig_tol=1e-3):
+    def calc_eigendecomposition(self, n_components=10, tol=1e-14, eig_tol=1e-2):
         n_components = min(n_components, self.n_genotypes-1)
         self.n_components = n_components
         sandwich_aux_matrix = self._calc_sandwich_aux_matrix()
-        
-        # torch.cuda.empty_cache()
-        # Acoo = sandwich_aux_matrix.tocoo()
-        # Apt = torch.sparse.FloatTensor(torch.LongTensor([Acoo.row.tolist(), Acoo.col.tolist()]),
-        #                                torch.FloatTensor(Acoo.data))
-        #
-        # self.report('Calculating {} eigenvalue-eigenvector pairs'.format(n_components))
-        # lambdas, q = torch.lobpcg(Apt, k=n_components, largest=True)
-        # self.report('Done')
-        # lambdas = lambdas.cpu().detach().numpy()
-        # q = q.cpu().detach().numpy()
-        # torch.cuda.empty_cache()
-        # self._check_eigendecomposition(sandwich_aux_matrix,
-        #                                lambdas,
-        #                                q,
-        #                                tol=eig_tol)
         
         self.report('Calculating {} eigenvalue-eigenvector pairs'.format(n_components))
         v0 = self.diag_freq.dot(self.genotypes_stationary_frequencies)
         lambdas, q = eigsh(sandwich_aux_matrix, n_components,
                            v0=v0, which='LM', tol=tol)
-        self.report('Done')
         
         # Reverse order
         lambdas = lambdas[::-1]
@@ -254,7 +237,7 @@ class Visualization(SequenceSpace):
         
     def calc_visualization(self, Ns=None, meanf=None, 
                            perc_function=None, n_components=10,
-                           tol=1e-9, eig_tol=1e-3):
+                           tol=1e-12, eig_tol=1e-2):
         if Ns is None and meanf is None and perc_function is None:
             msg = 'Either Ns or the expected mean function or its percentile '
             msg += 'in equilibrium is required to calculate the rate matrix'
@@ -804,7 +787,9 @@ class Visualization(SequenceSpace):
         savefig(fig, fpath)
     
     def plot_grid_eq_f(self, fpath, fmin=None, fmax=None,
-                       ncol=4, nrow=3, show_edges=True, size=5, cmap=CMAP,
+                       ncol=4, nrow=3, show_edges=True,
+                       
+                       size=5, cmap=CMAP,
                        label=None, lw=0, n_components=4):
         
         if fmin is None:
@@ -812,17 +797,16 @@ class Visualization(SequenceSpace):
         if fmax is None:
             fmax = self.f.mean() + 0.8 * (self.f.max() - self.f.mean())
 
-        eq_fs = np.linspace(fmin, fmax, ncol*nrow)
+        mean_fs = np.linspace(fmin, fmax, ncol*nrow)
         
         fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
         subplots = subplots.flatten()
         
-        fig2, subplots2 = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
-        subplots2 = subplots2.flatten()
-        
-        coords = None
-        for i, (eq_f, axes, axes_eig) in enumerate(zip(eq_fs, subplots, subplots2)):
-            self.calc_visualization(meanf=eq_f, n_components=n_components)
+        self.right_eigenvectors = None
+        for i, (meanf, axes, axes_eig) in enumerate(zip(mean_fs, subplots, subplots2)):
+            Ns = self.calc_Ns(stationary_function=meanf)
+            self.calc_visualization(Ns=Ns, n_components=n_components,
+                                    prev_eigenvectors=self.right_eigenvectors)
             self.plot_eigenvalues(axes_eig)
             axes_eig.set_title('Stationary f = {:.2f}'.format(eq_f))
             

@@ -264,7 +264,7 @@ def minimize_nodes_distance(nodes_df1, nodes_df2, axis):
     coords2 = nodes_df2[axis]
     
     for scalars in product([1, -1], repeat=len(axis)):
-        c = np.vstack([v * s for v, s in zip(coords1.T, scalars)]).T
+        c = np.vstack([v * s for v, s in zip(coords1.values.T, scalars)]).T
         distance = np.sqrt(np.sum((c - coords2) ** 2, 1)).mean(0)
         if distance < d:
             d = distance
@@ -530,4 +530,60 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
                                       is_prot=is_prot, x=x, y=y, z=z,
                                       alphabet_type=alphabet_type,
                                       size=highlight_size, palette=palette)
+        savefig(fig, fpath)
+
+
+def figure_Ns_grid(viz, fpath, fmin=None, fmax=None,
+                   ncol=4, nrow=3, show_edges=True,
+                   nodes_color='f', nodes_size=2.5, nodes_cmap='viridis', nodes_alpha=1,
+                   nodes_min_size=1, nodes_max_size=40,
+                   nodes_edgecolor='black', nodes_lw=0, 
+                   nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
+                   edges_color='grey', edges_width=0.5, edges_cmap='binary',
+                   edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
+                   sort_nodes=True, ascending=False, sort_by=None,
+                   fontsize=12):
+        
+        if fmin is None:
+            fmin = viz.f.mean() + 0.05 * (viz.f.max() - viz.f.mean())
+        if fmax is None:
+            fmax = viz.f.mean() + 0.8 * (viz.f.max() - viz.f.mean())
+
+        mean_fs = np.geomspace(fmin, fmax, ncol*nrow)
+        
+        fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
+        subplots = subplots.flatten()
+        
+        prev_nodes_df = None
+        for i, (meanf, axes) in enumerate(zip(mean_fs, subplots)):
+            Ns = viz.calc_Ns(stationary_function=meanf)
+            viz.calc_visualization(Ns=Ns, n_components=3,
+                                   eig_tol=0.1)
+            
+            edges_df = None if not show_edges else viz.edges_df
+            plot_visualization(axes, viz.nodes_df, edges_df=edges_df, x='1', y='2',
+                               nodes_color=nodes_color, nodes_size=nodes_size,
+                               nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
+                               nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
+                               nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
+                               nodes_cmap_label=nodes_cmap_label if (i+1) % ncol == 0 else None,
+                               nodes_vmin=nodes_vmin,
+                               nodes_vmax=nodes_vmax, edges_color=edges_color,
+                               edges_width=edges_width, edges_cmap=edges_cmap,
+                               edges_alpha=edges_alpha, 
+                               edges_max_width=edges_max_width, edges_min_width=edges_min_width, 
+                               sort_nodes=sort_nodes, ascending=ascending, sort_by=sort_by,
+                               fontsize=fontsize, prev_nodes_df=prev_nodes_df)
+            prev_nodes_df = viz.nodes_df
+            
+            axes.set_title('Stationary F = {:.2f}'.format(meanf))
+            
+            if i // ncol != nrow - 1:
+                axes.set_xlabel('')
+                axes.set_xticks([])
+            
+            if i % ncol != 0:
+                axes.set_ylabel('')
+                axes.set_yticks([])
+        
         savefig(fig, fpath)

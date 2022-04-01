@@ -13,7 +13,8 @@ from gpmap.settings import TEST_DATA_DIR, BIN_DIR
 from subprocess import check_call
 from gpmap.plot_utils import init_fig, savefig
 from gpmap.plot import (plot_nodes, plot_edges, figure_visualization,
-                        plot_decay_rates)
+                        plot_decay_rates, figure_Ns_grid)
+from scipy.sparse._matrix_io import save_npz
 
 
 class VisualizationTests(unittest.TestCase):
@@ -144,17 +145,21 @@ class VisualizationTests(unittest.TestCase):
     def test_big_landscape(self):
         log = LogTrack()
         np.random.seed(1)
-        length = 8
+        length = 10
         lambdas = np.array([0, 1e6, 1e5, 1e4,
                             1e3, 1e2, 1e1, 1e0,
-                            1e-1])
+                            1e-1, 0, 0])
     
         log.write('Simulate data')
         vc = VCregression(length, n_alleles=4, log=log)
         gpmap = Visualization(length, log=log)
         gpmap.set_function(vc.simulate(lambdas))
-        gpmap.calc_visualization(meanf=2, n_components=10)
-        gpmap.save(join(TEST_DATA_DIR, 'random.{}.pkl'.format(length)))
+        gpmap.calc_stationary_frequencies(Ns=1)
+        gpmap.calc_rate_matrix(Ns=1)
+        save_npz(join(TEST_DATA_DIR, 'test_matrix.npz'), gpmap.sandwich_rate_matrix)
+        
+        # gpmap.calc_visualization(meanf=2, n_components=10)
+        # gpmap.save(join(TEST_DATA_DIR, 'random.{}.pkl'.format(length)))
     
     def test_calc_visualization_bin(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
@@ -537,16 +542,20 @@ class VisualizationTests(unittest.TestCase):
         gpmap.calc_visualization()
         gpmap.plot_grid_allele(size=25)
     
-    def test_eq_grid(self):
-        gpmap = Visualization(3, 4)
-        gpmap.set_random_function(0)
-        gpmap.plot_grid_eq_f('test_eq_f_grid', fmin=0, fmax=2,
-                             ncol=3, nrow=3,  size=25)
+    def test_figure_Ns_grid(self):
+        log = LogTrack()
+        np.random.seed(5)
+        length = 7
+        lambdas = np.array([0, 1e6, 1e5, 1e4,
+                            1e3, 1e2, 1e1, 1e0,])
+    
+        log.write('Simulate data')
+        vc = VCregression(length, n_alleles=4, log=log)
+        landscape = Visualization(length, log=log)
+        landscape.set_function(vc.simulate(lambdas))
         
-        np.random.seed(0)
-        landscape = CodonFitnessLandscape(add_variation=True)
-        landscape.plot_grid_eq_f(fname='codon_landscape.ns', size=40,
-                                 n_components=50, fmin=1)
+        fig_fpath = join(TEST_DATA_DIR, 'fgrid')
+        figure_Ns_grid(landscape, fig_fpath, ncol=3)
     
     def test_get_edges(self):
         landscape = Visualization(length=3, n_alleles=4)
@@ -601,5 +610,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=20, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests.test_filter_genotypes']
+    import sys;sys.argv = ['', 'VisualizationTests.test_figure_Ns_grid']
     unittest.main()
