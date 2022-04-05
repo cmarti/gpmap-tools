@@ -34,25 +34,38 @@ class BaseGPMap(object):
             self.alphabet = self.alphabet_type
             
         elif alphabet_type == 'dna':
+            if n_alleles is not None:
+                msg = 'Number of alleles can only be specified for "custom" alphabet'
+                raise ValueError(msg)
+            
             self.alphabet = [DNA_ALPHABET] * self.length
             self.complements = {'A': ['T'], 'T': ['A'],
                                 'G': ['C'], 'C': ['G']}
             self.ambiguous_values = DNA_AMBIGUOUS_VALUES
             
         elif alphabet_type == 'rna':
+            if n_alleles is not None:
+                msg = 'Number of alleles can only be specified for "custom" alphabet'
+                raise ValueError(msg)
+            
             self.alphabet = [RNA_ALPHABET] * self.length
             self.complements = {'A': ['U'], 'U': ['A', 'G'],
                                 'G': ['C', 'U'], 'C': ['G']}
             self.ambiguous_values = RNA_AMBIGUOUS_VALUES
             
         elif alphabet_type == 'protein':
+            if n_alleles is not None:
+                msg = 'Number of alleles can only be specified for "custom" alphabet'
+                raise ValueError(msg)
+            
             self.ambiguous_values = PROT_AMBIGUOUS_VALUES
             self.alphabet = [PROTEIN_ALPHABET] * self.length
             
         elif alphabet_type == 'custom':
             if n_alleles is None:
-                raise ValueError('n_alleles must be provided for custom alphabet')
-            n_alleles = [n_alleles] if isinstance(n_alleles, int) else n_alleles
+                raise ValueError('n_alleles must be provided for "custom" alphabet')
+            
+            n_alleles = [n_alleles] * self.length if isinstance(n_alleles, int) else n_alleles
             self.alphabet = [[ALPHABET[x] for x in range(a)] for a in n_alleles]
             self.ambiguous_values = [{'X': ''.join(a)} for a in self.alphabet]
             for i, alleles in enumerate(self.alphabet):
@@ -62,12 +75,8 @@ class BaseGPMap(object):
             raise ValueError('alphabet_type not supported')
         
         if n_alleles is None:
-            n_alleles = len(self.alphabet)
-            
-        if not isinstance(n_alleles, list):
-            self.n_alleles = [n_alleles] * self.length
-        else:
-            self.n_alleles = n_alleles
+            n_alleles = [len(a) for a in self.alphabet]
+        self.n_alleles = n_alleles
 
     def extend_ambiguous_sequence(self, seq):
         """return list of all possible sequences given an ambiguous DNA input

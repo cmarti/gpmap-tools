@@ -842,7 +842,7 @@ class CodonFitnessLandscape(Visualization):
     def __init__(self,
                  sel_codons=['UCU', 'UCA', 'UCC', 'UCG', 'AGU', 'AGC'],
                  add_variation=False, log=None, seed=None):
-        self.init(3, 4, log=log, alphabet_type='rna')
+        self.init(3, alphabet_type='rna', log=log)
         self.cache_prefix = None
         self.cached_T = False
         self.cached_eigenvectors = False

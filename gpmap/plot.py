@@ -196,7 +196,7 @@ class FigGrid(object):
         savefig(self.fig, fname, tight=False)
 
 
-def plot_decay_rates(decay_df, axes=None, fpath=None):
+def plot_decay_rates(decay_df, axes=None, fpath=None, log_scale=False):
     if axes is None and fpath is None:
         msg = 'Either axes or fpath argument must be provided'
         raise ValueError(msg)
@@ -209,7 +209,8 @@ def plot_decay_rates(decay_df, axes=None, fpath=None):
               linewidth=1, color='purple')
     axes.scatter(decay_df['k'], decay_df['decay_rates'],
                  s=15, c='purple')
-    axes.set(yscale='log')
+    if log_scale:
+        axes.set(yscale='log')
     axes.set_xlabel(r'Eigenvalue order $k$')
     axes.set_ylabel(r'Decay rate $\frac{-1}{\lambda_{k}}$')
     
@@ -303,7 +304,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
             add_legend = True
             
         # Continuous color map
-        if nodes_df[color].dtype in (float, int):
+        elif nodes_df[color].dtype in (float, int):
             if sort:
                 if sort_by is None:
                     sort_by = color
@@ -592,9 +593,7 @@ def figure_Ns_grid(viz, fpath=None, fmin=None, fmax=None,
         
         prev_nodes_df = None
         for i, (meanf, axes) in enumerate(zip(mean_fs, subplots)):
-            Ns = viz.calc_Ns(stationary_function=meanf)
-            viz.calc_visualization(Ns=Ns, n_components=3,
-                                   eig_tol=0.1)
+            viz.calc_visualization(meanf=meanf, n_components=3, eig_tol=0.01)
             
             edges_df = None if not show_edges else viz.edges_df
             plot_visualization(axes, viz.nodes_df, edges_df=edges_df, x='1', y='2',

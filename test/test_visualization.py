@@ -14,10 +14,38 @@ from subprocess import check_call
 from gpmap.plot import (plot_nodes, plot_edges, figure_visualization,
                         plot_decay_rates, figure_Ns_grid,
                         init_fig, savefig, figure_allele_grid)
-from scipy.sparse._matrix_io import save_npz
 
 
 class VisualizationTests(unittest.TestCase):
+    def test_n_alleles(self):
+        v = Visualization(2, alphabet_type='dna')
+        assert(v.n_alleles == [4, 4])
+        
+        v = Visualization(2, alphabet_type='protein')
+        assert(v.n_alleles == [20, 20])
+        
+        v = Visualization(2, n_alleles=2, alphabet_type='custom')
+        assert(v.n_alleles == [2, 2])
+
+        # Raise error when n_alleles is specified for non custom alphabets        
+        try:
+            v = Visualization(2, n_alleles=4)
+            self.fail()
+        except ValueError:
+            pass
+        
+        # Try variable number of alleles per site
+        v = Visualization(4, n_alleles=[2, 4, 2, 2], alphabet_type='custom')
+        assert(v.n_genotypes == 32)
+        assert(v.genotypes.shape[0] == 32)
+    
+    def test_guess_configuration(self):
+        fpath = join(TEST_DATA_DIR, 'gfp.short.csv')
+        data = pd.read_csv(fpath).sort_values('pseudo_prot').set_index('pseudo_prot')
+        config = guess_configuration(data.index.values)
+        assert(config['length'] == 13)
+        assert(config['n_alleles'] == [2, 1, 8, 1, 2, 2, 6, 1, 1, 1, 2, 1, 2])
+        
     def test_translate(self):
         v = Visualization(6, alphabet_type='dna')
         prot = v.get_protein_seq()
@@ -34,53 +62,22 @@ class VisualizationTests(unittest.TestCase):
         assert(np.all(np.diag(A) == 0))
         assert(np.all(A + np.eye(4) + np.fliplr(np.eye(4)) == 1))
     
-    def test_variable_allele_number(self):
-        v = Visualization(4, n_alleles=[2, 4, 2, 2], alphabet_type='custom')
-        assert(v.n_genotypes == 32)
-        assert(v.genotypes.shape[0] == 32)
-        
-        fpath = join(TEST_DATA_DIR, 'gfp.short.csv')
-        data = pd.read_csv(fpath).sort_values('pseudo_prot').set_index('pseudo_prot')
-        config = guess_configuration(data.index.values)
-        assert(config['length'] == 13)
-        assert(config['n_alleles'] == [2, 1, 8, 1, 2, 2, 6, 1, 1, 1, 2, 1, 2])
-        
-        v = Visualization(config['length'], n_alleles=config['n_alleles'],
-                          alphabet_type=config['alphabet'])
-        v.set_function(data['G'], label='GFP')
-        assert(np.all(v.genotypes == data.index.values))
-        v.calc_visualization(meanf=0.85)
-
-        fpath = join(TEST_DATA_DIR, 'gfp_core')
-        figure_visualization(v.nodes_df, v.edges_df, fpath=fpath)
-        
-        fpath = join(TEST_DATA_DIR, 'gfp_core.Ns')
-        figure_Ns_grid(v, fpath=fpath, fmin=0.5, fmax=0.85,
-                       ncol=3, nrow=3, show_edges=True, nodes_cmap_label='GFP')
-        
-        v = Visualization(config['length'], n_alleles=config['n_alleles'],
-                          alphabet_type=config['alphabet'])
-        v.set_function(data['C'], label='CFP')
-        fpath = join(TEST_DATA_DIR, 'cfp_core.Ns')
-        figure_Ns_grid(v, fpath=fpath, fmin=0.2, fmax=0.60,
-                       ncol=3, nrow=3, show_edges=True, nodes_cmap_label='CFP')
-            
     def test_get_neighbors(self):
-        space = Visualization(3, 4, alphabet_type='rna')
+        space = Visualization(3, alphabet_type='rna')
         seq = 'AAA'
         
         idxs = space.get_neighborhood_idxs(seq, max_distance=1)
-        seqs = space.get_seq_from_idx(idxs)
+        seqs = space.genotypes[idxs]
         assert(np.all(seqs == ['AAA', 'AAC', 'AAG', 'AAU', 'ACA',
                                'AGA', 'AUA', 'CAA', 'GAA', 'UAA']))
         
         idxs = space.get_neighborhood_idxs(seq, max_distance=2)
-        seqs = space.get_seq_from_idx(idxs)
+        seqs = space.genotypes[idxs]
         for seq in seqs:
             assert('A' in seq)
         
     def test_calc_stationary_frequencies(self):
-        gpmap = Visualization(2, 2)
+        gpmap = Visualization(2, 2, alphabet_type='custom')
         gpmap.set_function([2, 1, 1, 1])
         Ns = gpmap.calc_Ns(stationary_function=1.5)
         gpmap.calc_stationary_frequencies(Ns)
@@ -90,7 +87,7 @@ class VisualizationTests(unittest.TestCase):
         assert(np.abs(fmean - 1.5) < 1e-4)
         
         # Try in a bigger landscape
-        gpmap = Visualization(8, 4)
+        gpmap = Visualization(8)
         gpmap.set_random_function()
         Ns = gpmap.calc_Ns(stationary_function=1.5)
         gpmap.calc_stationary_frequencies(Ns)
@@ -99,18 +96,6 @@ class VisualizationTests(unittest.TestCase):
         assert(np.all(gpmap.genotypes_stationary_frequencies > 0))
         assert(np.allclose(np.sum(gpmap.genotypes_stationary_frequencies), 1))
     
-    def test_plotting(self):
-        fpath = join(TEST_DATA_DIR, 'codon_landscape')
-        landscape = CodonFitnessLandscape(add_variation=True, seed=0)
-        landscape.calc_visualization(Ns=1, n_components=5)
-        nodes_df = landscape.nodes_df
-        edges_df = landscape.edges_df
-        
-        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
-        plot_nodes(axes, nodes_df, size='f', color='white', lw=0.2)
-        plot_edges(axes, nodes_df, edges_df)
-        savefig(fig, fpath)
-        
     def test_codon_landscape(self):
         fig_fpath = join(TEST_DATA_DIR, 'codon_landscape')
         landscape = CodonFitnessLandscape(add_variation=True, seed=0)
@@ -173,7 +158,7 @@ class VisualizationTests(unittest.TestCase):
                              highlight_genotypes=['LG', 'CA', 'AA', 'GM', 'FG'],
                              alphabet_type='protein', is_prot=True)
         
-    def test_big_landscape(self):
+    def xtest_big_landscape(self):
         log = LogTrack()
         np.random.seed(1)
         length = 10
@@ -187,67 +172,23 @@ class VisualizationTests(unittest.TestCase):
         gpmap.set_function(vc.simulate(lambdas))
         gpmap.calc_stationary_frequencies(Ns=1)
         gpmap.calc_rate_matrix(Ns=1)
-        save_npz(join(TEST_DATA_DIR, 'test_matrix.npz'), gpmap.sandwich_rate_matrix)
-        
-        # gpmap.calc_visualization(meanf=2, n_components=10)
-        # gpmap.save(join(TEST_DATA_DIR, 'random.{}.pkl'.format(length)))
+        gpmap.calc_visualization(meanf=2, n_components=10)
     
     def test_calc_visualization_bin(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
-        np.random.seed(1)
-        length = 4
-        lambdas = np.array([0, 100, 10, 1, 0.1])
     
         # Test help
         cmd = [sys.executable, bin_fpath, '-h']
         check_call(cmd)
     
-        # Simulate landscape
-        vc = VCregression(length, n_alleles=4)
-        data = pd.DataFrame({'function': vc.simulate(lambdas)},
-                            index=vc.genotype_labels)
-        fpath = join(TEST_DATA_DIR, 'small_landscape.csv')
-        data.to_csv(fpath)
-        
         # Calc visualization
-        out_fpath = join(TEST_DATA_DIR, 'small_landscape.pkl') 
+        fpath = join(TEST_DATA_DIR, 'small_landscape.csv')
+        out_fpath = join(TEST_DATA_DIR, 'small_landscape') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90']
         check_call(cmd)
-    
-    def test_plot_visualization_bin(self):    
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'codon_landscape.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'codon_landscape.edges.csv')
-        decay_fpath = join(TEST_DATA_DIR, 'codon_landscape.decay_rates.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'codon_landscape') 
-        
-        # Test bin
-        cmd = [sys.executable, bin_fpath, '-h']
-        check_call(cmd)
-        
-        # Test visualization
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath]
-        check_call(cmd)
-        
-        # Highlighting peaks in nucleotide sequence
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-g', 'UCN,AGY', '-A', 'rna']
-        check_call(cmd)
-        
-        # Highlighting coding sequence
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath,
-               '-g', 'S,L', '--protein_seq', '-l', 'log(binding)',
-               '-A', 'protein']
-        check_call(cmd)
-        
-        # Screeplot for decay rates
-        bin_fpath = join(BIN_DIR, 'plot_decay_rates.py')
-        plot_fpath = join(TEST_DATA_DIR, 'codon_landscape.decay_rates') 
-        cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
-        check_call(cmd)
-    
+
+
+class TPTTests(unittest.TestCase):
     def test_calc_transition_path_stats(self):
         np.random.seed(1)
         alpha = 2
@@ -495,14 +436,6 @@ class VisualizationTests(unittest.TestCase):
             
             js = np.array(list(gpmap.get_neighbors(i, only_j_higher_than_i=True)))
             assert(np.all(js > i) or len(js) == 0)
-        
-    def test_interactive_plot(self):
-        landscape = Visualization(length=3, n_alleles=4)
-        landscape.set_random_function(0)
-        landscape.calc_visualization(n_components=20)
-        landscape.plot_interactive_2d(fname='test_interactive_2d', show_edges=True)
-        landscape.plot_interactive_3d(fname='test_interactive_3d', show_edges=True,
-                                      force_coords=True)
     
     def test_transition_path_objects(self):
         landscape = CodonFitnessLandscape(add_variation=True, seed=0)
@@ -523,6 +456,86 @@ class VisualizationTests(unittest.TestCase):
         print(-max_entropy + np.sum(tpt['bottleneck']['flow_p'] * np.log(tpt['bottleneck']['flow_p'])))
         print(tpt['dom_paths_edges'].groupby('flow_p').count().reset_index().groupby('i')['flow_p'].sum())
         
+
+class PlottingTests(unittest.TestCase):
+    def test_variable_allele_number(self):
+        fpath = join(TEST_DATA_DIR, 'gfp.short.csv')
+        data = pd.read_csv(fpath).sort_values('pseudo_prot').set_index('pseudo_prot')
+        config = guess_configuration(data.index.values)
+        
+        v = Visualization(config['length'], n_alleles=config['n_alleles'],
+                          alphabet_type=config['alphabet'])
+        v.set_function(data['G'], label='GFP')
+        assert(np.all(v.genotypes == data.index.values))
+        v.calc_visualization(meanf=0.85)
+
+        fpath = join(TEST_DATA_DIR, 'gfp_core')
+        figure_visualization(v.nodes_df, v.edges_df, fpath=fpath)
+        
+        fpath = join(TEST_DATA_DIR, 'gfp_core.Ns')
+        figure_Ns_grid(v, fpath=fpath, fmin=0.5, fmax=0.85,
+                       ncol=3, nrow=3, show_edges=True, nodes_cmap_label='GFP')
+        
+        v = Visualization(config['length'], n_alleles=config['n_alleles'],
+                          alphabet_type=config['alphabet'])
+        v.set_function(data['C'], label='CFP')
+        fpath = join(TEST_DATA_DIR, 'cfp_core.Ns')
+        figure_Ns_grid(v, fpath=fpath, fmin=0.2, fmax=0.60,
+                       ncol=3, nrow=3, show_edges=True, nodes_cmap_label='CFP')
+        
+    def test_plotting(self):
+        fpath = join(TEST_DATA_DIR, 'codon_landscape')
+        landscape = CodonFitnessLandscape(add_variation=True, seed=0)
+        landscape.calc_visualization(Ns=1, n_components=5)
+        nodes_df = landscape.nodes_df
+        edges_df = landscape.edges_df
+        
+        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
+        plot_nodes(axes, nodes_df, size='f', color='white', lw=0.2)
+        plot_edges(axes, nodes_df, edges_df)
+        savefig(fig, fpath)
+        
+    def test_plot_visualization_bin(self):    
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        nodes_fpath = join(TEST_DATA_DIR, 'codon_landscape.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'codon_landscape.edges.csv')
+        decay_fpath = join(TEST_DATA_DIR, 'codon_landscape.decay_rates.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'codon_landscape') 
+        
+        # Test bin
+        cmd = [sys.executable, bin_fpath, '-h']
+        check_call(cmd)
+        
+        # Test visualization
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath]
+        check_call(cmd)
+        
+        # Highlighting peaks in nucleotide sequence
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-g', 'UCN,AGY', '-A', 'rna']
+        check_call(cmd)
+        
+        # Highlighting coding sequence
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath,
+               '-g', 'S,L', '--protein_seq', '-l', 'log(binding)',
+               '-A', 'protein']
+        check_call(cmd)
+        
+        # Screeplot for decay rates
+        bin_fpath = join(BIN_DIR, 'plot_decay_rates.py')
+        plot_fpath = join(TEST_DATA_DIR, 'codon_landscape.decay_rates') 
+        cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
+        check_call(cmd)
+        
+    def test_interactive_plot(self):
+        landscape = Visualization(length=3, n_alleles=4)
+        landscape.set_random_function(0)
+        landscape.calc_visualization(n_components=20)
+        landscape.plot_interactive_2d(fname='test_interactive_2d', show_edges=True)
+        landscape.plot_interactive_3d(fname='test_interactive_3d', show_edges=True,
+                                      force_coords=True)
     
     def test_visualize_reactive_paths(self):
         np.random.seed(0)
@@ -640,7 +653,8 @@ class VisualizationTests(unittest.TestCase):
         dpath = join(TEST_DATA_DIR, 'ns_movie')
         landscape.plot_ns_movie(dpath, nframes=60, fmax=1.64,
                                 n_components=20, force=True)
+
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests.test_visualization_grid_allele']
+    import sys;sys.argv = ['', 'VisualizationTests']
     unittest.main()
