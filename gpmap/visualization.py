@@ -46,7 +46,7 @@ class Visualization(SequenceSpace):
             msg = 'Only sequences with length multiple of 3 can be translated'
             raise ValueError(msg)
         prot_genotypes = np.array([str(Seq(seq).translate(table=table))
-                                   for seq in self.genotype_labels])
+                                   for seq in self.genotypes])
         return(prot_genotypes)
     
     def set_random_function(self, seed=None):
@@ -59,7 +59,7 @@ class Visualization(SequenceSpace):
 
         if codon_table is not None:
             self.prot = pd.Series(self.get_protein_seq(table=codon_table),
-                                  index=self.genotype_labels)
+                                  index=self.genotypes)
             f = f.reindex(self.prot).fillna(stop_f)
             
         self.f = np.array(f)
@@ -221,7 +221,7 @@ class Visualization(SequenceSpace):
                 
         colnames = [str(x) for x in np.arange(1, len(projection))]
         self.nodes_df = pd.DataFrame(np.vstack(projection[1:]).T,
-                                     index=self.genotype_labels,
+                                     index=self.genotypes,
                                      columns=colnames)
         self.nodes_df['f'] = self.f
         self.nodes_df['stationary_freq'] = self.genotypes_stationary_frequencies
@@ -294,7 +294,7 @@ class Visualization(SequenceSpace):
             self.projection = self.projection[:, selected_genotypes]
             
         self.f = self.f[selected_genotypes]
-        self.genotype_labels = self.genotype_labels[selected_genotypes]
+        self.genotypes = self.genotypes[selected_genotypes]
         self.seqs = [seq for k, seq in zip(selected_genotypes, self.seqs) if k]
         self.n_genotypes = self.f.shape[0]
     
@@ -306,8 +306,8 @@ class Visualization(SequenceSpace):
     def get_AB_genotypes_idxs(self, genotypes1, genotypes2):
         genotypes1 = self.extend_ambiguous_sequences(genotypes1)
         genotypes2 = self.extend_ambiguous_sequences(genotypes2)
-        a = self.get_genotype_labels_idx(genotypes1)
-        b = self.get_genotype_labels_idx(genotypes2)
+        a = self.get_genotypes_idx(genotypes1)
+        b = self.get_genotypes_idx(genotypes2)
         return(a, b)
 
     def get_noAB_genotypes_idxs(self, a, b):
@@ -615,8 +615,8 @@ class Visualization(SequenceSpace):
                 edges.append({'i': i, 'j': j, 'flow': flow, 'flow_p': p})
         
         bottlenecks_df = pd.DataFrame(bottlenecks)
-        bottlenecks_df['from'] = self.genotype_labels[bottlenecks_df['i']]
-        bottlenecks_df['to'] = self.genotype_labels[bottlenecks_df['j']]
+        bottlenecks_df['from'] = self.genotypes[bottlenecks_df['i']]
+        bottlenecks_df['to'] = self.genotypes[bottlenecks_df['j']]
         bottlenecks_df['mutation'] = [','.join(['{}{}{}'.format(x, p+1, y)
                                                 for p, (x, y) in enumerate(zip(s1, s2))
                                                 if x != y])
@@ -651,7 +651,7 @@ class Visualization(SequenceSpace):
                                     'flow': genotypes_flows,
                                     'eff_flow': genotypes_eff_flows,
                                     'p_in_path': p_gt_in_path},
-                                   index=self.genotype_labels)
+                                   index=self.genotypes)
         edges_df = pd.DataFrame({'i': edges[0], 'j': edges[1],
                                  'flow': flows, 'eff_flow': eff_flows})
         
@@ -688,7 +688,7 @@ class Visualization(SequenceSpace):
         return(coords)
     
     def get_logo_df(self, sel_idxs=None):
-        seqs = self.genotype_labels
+        seqs = self.genotypes
         if sel_idxs is not None:
             seqs = seqs[sel_idxs]
         instances = [Seq(seq) for seq in seqs]
@@ -785,52 +785,6 @@ class Visualization(SequenceSpace):
         
         self.report('Saving plot at {}'.format(fpath))
         savefig(fig, fpath)
-    
-    def plot_grid_eq_f(self, fpath, fmin=None, fmax=None,
-                       ncol=4, nrow=3, show_edges=True,
-                       
-                       size=5, cmap=CMAP,
-                       label=None, lw=0, n_components=4):
-        
-        if fmin is None:
-            fmin = self.f.mean() + 0.05 * (self.f.max() - self.f.mean())
-        if fmax is None:
-            fmax = self.f.mean() + 0.8 * (self.f.max() - self.f.mean())
-
-        mean_fs = np.linspace(fmin, fmax, ncol*nrow)
-        
-        fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
-        subplots = subplots.flatten()
-        
-        self.right_eigenvectors = None
-        for i, (meanf, axes, axes_eig) in enumerate(zip(mean_fs, subplots, subplots2)):
-            Ns = self.calc_Ns(stationary_function=meanf)
-            self.calc_visualization(Ns=Ns, n_components=n_components,
-                                    prev_eigenvectors=self.right_eigenvectors)
-            self.plot_eigenvalues(axes_eig)
-            axes_eig.set_title('Stationary f = {:.2f}'.format(eq_f))
-            
-            coords = self.plot(axes, x=1, y=2, show_edges=show_edges,
-                               size=size, cmap=cmap, label=label,
-                               force_coords=True, lw=lw,
-                               prev_coords=coords)
-            axes.set_title('Stationary f = {:.2f}'.format(eq_f))
-            
-            if i // ncol != nrow - 1:
-                axes.set_xlabel('')
-                axes.set_xticks([])
-                axes_eig.set_xlabel('')
-                axes_eig.set_xticks([])
-            
-            if i % ncol != 0:
-                axes.set_ylabel('')
-                axes.set_yticks([])
-                axes_eig.set_xlabel('')
-                axes_eig.set_xticks([])
-        
-        self.report('Saving plot at {}'.format(fpath))
-        savefig(fig, fpath)
-        savefig(fig2, fpath + '.eig')
     
     def plot_complete(self, fpath, show_edges=True,
                       cmap=CMAP, label=None, show_labels=False, size=6,
@@ -976,9 +930,6 @@ class CodonFitnessLandscape(Visualization):
         self.cached_eigenvalues = False
         self.label = 'codon_landscape'
         self.stop_codons = ['UGA', 'UAA', 'UAG']
-        self.alleles = ['A', 'C', 'G', 'U']
-        self.genotypes = np.array([''.join(self.alleles[i] for i in seq)
-                                   for seq in self.seqs])
         self.sel_codons = sel_codons
         self.add_variation = add_variation
         self.seed = seed

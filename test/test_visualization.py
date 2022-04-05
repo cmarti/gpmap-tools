@@ -7,13 +7,13 @@ import pandas as pd
 
 from gpmap.visualization import (Visualization, CodonFitnessLandscape,
                                  filter_genotypes)
-from gpmap.utils import LogTrack
+from gpmap.utils import LogTrack, guess_configuration
 from gpmap.inference import VCregression
 from gpmap.settings import TEST_DATA_DIR, BIN_DIR
 from subprocess import check_call
 from gpmap.plot import (plot_nodes, plot_edges, figure_visualization,
                         plot_decay_rates, figure_Ns_grid,
-                        init_fig, savefig)
+                        init_fig, savefig, figure_allele_grid)
 from scipy.sparse._matrix_io import save_npz
 
 
@@ -22,14 +22,6 @@ class VisualizationTests(unittest.TestCase):
         v = Visualization(6, alphabet_type='dna')
         prot = v.get_protein_seq()
         assert(prot.shape[0] == v.n_genotypes)
-    
-    def test_variable_allele_number(self):
-        fpath = join(TEST_DATA_DIR, 'gfp.short.csv')
-        data = pd.read_csv(fpath, index_col=0)
-        print(data)
-        
-        v = Visualization(4, n_alleles=[2, 4, 2, 2], alphabet_type='custom')
-        
     
     def test_adjacency_matrix(self):
         space = Visualization(1, alphabet_type='dna')
@@ -41,6 +33,37 @@ class VisualizationTests(unittest.TestCase):
         A = space.get_adjacency_matrix().todense()
         assert(np.all(np.diag(A) == 0))
         assert(np.all(A + np.eye(4) + np.fliplr(np.eye(4)) == 1))
+    
+    def test_variable_allele_number(self):
+        v = Visualization(4, n_alleles=[2, 4, 2, 2], alphabet_type='custom')
+        assert(v.n_genotypes == 32)
+        assert(v.genotypes.shape[0] == 32)
+        
+        fpath = join(TEST_DATA_DIR, 'gfp.short.csv')
+        data = pd.read_csv(fpath).sort_values('pseudo_prot').set_index('pseudo_prot')
+        config = guess_configuration(data.index.values)
+        assert(config['length'] == 13)
+        assert(config['n_alleles'] == [2, 1, 8, 1, 2, 2, 6, 1, 1, 1, 2, 1, 2])
+        
+        v = Visualization(config['length'], n_alleles=config['n_alleles'],
+                          alphabet_type=config['alphabet'])
+        v.set_function(data['G'], label='GFP')
+        assert(np.all(v.genotypes == data.index.values))
+        v.calc_visualization(meanf=0.85)
+
+        fpath = join(TEST_DATA_DIR, 'gfp_core')
+        figure_visualization(v.nodes_df, v.edges_df, fpath=fpath)
+        
+        fpath = join(TEST_DATA_DIR, 'gfp_core.Ns')
+        figure_Ns_grid(v, fpath=fpath, fmin=0.5, fmax=0.85,
+                       ncol=3, nrow=3, show_edges=True, nodes_cmap_label='GFP')
+        
+        v = Visualization(config['length'], n_alleles=config['n_alleles'],
+                          alphabet_type=config['alphabet'])
+        v.set_function(data['C'], label='CFP')
+        fpath = join(TEST_DATA_DIR, 'cfp_core.Ns')
+        figure_Ns_grid(v, fpath=fpath, fmin=0.2, fmax=0.60,
+                       ncol=3, nrow=3, show_edges=True, nodes_cmap_label='CFP')
             
     def test_get_neighbors(self):
         space = Visualization(3, 4, alphabet_type='rna')
@@ -545,10 +568,11 @@ class VisualizationTests(unittest.TestCase):
                           color_key=lambda x: 'orange' if x.startswith('A') else 'black')
     
     def test_visualization_grid_allele(self):
-        gpmap = Visualization(3, 4, label='test')
-        gpmap.set_random_function(0)
-        gpmap.calc_visualization()
-        gpmap.plot_grid_allele(size=25)
+        v = CodonFitnessLandscape(add_variation=True, seed=0)
+        v.calc_visualization(Ns=1)
+        
+        fpath = join(TEST_DATA_DIR, 'codon_landscape.alleles')
+        figure_allele_grid(v.nodes_df, edges_df=v.edges_df, fpath=fpath)
     
     def test_figure_Ns_grid(self):
         log = LogTrack()
@@ -618,5 +642,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=20, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests.test_variable_allele_number']
+    import sys;sys.argv = ['', 'VisualizationTests.test_visualization_grid_allele']
     unittest.main()
