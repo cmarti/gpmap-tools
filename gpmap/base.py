@@ -30,38 +30,45 @@ class BaseGPMap(object):
     def set_alphabet_type(self, alphabet_type, n_alleles=None):
         self.alphabet_type = alphabet_type
         
-        if not isinstance(n_alleles, list):
-            self.n_alleles = [n_alleles] * self.length
-        else:
-            self.n_alleles = n_alleles
-        
         if isinstance(alphabet_type, list):
             self.alphabet = self.alphabet_type
+            
         elif alphabet_type == 'dna':
-            self.alphabet = DNA_ALPHABET
+            self.alphabet = [DNA_ALPHABET] * self.length
             self.complements = {'A': ['T'], 'T': ['A'],
                                 'G': ['C'], 'C': ['G']}
             self.ambiguous_values = DNA_AMBIGUOUS_VALUES
+            
         elif alphabet_type == 'rna':
-            self.alphabet = RNA_ALPHABET
+            self.alphabet = [RNA_ALPHABET] * self.length
             self.complements = {'A': ['U'], 'U': ['A', 'G'],
                                 'G': ['C', 'U'], 'C': ['G']}
             self.ambiguous_values = RNA_AMBIGUOUS_VALUES
+            
         elif alphabet_type == 'protein':
             self.ambiguous_values = PROT_AMBIGUOUS_VALUES
-            self.alphabet = PROTEIN_ALPHABET
+            self.alphabet = [PROTEIN_ALPHABET] * self.length
             
         elif alphabet_type == 'custom':
             if n_alleles is None:
                 raise ValueError('n_alleles must be provided for custom alphabet')
+            n_alleles = [n_alleles] if isinstance(n_alleles, int) else n_alleles
             self.alphabet = [[ALPHABET[x] for x in range(a)] for a in n_alleles]
             self.ambiguous_values = [{'X': ''.join(a)} for a in self.alphabet]
             for i, alleles in enumerate(self.alphabet):
                 self.ambiguous_values[i].update(dict(zip(alleles, alleles)))
+                
         else:
-            raise ValueError('alphabet type not supported')
+            raise ValueError('alphabet_type not supported')
         
-    
+        if n_alleles is None:
+            n_alleles = len(self.alphabet)
+            
+        if not isinstance(n_alleles, list):
+            self.n_alleles = [n_alleles] * self.length
+        else:
+            self.n_alleles = n_alleles
+
     def extend_ambiguous_sequence(self, seq):
         """return list of all possible sequences given an ambiguous DNA input
         copied from https://www.biostars.org/p/260617/
@@ -80,57 +87,45 @@ class BaseGPMap(object):
 
 class SequenceSpace(BaseGPMap):
     def init(self, length, n_alleles=None, alphabet_type='dna', log=None):
-        self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
         self.length = length
+        
+        self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
         self.n_genotypes = np.prod(self.n_alleles)
+        
         if self.n_genotypes > MAX_GENOTYPES:
             raise ValueError('Sequence space is too big to handle')
         
-#         self.n_neighbors = length * (self.n_alleles - 1)
-        self.bases = [[str(i) for i in range(a)] for a in self.n_alleles]
-        self.seq_to_pos_converter = np.flip(self.n_alleles**np.array(range(length)), axis=0)
-        self.seqs = np.array([x for x in self.get_seqs_from_alleles(self.bases)])
-        print(self.seqs)
-        
-        self.genotype_labels = self.get_genotype_labels()
+        self.genotypes = self.get_genotypes()
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
-                                       index=self.genotype_labels)
-        self.subgraph_identity = sp.identity(self.n_alleles)
+                                       index=self.genotypes)
+
+        # Matrices for site level elementary graphs
+        self.site_I = [sp.identity(a) for a in self.n_alleles]
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.complete_subgraph_A = csr_matrix(np.ones((self.n_alleles, self.n_alleles))) - self.subgraph_identity
+            self.site_Kn = [csr_matrix(np.ones((a, a))) - I
+                            for a, I in zip(self.n_alleles, self.site_I)]
+            
         self.log = log
     
-    def get_seqs_from_alleles(self, alleles):
-        if not alleles:
+    def get_seqs_from_alleles(self, alphabet):
+        if not alphabet:
             yield('')
         else:
-            for allele in alleles[0]:
-                for seq in self.get_seqs_from_alleles(alleles[1:]):
+            for allele in alphabet[0]:
+                for seq in self.get_seqs_from_alleles(alphabet[1:]):
                     yield(allele + seq)
-        
+    
+    def get_genotypes(self):
+        return(np.array([x for x in self.get_seqs_from_alleles(self.alphabet)]))    
         
     def get_m_k(self, k):
         return(self.m[k])
     
-    def get_genotype_labels(self):
-        return(np.array([''.join([self.alphabet[a] for a in gt])
-                         for gt in self.seqs]))
-    
-    def get_genotype_labels_idx(self, genotypes):
+    def get_genotypes_idx(self, genotypes):
         return(self.genotype_idxs.loc[genotypes].values)
     
-    def seq_to_pos(self, seq, coding_dict=None):
-        if coding_dict is None:
-            return int(np.sum(seq * self.seq_to_pos_converter))
-        else:
-            tmp = [coding_dict[letter] for letter in seq]
-        return int(np.sum(tmp * self.seq_to_pos_converter))
-    
-    def get_seq_from_idx(self, idx):
-        return(self.genotype_labels[idx])
-    
-    def get_A_csr(self):
+    def _get_A_csr(self):
         self.get_adjacency_matrix()
         if not hasattr(self, 'A_csr'):
             with warnings.catch_warnings():
@@ -140,22 +135,10 @@ class SequenceSpace(BaseGPMap):
     
     def get_neighborhood_idxs(self, seq, max_distance=1):
         idxs = np.array([self.genotype_idxs.loc[seq]]).flatten()
-        a = self.get_A_csr()
+        a = self._get_A_csr()
         for _ in range(max_distance):
             idxs = np.append(idxs, a[idxs].indices)
         return(np.unique(idxs))
-    
-    def get_neighbors_old(self, i, only_j_higher_than_i=False):
-        for site in range(self.length):
-            for base in self.bases:
-                seq_i = np.array(self.seqs[i])
-                if base == seq_i[site]:
-                    continue
-                seq_i[site] = base
-                j = self.seq_to_pos(seq_i)
-                if only_j_higher_than_i and j < i:
-                    continue
-                yield(j)
     
     def get_adjacency_matrix(self):
         if not hasattr(self, 'A'):
@@ -172,28 +155,28 @@ class SequenceSpace(BaseGPMap):
                 self.neighbor_pairs = A.row, A.col
         return(self.neighbor_pairs)
     
-    def istack_matrices(self, m_diag, m_offdiag, module=sp):
+    def _istack_matrices(self, m_diag, m_offdiag, pos):
         rows = []
-        for j in range(self.n_alleles):
-            row = [m_offdiag] * j + [m_diag] + [m_offdiag] * (self.n_alleles - j - 1)
-            rows.append(module.hstack(row)) 
-        m = module.vstack(rows)
+        a = self.n_alleles[pos]
+        for j in range(a):
+            row = [m_offdiag] * j + [m_diag] + [m_offdiag] * (a - j - 1)
+            rows.append(sp.hstack(row)) 
+        m = sp.vstack(rows)
         return(m)
 
-    def _calc_adjacency(self, m=None, l=0):
+    def _calc_adjacency(self, m=None, pos=0):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             
             if m is None:
-                i = sp.identity(self.n_alleles)
-                m = csr_matrix(np.ones((self.n_alleles, self.n_alleles))) - i
+                m = self.site_Kn[pos]
             
-            if l == (self.length-1):
+            if pos == (self.length-1):
                 return(m)
     
             i = sp.identity(m.shape[0])
-            m = self.istack_matrices(m, i)
-        return(self._calc_adjacency(m, l+1))
+            m = self._istack_matrices(m, i, pos)
+        return(self._calc_adjacency(m, pos+1))
     
     def calc_adjacency(self):
         self.A = self._calc_adjacency()

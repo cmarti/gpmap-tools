@@ -13,7 +13,7 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 from gpmap.settings import PLOTS_FORMAT, PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
 from itertools import product
-from gpmap.utils import translante_seqs
+from gpmap.utils import translante_seqs, guess_configuration
 from gpmap.base import extend_ambigous_seq
 
 
@@ -37,12 +37,15 @@ def init_single_fig(figsize=None, style='ticks',
     return(fig, axes)
 
 
-def savefig(fig, fpath, tight=True, fmt=PLOTS_FORMAT):
-    fpath = '{}.{}'.format(fpath, fmt)
+def savefig(fig, fpath=None, tight=True, fmt=PLOTS_FORMAT):
     if tight:
         fig.tight_layout()
-    fig.savefig(fpath, format=fmt, dpi=240)
-    plt.close()
+    if fpath is not None:
+        fpath = '{}.{}'.format(fpath, fmt)
+        fig.savefig(fpath, format=fmt, dpi=240)
+        plt.close()
+    else:
+        plt.show()
     
 
 def save_plotly(fig, fpath=None):
@@ -300,7 +303,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
             add_legend = True
             
         # Continuous color map
-        elif nodes_df[color].dtype in (float, int):
+        if nodes_df[color].dtype in (float, int):
             if sort:
                 if sort_by is None:
                     sort_by = color
@@ -377,7 +380,8 @@ def highlight_genotype_groups(axes, nodes_df, genotype_groups,
 
 
 def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
-                       nodes_color='f', nodes_size=2.5, nodes_cmap='viridis', nodes_alpha=1,
+                       nodes_color='f', nodes_size=2.5, nodes_cmap='viridis',
+                       palette=None, nodes_alpha=1,
                        nodes_min_size=1, nodes_max_size=40,
                        nodes_edgecolor='black', nodes_lw=0, 
                        nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
@@ -392,8 +396,8 @@ def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
     
     plot_nodes(axes, nodes_df=nodes_df, x=x, y=y, z=z,
                color=nodes_color, size=nodes_size, cmap=nodes_cmap, 
-               alpha=nodes_alpha, zorder=2, max_size=nodes_max_size,
-               min_size=nodes_min_size,
+               palette=palette, alpha=nodes_alpha, zorder=2,
+               max_size=nodes_max_size, min_size=nodes_min_size,
                edgecolor=nodes_edgecolor, lw=nodes_lw,
                label=None, clabel=nodes_cmap_label,
                sort=sort_nodes, sort_by=sort_by, ascending=ascending, 
@@ -532,7 +536,40 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
         savefig(fig, fpath)
 
 
-def figure_Ns_grid(viz, fpath, fmin=None, fmax=None,
+def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
+                       allele_color='orange', background_color='lightgrey',
+                       nodes_size=None, edges_color='grey', edges_width=0.5):
+    
+    config = guess_configuration(nodes_df.index.values)
+    length, n_alleles = config['length'], np.max(config['n_alleles'])
+    
+    fig, subplots = init_fig(n_alleles, length, colsize=3, rowsize=2.7)
+    for j in range(length):
+        for i, allele in enumerate(config['alphabet'][j]):
+            axes = subplots[i][j]
+            plot_visualization(axes, nodes_df, edges_df=edges_df, x=x, y=y,
+                               nodes_color=background_color, nodes_size=nodes_size,
+                               edges_color=edges_color, edges_width=edges_width)
+            sel_idxs = np.array([seq[j] == allele for seq in nodes_df.index])
+            plot_nodes(axes, nodes_df.loc[sel_idxs, :], x=x, y=y, color=allele_color,
+                       size=nodes_size)
+            
+            if i < n_alleles - 1:
+                axes.set_xlabel('')
+                axes.set_xticks([])
+            if j > 0:
+                axes.set_ylabel('')
+                axes.set_yticks([])
+                
+            xlims, ylims = axes.get_xlim(), axes.get_ylim()
+            xpos = xlims[0] + 0.05 * (xlims[1] - xlims[0])
+            ypos = ylims[0] + 0.92 * (ylims[1] - ylims[0])
+            axes.text(xpos, ypos, '{}{}'.format(allele, j+1), ha='center')
+    
+    savefig(fig, fpath)
+    
+
+def figure_Ns_grid(viz, fpath=None, fmin=None, fmax=None,
                    ncol=4, nrow=3, show_edges=True,
                    nodes_color='f', nodes_size=2.5, nodes_cmap='viridis', nodes_alpha=1,
                    nodes_min_size=1, nodes_max_size=40,

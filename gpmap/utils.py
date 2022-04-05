@@ -11,6 +11,7 @@ import numpy as np
 
 from gpmap.settings import NUCLEOTIDES, COMPLEMENT, MODELS_DIR, CODE_DIR
 from Bio.Seq import Seq
+from _collections import defaultdict
 
 
 def logit(p):
@@ -126,3 +127,20 @@ def translante_seqs(seqs, codon_table='Standard'):
     prot_genotypes = np.array([str(Seq(seq).translate(table=codon_table))
                                for seq in seqs])
     return(prot_genotypes)
+
+
+def guess_configuration(seqs):
+    alleles = defaultdict(set)
+    for seq in seqs:
+        for i, a in enumerate(seq):
+            alleles[i].add(a)
+    length = len(alleles)
+    config = {'length': length,
+              'n_alleles': [len(alleles[i]) for i in range(length)],
+              'alphabet': [sorted(alleles[i]) for i in range(length)]}
+    if np.prod(config['n_alleles']) != seqs.shape[0]:
+        msg = 'Number of genotypes does not match the expected from guessed'
+        msg += ' configuration. Ensure that genotypes span the whole sequence '
+        msg += 'space'
+        raise ValueError(msg)
+    return(config)
