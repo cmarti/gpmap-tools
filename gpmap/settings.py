@@ -19,6 +19,13 @@ NUCLEOTIDES = ['A', 'U', 'G', 'C']
 COMPLEMENT = {'U': 'A', 'A': 'U', 'G': 'C', 'C': 'G', 'N': 'N',
               'T': 'A', '[': ']', ']': '['}
 
+ALPHABET = ['A', 'B', 'C', 'D', 'E',
+            'F', 'G', 'H', 'I', 'J',
+            'K', 'L', 'M', 'N', 'O',
+            'P', 'Q', 'R', 'S', 'T',
+            'U', 'V', 'W', 'X', 'Y',
+            'Z']
+
 DNA_ALPHABET = ['A', 'C', 'G', 'T']
 RNA_ALPHABET = ['A', 'C', 'G', 'U']
 PROTEIN_ALPHABET = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L',

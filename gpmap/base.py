@@ -12,7 +12,7 @@ from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 
 from gpmap.utils import write_log
 from gpmap.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
-                            MAX_GENOTYPES, PROT_AMBIGUOUS_VALUES,
+                            ALPHABET, MAX_GENOTYPES, PROT_AMBIGUOUS_VALUES,
                             DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
 
 
@@ -29,6 +29,12 @@ def extend_ambigous_seq(seq, mapping):
 class BaseGPMap(object):
     def set_alphabet_type(self, alphabet_type, n_alleles=None):
         self.alphabet_type = alphabet_type
+        
+        if not isinstance(n_alleles, list):
+            self.n_alleles = [n_alleles] * self.length
+        else:
+            self.n_alleles = n_alleles
+        
         if isinstance(alphabet_type, list):
             self.alphabet = self.alphabet_type
         elif alphabet_type == 'dna':
@@ -48,12 +54,13 @@ class BaseGPMap(object):
         elif alphabet_type == 'custom':
             if n_alleles is None:
                 raise ValueError('n_alleles must be provided for custom alphabet')
-            self.alphabet = [str(x) for x in range(n_alleles)]
-            self.ambiguous_values = {'X': ''.join(self.alphabet)}
-            self.ambiguous_values.update(dict(zip(self.alphabet, self.alphabet)))
+            self.alphabet = [[ALPHABET[x] for x in range(a)] for a in n_alleles]
+            self.ambiguous_values = [{'X': ''.join(a)} for a in self.alphabet]
+            for i, alleles in enumerate(self.alphabet):
+                self.ambiguous_values[i].update(dict(zip(alleles, alleles)))
         else:
             raise ValueError('alphabet type not supported')
-        self.n_alleles = len(self.alphabet)
+        
     
     def extend_ambiguous_sequence(self, seq):
         """return list of all possible sequences given an ambiguous DNA input
@@ -75,14 +82,16 @@ class SequenceSpace(BaseGPMap):
     def init(self, length, n_alleles=None, alphabet_type='dna', log=None):
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles)
         self.length = length
-        self.n_genotypes = self.n_alleles ** length
+        self.n_genotypes = np.prod(self.n_alleles)
         if self.n_genotypes > MAX_GENOTYPES:
             raise ValueError('Sequence space is too big to handle')
         
-        self.n_neighbors = length * (self.n_alleles - 1)
-        self.bases = list(range(self.n_alleles))
+#         self.n_neighbors = length * (self.n_alleles - 1)
+        self.bases = [[str(i) for i in range(a)] for a in self.n_alleles]
         self.seq_to_pos_converter = np.flip(self.n_alleles**np.array(range(length)), axis=0)
-        self.seqs = np.array(list(product(self.bases, repeat=length)))
+        self.seqs = np.array([x for x in self.get_seqs_from_alleles(self.bases)])
+        print(self.seqs)
+        
         self.genotype_labels = self.get_genotype_labels()
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
                                        index=self.genotype_labels)
@@ -91,6 +100,15 @@ class SequenceSpace(BaseGPMap):
             warnings.simplefilter("ignore")
             self.complete_subgraph_A = csr_matrix(np.ones((self.n_alleles, self.n_alleles))) - self.subgraph_identity
         self.log = log
+    
+    def get_seqs_from_alleles(self, alleles):
+        if not alleles:
+            yield('')
+        else:
+            for allele in alleles[0]:
+                for seq in self.get_seqs_from_alleles(alleles[1:]):
+                    yield(allele + seq)
+        
         
     def get_m_k(self, k):
         return(self.m[k])

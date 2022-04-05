@@ -21,7 +21,7 @@ from scipy.linalg.basic import solve
 from scipy.sparse.linalg import cg
 from numpy.linalg.linalg import cholesky
 
-from gpmap.plot_utils import init_fig, savefig, arrange_plot
+from gpmap.plot import init_fig, savefig, arrange_plot
 from gpmap.settings import CACHE_DIR, U_MAX, PHI_LB, PHI_UB
 from gpmap.base import SequenceSpace, get_sparse_diag_matrix
 from scipy.special._logsumexp import logsumexp

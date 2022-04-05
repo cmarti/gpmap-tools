@@ -22,7 +22,7 @@ def main():
     options_group = parser.add_argument_group('Landscape options')
     options_group.add_argument('-A', '--alphabet_type', default='dna',
                                help='Alphabet type [dna, rna, protein, custom] (dna)')
-    options_group.add_argument('-a', '--n_alleles', default=None,
+    options_group.add_argument('-a', '--n_alleles', default=None, type=int,
                                help='Number of alleles to use for custom alphabet')
     
     coding_group = parser.add_argument_group('Coding options')

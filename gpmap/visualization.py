@@ -23,7 +23,7 @@ from scipy.special._logsumexp import logsumexp
 from scipy.sparse.linalg.isolve.iterative import bicgstab
 
 from gpmap.base import SequenceSpace, get_sparse_diag_matrix
-from gpmap.plot_utils import init_fig, savefig, arrange_plot, init_single_fig
+from gpmap.plot import init_fig, savefig, arrange_plot, init_single_fig
 from gpmap.settings import CMAP
 from gpmap.utils import write_pickle, load_pickle
 

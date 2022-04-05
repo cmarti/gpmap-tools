@@ -15,7 +15,6 @@ from gpmap.settings import PLOTS_FORMAT, PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
 from itertools import product
 from gpmap.utils import translante_seqs
 from gpmap.base import extend_ambigous_seq
-from gpmap.plot_utils import init_fig
 
 
 # Functions

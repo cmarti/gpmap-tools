@@ -11,9 +11,9 @@ from gpmap.utils import LogTrack
 from gpmap.inference import VCregression
 from gpmap.settings import TEST_DATA_DIR, BIN_DIR
 from subprocess import check_call
-from gpmap.plot_utils import init_fig, savefig
 from gpmap.plot import (plot_nodes, plot_edges, figure_visualization,
-                        plot_decay_rates, figure_Ns_grid)
+                        plot_decay_rates, figure_Ns_grid,
+                        init_fig, savefig)
 from scipy.sparse._matrix_io import save_npz
 
 
@@ -22,6 +22,14 @@ class VisualizationTests(unittest.TestCase):
         v = Visualization(6, alphabet_type='dna')
         prot = v.get_protein_seq()
         assert(prot.shape[0] == v.n_genotypes)
+    
+    def test_variable_allele_number(self):
+        fpath = join(TEST_DATA_DIR, 'gfp.short.csv')
+        data = pd.read_csv(fpath, index_col=0)
+        print(data)
+        
+        v = Visualization(4, n_alleles=[2, 4, 2, 2], alphabet_type='custom')
+        
     
     def test_adjacency_matrix(self):
         space = Visualization(1, alphabet_type='dna')
@@ -610,5 +618,5 @@ class VisualizationTests(unittest.TestCase):
                                 n_components=20, force=True)
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VisualizationTests.test_figure_Ns_grid']
+    import sys;sys.argv = ['', 'VisualizationTests.test_variable_allele_number']
     unittest.main()
