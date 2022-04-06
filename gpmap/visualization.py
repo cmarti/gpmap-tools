@@ -634,21 +634,31 @@ class Visualization(SequenceSpace):
             
     def calc_transition_path_objects(self, genotypes1, genotypes2, tol=1e-12,
                                      max_missing_flow_p=1e-4, max_paths=None):
+        self.report('Finding indexes of starting and end genotypes')
         a, b = self.get_AB_genotypes_idxs(genotypes1, genotypes2)
         norm_freqs = self.calc_normalized_stationary_freq(a, b)
+        
+        self.report('Calculating committor probabilities')
         q = self.calc_committor_probability(a, b, tol)
+        
+        self.report('Calculating proportion of time spent in a reactive path')
         m_ab = self.calc_gt_p_time_reactive_path(q)[1]
         
+        self.report('Calculating flows through the edges')
         edges = self.get_neighbor_pairs()
         flows = self.calc_edges_flow(q, edges=edges)
         eff_flows = self.calc_edges_effective_flow(q=q, edges=edges,
                                                    flows=flows)
         
+        self.report('Calculating return probabilities before absortion')
         p_return = self.calc_p_return(a, b)
         genotypes_flows = self.calc_genotypes_flow(flows)
+        
+        self.report('Calculating proportion of paths including each genotype')
         p_gt_in_path = self.calc_gt_p_reactive_path(genotypes_flows, p_return)
         genotypes_eff_flows = self.calc_genotypes_flow(eff_flows)
         
+        self.report('Calculating dominant evolving paths')
         paths = self.calc_representative_pathways(a, b,
                                                   max_missing_flow_p=max_missing_flow_p,
                                                   max_paths=max_paths)
@@ -671,6 +681,7 @@ class Visualization(SequenceSpace):
     def write_tpt_objects(self, objects, prefix):
         for label, df in objects.items():
             fpath = '{}.{}.csv'.format(prefix, label)
+            self.report('Writting {} into {}'.format(label, fpath))
             df.to_csv(fpath)
         
     
