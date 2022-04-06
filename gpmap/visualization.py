@@ -595,9 +595,13 @@ class Visualization(SequenceSpace):
         return(genotypes_flows)
     
     def calc_gt_p_reactive_path(self, genotypes_flows, p_return, log=False):
-        res = np.log(genotypes_flows) - np.log(genotypes_flows.max()) + np.log(1 - p_return)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = np.log(genotypes_flows) - np.log(genotypes_flows.max()) + np.log(1 - p_return)
+
         if not log:
             res = np.exp(res)
+            
         return(res)
     
     def calc_normalized_stationary_freq(self, a, b):

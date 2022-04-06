@@ -19,6 +19,7 @@ def main():
             'console_scripts': [
                 'fit_SeqDEFT = bin.fit_seqdeft:main',
                 'calc_visualization = bin.calc_visualization:main',
+                'calc_tpt = bin.calc_tpt:main',
                 'plot_visualization = bin.plot_visualization:main',
                 'plot_decay_rates = bin.plot_decay_rates:main',
                 'filter_genotypes = bin.filter_genotypes:main',

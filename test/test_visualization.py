@@ -190,8 +190,8 @@ class VisualizationTests(unittest.TestCase):
         check_call(cmd)
     
         # Calc visualization
-        fpath = join(TEST_DATA_DIR, 'small_v.csv')
-        out_fpath = join(TEST_DATA_DIR, 'small_v') 
+        fpath = join(TEST_DATA_DIR, 'small_landscape.csv')
+        out_fpath = join(TEST_DATA_DIR, 'small_landscape') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90']
         check_call(cmd)
 
@@ -428,6 +428,20 @@ class TPTTests(unittest.TestCase):
         max_entropy = np.log(1/tpt['bottleneck'].shape[0])
         print(-max_entropy + np.sum(tpt['bottleneck']['flow_p'] * np.log(tpt['bottleneck']['flow_p'])))
         print(tpt['dom_paths_edges'].groupby('flow_p').count().reset_index().groupby('i')['flow_p'].sum())
+    
+    def test_transition_path_objects_bin(self):
+        bin_fpath = join(BIN_DIR, 'calc_tpt.py')
+    
+        # Test help
+        cmd = [sys.executable, bin_fpath, '-h']
+        check_call(cmd)
+    
+        # Calc visualization
+        fpath = join(TEST_DATA_DIR, 'small_landscape.csv')
+        out_fpath = join(TEST_DATA_DIR, 'small_landscape.tpt') 
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath,
+               '-gt1', 'AGCT', '-gt2', 'TCGA', '-Ns', '1', '-K', '10']
+        check_call(cmd)
         
 
 class PlottingTests(unittest.TestCase):
