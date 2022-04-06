@@ -23,7 +23,16 @@ def get_sparse_diag_matrix(values):
 
 
 def extend_ambigous_seq(seq, mapping):
-    return(list(map("".join, product(*map(mapping.get, seq)))))
+    if not seq:
+        yield('')
+
+    else:
+        character, next_seq = seq[0], seq[1:]
+        pos_mapping, next_mapping = mapping[0], mapping[1:]
+        
+        for allele in pos_mapping[character]:
+            for seq in extend_ambigous_seq(next_seq, next_mapping):
+                yield(allele + seq)
 
 
 class BaseGPMap(object):
@@ -41,7 +50,7 @@ class BaseGPMap(object):
             self.alphabet = [DNA_ALPHABET] * self.length
             self.complements = {'A': ['T'], 'T': ['A'],
                                 'G': ['C'], 'C': ['G']}
-            self.ambiguous_values = DNA_AMBIGUOUS_VALUES
+            self.ambiguous_values = [DNA_AMBIGUOUS_VALUES] * self.length
             
         elif alphabet_type == 'rna':
             if n_alleles is not None:
@@ -51,14 +60,14 @@ class BaseGPMap(object):
             self.alphabet = [RNA_ALPHABET] * self.length
             self.complements = {'A': ['U'], 'U': ['A', 'G'],
                                 'G': ['C', 'U'], 'C': ['G']}
-            self.ambiguous_values = RNA_AMBIGUOUS_VALUES
+            self.ambiguous_values = [RNA_AMBIGUOUS_VALUES] * self.length
             
         elif alphabet_type == 'protein':
             if n_alleles is not None:
                 msg = 'Number of alleles can only be specified for "custom" alphabet'
                 raise ValueError(msg)
             
-            self.ambiguous_values = PROT_AMBIGUOUS_VALUES
+            self.ambiguous_values = [PROT_AMBIGUOUS_VALUES] * self.length
             self.alphabet = [PROTEIN_ALPHABET] * self.length
             
         elif alphabet_type == 'custom':
@@ -249,7 +258,8 @@ class SequenceSpace(BaseGPMap):
         """Construct entries of powers of L. 
         Column: powers of L. 
         Row: Hamming distance"""
-        l, a, s = self.length, self.n_alleles, self.length + 1
+        # TODO: update to take into account n_alleles better
+        l, a, s = self.length, self.n_alleles[0], self.length + 1
     
         # Construct C
         C = np.zeros([s, s])
@@ -284,7 +294,8 @@ class SequenceSpace(BaseGPMap):
     
     def calc_w(self, k, d):
         """return value of the Krwatchouk polynomial for k, d"""
-        l, a = self.length, self.n_alleles
+        # TODO: n_alleles fix
+        l, a = self.length, self.n_alleles[0]
         s = 0
         for q in range(l + 1):
             s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)

@@ -366,7 +366,8 @@ class Visualization(SequenceSpace):
         return(flow)
 
     def calc_edges_effective_flow(self, q, edges=None, flows=None):
-        i, j = self._get_edges(edges)
+        edges = self._get_edges(edges)
+        i, j = edges
            
         if flows is None:
             stationary_freqs = self.genotypes_stationary_frequencies
@@ -501,12 +502,14 @@ class Visualization(SequenceSpace):
         return(left + right)
 
     def calc_representative_pathway(self, a, b, flows_dict=None):
-        i, j = self.get_neighbor_pairs()
+        i, j = self._get_edges()
         eff_flows = None
         
         if flows_dict is None:
-            eff_flows = self.calc_edges_effective_flow(a, b)
+            q = self.calc_committor_probability(a, b)
+            eff_flows = self.calc_edges_effective_flow(q)
             flows_dict = self.get_flows_dict(i, j, a, b, eff_flows)
+            
         if eff_flows is None:
             eff_flows = np.array([flows_dict[(s, t)] for s, t in zip(i, j)])
         
@@ -660,6 +663,12 @@ class Visualization(SequenceSpace):
         return({'nodes': genotype_df, 'edges': edges_df,
                 'bottleneck': bottlenecks_df,
                 'dom_paths_edges': dom_paths_edges})
+    
+    def write_tpt_objects(self, objects, prefix):
+        for label, df in objects.items():
+            fpath = '{}.{}.csv'.format(prefix, label)
+            df.to_csv(fpath)
+        
     
     '''
     Plotting methods

@@ -539,15 +539,19 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
 
 def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
                        allele_color='orange', background_color='lightgrey',
-                       nodes_size=None, edges_color='grey', edges_width=0.5):
+                       nodes_size=None, edges_color='grey', edges_width=0.5,
+                       positions=None):
     
     config = guess_configuration(nodes_df.index.values)
     length, n_alleles = config['length'], np.max(config['n_alleles'])
-    
-    fig, subplots = init_fig(n_alleles, length, colsize=3, rowsize=2.7)
-    for j in range(length):
+
+    if positions is None:
+        positions = np.arange(length)
+        
+    fig, subplots = init_fig(n_alleles, positions.shape[0], colsize=3, rowsize=2.7)
+    for col, j in enumerate(positions):
         for i, allele in enumerate(config['alphabet'][j]):
-            axes = subplots[i][j]
+            axes = subplots[i][col]
             plot_visualization(axes, nodes_df, edges_df=edges_df, x=x, y=y,
                                nodes_color=background_color, nodes_size=nodes_size,
                                edges_color=edges_color, edges_width=edges_width)

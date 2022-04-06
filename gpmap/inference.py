@@ -53,7 +53,6 @@ def grad_Frob(lambdas, M, a):
 class VCregression(SequenceSpace):
     def __init__(self, length, n_alleles, log=None, alphabet_type='dna'):
         self.init(length, n_alleles, log=log, alphabet_type=alphabet_type)
-        
         self.calc_MAT()
         self.calc_laplacian()
         self.calc_W_kd_matrix()
