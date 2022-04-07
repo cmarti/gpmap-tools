@@ -53,7 +53,9 @@ def main():
     help_msg = 'Maximum proportion of flow to missing in the set of dominant paths (0.01)'
     options_group.add_argument('-P', '--max_missing_flow_p', default=0.01,
                                type=float, help=help_msg)
-    
+    help_msg = 'Skip calculation of return probabilities to avoid inversion of large matrix'
+    options_group.add_argument('--skip_p_return', default=False,
+                               action='store_true', help=help_msg)
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True,
@@ -74,6 +76,7 @@ def main():
     
     max_paths = parsed_args.max_paths
     max_missing_flow_p = parsed_args.max_missing_flow_p
+    skip_p_return = parsed_args.skip_p_return
     
     out_prefix = parsed_args.output
     
@@ -101,7 +104,8 @@ def main():
     
     objects = v.calc_transition_path_objects(genotypes1, genotypes2,
                                              max_missing_flow_p=max_missing_flow_p,
-                                             max_paths=max_paths)
+                                             max_paths=max_paths,
+                                             skip_p_return=skip_p_return)
     v.write_tpt_objects(objects, out_prefix)
     
     log.finish()

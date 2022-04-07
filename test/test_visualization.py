@@ -381,7 +381,7 @@ class TPTTests(unittest.TestCase):
                       [0, 0, 0, 1]])
         assert(np.allclose(jump_matrix, m))
     
-    def test_calc_exp_n_returns(self):
+    def test_calc_p_return(self):
         np.random.seed(1)
         Ns = 5
     
@@ -393,6 +393,20 @@ class TPTTests(unittest.TestCase):
         v.calc_rate_matrix(Ns)
         m = v.calc_p_return(a, b)
         assert(np.allclose(m, [0, 0.87698151, 0.87698151, 0]))
+    
+    def test_calc_p_return_big(self):
+        np.random.seed(1)
+        Ns = 1
+    
+        v = Visualization(6, n_alleles=4, alphabet_type='custom')
+        vc = VCregression(6, n_alleles=4, alphabet_type='custom')
+        f = vc.simulate([0, 10000, 1000, 100, 10, 1, 0])
+        v.set_function(f)
+        a, b = v.get_AB_genotypes_idxs(['AAAAAA'], ['ABBABB'])
+        v.calc_stationary_frequencies(Ns)
+        v.calc_rate_matrix(Ns)
+        m = v.calc_p_return(a, b, tol=1e-6, inverse=False)
+        print(m)
     
     def test_neighbors(self):
         v = Visualization(4, 2)
@@ -436,7 +450,7 @@ class TPTTests(unittest.TestCase):
         cmd = [sys.executable, bin_fpath, '-h']
         check_call(cmd)
     
-        # Calc visualization
+        # Calculate objects for small landscape
         fpath = join(TEST_DATA_DIR, 'small_landscape.csv')
         out_fpath = join(TEST_DATA_DIR, 'small_landscape.tpt') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath,
@@ -576,13 +590,13 @@ class PlottingTests(unittest.TestCase):
     
     def test_figure_Ns_grid(self):
         log = LogTrack()
-        np.random.seed(5)
-        length = 7
+        np.random.seed(1)
+        length = 8
         lambdas = np.array([0, 1e6, 1e5, 1e4,
-                            1e3, 1e2, 1e1, 1e0,])
+                            1e3, 1e2, 1e1, 1e0, 0])
     
         log.write('Simulate data')
-        vc = VCregression(length, n_alleles=4, log=log)
+        vc = VCregression(length, n_alleles=4, log=log, alphabet_type='custom')
         v = Visualization(length, log=log)
         v.set_function(vc.simulate(lambdas))
         
@@ -643,5 +657,5 @@ class PlottingTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'TPTTests']
+    import sys;sys.argv = ['', 'TPTTests.test_calc_p_return_big']
     unittest.main()

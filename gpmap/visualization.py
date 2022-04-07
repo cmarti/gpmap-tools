@@ -26,6 +26,9 @@ from gpmap.base import SequenceSpace, get_sparse_diag_matrix
 from gpmap.plot import init_fig, savefig, arrange_plot, init_single_fig
 from gpmap.settings import CMAP
 from gpmap.utils import write_pickle, load_pickle
+from scipy.sparse.linalg.interface import LinearOperator
+from scipy.sparse.linalg import lobpcg
+from scipy.sparse.linalg.dsolve.linsolve import spilu
 
 
 class Visualization(SequenceSpace):
@@ -183,7 +186,8 @@ class Visualization(SequenceSpace):
             
         self.report('Eigendecomposition is correct')
     
-    def calc_eigendecomposition(self, n_components=10, tol=1e-14, eig_tol=1e-2):
+    def calc_eigendecomposition(self, n_components=10, tol=1e-14, eig_tol=1e-2,
+                                maxiter=30):
         n_components = min(n_components, self.n_genotypes-1)
         self.n_components = n_components
         sandwich_aux_matrix = self._calc_sandwich_aux_matrix()
@@ -317,7 +321,7 @@ class Visualization(SequenceSpace):
         no_ab_genotypes = np.where(idx)[0]
         return(no_ab_genotypes)
     
-    def calc_committor_probability(self, a, b, tol=1e-12):
+    def calc_committor_probability(self, a, b, tol=1e-16):
         if np.intersect1d(a, b).shape[0] > 0:
             raise ValueError('The two sets of genotypes cannot overlap')
         
@@ -481,6 +485,7 @@ class Visualization(SequenceSpace):
             return([])
         
         eff_flow = np.array([flows_dict[(s, t)] for s, t in zip(i, j)])
+        eff_flow[eff_flow < 0] = 0
         i, j, eff_flow = self.sort_flows(i, j, eff_flow)
         bottleneck = self._calc_dynamic_bottleneck(i, j, a, b, eff_flow=eff_flow)
         b1, b2 = bottleneck[0]
@@ -574,7 +579,8 @@ class Visualization(SequenceSpace):
         jump_matrix = csr_matrix((p_ij, (i, j)), shape=size)
         return(jump_matrix)
     
-    def calc_p_return(self, a, b):
+    def calc_p_return(self, a, b, tol=1e-12, inverse=False):
+        self.report('Calculating jump matrix for reactive paths')
         jump_matrix = self.calc_jump_transition_matrix(a, b)
         M = (identity(self.n_genotypes) - jump_matrix).tocsc()
         
@@ -582,8 +588,38 @@ class Visualization(SequenceSpace):
         no_ab_genotypes = self.get_noAB_genotypes_idxs(a, b)
         M = M[no_ab_genotypes, :][:, no_ab_genotypes]
         
+        # Init return times
         exp_return_times = np.zeros(self.n_genotypes)
-        exp_return_times[no_ab_genotypes] = inv(M).diagonal() - 1
+        z = np.zeros(M.shape[0], dtype=np.float32)
+        m = []
+        
+        if inverse:
+            self.report('Calculating matrix inverse')
+            m = inv(M).diagonal() - 1
+        else:
+            self.report('Calculating preconditioner')
+            ilu = spilu(M, drop_tol=1e-2, fill_factor=50)
+            preconditioner = LinearOperator(M.shape, matvec=ilu.solve,
+                                            matmat=ilu.solve,
+                                            dtype=np.float32)
+            
+            self.report('Solving for return times')
+            for i in tqdm(np.arange(M.shape[0])):
+                b = z.copy()
+                b[i] = 1
+                
+                hitting_times, exitCode = bicgstab(M, b, atol=tol,
+                                                   M=preconditioner)
+                if exitCode != 0 or np.any(hitting_times < 0):
+                    msg = 'Uq = v had a non-zero exit code'
+                    self.report(msg)
+    
+                m.append(hitting_times[i])
+            m = np.array(m) - 1
+
+        #exp_return_times[no_ab_genotypes] = inv(M).diagonal() - 1
+        exp_return_times[no_ab_genotypes] = m
+        
         p_return = exp_return_times / (1 + exp_return_times)
         return(p_return)
 
@@ -591,7 +627,7 @@ class Visualization(SequenceSpace):
         i, j = self._get_edges()
         flow_matrix = csr_matrix((flows, (i, j)),
                                  shape=(self.n_genotypes, self.n_genotypes))
-        genotypes_flows = flow_matrix.A.sum(1)
+        genotypes_flows = flow_matrix.sum(1).A.flatten()
         return(genotypes_flows)
     
     def calc_gt_p_reactive_path(self, genotypes_flows, p_return, log=False):
@@ -615,7 +651,7 @@ class Visualization(SequenceSpace):
         bottlenecks = []
         edges = []
         
-        for bottleneck, path, flow, p in paths:
+        for bottleneck, path, flow, p in tqdm(paths):
             bottlenecks.append({'i': bottleneck[0], 'j': bottleneck[1],
                                 'flow': flow,  'flow_p': p})
             for i, j in zip(path, path[1:]):
@@ -633,7 +669,8 @@ class Visualization(SequenceSpace):
         return(bottlenecks_df, edges_df)
             
     def calc_transition_path_objects(self, genotypes1, genotypes2, tol=1e-12,
-                                     max_missing_flow_p=1e-4, max_paths=None):
+                                     max_missing_flow_p=1e-4, max_paths=None,
+                                     skip_p_return=False):
         self.report('Finding indexes of starting and end genotypes')
         a, b = self.get_AB_genotypes_idxs(genotypes1, genotypes2)
         norm_freqs = self.calc_normalized_stationary_freq(a, b)
@@ -644,31 +681,40 @@ class Visualization(SequenceSpace):
         self.report('Calculating proportion of time spent in a reactive path')
         m_ab = self.calc_gt_p_time_reactive_path(q)[1]
         
-        self.report('Calculating flows through the edges')
+        self.report('Calculating flows through the edges and nodes')
         edges = self.get_neighbor_pairs()
         flows = self.calc_edges_flow(q, edges=edges)
         eff_flows = self.calc_edges_effective_flow(q=q, edges=edges,
                                                    flows=flows)
-        
-        self.report('Calculating return probabilities before absortion')
-        p_return = self.calc_p_return(a, b)
         genotypes_flows = self.calc_genotypes_flow(flows)
-        
-        self.report('Calculating proportion of paths including each genotype')
-        p_gt_in_path = self.calc_gt_p_reactive_path(genotypes_flows, p_return)
         genotypes_eff_flows = self.calc_genotypes_flow(eff_flows)
+
+        if skip_p_return:
+            self.report('Skipping calculation of return probabilities')
+        else:
+            self.report('Calculating return probabilities before absortion')
+            p_return = self.calc_p_return(a, b)
+            
+            self.report('Calculating proportion of paths including each genotype')
+            p_gt_in_path = self.calc_gt_p_reactive_path(genotypes_flows, p_return)
         
         self.report('Calculating dominant evolving paths')
         paths = self.calc_representative_pathways(a, b,
                                                   max_missing_flow_p=max_missing_flow_p,
                                                   max_paths=max_paths)
         
-        genotype_df = pd.DataFrame({'f': self.f, 'norm_freqs': norm_freqs,
-                                    'q': q, 'm_ab': m_ab, 'p_return': p_return,
+        genotype_df = pd.DataFrame({'f': self.f,
+                                    'norm_freqs': norm_freqs,
+                                    'q': q, 'm_ab': m_ab,
                                     'flow': genotypes_flows,
-                                    'eff_flow': genotypes_eff_flows,
-                                    'p_in_path': p_gt_in_path},
+                                    'eff_flow': genotypes_eff_flows},
                                    index=self.genotypes)
+        
+        if not skip_p_return:
+            genotype_df['p_in_path'] = p_gt_in_path
+            genotype_df['p_return'] = p_return
+        
+        
         edges_df = pd.DataFrame({'i': edges[0], 'j': edges[1],
                                  'flow': flows, 'eff_flow': eff_flows})
         
