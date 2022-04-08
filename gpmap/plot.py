@@ -334,7 +334,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                           vmax=vmax, vmin=vmin)
     
     if add_cbar:
-        plt.colorbar(sc, ax=axes).set_label(label=clabel, fontsize=fontsize)
+        plt.colorbar(sc, ax=axes, fraction=0.1, pad=0.02).set_label(label=clabel, fontsize=fontsize)
     if add_legend:
         create_patches_legend(axes, palette, loc=legendloc, fontsize=fontsize)
         
@@ -354,13 +354,15 @@ def get_nodes_df_highlight(nodes_df, genotype_groups, is_prot=False,
                                                   codon_table=codon_table)
         
         for group in genotype_groups:
-            for seq in extend_ambigous_seq(group, PROT_AMBIGUOUS_VALUES):
+            mapping = [PROT_AMBIGUOUS_VALUES] * len(group)
+            for seq in extend_ambigous_seq(group, mapping):
                 groups_dict[seq] = group
         nodes_df['group'] = [groups_dict.get(x, None) for x in nodes_df['protein']]
     else:
         nodes_df['group'] = np.nan
         for group in genotype_groups:
-            genotype_labels = extend_ambigous_seq(group, AMBIGUOUS_VALUES[alphabet_type])
+            mapping = [AMBIGUOUS_VALUES[alphabet_type]] * len(group)
+            genotype_labels = extend_ambigous_seq(group, mapping)
             nodes_df.loc[genotype_labels, 'group'] = group
     nodes_df = nodes_df.dropna()
     return(nodes_df)
@@ -497,7 +499,7 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
                          fontsize=12, prev_nodes_df=None,
                          highlight_genotypes=None, is_prot=False,
                          highlight_size=200, palette='colorblind',
-                         figsize=(10, 7.6), interactive=False, 
+                         figsize=None, figsize_factor=2, interactive=False, 
                          alphabet_type=None):
     
     if nodes_size is None:
@@ -512,6 +514,10 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
                          edges_width=edges_width, edges_color=edges_color,
                          text=text)
     else:
+        if figsize is None:
+            figsize = (figsize_factor*(nodes_df[x].max() - nodes_df[x].min()) / 0.85,
+                       figsize_factor*(nodes_df[y].max() - nodes_df[y].min()))
+                       
         fig, axes = init_single_fig(figsize=figsize, is_3d=z is not None)
         plot_visualization(axes, nodes_df=nodes_df, edges_df=edges_df,
                            x=x, y=y, z=z,

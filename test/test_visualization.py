@@ -104,29 +104,6 @@ class VisualizationTests(unittest.TestCase):
         assert(np.all(v.genotypes_stationary_frequencies > 0))
         assert(np.allclose(np.sum(v.genotypes_stationary_frequencies), 1))
     
-    def test_codon_v(self):
-        fig_fpath = join(TEST_DATA_DIR, 'codon_v')
-        v = CodonFitnessLandscape(add_variation=True, seed=0)
-        v.calc_visualization(Ns=1, n_components=25)
-        figure_visualization(v.nodes_df, v.edges_df,
-                             fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
-                             palette='Set1', alphabet_type='rna')
-
-        # Test whether saving the projections works        
-        prefix = join(TEST_DATA_DIR, 'codon_v')
-        v.write_tables(prefix)
-        
-        nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
-        edges_df = pd.read_csv('{}.edges.csv'.format(prefix))
-        decay_df = pd.read_csv('{}.decay_rates.csv'.format(prefix))
-        
-        figure_visualization(nodes_df, edges_df, nodes_size=50,
-                             fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
-                             palette='Set1', alphabet_type='rna')
-        
-        fpath = join(TEST_DATA_DIR, 'codon_v.decay_rates')
-        plot_decay_rates(decay_df, fpath=fpath)
-    
     def test_filter_genotypes(self):
         prefix = join(TEST_DATA_DIR, 'codon_v')
         nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
@@ -398,11 +375,11 @@ class TPTTests(unittest.TestCase):
         np.random.seed(1)
         Ns = 1
     
-        v = Visualization(6, n_alleles=4, alphabet_type='custom')
-        vc = VCregression(6, n_alleles=4, alphabet_type='custom')
-        f = vc.simulate([0, 10000, 1000, 100, 10, 1, 0])
+        v = Visualization(7, n_alleles=4, alphabet_type='custom')
+        vc = VCregression(7, n_alleles=4, alphabet_type='custom')
+        f = vc.simulate([0, 10000, 1000, 100, 10, 1, 0, 0])
         v.set_function(f)
-        a, b = v.get_AB_genotypes_idxs(['AAAAAA'], ['ABBABB'])
+        a, b = v.get_AB_genotypes_idxs(['AAAAAAA'], ['ABBABBB'])
         v.calc_stationary_frequencies(Ns)
         v.calc_rate_matrix(Ns)
         m = v.calc_p_return(a, b, tol=1e-6, inverse=False)
@@ -495,6 +472,29 @@ class PlottingTests(unittest.TestCase):
         plot_nodes(axes, nodes_df, size='f', color='white', lw=0.2)
         plot_edges(axes, nodes_df, edges_df)
         savefig(fig, fpath)
+    
+    def test_codon_visualization(self):
+        fig_fpath = join(TEST_DATA_DIR, 'codon_landscape')
+        v = CodonFitnessLandscape(add_variation=True, seed=0)
+        v.calc_visualization(Ns=1, n_components=25)
+        figure_visualization(v.nodes_df, v.edges_df,
+                             fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
+                             palette='Set1', alphabet_type='rna')
+
+        # Test whether saving the projections works        
+        prefix = join(TEST_DATA_DIR, 'codon_landscape')
+        v.write_tables(prefix)
+        
+        nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
+        edges_df = pd.read_csv('{}.edges.csv'.format(prefix))
+        decay_df = pd.read_csv('{}.decay_rates.csv'.format(prefix))
+        
+        figure_visualization(nodes_df, edges_df, nodes_size=50,
+                             fpath=fig_fpath, highlight_genotypes=['UCN', 'AGY'],
+                             palette='Set1', alphabet_type='rna')
+        
+        fpath = join(TEST_DATA_DIR, 'codon_landscape.decay_rates')
+        plot_decay_rates(decay_df, fpath=fpath)
         
     def test_plot_visualization_bin(self):    
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
@@ -657,5 +657,5 @@ class PlottingTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'TPTTests.test_calc_p_return_big']
+    import sys;sys.argv = ['', 'PlottingTests.test_codon_visualization']
     unittest.main()
