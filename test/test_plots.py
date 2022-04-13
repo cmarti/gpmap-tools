@@ -12,7 +12,8 @@ from gpmap.settings import TEST_DATA_DIR, BIN_DIR
 from subprocess import check_call
 from gpmap.plot import (plot_nodes, plot_edges, figure_visualization,
                         plot_decay_rates, figure_Ns_grid,
-                        init_fig, savefig, figure_allele_grid)
+                        init_fig, savefig, figure_allele_grid,
+                        figure_shifts_grid)
         
 
 class PlottingTests(unittest.TestCase):
@@ -174,6 +175,14 @@ class PlottingTests(unittest.TestCase):
         fpath = join(TEST_DATA_DIR, 'codon_v.alleles')
         figure_allele_grid(v.nodes_df, edges_df=v.edges_df, fpath=fpath)
     
+    def test_visualization_grid_shifts(self):
+        v = CodonFitnessLandscape(add_variation=True, seed=0)
+        v.calc_visualization(Ns=1)
+        
+        fpath = join(TEST_DATA_DIR, 'codon_v.shifts')
+        figure_shifts_grid(v.nodes_df, seq='AU', edges_df=v.edges_df,
+                           fpath=fpath, alphabet_type='rna')
+    
     def test_figure_Ns_grid(self):
         log = LogTrack()
         np.random.seed(1)
@@ -243,5 +252,5 @@ class PlottingTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'PlottingTests.test_plotting']
+    import sys;sys.argv = ['', 'PlottingTests.test_visualization_grid_shifts']
     unittest.main()

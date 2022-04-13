@@ -601,7 +601,7 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
             xpos = xlims[0] + xpos_label * (xlims[1] - xlims[0])
             ypos = ylims[0] + ypos_label * (ylims[1] - ylims[0])
             axes.text(xpos, ypos, '{}{}'.format(allele, position_labels[j]),
-                      ha='center')
+                      ha='left')
     
     savefig(fig, fpath)
     
@@ -658,3 +658,50 @@ def figure_Ns_grid(viz, fpath=None, fmin=None, fmax=None,
                 axes.set_yticks([])
         
         savefig(fig, fpath)
+
+
+def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
+                       allele_color='orange', background_color='lightgrey',
+                       nodes_size=None, edges_color='grey', edges_width=0.5,
+                       positions=None, position_labels=None, autoscale_axis=True,
+                       colsize=3, rowsize=2.7, xpos_label=0.05, ypos_label=0.92,
+                       is_prot=False, alphabet_type='rna', codon_table='Standard'):
+    
+    length = len(nodes_df.index[0]) - len(seq) + 1
+
+    if position_labels is None:
+        position_labels = np.arange(length) + 1
+
+    if positions is None:
+        positions = np.arange(length)
+        
+    fig, subplots = init_fig(1, positions.shape[0], colsize=colsize, rowsize=rowsize)
+    for col, j in enumerate(positions):
+        if alphabet_type in ['rna', 'dna']:
+            genotype_groups = ['N' * j + seq + 'N' * (length - j - length + 1)]
+        else:
+            genotype_groups = ['X' * j + seq + 'X' * (length - j - length + 1)]
+        axes = subplots[col]
+        plot_visualization(axes, nodes_df, edges_df=edges_df, x=x, y=y,
+                           nodes_color=background_color, nodes_size=nodes_size,
+                           edges_color=edges_color, edges_width=edges_width,
+                           autoscale_axis=autoscale_axis)
+        sel_nodes_df = get_nodes_df_highlight(nodes_df,
+                                              genotype_groups=genotype_groups,
+                                              is_prot=is_prot,
+                                              alphabet_type=alphabet_type,
+                                              codon_table=codon_table)
+        plot_nodes(axes, sel_nodes_df, x=x, y=y, color=allele_color,
+                   size=nodes_size, autoscale_axis=False)
+        
+        if col > 0:
+            axes.set_ylabel('')
+            axes.set_yticks([])
+            
+        xlims, ylims = axes.get_xlim(), axes.get_ylim()
+        xpos = xlims[0] + xpos_label * (xlims[1] - xlims[0])
+        ypos = ylims[0] + ypos_label * (ylims[1] - ylims[0])
+        axes.text(xpos, ypos, '{}{}'.format(seq, position_labels[j]),
+                  ha='left')
+    
+    savefig(fig, fpath)
