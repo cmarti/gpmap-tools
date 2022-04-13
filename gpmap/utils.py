@@ -130,14 +130,15 @@ def translante_seqs(seqs, codon_table='Standard'):
 
 
 def guess_configuration(seqs):
-    alleles = defaultdict(set)
+    alleles = defaultdict(dict)
     for seq in seqs:
         for i, a in enumerate(seq):
-            alleles[i].add(a)
+            alleles[i][a] = 1 
     length = len(alleles)
     config = {'length': length,
               'n_alleles': [len(alleles[i]) for i in range(length)],
-              'alphabet': [sorted(alleles[i]) for i in range(length)]}
+              'alphabet': [[a for a in alleles[i].keys()]
+                           for i in range(length)]}
     if np.prod(config['n_alleles']) != seqs.shape[0]:
         msg = 'Number of genotypes does not match the expected from guessed'
         msg += ' configuration. Ensure that genotypes span the whole sequence '

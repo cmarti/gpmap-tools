@@ -9,18 +9,17 @@ from os.path import join, exists
 from itertools import combinations, product
 
 from numpy.linalg import eigh, solve
-from numpy.random import choice, normal, random, seed, shuffle
+from numpy.random import choice, normal, random, seed
 from scipy.linalg import orth
 from scipy.optimize import minimize
 from scipy.sparse import csr_matrix, dia_matrix, load_npz, save_npz
 from scipy.sparse.linalg import eigsh
 from scipy.special import comb, factorial
 
-from settings import CACHE_DIR
-from plot_utils import arrange_plot, init_fig, savefig
-from gpmap import GenotypePhenotypeMap
-from utils import write_log
-from scipy.stats._multivariate import multinomial
+from gpmap.settings import CACHE_DIR
+from gpmap.base import SequenceSpace
+from gpmap.utils import write_log
+from gpmap.plot import init_fig, arrange_plot, savefig
 
 U_MAX = 500
 PHI_UB, PHI_LB = 100, 0
@@ -207,8 +206,10 @@ class SeqDEFT(object):
         assert(np.allclose(self.Q_star.sum(), 1))
     
     def calc_laplacian(self):
-        gpmap = GenotypePhenotypeMap(self.l, self.alpha)
-        self.L = gpmap.calc_laplacian()
+        gpmap = SequenceSpace()
+        gpmap.init(self.l, self.alpha, alphabet_type='custom')
+        gpmap.calc_laplacian()
+        self.L = gpmap.L
     
     def L_opt(self, phi, p=0):
         return self.L.dot(phi) - p * self.alpha * phi

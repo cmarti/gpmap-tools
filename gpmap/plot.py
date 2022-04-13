@@ -5,6 +5,7 @@ import seaborn as sns
 import matplotlib.patches as mpatches
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import plotly.graph_objects as go
 
 from matplotlib.gridspec import GridSpec
@@ -295,7 +296,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                edgecolor='black', lw=0,
                label=None, clabel='Function',
                sort=True, sort_by=None, ascending=False, 
-               vmax=None, vmin=None, fontsize=12, legendloc=0,
+               vcenter=None, vmax=None, vmin=None, fontsize=12, legendloc=0,
                subset=None, autoscale_axis=True):
     if subset is not None:
         nodes_df = nodes_df.loc[subset, :]
@@ -308,8 +309,8 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
             if isinstance(palette, str):
                 labels = np.unique(nodes_df[color])
                 n_colors = labels.shape[0]
-                colors = sns.color_palette(palette, n_colors)
-                palette = dict(zip(labels, colors))
+                c = sns.color_palette(palette, n_colors)
+                palette = dict(zip(labels, c))
             elif not isinstance(palette, dict):
                 raise ValueError('palette must be a str or dict')
             color = np.array([palette[label] for label in nodes_df[color]])
@@ -332,12 +333,14 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
         s = np.power(nodes_df[size], 2)
         size = min_size + s * (max_size - min_size) / (s.max() - s.min())
 
-    axis_lims = get_axis_lims(nodes_df, x, y, z=z)    
+    axis_lims = get_axis_lims(nodes_df, x, y, z=z)
+    
+    norm = None if vcenter is None else colors.CenteredNorm()
     if z is not None:
         sc = axes.scatter(nodes_df[x], nodes_df[y], zs=nodes_df[z], c=color,
                           linewidth=lw, s=size, zorder=zorder, alpha=alpha,
                           edgecolor=edgecolor, cmap=cmap, label=label,
-                          vmax=vmax, vmin=vmin)
+                          vmax=vmax, vmin=vmin, norm=norm)
         axes.set_zlabel('Diffusion axis {}'.format(z), fontsize=fontsize)
         axes.set_zlim(axis_lims)
     
@@ -345,7 +348,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
         sc = axes.scatter(nodes_df[x], nodes_df[y], c=color,
                           linewidth=lw, s=size, zorder=zorder, alpha=alpha,
                           edgecolor=edgecolor, cmap=cmap, label=label,
-                          vmax=vmax, vmin=vmin)
+                          vmax=vmax, vmin=vmin, norm=norm)
     
     if add_cbar:
         plt.colorbar(sc, ax=axes, fraction=0.1, pad=0.02).set_label(label=clabel, fontsize=fontsize)
