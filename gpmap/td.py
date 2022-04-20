@@ -124,6 +124,8 @@ class ConvolutionalModel(_ConvolutionalModel):
         if self.multiple_backgrounds:
             if self.variable_theta:
                 model_label = 'full_model'
+            elif self.fixed_theta:
+                model_label = 'full_model.fixed_theta.gpmu'
             else:
                 if self.positional_effects:
                     if self.allow_bulges:
@@ -132,7 +134,7 @@ class ConvolutionalModel(_ConvolutionalModel):
                         if self.n_filters > 1:
                             model_label = 'full_model.fixed.n_filters'
                         else:
-                            model_label = 'full_model.fixed'
+                            model_label = 'full_model.fixed.gpmu'
                 else:
                     model_label = 'full_model.fixed_pos'
         else:
@@ -171,6 +173,7 @@ class ConvolutionalModel(_ConvolutionalModel):
                        n_filters=1, positional_effects=False,
                        allow_bulges=False, base_bulges=False,
                        intercept=None, slope=None,
+                       fixed_theta=False,
                        position_bulges=False,
                        selected_bulges_positions=None,
                        multiple_backgrounds=False,
@@ -186,6 +189,7 @@ class ConvolutionalModel(_ConvolutionalModel):
         self.intercept = intercept
         self.slope = slope
         self.positional_effects = positional_effects
+        self.fixed_theta = fixed_theta
         
         self.allow_bulges = allow_bulges
         self.base_bulges = base_bulges
@@ -536,6 +540,7 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
                  intercept=None, slope=None,
                  multiple_backgrounds=False,
                  variable_theta=False,
+                 fixed_theta=False,
                  alpha_type=False, position_bulges=False,
                  allow_bulges=False, base_bulges=False,
                  selected_bulges_positions=None,
@@ -546,6 +551,7 @@ class AdditiveConvolutionalModel(ConvolutionalModel):
                             alpha_type=alpha_type,
                             multiple_backgrounds=multiple_backgrounds,
                             variable_theta=variable_theta,
+                            fixed_theta=fixed_theta,
                             intercept=intercept, slope=slope,
                             allow_bulges=allow_bulges, base_bulges=base_bulges,
                             selected_bulges_positions=selected_bulges_positions,

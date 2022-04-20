@@ -19,6 +19,17 @@ def check_error(condition, msg, error_type=ValueError):
         raise error_type(msg)
 
 
+def check_symmetric(sparse_matrix, tol=1e-6):
+    if not (abs(sparse_matrix - sparse_matrix.T)> tol).nnz == 0:
+        raise ValueError('Re-scaled rate matrix is not symmetric')
+
+
+def get_sparse_diag_matrix(values):
+    n_genotypes = values.shape[0]
+    m = dia_matrix((values, np.array([0])), shape=(n_genotypes, n_genotypes))
+    return(m)
+
+
 def logit(p):
     return(np.log(p  /(1 - p)))
 
