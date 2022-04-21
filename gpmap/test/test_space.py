@@ -4,8 +4,11 @@ import unittest
 import pandas as pd
 import numpy as np
 
-from gpmap.src.space import SequenceSpace, DiscreteSpace, CodonSpace
+from gpmap.src.space import SequenceSpace, DiscreteSpace, CodonSpace,\
+    read_sequence_space_csv
 from scipy.sparse.csr import csr_matrix
+from gpmap.src.settings import TEST_DATA_DIR
+from os.path import join
 
 
 class SpaceTests(unittest.TestCase):
@@ -106,6 +109,22 @@ class SpaceTests(unittest.TestCase):
         seqs = s.get_neighbors(seq, max_distance=2)
         for seq in seqs:
             assert('A' in seq)
+    
+    def test_write_space(self):
+        space = CodonSpace(['S'], add_variation=True, seed=0)
+        fpath = join(TEST_DATA_DIR, 'serine.csv')
+        space.write_csv(fpath)
+        
+        df = pd.read_csv(fpath, index_col=0)
+        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        assert(np.all(df[df['function'] > 1.5].index.values == codons))
+    
+    def test_read_space(self):
+        fpath = join(TEST_DATA_DIR, 'serine.csv')
+        s = read_sequence_space_csv(fpath, function_col='function')
+        
+        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        assert(np.all(s.state_labels[s.function > 1.5] == codons))
 
         
 if __name__ == '__main__':
