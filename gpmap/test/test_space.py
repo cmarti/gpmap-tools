@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import unittest
 
+import pandas as pd
 import numpy as np
 
 from gpmap.src.space import SequenceSpace, DiscreteSpace, CodonSpace
@@ -52,10 +53,14 @@ class SpaceTests(unittest.TestCase):
                 pass
     
     def test_codon_space(self):
-        s = CodonSpace(['K'], add_variation=True, seed=0)
+        s = CodonSpace(['S'], add_variation=True, seed=0)
         assert(s.n_states == 64)
         assert(s.state_labels[0] == 'AAA')
+        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        assert(np.all(s.state_labels[s.function > 1.5] == codons))
         
+        s = CodonSpace(['K'], add_variation=True, seed=0)
+        assert(np.all(s.state_labels[s.function > 1.5] == ['AAA', 'AAG']))
         
     def test_n_alleles(self):
         s = SequenceSpace(seq_length=2, alphabet_type='dna')

@@ -82,6 +82,11 @@ class DiscreteSpace(object):
                 self.neighbor_pairs = A.row, A.col
         return(self.neighbor_pairs)
     
+    def get_edges_df(self):
+        i, j = self.get_neighbor_pairs()
+        edges_df = pd.DataFrame({'i': i, 'j': j})
+        return(edges_df)
+    
     
 class SequenceSpace(DiscreteSpace):
     def __init__(self, seq_length=None, n_alleles=None,

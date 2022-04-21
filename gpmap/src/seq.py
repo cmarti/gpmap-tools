@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 import itertools
+from _collections import defaultdict
 
 import numpy as np
 from Bio.Seq import Seq 
 
 from gpmap.settings import NUCLEOTIDES, COMPLEMENT
+from gpmap.src.utils import check_error
 
 
 def extend_ambigous_seq(seq, mapping):
@@ -47,3 +49,19 @@ def translate_seqs(seqs, codon_table='Standard'):
     prot_genotypes = np.array([str(Seq(seq).translate(table=codon_table))
                                for seq in seqs])
     return(prot_genotypes)
+
+
+def guess_space_configuration(seqs):
+    alleles = defaultdict(dict)
+    for seq in seqs:
+        for i, a in enumerate(seq):
+            alleles[i][a] = 1 
+    length = len(alleles)
+    config = {'length': length,
+              'n_alleles': [len(alleles[i]) for i in range(length)],
+              'alphabet': [[a for a in alleles[i].keys()]
+                           for i in range(length)]}
+    msg = 'Number of genotypes does not match the expected from guessed configuration.'
+    msg += ' Ensure that genotypes span the whole sequence space'
+    check_error(np.prod(config['n_alleles']) == seqs.shape[0], msg)
+    return(config)

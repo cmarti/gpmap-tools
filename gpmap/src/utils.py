@@ -12,6 +12,7 @@ import numpy as np
 from gpmap.settings import NUCLEOTIDES, COMPLEMENT, MODELS_DIR, CODE_DIR
 from Bio.Seq import Seq
 from _collections import defaultdict
+from scipy.sparse.dia import dia_matrix
 
 
 def check_error(condition, msg, error_type=ValueError):
