@@ -181,7 +181,8 @@ class PlottingTests(unittest.TestCase):
         
         fpath = join(TEST_DATA_DIR, 'codon_v.shifts')
         figure_shifts_grid(v.nodes_df, seq='AU', edges_df=v.edges_df,
-                           fpath=fpath, alphabet_type='rna')
+                           fpath=fpath, alphabet_type='rna',
+                           labels_full_seq=True)
     
     def test_figure_Ns_grid(self):
         log = LogTrack()
