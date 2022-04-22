@@ -162,19 +162,23 @@ class SequenceSpace(DiscreteSpace):
         m = sp.vstack(rows)
         return(m)
     
-    def _calc_adjacency_matrix(self, m=None, pos=0):
+    def _calc_adjacency_matrix(self, m=None, pos=None):
+        if pos is None:
+            pos = self.seq_length - 1
+            
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             
             if m is None:
                 m = self.site_Kn[pos]
-            
-            if pos == (self.seq_length-1):
+    
+            if pos == 0:
                 return(m)
     
             i = sp.identity(m.shape[0])
-            m = self._istack_matrices(m, i, pos)
-        return(self._calc_adjacency_matrix(m, pos+1))
+            m = self._istack_matrices(m, i, pos-1)
+            
+        return(self._calc_adjacency_matrix(m, pos-1))
     
     def calc_adjacency_matrix(self):
         self._calc_site_adjacency_matrices(self.n_alleles)

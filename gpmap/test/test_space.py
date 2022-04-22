@@ -87,6 +87,40 @@ class SpaceTests(unittest.TestCase):
         assert(s.n_states == 32)
         assert(s.genotypes.shape[0] == 32)
     
+    def test_alphabet(self):
+        alphabet = [['A', 'B'], 
+                    ['C', 'D', 'E']]
+        
+        s = SequenceSpace(alphabet=alphabet, alphabet_type='custom')
+        states = ['AC', 'AD', 'AE', 'BC', 'BD', 'BE']
+        assert(np.all(s.state_labels == states))
+        
+        A = s.adjacency_matrix.todense()
+        expected_A = np.array([[0, 1, 1, 1, 0, 0],
+                               [1, 0, 1, 0, 1, 0],
+                               [1, 1, 0, 0, 0, 1],
+                               [1, 0, 0, 0, 1, 1],
+                               [0, 1, 0, 1, 0, 1],
+                               [0, 0, 1, 1, 1, 0]])
+        assert(np.all(A == expected_A))
+        
+        # Switch order of sites
+        alphabet = [['C', 'D', 'E'],
+                    ['A', 'B']]
+        
+        s = SequenceSpace(alphabet=alphabet, alphabet_type='custom')
+        states = ['CA', 'CB', 'DA', 'DB', 'EA', 'EB']
+        assert(np.all(s.state_labels == states))
+        
+        A = s.adjacency_matrix.todense()
+        expected_A = np.array([[0, 1, 1, 0, 1, 0],
+                               [1, 0, 0, 1, 0, 1],
+                               [1, 0, 0, 1, 1, 0],
+                               [0, 1, 1, 0, 0, 1],
+                               [1, 0, 1, 0, 0, 1],
+                               [0, 1, 0, 1, 1, 0]])
+        assert(np.all(A == expected_A))
+    
     def test_adjacency_matrix(self):
         s = SequenceSpace(1, alphabet_type='dna')
         A = s.adjacency_matrix.todense()
