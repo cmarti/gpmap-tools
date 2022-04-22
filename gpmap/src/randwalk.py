@@ -10,9 +10,9 @@ from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
-from gpmap.utils import write_pickle, load_pickle, check_eigendecomposition
 from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix, check_error,
-                             write_log)
+                             write_log, check_eigendecomposition, write_pickle,
+    load_pickle)
 
 
 class RandomWalk(object):
