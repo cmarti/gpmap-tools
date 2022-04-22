@@ -1,19 +1,25 @@
 #!/usr/bin/env python
+from itertools import product
 
 import numpy as np
+import pandas as pd
 import seaborn as sns
 import matplotlib.patches as mpatches
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import plotly.graph_objects as go
+import datashader as ds
+import holoviews as hv
 
 from matplotlib.gridspec import GridSpec
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
+from holoviews.operation.datashader import datashade
+from holoviews import opts
+from colorcet import fire
 
 from gpmap.settings import PLOTS_FORMAT, PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
-from itertools import product
 from gpmap.utils import translante_seqs, guess_configuration
 from gpmap.base import extend_ambigous_seq
 
@@ -715,4 +721,38 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
         panel_label = genotype_groups[0] if labels_full_seq else '{}{}'.format(seq, position_labels[j])
         axes.text(xpos, ypos, panel_label, ha='left')
     
+    savefig(fig, fpath)
+    
+    
+def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
+                  nodes_color='function', nodes_cmap='viridis',
+                  edges_cmap='grey', background_color='white'):
+    
+    # node_x, node_y = self.get_nodes_coord()
+    # edge_x, edge_y = self.get_plotly_edges(node_x, node_y)
+    
+    nodes = hv.Points(nodes_df, kdims=[x, y], label='Nodes')
+    dsg = datashade(nodes, cmap=nodes_cmap, # width=800, height=800,
+                    aggregator=ds.max(nodes_color))
+    
+    
+    if edges_df is not None:
+        edge_x, edge_y, _ = get_plotly_edges(nodes_df, edges_df, x=x, y=y, z=None)
+        e = pd.DataFrame({x: edge_x, y: edge_y})
+        edges = hv.Curve(e, label='Edges')
+        dsg = datashade(edges, width=800, height=800, cmap=edges_cmap) * dsg
+    
+    dsg.opts(xlabel='Diffusion axis 1',
+             ylabel='Diffusion axis 2', bgcolor=background_color,
+             # width=500, height=400,
+             fig_size=400,
+             title='Genotype-Phenotype Map')
+    
+    fig = hv.render(dsg)
+    # hv.extension('matplotlib')
+    # hv.output()
+    # hv.save(ds_g, 'holomap.html')
+    
+    # mr = hv.renderer('matplotlib')
+    # mr.show(ds_g)
     savefig(fig, fpath)
