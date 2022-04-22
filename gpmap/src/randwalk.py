@@ -12,7 +12,7 @@ from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix, check_error,
                              write_log, check_eigendecomposition, write_pickle,
-    load_pickle)
+                             load_pickle)
 
 
 class RandomWalk(object):
@@ -105,11 +105,13 @@ class TimeReversibleRandomWalk(RandomWalk):
         data = {attr: getattr(self, attr) for attr in attrs}
         write_pickle(data, fpath)
     
-    def write_tables(self, prefix):
+    def write_tables(self, prefix, write_edges=False):
         self.nodes_df.to_csv('{}.nodes.csv'.format(prefix))
-        self.edges_df.to_csv('{}.edges.csv'.format(prefix), index=False)
-        self.decay_df.to_csv('{}.decay_rates.csv'.format(prefix),
-                             index=False)
+        self.decay_rates_df.to_csv('{}.decay_rates.csv'.format(prefix),
+                                   index=False)
+        if write_edges:
+            edges_df = self.space.get_edges_df()
+            edges_df.to_csv('{}.edges.csv'.format(prefix), index=False)
         
     def load(self, fpath, log=None):
         self.log = log

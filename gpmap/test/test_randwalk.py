@@ -4,6 +4,7 @@ from os.path import join
 from subprocess import check_call
 
 import numpy as np
+import pandas as pd
 
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace
@@ -62,6 +63,15 @@ class RandomWalkTests(unittest.TestCase):
         df = mc.nodes_df
         assert(df.iloc[np.argmax(df['1']), :]['function'] > 1.5)
         assert(df.iloc[np.argmin(df['1']), :]['function'] > 1.5)
+    
+    def test_write_visualization(self):
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc.calc_visualization(Ns=1, n_components=20)
+        prefix = join(TEST_DATA_DIR, 'serine')
+        mc.write_tables(prefix, write_edges=True)
+        
+        nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
+        assert(np.allclose(nodes_df.values, mc.nodes_df.values))
         
     def xtest_calc_visualization_bin(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
