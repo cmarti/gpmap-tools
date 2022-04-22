@@ -6,7 +6,7 @@ import scipy.sparse as sp
 
 from scipy.sparse.csr import csr_matrix
 
-from gpmap.src.seq import translate_seqs
+from gpmap.src.seq import translate_seqs, guess_space_configuration
 from gpmap.utils import check_error
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
@@ -82,6 +82,16 @@ class DiscreteSpace(object):
                 self.neighbor_pairs = A.row, A.col
         return(self.neighbor_pairs)
     
+    def get_edges_df(self):
+        i, j = self.get_neighbor_pairs()
+        edges_df = pd.DataFrame({'i': i, 'j': j})
+        return(edges_df)
+    
+    def write_csv(self, fpath):
+        df = pd.DataFrame({'function': self.function}, 
+                          index=self.state_labels)
+        df.to_csv(fpath)
+    
     
 class SequenceSpace(DiscreteSpace):
     def __init__(self, seq_length=None, n_alleles=None,
@@ -130,7 +140,7 @@ class SequenceSpace(DiscreteSpace):
         if seq_length is None:
             check_error(n_alleles is not None or alphabet is not None,
                         'One of seq_length, n_alleles or alphabet is required')
-            seq_length = n_alleles.shape[0] if n_alleles is not None else alphabet.shape[0]
+            seq_length = len(n_alleles) if n_alleles is not None else len(alphabet)
         self.seq_length = seq_length
     
     def _calc_site_adjacency_matrices(self, n_alleles):
@@ -173,7 +183,7 @@ class SequenceSpace(DiscreteSpace):
     def _check_alphabet(self, n_alleles, alphabet_type, alphabet):
         if alphabet is not None:
             msg = 'n_alleles cannot be specified when the alphabet is provided'
-            check_error(n_alleles is not None, msg=msg)
+            check_error(n_alleles is None, msg=msg)
             msg = 'alphabet can only be provided for alphabet_type="custom"'
             check_error(alphabet_type == 'custom', msg=msg)
             
@@ -254,3 +264,16 @@ class CodonSpace(SequenceSpace):
             if seed is not None:
                 np.random.seed(seed)
             self.function += 1 / 10 * np.random.normal(size=self.n_states)
+
+
+def read_sequence_space_csv(fpath, function_col, seq_col=0, sort_seqs=True):
+    df = pd.read_csv(fpath, index_col=seq_col)
+    if sort_seqs:
+        df.sort_index(inplace=True)
+    
+    function = df[function_col].values
+    seqs = df.index.values
+    config = guess_space_configuration(seqs)
+    space = SequenceSpace(alphabet=config['alphabet'], function=function,
+                          alphabet_type='custom')
+    return(space)
