@@ -14,10 +14,36 @@ from gpmap.plot import (plot_nodes, plot_edges, figure_visualization,
                         plot_decay_rates, figure_Ns_grid,
                         init_fig, savefig, figure_allele_grid,
                         figure_shifts_grid)
-from gpmap.src.plot import plot_holoview
+from gpmap.src.plot import plot_holoview, get_lines_from_edges_df
         
 
 class PlottingTests(unittest.TestCase):
+    def test_get_lines_from_edges_df(self):
+        nodes_df = pd.DataFrame({'1': [0, 1, 2],
+                                 '2': [1, 2, 3],
+                                 '3': [2, 3, 4]})
+        edges_df = pd.DataFrame({'i': [0, 1],
+                                 'j': [1, 2]})
+        
+        # Test with two axis
+        line_coords = get_lines_from_edges_df(nodes_df, edges_df, x='1', y='2')
+        exp_x = [0, 1, np.nan, 1, 2, np.nan]
+        exp_y = [1, 2, np.nan, 2, 3, np.nan]
+        for a, b, c, d in zip(line_coords[:, 0], exp_x, line_coords[:, 1], exp_y):
+            assert(a == b or (np.isnan(a) and np.isnan(b)))
+            assert(c == d or (np.isnan(c) and np.isnan(d)))
+            
+        # Test with 3 axis
+        line_coords = get_lines_from_edges_df(nodes_df, edges_df, x='1', y='2', z='3')
+        exp_x = [0, 1, np.nan, 1, 2, np.nan]
+        exp_y = [1, 2, np.nan, 2, 3, np.nan]
+        exp_z = [2, 3, np.nan, 3, 4, np.nan]
+        for a, b, c, d, e, f in zip(line_coords[:, 0], exp_x, line_coords[:, 1],
+                                    exp_y, line_coords[:, 2], exp_z):
+            assert(a == b or (np.isnan(a) and np.isnan(b)))
+            assert(c == d or (np.isnan(c) and np.isnan(d)))
+            assert(e == f or (np.isnan(e) and np.isnan(f)))
+        
     def test_datashader_small(self):
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
         edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')

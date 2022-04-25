@@ -439,20 +439,14 @@ def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
                    max_width=edges_max_width, min_width=edges_min_width)
 
 
-def get_plotly_edges(nodes_df, edges_df, x=1, y=2, z=None,
-                     avoid_dups=True):
-    edge_x = []
-    edge_y = []
-    edge_z = []
+def get_lines_from_edges_df(nodes_df, edges_df, x=1, y=2, z=None,
+                            avoid_dups=True):
     edges = get_edges_coords(nodes_df, edges_df, x=x, y=y, z=z,
                              avoid_dups=avoid_dups)
-    ndim = edges.shape[2]
-    for node1, node2 in zip(edges[:, 0, :], edges[:, 1, :]):
-        edge_x.extend([node1[0], node2[0], None])
-        edge_y.extend([node1[1], node2[1], None])
-        if ndim > 2:
-            edge_z.extend([node1[2], node2[2], None])
-    return(edge_x, edge_y, edge_z)
+    nans = np.full((edges.shape[0], 1), fill_value=np.nan)
+    line_coords = np.vstack([np.hstack([edges[:, :, i], nans]).flatten()
+                             for i in range(edges.shape[2])]).T
+    return(line_coords)
 
 
 def plot_interactive(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
@@ -484,14 +478,14 @@ def plot_interactive(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
 
     # Create edges        
     if edges_df is not None:
-        edges = get_plotly_edges(nodes_df, edges_df, x=x, y=y, z=z)
+        edges = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=z)
         if z is None:
-            edge_trace = go.Scatter(x=edges[0], y=edges[1],
+            edge_trace = go.Scatter(x=edges[:, 0], y=edges[:, 1],
                                     line=dict(width=edges_width, color=edges_color),
                                     hoverinfo='none', mode='lines',
                                     opacity=edges_alpha, name='Mutations')
         else:
-            edge_trace = go.Scatter3d(x=edges[0], y=edges[1], z=edges[2],
+            edge_trace = go.Scatter3d(x=edges[:, 0], y=edges[:, 1], z=edges[:, 2],
                                       line=dict(width=edges_width, color=edges_color),
                                       hoverinfo='none', mode='lines',
                                       opacity=edges_alpha, name='Mutations')
@@ -737,16 +731,17 @@ def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
     
     
     if edges_df is not None:
-        edge_x, edge_y, _ = get_plotly_edges(nodes_df, edges_df, x=x, y=y, z=None)
-        e = pd.DataFrame({x: edge_x, y: edge_y})
-        edges = hv.Curve(e, label='Edges')
-        dsg = datashade(edges, width=800, height=800, cmap=edges_cmap) * dsg
+        line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
+        edges = hv.Curve(line_coords, label='Edges')
+        dsg = datashade(edges, cmap=edges_cmap) * dsg # width=800, height=800
     
-    dsg.opts(xlabel='Diffusion axis 1',
-             ylabel='Diffusion axis 2', bgcolor=background_color,
+    dsg.opts(xlabel='Diffusion axis {}'.format(x),
+             ylabel='Diffusion axis {}'.format(y),
+             bgcolor=background_color,
              # width=500, height=400,
-             fig_size=400,
-             title='Genotype-Phenotype Map')
+             # fig_size=400,
+             # title='Genotype-Phenotype Map',
+             )
     
     fig = hv.render(dsg)
     # hv.extension('matplotlib')
