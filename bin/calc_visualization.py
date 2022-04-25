@@ -5,6 +5,8 @@ import pandas as pd
 
 from gpmap.utils import LogTrack
 from gpmap.visualization import Visualization
+from gpmap.src.space import SequenceSpace
+from gpmap.src.randwalk import WMWSWalk
 
         
 def main():
@@ -31,6 +33,8 @@ def main():
                               help='Use codon model for visualization of protein landscape')
     coding_group.add_argument('-c', '--codon_table', default='Standard',
                               help='NCBI Codon table to use for equivalence (Standard)')
+    coding_group.add_argument('-sf', '--stop_f', default=-10, type=float,
+                              help='Function for stop codons')
     
     viz_group = parser.add_argument_group('Visualization options')
     viz_group.add_argument('-k', '--n_components', default=5, type=int,
@@ -59,28 +63,37 @@ def main():
     n_components = parsed_args.n_components
     Ns = parsed_args.Ns
     mean_function = parsed_args.mean_function
-    percentile_function = parsed_args.percentile_function
-    out_fpath = parsed_args.output
+    mean_function_perc = parsed_args.percentile_function
     
     use_coding_sequence = parsed_args.use_coding_sequence
     codon_table = parsed_args.codon_table if use_coding_sequence else None
+    stop_function = parsed_args.stop_f
     
-    # Load counts data
+    out_fpath = parsed_args.output
+    
+    # Load data
     log = LogTrack()
     log.write('Start analysis')
     data = pd.read_csv(data_fpath, index_col=0)
-    length = len(data.index[0])
+    
+    seq_length = len(data.index[0])
+    
     if use_coding_sequence:
-        length = length * 3
+        seq_length = seq_length * 3
+    else:
+        codon_table = None
 
     # Load annotation data
-    gpmap = Visualization(length, alphabet_type=alphabet_type,
-                          n_alleles=n_alleles, log=log)
-    gpmap.set_function(data.iloc[:, 0], codon_table=codon_table)
-    gpmap.calc_visualization(Ns=Ns, meanf=mean_function,
-                             perc_function=percentile_function,
-                             n_components=n_components)
-    gpmap.write_tables(out_fpath)
+    space = SequenceSpace(seq_length=seq_length, n_alleles=n_alleles,
+                          alphabet_type=alphabet_type,
+                          function=data.iloc[:, 0].values,
+                          codon_table=codon_table, stop_function=stop_function)
+    
+    mc = WMWSWalk(space)
+    mc.calc_visualization(Ns=Ns, mean_function=mean_function,
+                          mean_function_perc=mean_function_perc,
+                          n_components=n_components)
+    mc.write_tables(out_fpath)
     
     log.finish()
 

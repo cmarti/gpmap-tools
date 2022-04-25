@@ -73,18 +73,24 @@ class RandomWalkTests(unittest.TestCase):
         nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
         assert(np.allclose(nodes_df.values, mc.nodes_df.values))
         
-    def xtest_calc_visualization_bin(self):
+    def test_calc_visualization_bin_help(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
     
-        # Test help
         cmd = [sys.executable, bin_fpath, '-h']
         check_call(cmd)
     
-        # Calc visualization
-        fpath = join(TEST_DATA_DIR, 'small_landscape.csv')
-        out_fpath = join(TEST_DATA_DIR, 'small_landscape') 
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90']
+    def test_calc_visualization_bin(self):
+        bin_fpath = join(BIN_DIR, 'calc_visualization.py')
+        fpath = join(TEST_DATA_DIR, 'serine.csv')
+        
+        out_fpath = join(TEST_DATA_DIR, 'serine') 
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90',
+               '-A', 'rna']
         check_call(cmd)
+        
+        df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+        assert(df.iloc[np.argmax(df['1']), :]['function'] > 1.5)
+        assert(df.iloc[np.argmin(df['1']), :]['function'] > 1.5)
 
         
 if __name__ == '__main__':
