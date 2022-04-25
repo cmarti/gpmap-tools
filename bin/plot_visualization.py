@@ -5,6 +5,7 @@ import pandas as pd
 
 from gpmap.utils import LogTrack
 from gpmap.plot import figure_visualization
+from gpmap.src.plot import plot_holoview
 
         
 def main():
@@ -46,6 +47,8 @@ def main():
     fig_group.add_argument('-a', '--axis', default='1,2', help=help_msg)
     fig_group.add_argument('--interactive', default=False, action='store_true',
                            help='Make interactive html')
+    fig_group.add_argument('--datashader', default=False, action='store_true',
+                           help='Use datashader for plotting. Recommended for big landscapes')
     
     highlight_group = parser.add_argument_group('Highlight genotypes options')    
     help_msg = 'Comma separated list of IUPAC codes to highlight genotypes'
@@ -82,6 +85,7 @@ def main():
         axis.append(None)
     x, y, z = axis
     interactive = parsed_args.interactive
+    use_datashader = parsed_args.datashader 
     
     genotypes = parsed_args.genotypes
     alphabet_type = parsed_args.alphabet_type
@@ -107,16 +111,21 @@ def main():
         genotypes = str(genotypes).split(',')
     
     log.write('Plot visualization')
-    figure_visualization(nodes_df, edges_df=edges_df,
-                         fpath=out_fpath, x=x, y=y, z=z, 
-                         nodes_color=nodes_color, nodes_cmap=nodes_cmap, 
-                         nodes_size=nodes_size, nodes_cmap_label=label,
-                         edges_color=edges_color,
-                         edges_width=edges_width, edges_alpha=edges_alpha,
-                         sort_by=sort_by, ascending=ascending, sort_nodes=True,
-                         highlight_genotypes=genotypes,
-                         is_prot=is_prot, interactive=interactive,
-                         alphabet_type=alphabet_type)
+    if use_datashader:
+        plot_holoview(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
+                      nodes_color=nodes_color, nodes_cmap=nodes_cmap,
+                      edges_cmap='grey', background_color='white')
+    else:
+        figure_visualization(nodes_df, edges_df=edges_df,
+                             fpath=out_fpath, x=x, y=y, z=z, 
+                             nodes_color=nodes_color, nodes_cmap=nodes_cmap, 
+                             nodes_size=nodes_size, nodes_cmap_label=label,
+                             edges_color=edges_color,
+                             edges_width=edges_width, edges_alpha=edges_alpha,
+                             sort_by=sort_by, ascending=ascending, sort_nodes=True,
+                             highlight_genotypes=genotypes,
+                             is_prot=is_prot, interactive=interactive,
+                             alphabet_type=alphabet_type)
     
     log.finish()
 

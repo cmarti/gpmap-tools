@@ -117,36 +117,49 @@ class PlottingTests(unittest.TestCase):
         figure_visualization(nodes_df, edges_df, nodes_color='f',
                              fpath=plot_fpath)
         
-    def xtest_plot_visualization_bin(self):    
+    def test_plot_visualization_bin_help(self):    
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'codon_v.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'codon_v.edges.csv')
-        decay_fpath = join(TEST_DATA_DIR, 'codon_v.decay_rates.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'codon_v') 
-        
-        # Test bin
         cmd = [sys.executable, bin_fpath, '-h']
         check_call(cmd)
         
-        # Test visualization
+    def test_plot_visualization_bin(self):    
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        
+        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
+        
+        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
+        
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath]
+               '-o', plot_fpath, '-nc', 'function', '-s', 'function']
         check_call(cmd)
         
         # Highlighting peaks in nucleotide sequence
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-g', 'UCN,AGY', '-A', 'rna']
+               '-o', plot_fpath, '-g', 'UCN,AGY', '-A', 'rna',
+               '-nc', 'function', '-s', 'function']
         check_call(cmd)
         
         # Highlighting coding sequence
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
                '-o', plot_fpath,
                '-g', 'S,L', '--protein_seq', '-l', 'log(binding)',
-               '-A', 'protein']
+               '-A', 'protein', '-nc', 'function', '-s', 'function']
+        check_call(cmd)
+    
+    def test_plot_visualization_bin_datashader(self):
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-nc', 'f', '--datashader']
         check_call(cmd)
         
-        # Screeplot for decay rates
+    def test_plot_decay_rates_bin(self):    
         bin_fpath = join(BIN_DIR, 'plot_decay_rates.py')
+        decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
         plot_fpath = join(TEST_DATA_DIR, 'codon_v.decay_rates') 
         cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
         check_call(cmd)
