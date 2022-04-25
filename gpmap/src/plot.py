@@ -18,6 +18,7 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from holoviews.operation.datashader import datashade
 from holoviews import opts
 from colorcet import fire
+from datashader import transfer_functions as tf
 
 from gpmap.settings import PLOTS_FORMAT, PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
 from gpmap.utils import translante_seqs, guess_configuration
@@ -717,37 +718,91 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
     
     savefig(fig, fpath)
     
-    
-def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
-                  nodes_color='function', nodes_cmap='viridis',
-                  edges_cmap='grey', background_color='white'):
-    
-    # node_x, node_y = self.get_nodes_coord()
-    # edge_x, edge_y = self.get_plotly_edges(node_x, node_y)
-    
+
+def plot_edges_datashader(nodes_df, edges_df, x, y, edges_cmap,
+                          width=None, height=None):
+    line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
+    edges = hv.Curve(line_coords, label='Edges')
+    dsg = datashade(edges, cmap=edges_cmap) # , width=width, height=height
+    return(dsg)
+
+def plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap='viridis'):
     nodes = hv.Points(nodes_df, kdims=[x, y], label='Nodes')
     dsg = datashade(nodes, cmap=nodes_cmap, # width=800, height=800,
                     aggregator=ds.max(nodes_color))
+    return(dsg)
+
+
+def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
+                  nodes_color='function', nodes_cmap='viridis',
+                  edges_cmap='grey', background_color='white',
+                  width=None, height=None):
     
+    dsg = plot_nodes_datashader(nodes_df, x, y, nodes_color=nodes_color,
+                                nodes_cmap=nodes_cmap)
     
     if edges_df is not None:
-        line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
-        edges = hv.Curve(line_coords, label='Edges')
-        dsg = datashade(edges, cmap=edges_cmap) * dsg # width=800, height=800
+        edges_dsg = plot_edges_datashader(nodes_df, edges_df, x, y,
+                                          edges_cmap=edges_cmap,
+                                          width=width, height=height)
+        dsg = edges_dsg * dsg
     
     dsg.opts(xlabel='Diffusion axis {}'.format(x),
              ylabel='Diffusion axis {}'.format(y),
-             bgcolor=background_color,
-             # width=500, height=400,
-             # fig_size=400,
-             # title='Genotype-Phenotype Map',
-             )
+             bgcolor=background_color)
     
     fig = hv.render(dsg)
-    # hv.extension('matplotlib')
-    # hv.output()
-    # hv.save(ds_g, 'holomap.html')
-    
-    # mr = hv.renderer('matplotlib')
-    # mr.show(ds_g)
     savefig(fig, fpath)
+
+
+def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
+                                  positions=None, position_labels=None,
+                                  edges_cmap='grey', background_color='white',
+                                  width=None, height=None):
+    
+    if edges_df is not None:
+        edges = plot_edges_datashader(nodes_df, edges_df, x, y,
+                                      edges_cmap=edges_cmap,
+                                      width=width, height=height)
+    else:
+        edges = None
+        
+    config = guess_configuration(nodes_df.index.values)
+    length, n_alleles = config['length'], np.max(config['n_alleles'])
+
+    if position_labels is None:
+        position_labels = np.arange(length) + 1
+
+    if positions is None:
+        positions = np.arange(length)
+
+    plots = None
+    
+    nc = {i: np.array([seq[i] for seq in nodes_df.index])
+          for i in range(length)}
+    for i in range(n_alleles):
+        for col, j in enumerate(positions):
+            allele  = config['alphabet'][j][i]
+            nodes_df['allele'] = (nc[col] == allele).astype(int)
+            nodes = plot_nodes_datashader(nodes_df.copy(),
+                                          x, y, nodes_color='allele',
+                                          nodes_cmap='viridis')
+            nodes = nodes.relabel('{}{}'.format(j+1, allele))
+            dsg = nodes if edges is None else edges * nodes
+            dsg.opts(xlabel='Diffusion axis {}'.format(x),
+                     ylabel='Diffusion axis {}'.format(y),
+                     bgcolor=background_color,
+                     title='{}{}'.format(j+1, allele))
+            
+            if i < n_alleles - 1:
+                dsg.opts(xlabel='')
+            if col > 0:
+                dsg.opts(ylabel='')
+                
+            if plots is None:
+                plots = dsg
+            else:
+                plots += dsg
+    dsg = plots.cols(length)
+    fig = hv.render(dsg)
+    savefig(fig, fpath, tight=False)

@@ -14,7 +14,8 @@ from gpmap.plot import (plot_nodes, plot_edges, figure_visualization,
                         plot_decay_rates, figure_Ns_grid,
                         init_fig, savefig, figure_allele_grid,
                         figure_shifts_grid)
-from gpmap.src.plot import plot_holoview, get_lines_from_edges_df
+from gpmap.src.plot import plot_holoview, get_lines_from_edges_df,\
+    figure_allele_grid_datashader
         
 
 class PlottingTests(unittest.TestCase):
@@ -66,6 +67,16 @@ class PlottingTests(unittest.TestCase):
         
         plot_holoview(nodes_df, plot_fpath, edges_df=edges_df, nodes_color='f',
                       nodes_cmap='viridis', edges_cmap='grey')
+    
+    def test_datashader_alleles(self):  
+        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot.alleles')
+        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+        edges_df = pd.read_csv(edges_fpath)
+        
+        figure_allele_grid_datashader(nodes_df, plot_fpath, edges_df=edges_df,
+                                      x='1', y='2')
     
     def test_plotting(self):
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
