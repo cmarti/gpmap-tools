@@ -66,7 +66,8 @@ class PlottingTests(unittest.TestCase):
         edges_df = pd.read_csv(edges_fpath)
         
         plot_holoview(nodes_df, plot_fpath, edges_df=edges_df, nodes_color='f',
-                      nodes_cmap='viridis', edges_cmap='grey')
+                      nodes_cmap='viridis', edges_cmap='grey',
+                      resolution=600)
     
     def test_datashader_alleles(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
@@ -154,7 +155,7 @@ class PlottingTests(unittest.TestCase):
         plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
         
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader']
+               '-o', plot_fpath, '-nc', 'f', '--datashader', '-r', '800']
         check_call(cmd)
         
     def test_plot_decay_rates_bin(self):    

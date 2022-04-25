@@ -2,7 +2,6 @@
 from itertools import product
 
 import numpy as np
-import pandas as pd
 import seaborn as sns
 import matplotlib.patches as mpatches
 import matplotlib.cm as cm
@@ -12,13 +11,9 @@ import plotly.graph_objects as go
 import datashader as ds
 import holoviews as hv
 
-from matplotlib.gridspec import GridSpec
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from holoviews.operation.datashader import datashade
-from holoviews import opts
-from colorcet import fire
-from datashader import transfer_functions as tf
 
 from gpmap.settings import PLOTS_FORMAT, PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
 from gpmap.utils import translante_seqs, guess_configuration
@@ -80,128 +75,6 @@ def create_patches_legend(axes, colors_dict, loc=1, **kwargs):
     axes.legend(handles=[mpatches.Patch(color=color, label=label)
                          for label, color in colors_dict.items()],
                 loc=loc, **kwargs)
-
-
-def set_boxplot_colorlines(axes, color):
-    # From
-    # https://stackoverflow.com/questions/36874697/how-to-edit-properties-of-whiskers-fliers-caps-etc-in-seaborn-boxplot
-    for i, artist in enumerate(axes.artists):
-        artist.set_edgecolor(color)
-        artist.set_facecolor('None')
-
-        # Each box has 6 associated Line2D objects (to make the whiskers, fliers, etc.)
-        # Loop over them here, and use the same colour as above
-        for line in axes.lines:
-            line.set_color(color)
-            line.set_mfc(color)
-            line.set_mec(color)
-
-
-def arrange_plot(axes, xlims=None, ylims=None, zlims=None,
-                 xlabel=None, ylabel=None, zlabel=None,
-                 showlegend=False, legend_loc=None, hline=None, vline=None,
-                 rotate_xlabels=False, cols_legend=1, rotation=90,
-                 legend_frame=True, title=None, ticklabels_size=None,
-                 yticklines=False, despine=False, legend_fontsize=10):
-    if xlims is not None:
-        axes.set_xlim(xlims)
-    if ylims is not None:
-        axes.set_ylim(ylims)
-    if zlims is not None:
-        axes.set_zlim(zlims)
-        
-    if title is not None:
-        axes.set_title(title)
-
-    if xlabel is not None:
-        axes.set_xlabel(xlabel)
-    if ylabel is not None:
-        axes.set_ylabel(ylabel)
-    if zlabel is not None:
-        axes.set_zlabel(zlabel)
-
-    if showlegend:
-        axes.legend(loc=legend_loc, ncol=cols_legend,
-                    frameon=legend_frame, fancybox=legend_frame,
-                    fontsize=legend_fontsize)
-    elif axes.legend_ is not None:
-        axes.legend_.set_visible(False)
-
-    if hline is not None:
-        xlims = axes.get_xlim()
-        axes.plot(xlims, (hline, hline), linewidth=1, color='grey',
-                  linestyle='--')
-        axes.set_xlim(xlims)
-
-    if vline is not None:
-        ylims = axes.get_ylim()
-        axes.plot((vline, vline), ylims, linewidth=1, color='grey',
-                  linestyle='--')
-        axes.set_ylim(ylims)
-
-    if rotate_xlabels:
-        axes.set_xticklabels(axes.get_xticklabels(), rotation=rotation,
-                             ha='right')
-    if ticklabels_size is not None:
-        for tick in axes.xaxis.get_major_ticks():
-            tick.label.set_fontsize(ticklabels_size)
-        for tick in axes.yaxis.get_major_ticks():
-            tick.label.set_fontsize(ticklabels_size)
-    if yticklines:
-        xlims = axes.get_xlim()
-        for y in axes.get_yticks():
-            axes.plot(xlims, (y, y), lw=0.2, alpha=0.1, c='lightgrey')
-
-    if despine:
-        sns.despine(ax=axes)
-
-
-def plot_post_pred_ax(x, q, axes, color):
-    for i in range(int((q.shape[0] - 1) / 2)):
-        axes.fill_between(x, q[i, :], q[-(i + 1), :], facecolor=color,
-                          interpolate=True, alpha=0.1)
-    axes.plot(x, q[int(q.shape[0] / 2), :], color=color, linewidth=2)
-
-
-def add_panel_label(axes, label, fontsize=20, yfactor=0.015, xfactor=0.25):
-    xlims, ylims = axes.get_xlim(), axes.get_ylim()
-    x = xlims[0] - (xlims[1] - xlims[0]) * xfactor
-    y = ylims[1] + (ylims[1] - ylims[0]) * yfactor
-    axes.text(x, y, label, fontsize=fontsize)
-
-
-def add_grey_area(axes, between=(-0.2, 0.2), ylims=None, add_vline=True):
-    if ylims is None:
-        ylims = axes.get_ylim()
-    axes.fill_between(between, (ylims[0], ylims[0]), (ylims[1], ylims[1]),
-                      facecolor='grey', interpolate=True, alpha=0.2)
-    if add_vline:
-        axes.plot((0, 0), ylims, linestyle='--', c='grey', lw=0.5)
-
-
-def add_image(axes, fpath):
-    fmt = fpath.split('.')[-1]
-    arr_image = plt.imread(fpath, format=fmt)    
-    axes.imshow(arr_image)
-    axes.axis('off')
-
-
-class FigGrid(object):
-    def __init__(self, figsize=(11, 9.5), xsize=100, ysize=100):
-        self.fig = plt.figure(figsize=figsize)
-        self.gs = GridSpec(xsize, ysize, wspace=1, hspace=1)
-        self.xsize = 100
-        self.ysize = 100
-
-    def new_axes(self, xstart=0, xend=None, ystart=0, yend=None):
-        if xend is None:
-            xend = self.xsize
-        if yend is None:
-            yend = self.ysize
-        return(self.fig.add_subplot(self.gs[ystart:yend, xstart:xend]))
-
-    def savefig(self, fname):
-        savefig(self.fig, fname, tight=False)
 
 
 def plot_decay_rates(decay_df, axes=None, fpath=None, log_scale=False):
@@ -720,31 +593,44 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
     
 
 def plot_edges_datashader(nodes_df, edges_df, x, y, edges_cmap,
-                          width=None, height=None):
+                          resolution=800):
     line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
     edges = hv.Curve(line_coords, label='Edges')
-    dsg = datashade(edges, cmap=edges_cmap) # , width=width, height=height
+    dsg = datashade(edges, cmap=edges_cmap, width=resolution, height=resolution) 
     return(dsg)
 
-def plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap='viridis'):
+def plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap='viridis',
+                          is_sorted=False, resolution=800):
     nodes = hv.Points(nodes_df, kdims=[x, y], label='Nodes')
-    dsg = datashade(nodes, cmap=nodes_cmap, # width=800, height=800,
-                    aggregator=ds.max(nodes_color))
+    if is_sorted:
+        dsg = datashade(nodes, cmap=nodes_cmap,
+                        width=resolution, height=resolution,
+                        aggregator=ds.first(nodes_color))
+    else:
+        dsg = datashade(nodes, cmap=nodes_cmap, 
+                        width=resolution, height=resolution,
+                        aggregator=ds.max(nodes_color))
     return(dsg)
 
 
 def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
                   nodes_color='function', nodes_cmap='viridis',
+                  sort_by=None, ascending=False,
                   edges_cmap='grey', background_color='white',
-                  width=None, height=None):
+                  resolution=800):
+    
+    if sort_by is not None:
+        nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
     
     dsg = plot_nodes_datashader(nodes_df, x, y, nodes_color=nodes_color,
-                                nodes_cmap=nodes_cmap)
+                                nodes_cmap=nodes_cmap,
+                                is_sorted=sort_by is not None,
+                                resolution=resolution)
     
     if edges_df is not None:
         edges_dsg = plot_edges_datashader(nodes_df, edges_df, x, y,
                                           edges_cmap=edges_cmap,
-                                          width=width, height=height)
+                                          resolution=resolution)
         dsg = edges_dsg * dsg
     
     dsg.opts(xlabel='Diffusion axis {}'.format(x),
@@ -758,12 +644,12 @@ def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
 def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
                                   positions=None, position_labels=None,
                                   edges_cmap='grey', background_color='white',
-                                  width=None, height=None):
+                                  resolution=800):
     
     if edges_df is not None:
         edges = plot_edges_datashader(nodes_df, edges_df, x, y,
                                       edges_cmap=edges_cmap,
-                                      width=width, height=height)
+                                      resolution=resolution)
     else:
         edges = None
         
@@ -786,7 +672,8 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
             nodes_df['allele'] = (nc[col] == allele).astype(int)
             nodes = plot_nodes_datashader(nodes_df.copy(),
                                           x, y, nodes_color='allele',
-                                          nodes_cmap='viridis')
+                                          nodes_cmap='viridis',
+                                          resolution=resolution)
             nodes = nodes.relabel('{}{}'.format(j+1, allele))
             dsg = nodes if edges is None else edges * nodes
             dsg.opts(xlabel='Diffusion axis {}'.format(x),
