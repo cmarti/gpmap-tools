@@ -35,7 +35,7 @@ def main():
     
     edges_group = parser.add_argument_group('Edges options')
     edges_group.add_argument('-e', '--edges', default=None,
-                             help='npz file containing edges data for plotting')
+                             help='npz or csv file containing edges data for plotting')
     edges_group.add_argument('-ec', '--edges_color', default='grey',
                              help='Edges color (grey)')
     edges_group.add_argument('-ea', '--edges_alpha', default=0.1, type=float,
@@ -106,8 +106,15 @@ def main():
     
     if edges_fpath is not None:
         log.write('Reading edges data from {}'.format(edges_fpath))
-        A = load_npz(edges_fpath).tocoo()
-        edges_df = pd.DataFrame({'i': A.row, 'j': A.col}) 
+        edges_format = edges_fpath.split('.')[-1]
+        if edges_format == 'npz':
+            A = load_npz(edges_fpath).tocoo()
+            edges_df = pd.DataFrame({'i': A.row, 'j': A.col})
+        elif edges_format == 'csv':
+            edges_df = pd.read_csv(edges_fpath)
+        else:
+            raise ValueError('edges format has to be ".npz" or ".csv"')
+         
     else:
         log.write('No edges provided for plotting')
         edges_df = None
