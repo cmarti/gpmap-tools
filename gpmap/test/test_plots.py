@@ -67,7 +67,7 @@ class PlottingTests(unittest.TestCase):
         
         plot_holoview(nodes_df, plot_fpath, edges_df=edges_df, nodes_color='f',
                       nodes_cmap='viridis', edges_cmap='grey',
-                      resolution=600)
+                      edges_resolution=1800, nodes_resolution=600)
     
     def test_datashader_alleles(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
@@ -127,7 +127,7 @@ class PlottingTests(unittest.TestCase):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
         
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.npz')
         
         plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
         
@@ -151,11 +151,12 @@ class PlottingTests(unittest.TestCase):
     def test_plot_visualization_bin_datashader(self):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
         plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
         
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader', '-r', '800']
+               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
+               '-er', '1800']
         check_call(cmd)
         
     def test_plot_decay_rates_bin(self):    

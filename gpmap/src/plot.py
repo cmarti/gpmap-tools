@@ -617,7 +617,7 @@ def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
                   nodes_color='function', nodes_cmap='viridis',
                   sort_by=None, ascending=False,
                   edges_cmap='grey', background_color='white',
-                  resolution=800):
+                  nodes_resolution=800, edges_resolution=1200):
     
     if sort_by is not None:
         nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
@@ -625,12 +625,12 @@ def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
     dsg = plot_nodes_datashader(nodes_df, x, y, nodes_color=nodes_color,
                                 nodes_cmap=nodes_cmap,
                                 is_sorted=sort_by is not None,
-                                resolution=resolution)
+                                resolution=nodes_resolution)
     
     if edges_df is not None:
         edges_dsg = plot_edges_datashader(nodes_df, edges_df, x, y,
                                           edges_cmap=edges_cmap,
-                                          resolution=resolution)
+                                          resolution=edges_resolution)
         dsg = edges_dsg * dsg
     
     dsg.opts(xlabel='Diffusion axis {}'.format(x),
@@ -644,12 +644,12 @@ def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
 def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
                                   positions=None, position_labels=None,
                                   edges_cmap='grey', background_color='white',
-                                  resolution=800):
+                                  nodes_resolution=800, edges_resolution=1200):
     
     if edges_df is not None:
         edges = plot_edges_datashader(nodes_df, edges_df, x, y,
                                       edges_cmap=edges_cmap,
-                                      resolution=resolution)
+                                      resolution=edges_resolution)
     else:
         edges = None
         
@@ -673,7 +673,7 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
             nodes = plot_nodes_datashader(nodes_df.copy(),
                                           x, y, nodes_color='allele',
                                           nodes_cmap='viridis',
-                                          resolution=resolution)
+                                          resolution=nodes_resolution)
             nodes = nodes.relabel('{}{}'.format(j+1, allele))
             dsg = nodes if edges is None else edges * nodes
             dsg.opts(xlabel='Diffusion axis {}'.format(x),

@@ -50,8 +50,10 @@ def main():
                            help='Make interactive html')
     fig_group.add_argument('--datashader', default=False, action='store_true',
                            help='Use datashader for plotting. Recommended for big landscapes')
-    fig_group.add_argument('-r', '--resolution', default=600, type=int,
-                           help='Resolution for datashader plotting (600)')
+    fig_group.add_argument('-nr', '--nodes_resolution', default=600, type=int,
+                           help='Resolution for datashader plotting of nodes (600)')
+    fig_group.add_argument('-er', '--edges_resolution', default=1200, type=int,
+                           help='Resolution for datashader plotting of edges (1200)')
     
     highlight_group = parser.add_argument_group('Highlight genotypes options')    
     help_msg = 'Comma separated list of IUPAC codes to highlight genotypes'
@@ -89,7 +91,8 @@ def main():
     x, y, z = axis
     interactive = parsed_args.interactive
     use_datashader = parsed_args.datashader
-    resolution = parsed_args.resolution 
+    nodes_resolution = parsed_args.nodes_resolution
+    edges_resolution = parsed_args.edges_resolution 
     
     genotypes = parsed_args.genotypes
     alphabet_type = parsed_args.alphabet_type
@@ -127,7 +130,8 @@ def main():
         plot_holoview(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
                       nodes_color=nodes_color, nodes_cmap=nodes_cmap,
                       edges_cmap='grey', background_color='white',
-                      resolution=resolution)
+                      nodes_resolution=nodes_resolution,
+                      edges_resolution=edges_resolution)
     else:
         figure_visualization(nodes_df, edges_df=edges_df,
                              fpath=out_fpath, x=x, y=y, z=z, 
