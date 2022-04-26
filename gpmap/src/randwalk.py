@@ -105,13 +105,20 @@ class TimeReversibleRandomWalk(RandomWalk):
         data = {attr: getattr(self, attr) for attr in attrs}
         write_pickle(data, fpath)
     
-    def write_tables(self, prefix, write_edges=False):
+    def write_tables(self, prefix, write_edges=False, edges_format='npz'):
         self.nodes_df.to_csv('{}.nodes.csv'.format(prefix))
         self.decay_rates_df.to_csv('{}.decay_rates.csv'.format(prefix),
                                    index=False)
         if write_edges:
-            edges_df = self.space.get_edges_df()
-            edges_df.to_csv('{}.edges.csv'.format(prefix), index=False)
+            if edges_format == 'npz':
+                fpath = '{}.edges.npz'.format(prefix)
+                self.space.write_edges_npz(fpath)
+            elif edges_format == 'csv':
+                fpath = '{}.edges.csv'.format(prefix)
+                self.space.write_edges_csv(fpath)
+            else:
+                msg = 'edges_format can only take values ["npz", "csv"]'
+                raise ValueError(msg)
         
     def load(self, fpath, log=None):
         self.log = log

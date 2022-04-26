@@ -9,6 +9,7 @@ import pandas as pd
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace
 from gpmap.src.randwalk import WMWSWalk
+from scipy.sparse._matrix_io import load_npz
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -85,12 +86,15 @@ class RandomWalkTests(unittest.TestCase):
         
         out_fpath = join(TEST_DATA_DIR, 'serine') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90',
-               '-A', 'rna']
+               '-A', 'rna', '-e']
         check_call(cmd)
         
         df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
         assert(df.iloc[np.argmax(df['1']), :]['function'] > 1.5)
         assert(df.iloc[np.argmin(df['1']), :]['function'] > 1.5)
+        
+        edges = load_npz('{}.edges.npz'.format(out_fpath))
+        assert(np.all(edges.shape == (64, 64)))
 
         
 if __name__ == '__main__':

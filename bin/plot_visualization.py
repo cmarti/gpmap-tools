@@ -6,6 +6,7 @@ import pandas as pd
 from gpmap.utils import LogTrack
 from gpmap.plot import figure_visualization
 from gpmap.src.plot import plot_holoview
+from scipy.sparse._matrix_io import load_npz
 
         
 def main():
@@ -34,7 +35,7 @@ def main():
     
     edges_group = parser.add_argument_group('Edges options')
     edges_group.add_argument('-e', '--edges', default=None,
-                             help='CSV files containing edges data for plotting')
+                             help='npz file containing edges data for plotting')
     edges_group.add_argument('-ec', '--edges_color', default='grey',
                              help='Edges color (grey)')
     edges_group.add_argument('-ea', '--edges_alpha', default=0.1, type=float,
@@ -105,7 +106,8 @@ def main():
     
     if edges_fpath is not None:
         log.write('Reading edges data from {}'.format(edges_fpath))
-        edges_df = pd.read_csv(edges_fpath)
+        A = load_npz(edges_fpath).tocoo()
+        edges_df = pd.DataFrame({'i': A.row, 'j': A.col}) 
     else:
         log.write('No edges provided for plotting')
         edges_df = None

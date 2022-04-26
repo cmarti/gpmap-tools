@@ -11,6 +11,8 @@ from gpmap.utils import check_error
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
+from scipy.sparse._matrix_io import save_npz
+from scipy.sparse.extract import triu
 
 
 class DiscreteSpace(object):
@@ -86,6 +88,16 @@ class DiscreteSpace(object):
         i, j = self.get_neighbor_pairs()
         edges_df = pd.DataFrame({'i': i, 'j': j})
         return(edges_df)
+    
+    def write_edges_npz(self, fpath, triagular=True):
+        if triagular:
+            save_npz(fpath, triu(self.adjacency_matrix))
+        else:
+            save_npz(fpath, self.adjacency_matrix)
+    
+    def write_edges_csv(self, fpath):
+        edges_df = self.get_edges_df()
+        edges_df.to_csv(fpath, index=False)
     
     def write_csv(self, fpath):
         df = pd.DataFrame({'function': self.function}, 

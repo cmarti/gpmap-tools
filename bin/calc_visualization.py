@@ -53,6 +53,11 @@ def main():
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True,
                               help='Output file')
+    output_group.add_argument('-e', '--edges', default=False, action='store_true',
+                              help='Write edges')
+    output_group.add_argument('-f', '--edges_format', default='npz',
+                              help='Edges format [npz, csv] (npz)')
+    
 
     # Parse arguments
     parsed_args = parser.parse_args()
@@ -70,6 +75,8 @@ def main():
     stop_function = parsed_args.stop_f
     
     out_fpath = parsed_args.output
+    write_edges = parsed_args.edges
+    edges_format = parsed_args.edges_format
     
     # Load data
     log = LogTrack()
@@ -93,7 +100,7 @@ def main():
     mc.calc_visualization(Ns=Ns, mean_function=mean_function,
                           mean_function_perc=mean_function_perc,
                           n_components=n_components)
-    mc.write_tables(out_fpath)
+    mc.write_tables(out_fpath, write_edges=write_edges, edges_format=edges_format)
     
     log.finish()
 

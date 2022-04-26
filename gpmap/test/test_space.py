@@ -9,6 +9,7 @@ from gpmap.src.space import SequenceSpace, DiscreteSpace, CodonSpace,\
 from scipy.sparse.csr import csr_matrix
 from gpmap.src.settings import TEST_DATA_DIR
 from os.path import join
+from tempfile import NamedTemporaryFile
 
 
 class SpaceTests(unittest.TestCase):
@@ -159,8 +160,19 @@ class SpaceTests(unittest.TestCase):
         
         codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
         assert(np.all(s.state_labels[s.function > 1.5] == codons))
+    
+    def test_write_edges_npz(self):
+        s = SequenceSpace(seq_length=9, alphabet_type='dna')
+        with NamedTemporaryFile('w') as fhand:
+            s.write_edges_npz(fhand.name)
+    
+    def test_write_edges_csv(self):
+        s = SequenceSpace(seq_length=9, alphabet_type='dna')
+        with NamedTemporaryFile('w') as fhand:
+            s.write_edges_csv(fhand.name)
 
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'SpaceTests']
     unittest.main()
+
