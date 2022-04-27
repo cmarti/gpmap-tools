@@ -95,10 +95,10 @@ plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.2sets -nc
 
 ![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.2sets.png)
 
-Or highlight directly the sequences that encode a particular aminoacid under a specific genetic code
+Or highlight directly the sequences that encode different aminoacid sequences under a specific genetic code e.g. S and L
 
 ```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.aa -nc function -s function -g S -A protein --protein_seq
+plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.aa -nc function -s function -g S,L -A protein --protein_seq
 ```
 
 ![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.aa.png)
