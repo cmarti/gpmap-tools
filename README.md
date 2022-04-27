@@ -1,4 +1,4 @@
-# Visualizing high dimensional fitness landscapes
+# Visualizing fitness landscapes
 
 
 ## Installation
@@ -69,7 +69,7 @@ Generally, for the visualization to be as representative as possible, we want th
 plot_decay_rates serine.decay_rates.csv -o serine.decay_rates
 ```
 
-![Decay rates](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.decay_rates.png)
+![Decay rates](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.decay_rates.png)
 
 
 ## Plotting the fitness landscape
@@ -85,7 +85,7 @@ For our case
 plot_visualization serine.nodes.csv -e serine.edges.npz -o serine -nc function -s function
 ```
 
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.plot.png)
+![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.png)
 
 Additionally, one can highlight specific genotypes with a comma separated list IUPAC encoded genotypes. For instance, if we want to highlight the different types of codons encoding Serine:
 
@@ -93,7 +93,7 @@ Additionally, one can highlight specific genotypes with a comma separated list I
 plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.2sets -nc function -s function -g UCN,AGY
 ```
 
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.plot.2sets.png)
+![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.2sets.png)
 
 Or highlight directly the sequences that encode a particular aminoacid under a specific genetic code
 
@@ -101,7 +101,7 @@ Or highlight directly the sequences that encode a particular aminoacid under a s
 plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.aa -nc function -s function -g S -A protein --protein_seq
 ```
 
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.plot.aa.png)
+![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.aa.png)
 
 
 ## Interactive 3D maps
@@ -112,7 +112,7 @@ We make use of [plotly](https://plotly.com/python/) to make an interactive 3D pl
 plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot -nc function -s function --interactive
 ```
 
-Click [here](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.plot.html) for interactive visualization of the Serine landscape
+Click [here](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.html) for interactive visualization of the Serine landscape
 
 
 ## Plotting very big landscapes
@@ -121,3 +121,6 @@ For bigger landscapes, rendering can become very time consuming, specially due t
 
 
 
+# Cite
+
+- Mccandlish, D. M. (2011). Visualizing fitness landscapes. Evolution, 65(6), 1544–1558. [https://doi.org/10.1111/j.1558-5646.2011.01236.x](https://doi.org/10.1111/j.1558-5646.2011.01236.x)
