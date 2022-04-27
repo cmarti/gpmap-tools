@@ -160,6 +160,13 @@ class PlottingTests(unittest.TestCase):
                '-g', 'S,L', '--protein_seq', '-l', 'log(binding)',
                '-A', 'protein', '-nc', 'function', '-s', 'function']
         check_call(cmd)
+        
+        # Interactive
+        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-nc', 'function', '-s', 'function',
+               '--interactive']
+        check_call(cmd)
     
     def test_plot_visualization_bin_datashader(self):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')

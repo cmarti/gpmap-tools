@@ -69,6 +69,8 @@ Generally, for the visualization to be as representative as possible, we want th
 plot_decay_rates serine.decay_rates.csv -o serine.decay_rates
 ```
 
+![Decay rates](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.decay_rates.png)
+
 
 ## Plotting the fitness landscape
 
@@ -83,19 +85,23 @@ For our case
 plot_visualization serine.nodes.csv -e serine.edges.npz -o serine -nc function -s function
 ```
 
+![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.plot.png)
+
 Additionally, one can highlight specific genotypes with a comma separated list IUPAC encoded genotypes. For instance, if we want to highlight the different types of codons encoding Serine:
 
 ```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine -nc function -s function -g UCN,AGY
+plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.2sets -nc function -s function -g UCN,AGY
 ```
+
+![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.plot.2sets.png)
 
 Or highlight directly the sequences that encode a particular aminoacid under a specific genetic code
 
 ```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine -nc function -s function -g S -A protein --protein_seq
+plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.aa -nc function -s function -g S -A protein --protein_seq
 ```
 
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.png)
+![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.plot.aa.png)
 
 
 ## Interactive 3D maps
@@ -103,9 +109,11 @@ plot_visualization serine.nodes.csv -e serine.edges.npz -o serine -nc function -
 We make use of [plotly](https://plotly.com/python/) to make an interactive 3D plot of the fitness landscape that we can rotate and hover over the genotypes to show their corresponding sequences.
 
 ```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine -nc function -s function --interactive
+plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot -nc function -s function --interactive
 ```
- 
+
+Click [here](https://bitbucket.org/cmartiga/gpmap_tools/src/master/gpmap/test/data/serine.plot.html) for interactive visualization of the Serine landscape
+
 
 ## Plotting very big landscapes
 
