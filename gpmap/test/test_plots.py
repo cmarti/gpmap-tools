@@ -1,22 +1,17 @@
 #!/usr/bin/env python
 import unittest
 import sys
+
 from os.path import join
+from subprocess import check_call
 
 import numpy as np
 import pandas as pd
 
-from gpmap.visualization import Visualization, CodonFitnessLandscape
-from gpmap.utils import LogTrack, guess_configuration
-from gpmap.inference import VCregression
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
-from subprocess import check_call
-from gpmap.plot import (plot_nodes, plot_edges, figure_visualization,
-                        plot_decay_rates, figure_Ns_grid,
-                        init_fig, savefig, figure_allele_grid,
-                        figure_shifts_grid)
-from gpmap.src.plot import plot_holoview, get_lines_from_edges_df,\
-    figure_allele_grid_datashader
+from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
+                            figure_allele_grid_datashader, plot_nodes,
+                            plot_edges, savefig, init_fig, figure_visualization)
         
 
 class PlottingTests(unittest.TestCase):
