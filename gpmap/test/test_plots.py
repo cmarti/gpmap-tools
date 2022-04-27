@@ -175,7 +175,7 @@ class PlottingTests(unittest.TestCase):
     def test_plot_decay_rates_bin(self):    
         bin_fpath = join(BIN_DIR, 'plot_decay_rates.py')
         decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'codon_v.decay_rates') 
+        plot_fpath = join(TEST_DATA_DIR, 'serine.decay_rates') 
         cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
         check_call(cmd)
         
