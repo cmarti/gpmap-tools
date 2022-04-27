@@ -24,9 +24,9 @@ def main():
                 'plot_decay_rates = bin.plot_decay_rates:main',
                 'filter_genotypes = bin.filter_genotypes:main',
             ]},
-        install_requires=['numpy', 'cython', 'pandas', 'scipy', 
-                          'seaborn', 'matplotlib', 'tqdm', 'logomaker',
-                          'statsmodels', 'biopython', 'datashader', 'plotly'],
+        install_requires=['biopython', 'datashader', 'plotly', 'logomaker',
+                          'seaborn', 'matplotlib', 'tqdm',
+                          'pandas', 'scipy', 'numpy', 'cython'],
         platforms='ALL',
         keywords=['genotype-phenotyp maps', 'fitness landscape'],
         classifiers=[
