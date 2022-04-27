@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import unittest
+import sys
 from os.path import join
 
 import numpy as np
@@ -69,6 +70,17 @@ class PlottingTests(unittest.TestCase):
                       nodes_cmap='viridis', edges_cmap='grey',
                       edges_resolution=1800, nodes_resolution=600)
     
+    def test_datashader_big_vmax(self):  
+        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot.ds')
+        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+        edges_df = pd.read_csv(edges_fpath)
+        
+        plot_holoview(nodes_df, plot_fpath, edges_df=edges_df, nodes_color='f',
+                      nodes_cmap='viridis', edges_cmap='grey',
+                      edges_resolution=1800, nodes_resolution=2000)
+    
     def test_datashader_alleles(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
         edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
@@ -130,18 +142,19 @@ class PlottingTests(unittest.TestCase):
         edges_fpath = join(TEST_DATA_DIR, 'serine.edges.npz')
         
         plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
-        
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
                '-o', plot_fpath, '-nc', 'function', '-s', 'function']
         check_call(cmd)
         
         # Highlighting peaks in nucleotide sequence
+        plot_fpath = join(TEST_DATA_DIR, 'serine.plot.2sets')
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
                '-o', plot_fpath, '-g', 'UCN,AGY', '-A', 'rna',
                '-nc', 'function', '-s', 'function']
         check_call(cmd)
         
         # Highlighting coding sequence
+        plot_fpath = join(TEST_DATA_DIR, 'serine.plot.aa')
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
                '-o', plot_fpath,
                '-g', 'S,L', '--protein_seq', '-l', 'log(binding)',

@@ -592,11 +592,11 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
     savefig(fig, fpath)
     
 
-def plot_edges_datashader(nodes_df, edges_df, x, y, edges_cmap,
-                          resolution=800):
+def plot_edges_datashader(nodes_df, edges_df, x, y, cmap,
+                          resolution=800, vmax=None):
     line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
     edges = hv.Curve(line_coords, label='Edges')
-    dsg = datashade(edges, cmap=edges_cmap, width=resolution, height=resolution) 
+    dsg = datashade(edges, cmap=cmap, width=resolution, height=resolution) 
     return(dsg)
 
 def plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap='viridis',
@@ -617,7 +617,8 @@ def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
                   nodes_color='function', nodes_cmap='viridis',
                   sort_by=None, ascending=False,
                   edges_cmap='grey', background_color='white',
-                  nodes_resolution=800, edges_resolution=1200):
+                  nodes_resolution=800, edges_resolution=1200,
+                  edges_vmax=None):
     
     if sort_by is not None:
         nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
@@ -629,8 +630,9 @@ def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
     
     if edges_df is not None:
         edges_dsg = plot_edges_datashader(nodes_df, edges_df, x, y,
-                                          edges_cmap=edges_cmap,
-                                          resolution=edges_resolution)
+                                          cmap=edges_cmap,
+                                          resolution=edges_resolution,
+                                          vmax=edges_vmax)
         dsg = edges_dsg * dsg
     
     dsg.opts(xlabel='Diffusion axis {}'.format(x),
@@ -648,7 +650,7 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
     
     if edges_df is not None:
         edges = plot_edges_datashader(nodes_df, edges_df, x, y,
-                                      edges_cmap=edges_cmap,
+                                      cmap=edges_cmap,
                                       resolution=edges_resolution)
     else:
         edges = None

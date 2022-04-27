@@ -49,7 +49,7 @@ class SeqTests(unittest.TestCase):
         protein = translate_seqs(dna, codon_table=11)
         assert(np.all(protein == ['M*', 'M*M']))
     
-    def test_get_neighbors(self):
+    def xtest_get_neighbors(self):
         v = Visualization(3, alphabet_type='rna')
         seq = 'AAA'
         
@@ -63,8 +63,7 @@ class SeqTests(unittest.TestCase):
         for seq in seqs:
             assert('A' in seq)
         
-
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqTests.test_translate']
+    import sys;sys.argv = ['', 'SeqTests']
     unittest.main()

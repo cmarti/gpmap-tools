@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 import unittest
+import sys
+
 from os.path import join
 from subprocess import check_call
 
