@@ -9,7 +9,7 @@ from scipy.sparse.csr import csr_matrix
 from gpmap.src.genotypes import (select_genotypes, dataframe_to_csr_matrix,
                                  select_d_neighbors, select_genotypes_re,
                                  select_genotypes_ambiguous_seqs,
-    select_closest_genotypes)
+                                 select_closest_genotypes)
 
 
 class GenotypeTests(unittest.TestCase):

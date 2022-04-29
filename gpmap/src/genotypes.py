@@ -6,12 +6,11 @@ import numpy as np
 import pandas as pd
 
 from scipy.sparse.csr import csr_matrix
-
-from gpmap.settings import PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
-from gpmap.utils import translante_seqs
-from gpmap.base import extend_ambigous_seq
 from scipy.sparse.coo import coo_matrix
-from gpmap.src.utils import check_error
+
+from gpmap.src.settings import PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
+from gpmap.src.utils import translante_seqs, check_error
+from gpmap.src.seq import extend_ambigous_seq
 
 
 def get_edges_coords(nodes_df, edges_df, x='1', y='2', z=None, avoid_dups=False):
