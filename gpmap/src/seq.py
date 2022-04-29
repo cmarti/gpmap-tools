@@ -15,7 +15,10 @@ def extend_ambigous_seq(seq, mapping):
 
     else:
         character, next_seq = seq[0], seq[1:]
-        pos_mapping, next_mapping = mapping[0], mapping[1:]
+        if isinstance(mapping, dict):
+            pos_mapping, next_mapping = mapping, mapping
+        else:
+            pos_mapping, next_mapping = mapping[0], mapping[1:]
         
         for allele in pos_mapping[character]:
             for seq in extend_ambigous_seq(next_seq, next_mapping):
