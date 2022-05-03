@@ -18,6 +18,8 @@ from holoviews.operation.datashader import datashade
 from gpmap.settings import PLOTS_FORMAT, PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
 from gpmap.utils import translante_seqs, guess_configuration
 from gpmap.base import extend_ambigous_seq
+from gpmap.src.genotypes import get_edges_coords, get_nodes_df_highlight,\
+    minimize_nodes_distance
 
 
 # Functions
@@ -59,12 +61,6 @@ def save_plotly(fig, fpath=None):
         fig.write_html(fpath)
 
 
-def plot_comp_line(axes, x1, x2, y, size, lw=1):
-    axes.plot((x1, x2), (y, y), lw=lw, c='black')
-    axes.plot((x1, x1), (y-size, y), lw=lw, c='black')
-    axes.plot((x2, x2), (y-size, y), lw=lw, c='black')
-
-
 def empty_axes(axes):
     sns.despine(ax=axes, left=True, bottom=True)
     axes.set_xticks([])
@@ -99,21 +95,6 @@ def plot_decay_rates(decay_df, axes=None, fpath=None, log_scale=False):
         savefig(fig, fpath)
 
 
-def get_edges_coords(nodes_df, edges_df, x='1', y='2', z=None, avoid_dups=False):
-    if avoid_dups:
-        s = np.where(edges_df['j'] > edges_df['i'])[0]
-        edges_df = edges_df.iloc[s, :]
-
-    colnames = [x, y]
-    if z is not None:
-        colnames.append(z)
-        
-    nodes_coords = nodes_df[colnames].values
-    edges_coords = np.stack([nodes_coords[edges_df['i']],
-                             nodes_coords[edges_df['j']]], axis=2).transpose((0, 2, 1))
-    return(edges_coords)
-    
-
 def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
                color='grey', width=0.5, cmap='binary',
                alpha=0.1, zorder=1, avoid_dups=False,
@@ -140,24 +121,6 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
     return(ln_coll)
 
 
-def minimize_nodes_distance(nodes_df1, nodes_df2, axis):
-    d = np.inf
-    sel_coords = None
-    
-    coords1 = nodes_df1[axis]
-    coords2 = nodes_df2[axis]
-    
-    for scalars in product([1, -1], repeat=len(axis)):
-        c = np.vstack([v * s for v, s in zip(coords1.values.T, scalars)]).T
-        distance = np.sqrt(np.sum((c - coords2) ** 2, 1)).mean(0)
-        if distance < d:
-            d = distance
-            sel_coords = c
-    
-    nodes_df1[axis] = sel_coords
-    return(nodes_df1)
-
-
 def get_axis_lims(nodes_df, x, y, z=None):
     axis_max = max(nodes_df[x].max(), nodes_df[y].max())
     axis_min = min(nodes_df[x].min(), nodes_df[y].min())
@@ -177,7 +140,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                label=None, clabel='Function',
                sort=True, sort_by=None, ascending=False, 
                vcenter=None, vmax=None, vmin=None, fontsize=12, legendloc=0,
-               subset=None, autoscale_axis=True):
+               subset=None, autoscale_axis=True, cbar=True):
     if subset is not None:
         nodes_df = nodes_df.loc[subset, :]
     
@@ -230,7 +193,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                           edgecolor=edgecolor, cmap=cmap, label=label,
                           vmax=vmax, vmin=vmin, norm=norm)
     
-    if add_cbar:
+    if add_cbar and cbar:
         plt.colorbar(sc, ax=axes, fraction=0.1, pad=0.02).set_label(label=clabel, fontsize=fontsize)
     if add_legend:
         create_patches_legend(axes, palette, loc=legendloc, fontsize=fontsize)
@@ -241,31 +204,6 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
         axes.set(xlim=axis_lims, ylim=axis_lims)
 
 
-def get_nodes_df_highlight(nodes_df, genotype_groups, is_prot=False,
-                           alphabet_type='dna', codon_table='Standard'):
-    # TODO: force protein to be in the table if we want to do highlight
-    # protein subsequences to decouple the genetic code from plotting as 
-    # it is key to visualization and should not be changed afterwards
-    groups_dict = {}
-    if is_prot:
-        if 'protein' not in nodes_df.columns:
-            nodes_df['protein'] = translante_seqs(nodes_df.index,
-                                                  codon_table=codon_table)
-        
-        for group in genotype_groups:
-            mapping = [PROT_AMBIGUOUS_VALUES] * len(group)
-            for seq in extend_ambigous_seq(group, mapping):
-                groups_dict[seq] = group
-        nodes_df['group'] = [groups_dict.get(x, None) for x in nodes_df['protein']]
-    else:
-        nodes_df['group'] = np.nan
-        for group in genotype_groups:
-            mapping = [AMBIGUOUS_VALUES[alphabet_type]] * len(group)
-            genotype_labels = extend_ambigous_seq(group, mapping)
-            nodes_df.loc[genotype_labels, 'group'] = group
-    nodes_df = nodes_df.dropna()
-    return(nodes_df)
-    
 def highlight_genotype_groups(axes, nodes_df, genotype_groups,
                               x='1', y='2', z=None, size=50, edgecolor='black',
                               lw=1, palette='colorblind', legendloc=1,
@@ -480,7 +418,7 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
     savefig(fig, fpath)
     
 
-def figure_Ns_grid(viz, fpath=None, fmin=None, fmax=None,
+def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
                    ncol=4, nrow=3, show_edges=True,
                    nodes_color='f', nodes_size=2.5, nodes_cmap='viridis', nodes_alpha=1,
                    nodes_min_size=1, nodes_max_size=40,
@@ -491,10 +429,11 @@ def figure_Ns_grid(viz, fpath=None, fmin=None, fmax=None,
                    sort_nodes=True, ascending=False, sort_by=None,
                    fontsize=12):
         
+        f = rw.space.function
         if fmin is None:
-            fmin = viz.f.mean() + 0.05 * (viz.f.max() - viz.f.mean())
+            fmin = f.mean() + 0.05 * (f.max() - f.mean())
         if fmax is None:
-            fmax = viz.f.mean() + 0.8 * (viz.f.max() - viz.f.mean())
+            fmax = f.mean() + 0.8 * (f.max() - f.mean())
 
         mean_fs = np.geomspace(fmin, fmax, ncol*nrow)
         
@@ -503,10 +442,10 @@ def figure_Ns_grid(viz, fpath=None, fmin=None, fmax=None,
         
         prev_nodes_df = None
         for i, (meanf, axes) in enumerate(zip(mean_fs, subplots)):
-            viz.calc_visualization(meanf=meanf, n_components=3, eig_tol=0.01)
+            rw.calc_visualization(meanf=meanf, n_components=3, eig_tol=0.01)
             
-            edges_df = None if not show_edges else viz.edges_df
-            plot_visualization(axes, viz.nodes_df, edges_df=edges_df, x='1', y='2',
+            edges_df = None if not show_edges else rw.edges_df
+            plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x='1', y='2',
                                nodes_color=nodes_color, nodes_size=nodes_size,
                                nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
                                nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
@@ -519,7 +458,7 @@ def figure_Ns_grid(viz, fpath=None, fmin=None, fmax=None,
                                edges_max_width=edges_max_width, edges_min_width=edges_min_width, 
                                sort_nodes=sort_nodes, ascending=ascending, sort_by=sort_by,
                                fontsize=fontsize, prev_nodes_df=prev_nodes_df)
-            prev_nodes_df = viz.nodes_df
+            prev_nodes_df = rw.nodes_df
             
             axes.set_title('Stationary F = {:.2f}'.format(meanf))
             
@@ -598,6 +537,7 @@ def plot_edges_datashader(nodes_df, edges_df, x, y, cmap,
     edges = hv.Curve(line_coords, label='Edges')
     dsg = datashade(edges, cmap=cmap, width=resolution, height=resolution) 
     return(dsg)
+
 
 def plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap='viridis',
                           is_sorted=False, resolution=800):
