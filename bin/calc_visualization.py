@@ -7,6 +7,7 @@ from gpmap.utils import LogTrack
 from gpmap.visualization import Visualization
 from gpmap.src.space import SequenceSpace
 from gpmap.src.randwalk import WMWSWalk
+from gpmap.src.seq import guess_space_configuration
 
         
 def main():
@@ -22,8 +23,8 @@ def main():
     input_group.add_argument('input', help=help_msg)
 
     options_group = parser.add_argument_group('Landscape options')
-    options_group.add_argument('-A', '--alphabet_type', default='dna',
-                               help='Alphabet type [dna, rna, protein, custom] (dna)')
+    options_group.add_argument('-A', '--alphabet_type', default='guess',
+                               help='Alphabet type [guess, dna, rna, protein, custom] (guess)')
     options_group.add_argument('-a', '--n_alleles', default=None, type=int,
                                help='Number of alleles to use for custom alphabet')
     
@@ -82,17 +83,26 @@ def main():
     log = LogTrack()
     log.write('Start analysis')
     data = pd.read_csv(data_fpath, index_col=0)
+    genotypes = data.index.values
+    seq_length = len(genotypes[0])
     
-    seq_length = len(data.index[0])
+    alphabet = None
+    if alphabet_type == 'guess':
+        config = guess_space_configuration(genotypes)
+        seq_length = config['length']
+        alphabet = config['alphabet']
+        alphabet_type = 'custom'
+        n_alleles = None
     
     if use_coding_sequence:
         seq_length = seq_length * 3
+        alphabet_type = 'dna'
     else:
         codon_table = None
 
     # Load annotation data
     space = SequenceSpace(seq_length=seq_length, n_alleles=n_alleles,
-                          alphabet_type=alphabet_type,
+                          alphabet=alphabet, alphabet_type=alphabet_type,
                           function=data.iloc[:, 0].values,
                           codon_table=codon_table, stop_function=stop_function)
     
