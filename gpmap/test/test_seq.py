@@ -5,28 +5,52 @@ from os.path import join
 import numpy as np
 import pandas as pd
 
-from gpmap.utils import LogTrack, guess_configuration
+from gpmap.utils import LogTrack
 from gpmap.inference import VCregression
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from subprocess import check_call
 from gpmap.src.space import SequenceSpace
-from gpmap.src.seq import translate_seqs
+from gpmap.src.seq import translate_seqs, guess_alphabet_type, guess_space_configuration
 
 
 class SeqTests(unittest.TestCase):
+    def test_guess_alphabet(self):
+        alphabet_type = guess_alphabet_type(['A', 'C', 'G'])
+        assert(alphabet_type == 'dna')
+        
+        alphabet_type = guess_alphabet_type(['A', 'C', 'G', 'T'])
+        assert(alphabet_type == 'dna')
+        
+        alphabet_type = guess_alphabet_type([['A', 'C', 'G', 'T'],
+                                             ['A', 'C', 'G', 'T']])
+        assert(alphabet_type == 'dna')
+        
+        alphabet_type = guess_alphabet_type(['A', 'C', 'G', 'U'])
+        assert(alphabet_type == 'rna')
+        
+        alphabet_type = guess_alphabet_type(['A', 'K', 'G', 'R'])
+        assert(alphabet_type == 'protein')
+        
+        alphabet_type = guess_alphabet_type([['A', 'K'], ['G', 'R']])
+        assert(alphabet_type == 'protein')
+        
+        alphabet_type = guess_alphabet_type(['0', '1'])
+        assert(alphabet_type == 'custom')
+        
     def test_guess_configuration(self):
         # Test with a simple scenario
         seqs = np.array(['AA', 'AB', 'AC',
                          'BA', 'BB', 'BC'])
-        config = guess_configuration(seqs)
+        config = guess_space_configuration(seqs)
         assert(config['length'] == 2)
         assert(config['n_alleles'] == [2, 3])
+        assert(config['alphabet_type'] == 'custom')
         
         # Fail when sequence space is not complete
         seqs = np.array(['AA', 'AB', 'AC',
                          'BA', 'BB'])
         try:
-            config = guess_configuration(seqs)
+            config = guess_space_configuration(seqs)
             self.fail('guess_configuration did not fail with incomplete space')
         except ValueError:
             pass
@@ -34,9 +58,10 @@ class SeqTests(unittest.TestCase):
         # With a real file
         fpath = join(TEST_DATA_DIR, 'gfp.short.csv')
         data = pd.read_csv(fpath).sort_values('pseudo_prot').set_index('pseudo_prot')
-        config = guess_configuration(data.index.values)
+        config = guess_space_configuration(data.index.values)
         assert(config['length'] == 13)
         assert(config['n_alleles'] == [2, 1, 8, 1, 2, 2, 6, 1, 1, 1, 2, 1, 2])
+        assert(config['alphabet_type'] == 'protein')
         
     def test_translate(self):
         dna = np.array(['ATGUGA', 'ATGUGAATG'])

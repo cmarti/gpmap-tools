@@ -7,6 +7,8 @@ from Bio.Seq import Seq
 
 from gpmap.settings import NUCLEOTIDES, COMPLEMENT
 from gpmap.src.utils import check_error
+from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
+from itertools import chain
 
 
 def extend_ambigous_seq(seq, mapping):
@@ -54,6 +56,19 @@ def translate_seqs(seqs, codon_table='Standard'):
     return(prot_genotypes)
 
 
+def guess_alphabet_type(alphabet):
+    set_alphabet = set(chain(*alphabet))
+    if len(set_alphabet - set(DNA_ALPHABET)) == 0:
+        alphabet_type = 'dna'
+    elif len(set_alphabet - set(RNA_ALPHABET)) == 0:
+        alphabet_type = 'rna'
+    elif len(set_alphabet - set(PROTEIN_ALPHABET)) == 0:
+        alphabet_type = 'protein'
+    else:
+        alphabet_type = 'custom'
+    return(alphabet_type)
+    
+
 def guess_space_configuration(seqs):
     alleles = defaultdict(dict)
     for seq in seqs:
@@ -63,6 +78,8 @@ def guess_space_configuration(seqs):
     config = {'length': length,
               'n_alleles': [len(alleles[i]) for i in range(length)],
               'alphabet': [[a for a in alleles[i].keys()] for i in range(length)]}
+    config['alphabet_type'] = guess_alphabet_type(config['alphabet'])
+    
     msg = 'Number of genotypes does not match the expected from guessed configuration.'
     msg += ' Ensure that genotypes span the whole sequence space'
     check_error(np.prod(config['n_alleles']) == seqs.shape[0], msg)
