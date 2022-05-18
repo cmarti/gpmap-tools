@@ -97,8 +97,17 @@ class RandomWalkTests(unittest.TestCase):
         
         edges = load_npz('{}.edges.npz'.format(out_fpath))
         assert(np.all(edges.shape == (64, 64)))
-
+        
+    def test_calc_visualization_bin_guess_config(self):
+        bin_fpath = join(BIN_DIR, 'calc_visualization.py')
+        fpath = join(TEST_DATA_DIR, 'gfp.csv')
+        
+        out_fpath = join(TEST_DATA_DIR, 'gfp') 
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.5',
+               '-A', 'guess', '-e']
+        check_call(cmd)
+        
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'RandomWalkTests']
+    sys.argv = ['', 'RandomWalkTests']
     unittest.main()
