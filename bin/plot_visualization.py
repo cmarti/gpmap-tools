@@ -5,7 +5,8 @@ import pandas as pd
 
 from gpmap.utils import LogTrack
 from gpmap.plot import figure_visualization
-from gpmap.src.plot import plot_holoview
+from gpmap.src.plot import plot_holoview, figure_allele_grid_datashader,\
+    figure_allele_grid
 from scipy.sparse._matrix_io import load_npz
 
         
@@ -64,6 +65,11 @@ def main():
     help_msg = 'Sequences to highlight are the encoded protein sequences'
     highlight_group.add_argument('--protein_seq', default=False, action='store_true', 
                                  help=help_msg)
+    
+    layouts_group = parser.add_argument_group('Special layouts')
+    help_msg = 'Layout with panels highlighting alleles at each position'
+    layouts_group.add_argument('--alleles', default=False, action='store_true',
+                               help=help_msg)
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True,
@@ -97,6 +103,8 @@ def main():
     genotypes = parsed_args.genotypes
     alphabet_type = parsed_args.alphabet_type
     is_prot = parsed_args.protein_seq
+
+    alleles_grid = parsed_args.alleles
     
     out_fpath = parsed_args.output
     
@@ -127,22 +135,37 @@ def main():
     
     log.write('Plot visualization')
     if use_datashader:
-        plot_holoview(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
-                      nodes_color=nodes_color, nodes_cmap=nodes_cmap,
-                      edges_cmap='grey', background_color='white',
-                      nodes_resolution=nodes_resolution,
-                      edges_resolution=edges_resolution)
+        if alleles_grid:
+            figure_allele_grid_datashader(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
+                                          edges_cmap='grey', background_color='white',
+                                          nodes_resolution=nodes_resolution,
+                                          edges_resolution=edges_resolution)
+        else:
+            plot_holoview(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
+                          nodes_color=nodes_color, nodes_cmap=nodes_cmap,
+                          edges_cmap='grey', background_color='white',
+                          nodes_resolution=nodes_resolution,
+                          edges_resolution=edges_resolution)
     else:
-        figure_visualization(nodes_df, edges_df=edges_df,
-                             fpath=out_fpath, x=x, y=y, z=z, 
-                             nodes_color=nodes_color, nodes_cmap=nodes_cmap, 
-                             nodes_size=nodes_size, nodes_cmap_label=label,
-                             edges_color=edges_color,
-                             edges_width=edges_width, edges_alpha=edges_alpha,
-                             sort_by=sort_by, ascending=ascending, sort_nodes=True,
-                             highlight_genotypes=genotypes,
-                             is_prot=is_prot, interactive=interactive,
-                             alphabet_type=alphabet_type)
+        if alleles_grid:
+            figure_allele_grid(nodes_df, edges_df=edges_df, fpath=out_fpath, x=x, y=y,
+                               allele_color='orange', background_color='lightgrey',
+                               nodes_size=nodes_size, edges_color=edges_color,
+                               edges_width=edges_width,
+                               autoscale_axis=False,
+                               colsize=3, rowsize=2.7,
+                               xpos_label=0.05, ypos_label=0.92)
+        else:
+            figure_visualization(nodes_df, edges_df=edges_df,
+                                 fpath=out_fpath, x=x, y=y, z=z, 
+                                 nodes_color=nodes_color, nodes_cmap=nodes_cmap, 
+                                 nodes_size=nodes_size, nodes_cmap_label=label,
+                                 edges_color=edges_color,
+                                 edges_width=edges_width, edges_alpha=edges_alpha,
+                                 sort_by=sort_by, ascending=ascending, sort_nodes=True,
+                                 highlight_genotypes=genotypes,
+                                 is_prot=is_prot, interactive=interactive,
+                                 alphabet_type=alphabet_type)
     
     log.finish()
 

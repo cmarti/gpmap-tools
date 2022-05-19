@@ -11,7 +11,9 @@ import pandas as pd
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             figure_allele_grid_datashader, plot_nodes,
-                            plot_edges, savefig, init_fig, figure_visualization)
+                            plot_edges, savefig, init_fig, figure_visualization,
+    figure_allele_grid)
+from gpmap.src.genotypes import select_genotypes
         
 
 class PlottingTests(unittest.TestCase):
@@ -82,6 +84,32 @@ class PlottingTests(unittest.TestCase):
         plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot.alleles')
         nodes_df = pd.read_csv(nodes_fpath, index_col=0)
         edges_df = pd.read_csv(edges_fpath)
+        
+        figure_allele_grid_datashader(nodes_df, plot_fpath, edges_df=edges_df,
+                                      x='1', y='2')
+    
+    def test_alleles_variable_sites(self):  
+        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'serine.plot.alleles')
+        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+        edges_df = pd.read_csv(edges_fpath)
+        
+        genotypes = np.array([seq[-3] != 'C' for seq in nodes_df.index])
+        nodes_df, edges_df = select_genotypes(nodes_df, genotypes, edges=edges_df)
+        
+        figure_allele_grid(nodes_df, fpath=plot_fpath, edges_df=edges_df, x='1', y='2')
+        
+    def test_datashader_alleles_variable_sites(self):  
+        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot.alleles')
+        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+        edges_df = pd.read_csv(edges_fpath)
+        
+        genotypes = np.array([seq.endswith('AA') and seq[-3] != 'C'
+                              for seq in nodes_df.index])
+        nodes_df, edges_df = select_genotypes(nodes_df, genotypes, edges=edges_df)
         
         figure_allele_grid_datashader(nodes_df, plot_fpath, edges_df=edges_df,
                                       x='1', y='2')
@@ -172,6 +200,28 @@ class PlottingTests(unittest.TestCase):
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
                '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
                '-er', '1800']
+        check_call(cmd)
+        
+    def test_plot_visualization_bin_alleles(self):    
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        
+        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.npz')
+        
+        plot_fpath = join(TEST_DATA_DIR, 'serine.alleles')
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-nc', 'function', '-s', 'function', '--alleles']
+        check_call(cmd)
+    
+    def test_plot_visualization_bin_datashader_alleles(self):
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
+        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
+               '-er', '1800', '--alleles']
         check_call(cmd)
         
     def test_plot_decay_rates_bin(self):    

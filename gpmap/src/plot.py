@@ -134,13 +134,13 @@ def get_axis_lims(nodes_df, x, y, z=None):
 
 
 def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
-               color='f', size=2.5, cmap='viridis', palette='Set1',
+               color='f', size=2.5, cmap='viridis', cbar=True, palette='Set1',
                alpha=1, zorder=2, max_size=40, min_size=1,
                edgecolor='black', lw=0,
                label=None, clabel='Function',
                sort=True, sort_by=None, ascending=False, 
                vcenter=None, vmax=None, vmin=None, fontsize=12, legendloc=0,
-               subset=None, autoscale_axis=True, cbar=True):
+               subset=None, autoscale_axis=True):
     if subset is not None:
         nodes_df = nodes_df.loc[subset, :]
     
@@ -221,7 +221,7 @@ def highlight_genotype_groups(axes, nodes_df, genotype_groups,
 
 def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
                        nodes_color='f', nodes_size=2.5, nodes_cmap='viridis',
-                       palette=None, nodes_alpha=1,
+                       cbar=True, palette=None, nodes_alpha=1,
                        nodes_min_size=1, nodes_max_size=40,
                        nodes_edgecolor='black', nodes_lw=0, 
                        nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
@@ -235,7 +235,7 @@ def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
         nodes_df = minimize_nodes_distance(nodes_df, prev_nodes_df, axis)
     
     plot_nodes(axes, nodes_df=nodes_df, x=x, y=y, z=z,
-               color=nodes_color, size=nodes_size, cmap=nodes_cmap, 
+               color=nodes_color, size=nodes_size, cmap=nodes_cmap, cbar=cbar,
                palette=palette, alpha=nodes_alpha, zorder=2,
                max_size=nodes_max_size, min_size=nodes_min_size,
                edgecolor=nodes_edgecolor, lw=nodes_lw,
@@ -392,28 +392,33 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
         
     fig, subplots = init_fig(n_alleles, positions.shape[0], colsize=colsize, rowsize=rowsize)
     for col, j in enumerate(positions):
-        for i, allele in enumerate(config['alphabet'][j]):
+        for i in range(n_alleles):
             axes = subplots[i][col]
-            plot_visualization(axes, nodes_df, edges_df=edges_df, x=x, y=y,
-                               nodes_color=background_color, nodes_size=nodes_size,
-                               edges_color=edges_color, edges_width=edges_width,
-                               autoscale_axis=autoscale_axis)
-            sel_idxs = np.array([seq[j] == allele for seq in nodes_df.index])
-            plot_nodes(axes, nodes_df.loc[sel_idxs, :], x=x, y=y, color=allele_color,
-                       size=nodes_size, autoscale_axis=False)
             
-            if i < n_alleles - 1:
-                axes.set_xlabel('')
-                axes.set_xticks([])
-            if col > 0:
-                axes.set_ylabel('')
-                axes.set_yticks([])
+            try:
+                allele = config['alphabet'][col][i]
+                plot_visualization(axes, nodes_df, edges_df=edges_df, x=x, y=y,
+                                   nodes_color=background_color, nodes_size=nodes_size,
+                                   edges_color=edges_color, edges_width=edges_width,
+                                   autoscale_axis=autoscale_axis)
+                sel_idxs = np.array([seq[j] == allele for seq in nodes_df.index])
+                plot_nodes(axes, nodes_df.loc[sel_idxs, :], x=x, y=y, color=allele_color,
+                           size=nodes_size, autoscale_axis=False)
                 
-            xlims, ylims = axes.get_xlim(), axes.get_ylim()
-            xpos = xlims[0] + xpos_label * (xlims[1] - xlims[0])
-            ypos = ylims[0] + ypos_label * (ylims[1] - ylims[0])
-            axes.text(xpos, ypos, '{}{}'.format(allele, position_labels[j]),
-                      ha='left')
+                if i < n_alleles - 1:
+                    axes.set_xlabel('')
+                    axes.set_xticks([])
+                if col > 0:
+                    axes.set_ylabel('')
+                    axes.set_yticks([])
+                    
+                xlims, ylims = axes.get_xlim(), axes.get_ylim()
+                xpos = xlims[0] + xpos_label * (xlims[1] - xlims[0])
+                ypos = ylims[0] + ypos_label * (ylims[1] - ylims[0])
+                axes.text(xpos, ypos, '{}{}'.format(allele, position_labels[j]),
+                          ha='left')
+            except IndexError:
+                empty_axes(axes)
     
     savefig(fig, fpath)
     
@@ -608,16 +613,23 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
     
     nc = {i: np.array([seq[i] for seq in nodes_df.index])
           for i in range(length)}
+    
     for i in range(n_alleles):
         for col, j in enumerate(positions):
-            allele  = config['alphabet'][j][i]
-            nodes_df['allele'] = (nc[col] == allele).astype(int)
+            try:
+                allele  = config['alphabet'][j][i]
+                nodes_df['allele'] = (nc[col] == allele).astype(int)
+            except IndexError:
+                allele = ''
+                nodes_df['allele'] = np.nan
+                
             nodes = plot_nodes_datashader(nodes_df.copy(),
                                           x, y, nodes_color='allele',
                                           nodes_cmap='viridis',
                                           resolution=nodes_resolution)
             nodes = nodes.relabel('{}{}'.format(j+1, allele))
             dsg = nodes if edges is None else edges * nodes
+            
             dsg.opts(xlabel='Diffusion axis {}'.format(x),
                      ylabel='Diffusion axis {}'.format(y),
                      bgcolor=background_color,
