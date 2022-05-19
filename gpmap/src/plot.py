@@ -633,7 +633,7 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
             dsg.opts(xlabel='Diffusion axis {}'.format(x),
                      ylabel='Diffusion axis {}'.format(y),
                      bgcolor=background_color,
-                     title='{}{}'.format(j+1, allele))
+                     title='{}{}'.format(position_labels[j], allele))
             
             if i < n_alleles - 1:
                 dsg.opts(xlabel='')
