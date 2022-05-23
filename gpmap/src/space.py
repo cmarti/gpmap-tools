@@ -13,6 +13,8 @@ from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
 from scipy.sparse._matrix_io import save_npz
 from scipy.sparse.extract import triu
+from itertools import product
+from _collections import defaultdict
 
 
 class DiscreteSpace(object):
@@ -125,7 +127,7 @@ class SequenceSpace(DiscreteSpace):
         check_error(self.n_states <= MAX_STATES,
                     msg='Sequence space is too big to handle ({})'.format(self.n_states))
         
-        adjacency_matrix = self.calc_adjacency_matrix()
+        adjacency_matrix = self.calc_adjacency_matrix(codon_table=codon_table)
         state_labels = self.get_genotypes()
         
         self.init_space(adjacency_matrix, state_labels=state_labels)
@@ -148,6 +150,20 @@ class SequenceSpace(DiscreteSpace):
         self.function = function
         self._check_function()
     
+    def calc_transitions(self, codon_table):
+        seqs = [''.join(x) for x in product(DNA_ALPHABET, repeat=3)]
+        
+        transitions = defaultdict(lambda: defaultdict(lambda: 0))        
+        for codon1, codon2 in product(seqs, repeat=2):
+            d = np.sum([x != y for x, y in zip(codon1, codon2)])
+            if d != 1:
+                continue
+            aa1, aa2 = translate_seqs([codon1, codon2], codon_table)
+            transitions[aa1][aa2] += 1
+        transitions = pd.DataFrame(transitions).fillna(0).astype(int)
+        transitions = transitions.loc[PROTEIN_ALPHABET, PROTEIN_ALPHABET]
+        return(transitions)
+    
     def set_seq_length(self, seq_length=None, n_alleles=None, alphabet=None):
         if seq_length is None:
             check_error(n_alleles is not None or alphabet is not None,
@@ -155,14 +171,28 @@ class SequenceSpace(DiscreteSpace):
             seq_length = len(n_alleles) if n_alleles is not None else len(alphabet)
         self.seq_length = seq_length
     
-    def _calc_site_adjacency_matrices(self, n_alleles):
-        site_I = [sp.identity(a) for a in n_alleles]
+    def _calc_site_matrix(self, alleles, transitions=None):
+        n_alleles = len(alleles)
+        if transitions is None:
+            m = csr_matrix(np.ones((n_alleles, n_alleles)))
+        else:
+            m = csr_matrix(transitions.loc[alleles, alleles]) 
+        m.setdiag(np.zeros(n_alleles))
+        return(m)
+    
+    def _calc_site_adjacency_matrices(self, alleles, codon_table=None):
+        if codon_table is None:
+            transitions = None
+        else:
+            transitions = self.calc_transitions(codon_table=codon_table)
+            # TODO: fix this to generalize to having multiple ways of going
+            # from one aminoacid to another
+            transitions = (transitions > 0).astype(int)
+            
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            site_Kn = [csr_matrix(np.ones((a, a))) - I
-                       for a, I in zip(n_alleles, site_I)]
-        
-        self.site_I = site_I
+            site_Kn = [self._calc_site_matrix(a, transitions) for a in alleles]
+
         self.site_Kn = site_Kn
     
     def _istack_matrices(self, m_diag, m_offdiag, pos):
@@ -192,8 +222,10 @@ class SequenceSpace(DiscreteSpace):
             
         return(self._calc_adjacency_matrix(m, pos-1))
     
-    def calc_adjacency_matrix(self):
-        self._calc_site_adjacency_matrices(self.n_alleles)
+    def calc_adjacency_matrix(self, codon_table=None):
+        if self.alphabet_type not in ['protein', 'custom']:
+            codon_table = None 
+        self._calc_site_adjacency_matrices(self.alphabet, codon_table=codon_table)
         return(self._calc_adjacency_matrix())
     
     def _check_alphabet(self, n_alleles, alphabet_type, alphabet):
