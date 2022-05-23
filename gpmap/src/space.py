@@ -174,11 +174,11 @@ class SequenceSpace(DiscreteSpace):
     def _calc_site_matrix(self, alleles, transitions=None):
         n_alleles = len(alleles)
         if transitions is None:
-            m = csr_matrix(np.ones((n_alleles, n_alleles)))
+            m = np.ones((n_alleles, n_alleles))
         else:
-            m = csr_matrix(transitions.loc[alleles, alleles]) 
-        m.setdiag(np.zeros(n_alleles))
-        return(m)
+            m = transitions.loc[alleles, alleles].values
+        np.fill_diagonal(m, np.zeros(n_alleles))
+        return(csr_matrix(m))
     
     def _calc_site_adjacency_matrices(self, alleles, codon_table=None):
         if codon_table is None:
