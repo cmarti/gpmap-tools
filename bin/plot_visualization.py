@@ -6,7 +6,7 @@ import pandas as pd
 from gpmap.utils import LogTrack
 from gpmap.plot import figure_visualization
 from gpmap.src.plot import plot_holoview, figure_allele_grid_datashader,\
-    figure_allele_grid
+    figure_allele_grid, save_holoviews
 from scipy.sparse._matrix_io import load_npz
 
         
@@ -141,11 +141,12 @@ def main():
                                           nodes_resolution=nodes_resolution,
                                           edges_resolution=edges_resolution)
         else:
-            plot_holoview(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
-                          nodes_color=nodes_color, nodes_cmap=nodes_cmap,
-                          edges_cmap='grey', background_color='white',
-                          nodes_resolution=nodes_resolution,
-                          edges_resolution=edges_resolution)
+            dsg = plot_holoview(nodes_df, x=x, y=y, edges_df=edges_df,
+                                nodes_color=nodes_color, nodes_cmap=nodes_cmap,
+                                edges_cmap='grey', background_color='white',
+                                nodes_resolution=nodes_resolution,
+                                edges_resolution=edges_resolution)
+            save_holoviews(dsg, out_fpath)
     else:
         if alleles_grid:
             figure_allele_grid(nodes_df, edges_df=edges_df, fpath=out_fpath, x=x, y=y,

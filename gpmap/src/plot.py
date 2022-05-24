@@ -536,54 +536,69 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
     savefig(fig, fpath)
     
 
-def plot_edges_datashader(nodes_df, edges_df, x, y, cmap,
-                          resolution=800, vmax=None):
+def plot_edges_datashader(nodes_df, edges_df, x='1', y='2', cmap='grey',
+                          width=0.5, alpha=0.2, color='grey',
+                          shade=True, resolution=800):
     line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
-    edges = hv.Curve(line_coords, label='Edges')
-    dsg = datashade(edges, cmap=cmap, width=resolution, height=resolution) 
-    return(dsg)
-
-
-def plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap='viridis',
-                          is_sorted=False, resolution=800):
-    nodes = hv.Points(nodes_df, kdims=[x, y], label='Nodes')
-    if is_sorted:
-        dsg = datashade(nodes, cmap=nodes_cmap,
-                        width=resolution, height=resolution,
-                        aggregator=ds.first(nodes_color))
+    dsg = hv.Curve(line_coords)
+    if shade:
+        dsg = datashade(dsg, cmap=cmap, width=resolution, height=resolution)
     else:
-        dsg = datashade(nodes, cmap=nodes_cmap, 
-                        width=resolution, height=resolution,
-                        aggregator=ds.max(nodes_color))
+        dsg = dsg.opts(color=color, linewidth=width, alpha=alpha)
     return(dsg)
 
 
-def plot_holoview(nodes_df, fpath, x='1', y='2', edges_df=None,
+def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridis',
+                          size=5, vmin=None, vmax=None,
+                          sort_by=None, ascending=True,
+                          shade=False, resolution=800):
+    if sort_by is not None:
+        nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
+    
+    if shade:
+        nodes = hv.Points(nodes_df, kdims=[x, y], label='Nodes')
+        if sort_by is not None:
+            dsg = datashade(nodes, cmap=cmap,
+                            width=resolution, height=resolution,
+                            aggregator=ds.first(color))
+        else:
+            dsg = datashade(nodes, cmap=cmap, 
+                            width=resolution, height=resolution,
+                            aggregator=ds.max(color))
+    else:
+        hv.extension('matplotlib')
+        scatter = hv.Scatter(nodes_df[[x, y, color]])
+        dsg = scatter.opts(color=color, cmap=cmap, vmin=vmin, vmax=vmax, s=size)
+    
+    return(dsg)
+
+
+def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
                   nodes_color='function', nodes_cmap='viridis',
                   sort_by=None, ascending=False,
                   edges_cmap='grey', background_color='white',
                   nodes_resolution=800, edges_resolution=1200,
-                  edges_vmax=None):
-    
-    if sort_by is not None:
-        nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
-    
-    dsg = plot_nodes_datashader(nodes_df, x, y, nodes_color=nodes_color,
-                                nodes_cmap=nodes_cmap,
-                                is_sorted=sort_by is not None,
-                                resolution=nodes_resolution)
+                  shade_nodes=True, shade_edges=True):
+    dsg = plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap,
+                                sort_by=sort_by, ascending=ascending,
+                                resolution=nodes_resolution,
+                                shade=shade_nodes)
     
     if edges_df is not None:
         edges_dsg = plot_edges_datashader(nodes_df, edges_df, x, y,
                                           cmap=edges_cmap,
                                           resolution=edges_resolution,
-                                          vmax=edges_vmax)
+                                          shade=shade_edges)
         dsg = edges_dsg * dsg
     
     dsg.opts(xlabel='Diffusion axis {}'.format(x),
              ylabel='Diffusion axis {}'.format(y),
-             bgcolor=background_color)
+             bgcolor=background_color, padding=0.1)
     
+    return(dsg)
+
+
+def save_holoviews(dsg, fpath):
     fig = hv.render(dsg)
     savefig(fig, fpath)
 
@@ -624,8 +639,8 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
                 nodes_df['allele'] = np.nan
                 
             nodes = plot_nodes_datashader(nodes_df.copy(),
-                                          x, y, nodes_color='allele',
-                                          nodes_cmap='viridis',
+                                          x, y,
+                                          color='allele', cmap='viridis',
                                           resolution=nodes_resolution)
             nodes = nodes.relabel('{}{}'.format(j+1, allele))
             dsg = nodes if edges is None else edges * nodes

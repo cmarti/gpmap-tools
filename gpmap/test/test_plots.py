@@ -12,7 +12,7 @@ from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             figure_allele_grid_datashader, plot_nodes,
                             plot_edges, savefig, init_fig, figure_visualization,
-    figure_allele_grid)
+    figure_allele_grid, save_holoviews)
 from gpmap.src.genotypes import select_genotypes
         
 
@@ -51,10 +51,18 @@ class PlottingTests(unittest.TestCase):
         edges_df = pd.read_csv(edges_fpath)
         
         # Test only with nodes
-        plot_holoview(nodes_df, plot_fpath, nodes_color='function')
+        dsg =  plot_holoview(nodes_df, nodes_color='function')
+        save_holoviews(dsg, plot_fpath)
         
-        # Test adding edges
-        plot_holoview(nodes_df, plot_fpath, edges_df=edges_df, nodes_color='function')
+        # Test with edges
+        dsg =  plot_holoview(nodes_df, edges_df=edges_df, nodes_color='function')
+        save_holoviews(dsg, plot_fpath)
+        
+        # Test without shading
+        dsg = plot_holoview(nodes_df, edges_df=edges_df,
+                            nodes_color='function', shade_nodes=False,
+                            shade_edges=False)
+        save_holoviews(dsg, plot_fpath)
         
     def test_datashader_big(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
@@ -63,9 +71,10 @@ class PlottingTests(unittest.TestCase):
         nodes_df = pd.read_csv(nodes_fpath, index_col=0)
         edges_df = pd.read_csv(edges_fpath)
         
-        plot_holoview(nodes_df, plot_fpath, edges_df=edges_df, nodes_color='f',
-                      nodes_cmap='viridis', edges_cmap='grey',
-                      edges_resolution=1800, nodes_resolution=600)
+        dsg = plot_holoview(nodes_df, edges_df=edges_df, nodes_color='f',
+                            nodes_cmap='viridis', edges_cmap='grey',
+                            edges_resolution=1800, nodes_resolution=600)
+        save_holoviews(dsg, plot_fpath)
     
     def test_datashader_big_vmax(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
@@ -74,9 +83,10 @@ class PlottingTests(unittest.TestCase):
         nodes_df = pd.read_csv(nodes_fpath, index_col=0)
         edges_df = pd.read_csv(edges_fpath)
         
-        plot_holoview(nodes_df, plot_fpath, edges_df=edges_df, nodes_color='f',
-                      nodes_cmap='viridis', edges_cmap='grey',
-                      edges_resolution=1800, nodes_resolution=2000)
+        dsg = plot_holoview(nodes_df, edges_df=edges_df, nodes_color='f',
+                            nodes_cmap='viridis', edges_cmap='grey',
+                            edges_resolution=1800, nodes_resolution=2000)
+        save_holoviews(dsg, plot_fpath)
     
     def test_datashader_alleles(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
@@ -140,8 +150,8 @@ class PlottingTests(unittest.TestCase):
         edges_df = pd.read_csv(edges_fpath)
         
         figure_visualization(nodes_df, edges_df, nodes_color='function',
-                             fpath=plot_fpath, highlight_genotypes=['UCN', 'AGY'],
-                             palette='Set1', alphabet_type='rna')
+                             fpath=plot_fpath, highlight_genotypes=['TCN', 'AGY'],
+                             palette='Set1', alphabet_type='dna')
     
     def test_figure_visualization_big(self):
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
@@ -172,7 +182,7 @@ class PlottingTests(unittest.TestCase):
         # Highlighting peaks in nucleotide sequence
         plot_fpath = join(TEST_DATA_DIR, 'serine.plot.2sets')
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-g', 'UCN,AGY', '-A', 'rna',
+               '-o', plot_fpath, '-g', 'TCN,AGY', '-A', 'rna',
                '-nc', 'function', '-s', 'function']
         check_call(cmd)
         
@@ -246,7 +256,7 @@ class PlottingTests(unittest.TestCase):
         v.calc_stationary_frequencies(Ns)
         v.calc_visualization(Ns, n_components=5)
         
-        gt1, gt2 = ['UCU', 'UCA', 'UCC', 'UCG'], ['AGU', 'AGC']
+        gt1, gt2 = ['TCT', 'TCA', 'TCC', 'TCG'], ['AGT', 'AGC']
         fpath = join(TEST_DATA_DIR, 'reactive_path')
         # v.figure(fpath=fpath, size=40, cmap='coolwarm', 
         #                  genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
