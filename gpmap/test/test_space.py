@@ -102,7 +102,6 @@ class SpaceTests(unittest.TestCase):
                     ['A', 'V', 'T']]
         space = SequenceSpace(alphabet=alphabet, alphabet_type='custom',
                               codon_table='Standard')
-        
         assert(np.all(space.genotypes == ['AA', 'AV', 'AT', 'VA', 'VV', 'VT']))
         
         m = space.adjacency_matrix.tocsr()
@@ -112,12 +111,12 @@ class SpaceTests(unittest.TestCase):
         assert(m[2, 1] == 0)
         assert(m[4, 5] == 0)
         assert(m[5, 4] == 0)
-        
+
     def test_codon_space(self):
         s = CodonSpace(['S'], add_variation=True, seed=0)
         assert(s.n_states == 64)
         assert(s.state_labels[0] == 'AAA')
-        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
         assert(np.all(s.state_labels[s.function > 1.5] == codons))
         
         s = CodonSpace(['K'], add_variation=True, seed=0)
@@ -208,14 +207,14 @@ class SpaceTests(unittest.TestCase):
         space.write_csv(fpath)
         
         df = pd.read_csv(fpath, index_col=0)
-        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
         assert(np.all(df[df['function'] > 1.5].index.values == codons))
     
     def test_read_space(self):
         fpath = join(TEST_DATA_DIR, 'serine.csv')
         s = read_sequence_space_csv(fpath, function_col='function')
         
-        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
         assert(np.all(s.state_labels[s.function > 1.5] == codons))
     
     def test_write_edges_npz(self):

@@ -29,11 +29,11 @@ def main():
                                help='Number of alleles to use for custom alphabet')
     
     coding_group = parser.add_argument_group('Coding options')
-    coding_group.add_argument('-C', '--use_coding_sequence', default=False,
+    coding_group.add_argument('-C', '--use_codon_model', default=False,
                               action='store_true',
                               help='Use codon model for visualization of protein landscape')
-    coding_group.add_argument('-c', '--codon_table', default='Standard',
-                              help='NCBI Codon table to use for equivalence (Standard)')
+    coding_group.add_argument('-c', '--codon_table', default=None,
+                              help='NCBI Codon table to use for equivalence (None)')
     coding_group.add_argument('-sf', '--stop_f', default=-10, type=float,
                               help='Function for stop codons')
     
@@ -71,8 +71,8 @@ def main():
     mean_function = parsed_args.mean_function
     mean_function_perc = parsed_args.percentile_function
     
-    use_coding_sequence = parsed_args.use_coding_sequence
-    codon_table = parsed_args.codon_table if use_coding_sequence else None
+    use_codon_model = parsed_args.use_codon_model
+    codon_table = parsed_args.codon_table
     stop_function = parsed_args.stop_f
     
     out_fpath = parsed_args.output
@@ -85,7 +85,7 @@ def main():
     data = pd.read_csv(data_fpath, index_col=0)
     genotypes = data.index.values
     seq_length = len(genotypes[0])
-    
+
     alphabet = None
     if alphabet_type == 'guess':
         config = guess_space_configuration(genotypes)
@@ -94,16 +94,11 @@ def main():
         alphabet_type = 'custom'
         n_alleles = None
     
-    if use_coding_sequence:
-        seq_length = seq_length * 3
-        alphabet_type = 'dna'
-    else:
-        codon_table = None
-
     # Load annotation data
     space = SequenceSpace(seq_length=seq_length, n_alleles=n_alleles,
                           alphabet=alphabet, alphabet_type=alphabet_type,
                           function=data.iloc[:, 0].values,
+                          use_codon_model=use_codon_model, 
                           codon_table=codon_table, stop_function=stop_function)
     
     mc = WMWSWalk(space)
