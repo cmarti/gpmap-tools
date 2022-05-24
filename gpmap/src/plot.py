@@ -549,7 +549,8 @@ def plot_edges_datashader(nodes_df, edges_df, x='1', y='2', cmap='grey',
 
 
 def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridis',
-                          size=5, vmin=None, vmax=None,
+                          size=5, linewidth=0, edgecolor='black',
+                          vmin=None, vmax=None,
                           sort_by=None, ascending=True,
                           shade=False, resolution=800):
     if sort_by is not None:
@@ -568,18 +569,22 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
     else:
         hv.extension('matplotlib')
         scatter = hv.Scatter(nodes_df[[x, y, color]])
-        dsg = scatter.opts(color=color, cmap=cmap, vmin=vmin, vmax=vmax, s=size)
+        dsg = scatter.opts(color=color, cmap=cmap, vmin=vmin,
+                           vmax=vmax, s=size, linewidth=linewidth, 
+                           edgecolor=edgecolor)
     
     return(dsg)
 
 
 def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
                   nodes_color='function', nodes_cmap='viridis',
+                  linewidth=0, edgecolor='black',
                   sort_by=None, ascending=False,
                   edges_cmap='grey', background_color='white',
                   nodes_resolution=800, edges_resolution=1200,
                   shade_nodes=True, shade_edges=True):
     dsg = plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap,
+                                linewidth=linewidth, edgecolor=edgecolor,
                                 sort_by=sort_by, ascending=ascending,
                                 resolution=nodes_resolution,
                                 shade=shade_nodes)
