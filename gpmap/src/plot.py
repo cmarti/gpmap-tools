@@ -583,10 +583,10 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
 
 def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
                   nodes_color='function', nodes_cmap='viridis',
-                  nodes_size=5,
-                  nodes_vmin=None, nodes_vmax=None,
+                  nodes_size=5, nodes_vmin=None, nodes_vmax=None,
                   linewidth=0, edgecolor='black',
                   sort_by=None, ascending=False,
+                  edges_width=0.5, edges_alpha=0.2, edges_color='grey',
                   edges_cmap='grey', background_color='white',
                   nodes_resolution=800, edges_resolution=1200,
                   shade_nodes=True, shade_edges=True):
@@ -601,6 +601,9 @@ def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
     if edges_df is not None:
         edges_dsg = plot_edges_datashader(nodes_df, edges_df, x, y,
                                           cmap=edges_cmap,
+                                          width=edges_width, 
+                                          alpha=edges_alpha,
+                                          color=edges_color,
                                           resolution=edges_resolution,
                                           shade=shade_edges)
         dsg = edges_dsg * dsg
