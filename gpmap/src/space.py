@@ -13,6 +13,8 @@ from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
 from scipy.sparse._matrix_io import save_npz
 from scipy.sparse.extract import triu
+from itertools import product
+from _collections import defaultdict
 
 
 class DiscreteSpace(object):
@@ -108,45 +110,79 @@ class DiscreteSpace(object):
 class SequenceSpace(DiscreteSpace):
     def __init__(self, seq_length=None, n_alleles=None,
                  alphabet_type='dna', alphabet=None, function=None,
-                 codon_table=None, stop_function=-10):
+                 use_codon_model=False, codon_table=None, stop_function=-10):
         self._init(seq_length=seq_length, n_alleles=n_alleles, 
                    alphabet_type=alphabet_type, alphabet=alphabet,
-                   function=function, codon_table=codon_table,
-                   stop_function=stop_function)
+                   function=function, use_codon_model=use_codon_model, 
+                   codon_table=codon_table, stop_function=stop_function)
     
     def _init(self, seq_length=None, n_alleles=None,
-              alphabet_type='dna', alphabet=None, function=None,
+              alphabet_type='dna', alphabet=None,
+              function=None, use_codon_model=False,
               codon_table=None, stop_function=-10):
+        
+        if use_codon_model:
+            seq_length = seq_length * 3
+            alphabet_type = 'dna'
+        
         self.set_seq_length(seq_length, n_alleles, alphabet)
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles,
                                alphabet=alphabet)
-
+        self.use_codon_model = use_codon_model
         self.n_states = np.prod(self.n_alleles)
-        check_error(self.n_states <= MAX_STATES,
-                    msg='Sequence space is too big to handle ({})'.format(self.n_states))
         
-        adjacency_matrix = self.calc_adjacency_matrix()
+        # Check number of states to avoid memory problems with very big 
+        # landscapes before building the adjacency matrix
+        msg='Sequence space is too big to handle ({})'.format(self.n_states)
+        check_error(self.n_states <= MAX_STATES, msg=msg)
+        
+        if use_codon_model:
+            adjacency_matrix = self.calc_adjacency_matrix()
+        else:
+            adjacency_matrix = self.calc_adjacency_matrix(codon_table=codon_table)
+            
         state_labels = self.get_genotypes()
-        
         self.init_space(adjacency_matrix, state_labels=state_labels)
+        
         if function is not None:
-            self.set_function(function, codon_table=codon_table,
+            self.set_function(function, use_codon_model=use_codon_model,
+                              codon_table=codon_table,
                               stop_function=stop_function)
     
     @property
     def genotypes(self):
         return(self.state_labels)
     
-    def set_function(self, function, codon_table=None, stop_function=-10):
-        if codon_table is not None:
-            check_error(self.seq_length % 3 == 0, 
-                        'Only 3n-long sequences can be translated')
+    def set_function(self, function, use_codon_model=False,
+                     codon_table=None, stop_function=-10):
+        if use_codon_model:
+            # Check errors
+            msg = 'Only 3n-long sequences can be translated'
+            check_error(self.seq_length % 3 == 0, msg)
+            msg = 'codon_table should be provided for translating sequences'
+            check_error(codon_table is not None, msg)
+            
+            # Translate and transfer function to codon space
             prot = pd.Series(translate_seqs(self.genotypes, codon_table),
                              index=self.state_labels)
             function = function.reindex(prot).fillna(stop_function).values
             
         self.function = function
         self._check_function()
+    
+    def calc_transitions(self, codon_table):
+        seqs = [''.join(x) for x in product(DNA_ALPHABET, repeat=3)]
+        
+        transitions = defaultdict(lambda: defaultdict(lambda: 0))        
+        for codon1, codon2 in product(seqs, repeat=2):
+            d = np.sum([x != y for x, y in zip(codon1, codon2)])
+            if d != 1:
+                continue
+            aa1, aa2 = translate_seqs([codon1, codon2], codon_table)
+            transitions[aa1][aa2] += 1
+        transitions = pd.DataFrame(transitions).fillna(0).astype(int)
+        transitions = transitions.loc[PROTEIN_ALPHABET, PROTEIN_ALPHABET]
+        return(transitions)
     
     def set_seq_length(self, seq_length=None, n_alleles=None, alphabet=None):
         if seq_length is None:
@@ -155,14 +191,28 @@ class SequenceSpace(DiscreteSpace):
             seq_length = len(n_alleles) if n_alleles is not None else len(alphabet)
         self.seq_length = seq_length
     
-    def _calc_site_adjacency_matrices(self, n_alleles):
-        site_I = [sp.identity(a) for a in n_alleles]
+    def _calc_site_matrix(self, alleles, transitions=None):
+        n_alleles = len(alleles)
+        if transitions is None:
+            m = np.ones((n_alleles, n_alleles))
+        else:
+            m = transitions.loc[alleles, alleles].values
+        np.fill_diagonal(m, np.zeros(n_alleles))
+        return(csr_matrix(m))
+    
+    def _calc_site_adjacency_matrices(self, alleles, codon_table=None):
+        if codon_table is None:
+            transitions = None
+        else:
+            transitions = self.calc_transitions(codon_table=codon_table)
+            # TODO: fix this to generalize to having multiple ways of going
+            # from one aminoacid to another
+            transitions = (transitions > 0).astype(int)
+            
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            site_Kn = [csr_matrix(np.ones((a, a))) - I
-                       for a, I in zip(n_alleles, site_I)]
-        
-        self.site_I = site_I
+            site_Kn = [self._calc_site_matrix(a, transitions) for a in alleles]
+
         self.site_Kn = site_Kn
     
     def _istack_matrices(self, m_diag, m_offdiag, pos):
@@ -192,8 +242,10 @@ class SequenceSpace(DiscreteSpace):
             
         return(self._calc_adjacency_matrix(m, pos-1))
     
-    def calc_adjacency_matrix(self):
-        self._calc_site_adjacency_matrices(self.n_alleles)
+    def calc_adjacency_matrix(self, codon_table=None):
+        if self.alphabet_type not in ['protein', 'custom']:
+            codon_table = None 
+        self._calc_site_adjacency_matrices(self.alphabet, codon_table=codon_table)
         return(self._calc_adjacency_matrix())
     
     def _check_alphabet(self, n_alleles, alphabet_type, alphabet):
@@ -273,9 +325,9 @@ class CodonSpace(SequenceSpace):
         function = pd.Series(np.ones(20), index=PROTEIN_ALPHABET)
         function.loc[allowed_aminoacids] = 2
         
-        self._init(seq_length=3, alphabet_type='rna',
-                   function=function, codon_table=codon_table,
-                   stop_function=0)
+        self._init(seq_length=1,
+                   function=function, use_codon_model=True,
+                   codon_table=codon_table, stop_function=0)
         if add_variation:
             if seed is not None:
                 np.random.seed(seed)

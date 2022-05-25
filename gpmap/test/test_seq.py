@@ -62,6 +62,14 @@ class SeqTests(unittest.TestCase):
         assert(config['length'] == 13)
         assert(config['n_alleles'] == [2, 1, 8, 1, 2, 2, 6, 1, 1, 1, 2, 1, 2])
         assert(config['alphabet_type'] == 'protein')
+    
+        # With another real file
+        fpath = join(TEST_DATA_DIR, 'test.csv')
+        data = pd.read_csv(fpath, index_col=0)
+        config = guess_space_configuration(data.index.values)
+        assert(config['length'] == 7)
+        assert(config['n_alleles'] == [2, 3, 2, 2, 3, 2, 3])
+        assert(config['alphabet_type'] == 'protein')
         
     def test_translate(self):
         dna = np.array(['ATGUGA', 'ATGUGAATG'])

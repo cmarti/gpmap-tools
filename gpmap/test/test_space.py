@@ -55,12 +55,68 @@ class SpaceTests(unittest.TestCase):
                 self.fail('DiscreteSpace did not capture erroneous function')
             except ValueError:
                 pass
+    def test_calc_transitions(self):
+        space = SequenceSpace(seq_length=1, alphabet_type='protein')
+        transitions = space.calc_transitions(codon_table='Standard')
+        n_neighbors = transitions.sum(0)
+        
+        assert(np.all(transitions.T == transitions))
+        assert(n_neighbors['W'] == 7)
+        assert(n_neighbors['Y'] == 14)
+        assert(n_neighbors['A'] == 36)
+        assert(n_neighbors['I'] == 27)
+        assert(n_neighbors['M'] == 9)
+        assert(n_neighbors['S'] == 51)
+        assert(n_neighbors['L'] == 51)
+        assert(n_neighbors['R'] == 52)
     
+    def test_calc_site_adjacency_matrices(self):
+        space = SequenceSpace(seq_length=1, alphabet_type='protein')
+        
+        # Without taking into account genetic code
+        space._calc_site_adjacency_matrices(alleles=[['T', 'V']])
+        m = space.site_Kn[0].todense()
+        assert(np.all(m == [[0, 1], [1, 0]]))
+        assert(np.all(space.site_Kn[0].data == 1))
+        
+        # Inaccessible aminoacids
+        space._calc_site_adjacency_matrices(alleles=[['T', 'V']], codon_table='Standard')
+        m = space.site_Kn[0].todense()
+        assert(np.all(m == 0))
+        assert(np.all(space.site_Kn[0].data == 1))
+        
+        # Accessible aminoacids
+        space._calc_site_adjacency_matrices(alleles=[['A', 'V']], codon_table='Standard')
+        m = space.site_Kn[0].todense()
+        assert(np.all(m == [[0, 1], [1, 0]]))
+        assert(np.all(space.site_Kn[0].data == 1))
+        
+        # Indirect T-V connection
+        space._calc_site_adjacency_matrices(alleles=[['A', 'V', 'T']], codon_table='Standard')
+        m = space.site_Kn[0].todense()
+        assert(np.all(m == [[0, 1, 1], [1, 0, 0], [1, 0, 0]]))
+        assert(np.all(space.site_Kn[0].data == 1))
+    
+    def test_protein_space_codon_restricted(self):
+        alphabet = [['A', 'V'],
+                    ['A', 'V', 'T']]
+        space = SequenceSpace(alphabet=alphabet, alphabet_type='custom',
+                              codon_table='Standard')
+        assert(np.all(space.genotypes == ['AA', 'AV', 'AT', 'VA', 'VV', 'VT']))
+        
+        m = space.adjacency_matrix.tocsr()
+        
+        # Ensure V-T transitions are not allowed in either direction
+        assert(m[1, 2] == 0)
+        assert(m[2, 1] == 0)
+        assert(m[4, 5] == 0)
+        assert(m[5, 4] == 0)
+
     def test_codon_space(self):
         s = CodonSpace(['S'], add_variation=True, seed=0)
         assert(s.n_states == 64)
         assert(s.state_labels[0] == 'AAA')
-        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
         assert(np.all(s.state_labels[s.function > 1.5] == codons))
         
         s = CodonSpace(['K'], add_variation=True, seed=0)
@@ -151,14 +207,14 @@ class SpaceTests(unittest.TestCase):
         space.write_csv(fpath)
         
         df = pd.read_csv(fpath, index_col=0)
-        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
         assert(np.all(df[df['function'] > 1.5].index.values == codons))
     
     def test_read_space(self):
         fpath = join(TEST_DATA_DIR, 'serine.csv')
         s = read_sequence_space_csv(fpath, function_col='function')
         
-        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
         assert(np.all(s.state_labels[s.function > 1.5] == codons))
     
     def test_write_edges_npz(self):
@@ -175,4 +231,3 @@ class SpaceTests(unittest.TestCase):
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'SpaceTests']
     unittest.main()
-

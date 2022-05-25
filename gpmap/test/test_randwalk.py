@@ -33,11 +33,11 @@ class RandomWalkTests(unittest.TestCase):
         mc.calc_stationary_frequencies()
         
         # Check serine codons have high frequencies
-        codons = ['AGC', 'AGU', 'UCA', 'UCC', 'UCG', 'UCU']
+        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
         assert(np.all(mc.stationary_freqs[mc.space.get_state_idxs(codons)] > 0.03))
         
         # Check stop codons have low frequencies
-        codons = ['UGA', 'UAG', 'UAA']
+        codons = ['TGA', 'TAG', 'TAA']
         assert(np.all(mc.stationary_freqs[mc.space.get_state_idxs(codons)] < 0.01))
     
     def test_stationary_function(self):
@@ -100,12 +100,36 @@ class RandomWalkTests(unittest.TestCase):
         
     def test_calc_visualization_bin_guess_config(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
-        fpath = join(TEST_DATA_DIR, 'gfp.csv')
+        fpath = join(TEST_DATA_DIR, 'test.csv')
         
-        out_fpath = join(TEST_DATA_DIR, 'gfp') 
+        out_fpath = join(TEST_DATA_DIR, 'test') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.5',
                '-A', 'guess', '-e']
         check_call(cmd)
+    
+    def test_calc_visualization_codon_restricted(self):
+        bin_fpath = join(BIN_DIR, 'calc_visualization.py')
+        fpath = join(TEST_DATA_DIR, 'test.csv')
+        
+        out_fpath = join(TEST_DATA_DIR, 'test') 
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65', '-e',
+               '-A', 'guess']
+        check_call(cmd)
+        
+        edges1 = load_npz('{}.edges.npz'.format(out_fpath))
+        
+        out_fpath = join(TEST_DATA_DIR, 'test.codon') 
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
+               '-e', '-c', '11', '-A', 'guess']
+        check_call(cmd)
+        
+        df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+        data = pd.read_csv(fpath, index_col=0)
+        assert(df.shape[0] == data.shape[0])
+
+        # Ensure we have less edges when using codon restricted transitions        
+        edges2 = load_npz('{}.edges.npz'.format(out_fpath))
+        assert(edges1.sum() > edges2.sum())
         
         
 if __name__ == '__main__':
