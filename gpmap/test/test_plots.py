@@ -50,17 +50,18 @@ class PlottingTests(unittest.TestCase):
         nodes_df = pd.read_csv(nodes_fpath, index_col=0)
         edges_df = pd.read_csv(edges_fpath)
         
-        # # Test only with nodes
-        # dsg =  plot_holoview(nodes_df, nodes_color='function')
-        # save_holoviews(dsg, plot_fpath)
-        #
-        # # Test with edges
-        # dsg =  plot_holoview(nodes_df, edges_df=edges_df, nodes_color='function')
-        # save_holoviews(dsg, plot_fpath)
+        # Test only with nodes
+        dsg =  plot_holoview(nodes_df, nodes_color='function')
+        save_holoviews(dsg, plot_fpath)
+        
+        # Test with edges
+        dsg =  plot_holoview(nodes_df, edges_df=edges_df, nodes_color='function')
+        save_holoviews(dsg, plot_fpath)
         
         # Test without shading
         dsg = plot_holoview(nodes_df, edges_df=edges_df,
-                            nodes_color='function', linewidth=0.5,
+                            nodes_color='function', linewidth=0,
+                            nodes_size=20, nodes_vmin=-5,
                             shade_nodes=False, shade_edges=False)
         save_holoviews(dsg, plot_fpath)
         

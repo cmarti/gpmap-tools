@@ -555,6 +555,11 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
                           shade=False, resolution=800):
     if sort_by is not None:
         nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
+        
+    if vmin is None:
+        vmin = nodes_df[color].min()
+    if vmax is None:
+        vmax = nodes_df[color].max()
     
     if shade:
         nodes = hv.Points(nodes_df, kdims=[x, y], label='Nodes')
@@ -569,8 +574,8 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
     else:
         hv.extension('matplotlib')
         scatter = hv.Scatter(nodes_df[[x, y, color]])
-        dsg = scatter.opts(color=color, cmap=cmap, vmin=vmin,
-                           vmax=vmax, s=size, linewidth=linewidth, 
+        dsg = scatter.opts(color=color, cmap=cmap, clim=(vmin, vmax),
+                           s=size, linewidth=linewidth, 
                            edgecolor=edgecolor)
     
     return(dsg)
@@ -578,6 +583,8 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
 
 def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
                   nodes_color='function', nodes_cmap='viridis',
+                  nodes_size=5,
+                  nodes_vmin=None, nodes_vmax=None,
                   linewidth=0, edgecolor='black',
                   sort_by=None, ascending=False,
                   edges_cmap='grey', background_color='white',
@@ -585,6 +592,8 @@ def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
                   shade_nodes=True, shade_edges=True):
     dsg = plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap,
                                 linewidth=linewidth, edgecolor=edgecolor,
+                                size=nodes_size,
+                                vmin=nodes_vmin, vmax=nodes_vmax,
                                 sort_by=sort_by, ascending=ascending,
                                 resolution=nodes_resolution,
                                 shade=shade_nodes)
