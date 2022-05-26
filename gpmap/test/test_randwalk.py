@@ -7,11 +7,12 @@ from subprocess import check_call
 
 import numpy as np
 import pandas as pd
+from scipy.sparse._matrix_io import load_npz
 
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace
 from gpmap.src.randwalk import WMWSWalk
-from scipy.sparse._matrix_io import load_npz
+from gpmap.src.plot import figure_Ns_grid
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -66,6 +67,11 @@ class RandomWalkTests(unittest.TestCase):
         df = mc.nodes_df
         assert(df.iloc[np.argmax(df['1']), :]['function'] > 1.5)
         assert(df.iloc[np.argmin(df['1']), :]['function'] > 1.5)
+    
+    def test_figure_Ns(self):
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        fpath = join(TEST_DATA_DIR, 'serine.Ns_grid')
+        figure_Ns_grid(mc, fpath=fpath, nodes_color='function')
     
     def test_write_visualization(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))

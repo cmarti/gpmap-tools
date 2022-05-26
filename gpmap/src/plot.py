@@ -446,7 +446,7 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
         for i, (mean_function, axes) in enumerate(zip(mean_fs, subplots)):
             rw.calc_visualization(mean_function=mean_function, n_components=3, eig_tol=0.01)
             
-            edges_df = None if not show_edges else rw.edges_df
+            edges_df = None if not show_edges else rw.space.get_edges_df()
             plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x='1', y='2',
                                nodes_color=nodes_color, nodes_size=nodes_size,
                                nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
