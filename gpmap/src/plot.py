@@ -430,49 +430,52 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
                    edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
                    sort_nodes=True, ascending=False, sort_by=None,
                    fontsize=12):
-        
-        f = rw.space.function
-        if fmin is None:
-            fmin = f.mean() + 0.05 * (f.max() - f.mean())
-        if fmax is None:
-            fmax = f.mean() + 0.8 * (f.max() - f.mean())
+    f = rw.space.function
+    if fmin is None:
+        fmin = f.mean() + 0.05 * (f.max() - f.mean())
+    if fmax is None:
+        fmax = f.mean() + 0.8 * (f.max() - f.mean())
 
-        mean_fs = np.geomspace(fmin, fmax, ncol*nrow)
+    mean_fs = np.geomspace(fmin, fmax, ncol*nrow)
+    
+    fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
+    subplots = subplots.flatten()
+    
+    prev_nodes_df = None
+    for i, (mean_function, axes) in enumerate(zip(mean_fs, subplots)):
+        rw.calc_visualization(mean_function=mean_function, n_components=3, eig_tol=0.01)
         
-        fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
-        subplots = subplots.flatten()
+        edges_df = None if not show_edges else rw.space.get_edges_df()
+        plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x='1', y='2',
+                           nodes_color=nodes_color, nodes_size=nodes_size,
+                           nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
+                           nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
+                           nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
+                           nodes_cmap_label=nodes_cmap_label if (i+1) % ncol == 0 else None,
+                           nodes_vmin=nodes_vmin,
+                           nodes_vmax=nodes_vmax, edges_color=edges_color,
+                           edges_width=edges_width, edges_cmap=edges_cmap,
+                           edges_alpha=edges_alpha, 
+                           edges_max_width=edges_max_width, edges_min_width=edges_min_width, 
+                           sort_nodes=sort_nodes, ascending=ascending, sort_by=sort_by,
+                           fontsize=fontsize, prev_nodes_df=prev_nodes_df)
+        prev_nodes_df = rw.nodes_df
         
-        prev_nodes_df = None
-        for i, (mean_function, axes) in enumerate(zip(mean_fs, subplots)):
-            rw.calc_visualization(mean_function=mean_function, n_components=3, eig_tol=0.01)
-            
-            edges_df = None if not show_edges else rw.space.get_edges_df()
-            plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x='1', y='2',
-                               nodes_color=nodes_color, nodes_size=nodes_size,
-                               nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
-                               nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
-                               nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
-                               nodes_cmap_label=nodes_cmap_label if (i+1) % ncol == 0 else None,
-                               nodes_vmin=nodes_vmin,
-                               nodes_vmax=nodes_vmax, edges_color=edges_color,
-                               edges_width=edges_width, edges_cmap=edges_cmap,
-                               edges_alpha=edges_alpha, 
-                               edges_max_width=edges_max_width, edges_min_width=edges_min_width, 
-                               sort_nodes=sort_nodes, ascending=ascending, sort_by=sort_by,
-                               fontsize=fontsize, prev_nodes_df=prev_nodes_df)
-            prev_nodes_df = rw.nodes_df
-            
-            axes.set_title('Stationary F = {:.2f}'.format(mean_function))
-            
-            if i // ncol != nrow - 1:
-                axes.set_xlabel('')
-                axes.set_xticks([])
-            
-            if i % ncol != 0:
-                axes.set_ylabel('')
-                axes.set_yticks([])
+        axes.set_title('Stationary F = {:.2f}'.format(mean_function))
         
-        savefig(fig, fpath)
+        if i // ncol != nrow - 1:
+            axes.set_xlabel('')
+            axes.set_xticks([])
+        
+        if i % ncol != 0:
+            axes.set_ylabel('')
+            axes.set_yticks([])
+    
+    xlims, ylims = axes.get_xlim(), axes.get_ylim()
+    for axes in subplots:
+        axes.set(xlim=xlims, ylim=ylims)
+    
+    savefig(fig, fpath)
 
 
 def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
