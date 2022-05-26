@@ -442,6 +442,7 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
     subplots = subplots.flatten()
     
     prev_nodes_df = None
+    xmin, xmax, ymin, ymax = None, None, None, None
     for i, (mean_function, axes) in enumerate(zip(mean_fs, subplots)):
         rw.calc_visualization(mean_function=mean_function, n_components=3, eig_tol=0.01)
         
@@ -470,10 +471,22 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
         if i % ncol != 0:
             axes.set_ylabel('')
             axes.set_yticks([])
+            
+        # Check and store global lims values
+        xlims, ylims = axes.get_xlim(), axes.get_ylim()
+        
+        if xmin is None or xlims[0] < xmin:
+            xmin = xlims[0]
+        if xmax is None or xlims[1] > xmax:
+            xmax = xlims[1] 
+            
+        if ymin is None or ylims[0] < ymin:
+            ymin = ylims[0]
+        if ymax is None or ylims[1] > ymax:
+            ymax = ylims[1]
     
-    xlims, ylims = axes.get_xlim(), axes.get_ylim()
     for axes in subplots:
-        axes.set(xlim=xlims, ylim=ylims)
+        axes.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
     
     savefig(fig, fpath)
 
