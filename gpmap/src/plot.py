@@ -443,8 +443,8 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
         subplots = subplots.flatten()
         
         prev_nodes_df = None
-        for i, (meanf, axes) in enumerate(zip(mean_fs, subplots)):
-            rw.calc_visualization(meanf=meanf, n_components=3, eig_tol=0.01)
+        for i, (mean_function, axes) in enumerate(zip(mean_fs, subplots)):
+            rw.calc_visualization(mean_function=mean_function, n_components=3, eig_tol=0.01)
             
             edges_df = None if not show_edges else rw.edges_df
             plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x='1', y='2',
@@ -462,7 +462,7 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
                                fontsize=fontsize, prev_nodes_df=prev_nodes_df)
             prev_nodes_df = rw.nodes_df
             
-            axes.set_title('Stationary F = {:.2f}'.format(meanf))
+            axes.set_title('Stationary F = {:.2f}'.format(mean_function))
             
             if i // ncol != nrow - 1:
                 axes.set_xlabel('')
