@@ -3,8 +3,8 @@ import argparse
 
 import pandas as pd
 
-from gpmap.utils import LogTrack
-from gpmap.plot import plot_decay_rates
+from gpmap.src.utils import LogTrack
+from gpmap.src.plot import plot_relaxation_times
 
         
 def main():
@@ -30,11 +30,11 @@ def main():
     log = LogTrack()
     log.write('Start analysis')
     
-    log.write('Reading decay rates from {}'.format(fpath))
+    log.write('Reading decay rates and relaxation times from {}'.format(fpath))
     decay_rates = pd.read_csv(fpath)
     
     log.write('Making screeplot at {}'.format(out_fpath))
-    plot_decay_rates(decay_rates, fpath=out_fpath)
+    plot_relaxation_times(decay_rates, fpath=out_fpath)
     log.finish()
 
 

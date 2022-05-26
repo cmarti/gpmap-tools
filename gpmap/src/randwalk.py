@@ -11,8 +11,7 @@ from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix, check_error,
-                             write_log, check_eigendecomposition, write_pickle,
-                             load_pickle)
+                             write_log, check_eigendecomposition, load_pickle)
 
 
 class RandomWalk(object):
@@ -77,10 +76,12 @@ class TimeReversibleRandomWalk(RandomWalk):
         self.nodes_df['function'] = self.space.function
         self.nodes_df['stationary_freq'] = self.stationary_freqs
         
-    def calc_decay_rates(self):
-        decay_rates = -1 / self.eigenvalues[1:]
+    def calc_relaxation_times(self):
+        decay_rates = -self.eigenvalues[1:]
+        relaxation_times = 1 / decay_rates 
         k = np.arange(1, decay_rates.shape[0] + 1)
-        self.decay_rates_df = pd.DataFrame({'k': k, 'decay_rates': decay_rates})
+        self.decay_rates_df = pd.DataFrame({'k': k, 'decay_rates': decay_rates,
+                                            'relaxation_time': relaxation_times})
     
     def calc_visualization(self, Ns=None, mean_function=None, 
                            mean_function_perc=None, n_components=10,
@@ -96,14 +97,7 @@ class TimeReversibleRandomWalk(RandomWalk):
         self.calc_rate_matrix(tol=tol)
         self.calc_eigendecomposition(n_components, tol=tol, eig_tol=eig_tol)
         self.calc_diffusion_axis()
-        self.calc_decay_rates()
-    
-    def save(self, fpath):
-        attrs = ['Ns', 'nodes_df', 'edges_df', 'log_decay_rates', 'f',
-                 'stationary_freqs', 'n_alleles', 'length',
-                 'alphabet_type']
-        data = {attr: getattr(self, attr) for attr in attrs}
-        write_pickle(data, fpath)
+        self.calc_relaxation_times()
     
     def write_tables(self, prefix, write_edges=False, edges_format='npz'):
         self.nodes_df.to_csv('{}.nodes.csv'.format(prefix))

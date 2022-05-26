@@ -235,8 +235,8 @@ class PlottingTests(unittest.TestCase):
                '-er', '1800', '--alleles']
         check_call(cmd)
         
-    def test_plot_decay_rates_bin(self):    
-        bin_fpath = join(BIN_DIR, 'plot_decay_rates.py')
+    def test_plot_relaxation_times_bin(self):    
+        bin_fpath = join(BIN_DIR, 'plot_relaxation_times.py')
         decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
         plot_fpath = join(TEST_DATA_DIR, 'serine.decay_rates') 
         cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]

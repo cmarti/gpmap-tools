@@ -70,7 +70,7 @@ def create_patches_legend(axes, colors_dict, loc=1, **kwargs):
                 loc=loc, **kwargs)
 
 
-def plot_decay_rates(decay_df, axes=None, fpath=None, log_scale=False):
+def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False):
     if axes is None and fpath is None:
         msg = 'Either axes or fpath argument must be provided'
         raise ValueError(msg)
@@ -79,14 +79,14 @@ def plot_decay_rates(decay_df, axes=None, fpath=None, log_scale=False):
     if axes is None:
         fig, axes = init_fig(1, 1, colsize=4, rowsize=3)
     
-    axes.plot(decay_df['k'], decay_df['decay_rates'],
+    axes.plot(decay_df['k'], decay_df['relaxation_times'],
               linewidth=1, color='purple')
-    axes.scatter(decay_df['k'], decay_df['decay_rates'],
+    axes.scatter(decay_df['k'], decay_df['relaxation_times'],
                  s=15, c='purple')
     if log_scale:
         axes.set(yscale='log')
     axes.set_xlabel(r'Eigenvalue order $k$')
-    axes.set_ylabel(r'Decay rate $\frac{-1}{\lambda_{k}}$')
+    axes.set_ylabel(r'Relaxation time $\frac{-1}{\lambda_{k}}$')
     
     if fig is not None:
         savefig(fig, fpath)
