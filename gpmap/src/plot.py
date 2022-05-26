@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-from itertools import product
-
 import numpy as np
 import seaborn as sns
 import matplotlib.patches as mpatches
@@ -15,11 +13,10 @@ from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from holoviews.operation.datashader import datashade
 
-from gpmap.settings import PLOTS_FORMAT, PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
-from gpmap.utils import translante_seqs, guess_configuration
-from gpmap.base import extend_ambigous_seq
-from gpmap.src.genotypes import get_edges_coords, get_nodes_df_highlight,\
-    minimize_nodes_distance
+from gpmap.src.settings import PLOTS_FORMAT
+from gpmap.src.utils import guess_configuration
+from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
+                                 minimize_nodes_distance)
 
 
 # Functions
