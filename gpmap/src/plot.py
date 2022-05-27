@@ -79,9 +79,9 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False):
     if axes is None:
         fig, axes = init_fig(1, 1, colsize=4, rowsize=3)
     
-    axes.plot(decay_df['k'], decay_df['relaxation_times'],
+    axes.plot(decay_df['k'], decay_df['relaxation_time'],
               linewidth=1, color='purple')
-    axes.scatter(decay_df['k'], decay_df['relaxation_times'],
+    axes.scatter(decay_df['k'], decay_df['relaxation_time'],
                  s=15, c='purple')
     if log_scale:
         axes.set(yscale='log')
