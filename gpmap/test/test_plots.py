@@ -12,7 +12,8 @@ from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             figure_allele_grid_datashader, plot_nodes,
                             plot_edges, savefig, init_fig, figure_visualization,
-    figure_allele_grid, save_holoviews)
+                            figure_allele_grid, save_holoviews,
+                            plot_relaxation_times)
 from gpmap.src.genotypes import select_genotypes
         
 
@@ -234,9 +235,15 @@ class PlottingTests(unittest.TestCase):
                '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
                '-er', '1800', '--alleles']
         check_call(cmd)
-        
-    def test_plot_decay_rates_bin(self):    
-        bin_fpath = join(BIN_DIR, 'plot_decay_rates.py')
+    
+    def test_plot_relaxation_times(self):    
+        decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
+        fpath = join(TEST_DATA_DIR, 'serine.decay_rates')
+        df = pd.read_csv(decay_fpath)
+        plot_relaxation_times(df, fpath=fpath)
+    
+    def test_plot_relaxation_times_bin(self):    
+        bin_fpath = join(BIN_DIR, 'plot_relaxation_times.py')
         decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
         plot_fpath = join(TEST_DATA_DIR, 'serine.decay_rates') 
         cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]

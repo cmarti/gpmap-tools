@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-from itertools import product
-
 import numpy as np
 import seaborn as sns
 import matplotlib.patches as mpatches
@@ -15,11 +13,10 @@ from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from holoviews.operation.datashader import datashade
 
-from gpmap.settings import PLOTS_FORMAT, PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
-from gpmap.utils import translante_seqs, guess_configuration
-from gpmap.base import extend_ambigous_seq
-from gpmap.src.genotypes import get_edges_coords, get_nodes_df_highlight,\
-    minimize_nodes_distance
+from gpmap.src.settings import PLOTS_FORMAT
+from gpmap.src.utils import guess_configuration
+from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
+                                 minimize_nodes_distance)
 
 
 # Functions
@@ -73,7 +70,7 @@ def create_patches_legend(axes, colors_dict, loc=1, **kwargs):
                 loc=loc, **kwargs)
 
 
-def plot_decay_rates(decay_df, axes=None, fpath=None, log_scale=False):
+def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False):
     if axes is None and fpath is None:
         msg = 'Either axes or fpath argument must be provided'
         raise ValueError(msg)
@@ -82,14 +79,14 @@ def plot_decay_rates(decay_df, axes=None, fpath=None, log_scale=False):
     if axes is None:
         fig, axes = init_fig(1, 1, colsize=4, rowsize=3)
     
-    axes.plot(decay_df['k'], decay_df['decay_rates'],
+    axes.plot(decay_df['k'], decay_df['relaxation_time'],
               linewidth=1, color='purple')
-    axes.scatter(decay_df['k'], decay_df['decay_rates'],
+    axes.scatter(decay_df['k'], decay_df['relaxation_time'],
                  s=15, c='purple')
     if log_scale:
         axes.set(yscale='log')
     axes.set_xlabel(r'Eigenvalue order $k$')
-    axes.set_ylabel(r'Decay rate $\frac{-1}{\lambda_{k}}$')
+    axes.set_ylabel(r'Relaxation time $\frac{-1}{\lambda_{k}}$')
     
     if fig is not None:
         savefig(fig, fpath)
@@ -228,7 +225,7 @@ def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
                        edges_color='grey', edges_width=0.5, edges_cmap='binary',
                        edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
                        sort_nodes=True, ascending=False, sort_by=None,
-                       fontsize=12, prev_nodes_df=None, autoscale_axis=True):
+                       fontsize=12, prev_nodes_df=None, autoscale_axis=False):
     
     if prev_nodes_df is not None:
         axis = [x, y] if z is None else [x, y, z]
@@ -433,49 +430,65 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
                    edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
                    sort_nodes=True, ascending=False, sort_by=None,
                    fontsize=12):
-        
-        f = rw.space.function
-        if fmin is None:
-            fmin = f.mean() + 0.05 * (f.max() - f.mean())
-        if fmax is None:
-            fmax = f.mean() + 0.8 * (f.max() - f.mean())
+    f = rw.space.function
+    if fmin is None:
+        fmin = f.mean() + 0.05 * (f.max() - f.mean())
+    if fmax is None:
+        fmax = f.mean() + 0.8 * (f.max() - f.mean())
 
-        mean_fs = np.geomspace(fmin, fmax, ncol*nrow)
+    mean_fs = np.geomspace(fmin, fmax, ncol*nrow)
+    
+    fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
+    subplots = subplots.flatten()
+    
+    prev_nodes_df = None
+    xmin, xmax, ymin, ymax = None, None, None, None
+    for i, (mean_function, axes) in enumerate(zip(mean_fs, subplots)):
+        rw.calc_visualization(mean_function=mean_function, n_components=3, eig_tol=0.01)
         
-        fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
-        subplots = subplots.flatten()
+        edges_df = None if not show_edges else rw.space.get_edges_df()
+        plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x='1', y='2',
+                           nodes_color=nodes_color, nodes_size=nodes_size,
+                           nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
+                           nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
+                           nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
+                           nodes_cmap_label=nodes_cmap_label if (i+1) % ncol == 0 else None,
+                           nodes_vmin=nodes_vmin,
+                           nodes_vmax=nodes_vmax, edges_color=edges_color,
+                           edges_width=edges_width, edges_cmap=edges_cmap,
+                           edges_alpha=edges_alpha, 
+                           edges_max_width=edges_max_width, edges_min_width=edges_min_width, 
+                           sort_nodes=sort_nodes, ascending=ascending, sort_by=sort_by,
+                           fontsize=fontsize, prev_nodes_df=prev_nodes_df)
+        prev_nodes_df = rw.nodes_df
         
-        prev_nodes_df = None
-        for i, (meanf, axes) in enumerate(zip(mean_fs, subplots)):
-            rw.calc_visualization(meanf=meanf, n_components=3, eig_tol=0.01)
-            
-            edges_df = None if not show_edges else rw.edges_df
-            plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x='1', y='2',
-                               nodes_color=nodes_color, nodes_size=nodes_size,
-                               nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
-                               nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
-                               nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
-                               nodes_cmap_label=nodes_cmap_label if (i+1) % ncol == 0 else None,
-                               nodes_vmin=nodes_vmin,
-                               nodes_vmax=nodes_vmax, edges_color=edges_color,
-                               edges_width=edges_width, edges_cmap=edges_cmap,
-                               edges_alpha=edges_alpha, 
-                               edges_max_width=edges_max_width, edges_min_width=edges_min_width, 
-                               sort_nodes=sort_nodes, ascending=ascending, sort_by=sort_by,
-                               fontsize=fontsize, prev_nodes_df=prev_nodes_df)
-            prev_nodes_df = rw.nodes_df
-            
-            axes.set_title('Stationary F = {:.2f}'.format(meanf))
-            
-            if i // ncol != nrow - 1:
-                axes.set_xlabel('')
-                axes.set_xticks([])
-            
-            if i % ncol != 0:
-                axes.set_ylabel('')
-                axes.set_yticks([])
+        axes.set_title('Stationary F = {:.2f}'.format(mean_function))
         
-        savefig(fig, fpath)
+        if i // ncol != nrow - 1:
+            axes.set_xlabel('')
+            axes.set_xticks([])
+        
+        if i % ncol != 0:
+            axes.set_ylabel('')
+            axes.set_yticks([])
+            
+        # Check and store global lims values
+        xlims, ylims = axes.get_xlim(), axes.get_ylim()
+        
+        if xmin is None or xlims[0] < xmin:
+            xmin = xlims[0]
+        if xmax is None or xlims[1] > xmax:
+            xmax = xlims[1] 
+            
+        if ymin is None or ylims[0] < ymin:
+            ymin = ylims[0]
+        if ymax is None or ylims[1] > ymax:
+            ymax = ylims[1]
+    
+    for axes in subplots:
+        axes.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
+    
+    savefig(fig, fpath)
 
 
 def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',

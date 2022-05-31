@@ -5,8 +5,8 @@ import pandas as pd
 
 from gpmap.utils import LogTrack
 from gpmap.plot import figure_visualization
-from gpmap.src.plot import plot_holoview, figure_allele_grid_datashader,\
-    figure_allele_grid, save_holoviews
+from gpmap.src.plot import (plot_holoview, figure_allele_grid_datashader,
+                            figure_allele_grid, save_holoviews)
 from scipy.sparse._matrix_io import load_npz
 
         
