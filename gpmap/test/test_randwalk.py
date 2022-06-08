@@ -103,7 +103,7 @@ class RandomWalkTests(unittest.TestCase):
         
         edges = load_npz('{}.edges.npz'.format(out_fpath))
         assert(np.all(edges.shape == (64, 64)))
-        
+    
     def test_calc_visualization_bin_guess_config(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
         fpath = join(TEST_DATA_DIR, 'test.csv')
@@ -117,13 +117,14 @@ class RandomWalkTests(unittest.TestCase):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
         fpath = join(TEST_DATA_DIR, 'test.csv')
         
+        # run with standard genetic code
         out_fpath = join(TEST_DATA_DIR, 'test') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65', '-e',
                '-A', 'guess']
         check_call(cmd)
-        
         edges1 = load_npz('{}.edges.npz'.format(out_fpath))
         
+        # run with bacterial genetic code 11
         out_fpath = join(TEST_DATA_DIR, 'test.codon') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
                '-e', '-c', '11', '-A', 'guess']
@@ -136,6 +137,13 @@ class RandomWalkTests(unittest.TestCase):
         # Ensure we have less edges when using codon restricted transitions        
         edges2 = load_npz('{}.edges.npz'.format(out_fpath))
         assert(edges1.sum() > edges2.sum())
+        
+        # run with custom genetic code
+        out_fpath = join(TEST_DATA_DIR, 'test.codon_custom')
+        codon_fpath = join(TEST_DATA_DIR, 'code_6037.csv')
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
+               '-e', '-c', codon_fpath, '-A', 'guess']
+        check_call(cmd)
         
         
 if __name__ == '__main__':

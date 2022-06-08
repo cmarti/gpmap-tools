@@ -7,7 +7,8 @@ from gpmap.utils import LogTrack
 from gpmap.visualization import Visualization
 from gpmap.src.space import SequenceSpace
 from gpmap.src.randwalk import WMWSWalk
-from gpmap.src.seq import guess_space_configuration
+from gpmap.src.seq import guess_space_configuration, get_custom_codon_table
+from os.path import exists
 
         
 def main():
@@ -32,8 +33,9 @@ def main():
     coding_group.add_argument('-C', '--use_codon_model', default=False,
                               action='store_true',
                               help='Use codon model for visualization of protein landscape')
-    coding_group.add_argument('-c', '--codon_table', default=None,
-                              help='NCBI Codon table to use for equivalence (None)')
+    help_msg = 'NCBI Codon table to use for equivalence (None) or '
+    help_msg += 'CSV file with codon-aa correspondance information'
+    coding_group.add_argument('-c', '--codon_table', default=None, help=help_msg)
     coding_group.add_argument('-sf', '--stop_f', default=-10, type=float,
                               help='Function for stop codons')
     
@@ -93,6 +95,11 @@ def main():
         alphabet = config['alphabet']
         alphabet_type = 'custom'
         n_alleles = None
+        
+    # Select codon table if file is provided
+    if codon_table is not None and exists(codon_table):
+        aa_mapping = pd.read_csv(codon_table)
+        codon_table = get_custom_codon_table(aa_mapping)
     
     # Load annotation data
     space = SequenceSpace(seq_length=seq_length, n_alleles=n_alleles,
