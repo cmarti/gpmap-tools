@@ -10,7 +10,8 @@ from gpmap.inference import VCregression
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from subprocess import check_call
 from gpmap.src.space import SequenceSpace
-from gpmap.src.seq import translate_seqs, guess_alphabet_type, guess_space_configuration
+from gpmap.src.seq import translate_seqs, guess_alphabet_type, guess_space_configuration,\
+    get_custom_codon_table
 
 
 class SeqTests(unittest.TestCase):
@@ -72,7 +73,7 @@ class SeqTests(unittest.TestCase):
         assert(config['alphabet_type'] == 'protein')
         
     def test_translate(self):
-        dna = np.array(['ATGUGA', 'ATGUGAATG'])
+        dna = np.array(['ATGTGA', 'ATGTGAATG'])
         
         # Standard codon table
         protein = translate_seqs(dna, codon_table='Standard')
@@ -81,6 +82,19 @@ class SeqTests(unittest.TestCase):
         # Test other codon tables with NCBI identifiers
         protein = translate_seqs(dna, codon_table=11)
         assert(np.all(protein == ['M*', 'M*M']))
+    
+    def test_get_custom_codon_table(self):
+        fpath = join(TEST_DATA_DIR, 'code_6037.tsv')
+        aa_mapping = pd.read_csv(fpath, sep='\t')
+        codon_table = get_custom_codon_table(aa_mapping)
+        
+        assert(codon_table.__str__())
+        assert(codon_table.stop_codons == ['TAA', 'TAG', 'TGA'])
+
+        # Ensure that translation works with the new code        
+        dna = np.array(['ATGTGA', 'ATGTGATGG'])
+        protein = translate_seqs(dna, codon_table=codon_table)
+        assert(np.all(protein == ['S*', 'S*M']))
     
     def xtest_get_neighbors(self):
         v = Visualization(3, alphabet_type='rna')

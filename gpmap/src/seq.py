@@ -9,6 +9,7 @@ from gpmap.settings import NUCLEOTIDES, COMPLEMENT
 from gpmap.src.utils import check_error
 from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
 from itertools import chain
+from Bio.Data.CodonTable import CodonTable, standard_dna_table
 
 
 def extend_ambigous_seq(seq, mapping):
@@ -84,3 +85,22 @@ def guess_space_configuration(seqs):
     msg += ' Ensure that genotypes span the whole sequence space'
     check_error(np.prod(config['n_alleles']) == seqs.shape[0], msg)
     return(config)
+
+
+def get_custom_codon_table(aa_mapping):
+    '''
+    Builds a biopython CodonTable to use for translation with a custom genetic code
+    
+    aa_mapping: pd.DataFrame with columns "Codon" and "Letter" representing the
+    genetic code correspondence. Stop codons should appear as "*"
+    
+    '''
+    aa_mapping['Codon'] = [x.replace('U', 'T') for x in aa_mapping['Codon']]
+    stop_codons = aa_mapping.loc[aa_mapping['Letter'] == '*', 'Codon'].tolist()
+    aa_mapping = aa_mapping.loc[aa_mapping['Letter'] != '*', :]
+    forward_table = aa_mapping.set_index('Codon')['Letter'].to_dict()
+    codon_table = CodonTable(forward_table=forward_table, stop_codons=stop_codons,
+                             nucleotide_alphabet='ACGT')
+    codon_table.id = -1
+    codon_table.names = ['Custom']
+    return(codon_table)
