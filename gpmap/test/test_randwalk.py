@@ -137,13 +137,27 @@ class RandomWalkTests(unittest.TestCase):
         # Ensure we have less edges when using codon restricted transitions        
         edges2 = load_npz('{}.edges.npz'.format(out_fpath))
         assert(edges1.sum() > edges2.sum())
+
+    def test_calc_visualization_codon_bin(self):
+        bin_fpath = join(BIN_DIR, 'calc_visualization.py')
+        fpath = join(TEST_DATA_DIR, 'serine.protein.csv')
         
-        # run with custom genetic code
-        out_fpath = join(TEST_DATA_DIR, 'test.codon_custom')
+        # standard genetic code
+        out_fpath = join(TEST_DATA_DIR, 'serine.codon')
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
+               '-e', '-C', '-A', 'dna', '-c', 'Standard']
+        check_call(cmd)
+        nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+        assert(nodes.shape[0] == 64)
+        
+        # custom genetic code
+        out_fpath = join(TEST_DATA_DIR, 'serine.codon.custom')
         codon_fpath = join(TEST_DATA_DIR, 'code_6037.csv')
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
-               '-e', '-c', codon_fpath, '-A', 'guess']
+               '-e', '-C', '-A', 'dna', '-c', codon_fpath]
         check_call(cmd)
+        nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+        assert(nodes.shape[0] == 64)
         
         
 if __name__ == '__main__':

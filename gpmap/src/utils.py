@@ -156,11 +156,16 @@ def guess_configuration(seqs):
               'n_alleles': [len(alleles[i]) for i in range(length)],
               'alphabet': [[a for a in alleles[i].keys()]
                            for i in range(length)]}
-    if np.prod(config['n_alleles']) != seqs.shape[0]:
-        msg = 'Number of genotypes does not match the expected from guessed'
+    exp_n_seqs = np.prod(config['n_alleles'])
+    if exp_n_seqs > seqs.shape[0]:
+        msg = 'Number of genotypes is lower than the expected from guessed'
         msg += ' configuration. Ensure that genotypes span the whole sequence '
         msg += 'space'
         raise ValueError(msg)
+    elif exp_n_seqs < seqs.shape[0]:
+        msg = 'Number of genotypes is higher than the expected from guessed'
+        msg += ' configuration'
+        Warning(msg)
     return(config)
 
 

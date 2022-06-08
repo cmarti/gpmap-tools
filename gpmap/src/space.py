@@ -166,6 +166,8 @@ class SequenceSpace(DiscreteSpace):
             prot = pd.Series(translate_seqs(self.genotypes, codon_table),
                              index=self.state_labels)
             function = function.reindex(prot).fillna(stop_function).values
+        elif isinstance(function, pd.Series):
+            function = function.values
             
         self.function = function
         self._check_function()

@@ -104,7 +104,7 @@ def main():
     # Load annotation data
     space = SequenceSpace(seq_length=seq_length, n_alleles=n_alleles,
                           alphabet=alphabet, alphabet_type=alphabet_type,
-                          function=data.iloc[:, 0].values,
+                          function=data.iloc[:, 0],
                           use_codon_model=use_codon_model, 
                           codon_table=codon_table, stop_function=stop_function)
     
