@@ -84,8 +84,8 @@ class SeqTests(unittest.TestCase):
         assert(np.all(protein == ['M*', 'M*M']))
     
     def test_get_custom_codon_table(self):
-        fpath = join(TEST_DATA_DIR, 'code_6037.tsv')
-        aa_mapping = pd.read_csv(fpath, sep='\t')
+        fpath = join(TEST_DATA_DIR, 'code_6037.csv')
+        aa_mapping = pd.read_csv(fpath)
         codon_table = get_custom_codon_table(aa_mapping)
         
         assert(codon_table.__str__())
