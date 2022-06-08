@@ -13,7 +13,7 @@ from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             figure_allele_grid_datashader, plot_nodes,
                             plot_edges, savefig, init_fig, figure_visualization,
                             figure_allele_grid, save_holoviews,
-                            plot_relaxation_times)
+                            plot_relaxation_times, plot_interactive)
 from gpmap.src.genotypes import select_genotypes
         
 
@@ -249,14 +249,22 @@ class PlottingTests(unittest.TestCase):
         cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
         check_call(cmd)
         
-    def xtest_interactive_plot(self):
-        v = Visualization(length=3, n_alleles=4)
-        v.set_random_function(0)
-        v.calc_visualization(n_components=20)
-        v.plot_interactive_2d(fname='test_interactive_2d', show_edges=True)
-        v.plot_interactive_3d(fname='test_interactive_3d', show_edges=True,
-                                      force_coords=True)
-    
+    def test_interactive_plot(self):
+        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
+        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+        edges_df = pd.read_csv(edges_fpath)
+        
+        fpath = join(TEST_DATA_DIR, 'serine.interactive2d')
+        plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
+                         nodes_color='function', nodes_size=10,
+                         edges_width=1)
+        
+        fpath = join(TEST_DATA_DIR, 'serine.interactive3d')
+        plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
+                         nodes_color='function', nodes_size=10,
+                         edges_width=1, z='3')
+        
     def xtest_visualize_reactive_paths(self):
         np.random.seed(0)
         v = CodonFitnessLandscape(add_variation=True)

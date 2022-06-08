@@ -85,8 +85,9 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False):
                  s=15, c='purple')
     if log_scale:
         axes.set(yscale='log')
-    axes.set_xlabel(r'Eigenvalue order $k$')
-    axes.set_ylabel(r'Relaxation time $\frac{-1}{\lambda_{k}}$')
+    axes.set(xlabel=r'Eigenvalue order $k$', 
+             ylabel=r'Relaxation time $\frac{-1}{\lambda_{k}}$',
+             xticks=decay_df['k'])
     
     if fig is not None:
         savefig(fig, fpath)
@@ -436,7 +437,7 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
     if fmax is None:
         fmax = f.mean() + 0.8 * (f.max() - f.mean())
 
-    mean_fs = np.geomspace(fmin, fmax, ncol*nrow)
+    mean_fs = np.linspace(fmin, fmax, ncol*nrow)
     
     fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
     subplots = subplots.flatten()
@@ -565,7 +566,7 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
                           size=5, linewidth=0, edgecolor='black',
                           vmin=None, vmax=None,
                           sort_by=None, ascending=True,
-                          shade=False, resolution=800):
+                          shade=True, resolution=800):
     if sort_by is not None:
         nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
         
@@ -671,7 +672,8 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
             nodes = plot_nodes_datashader(nodes_df.copy(),
                                           x, y,
                                           color='allele', cmap='viridis',
-                                          resolution=nodes_resolution)
+                                          resolution=nodes_resolution,
+                                          shade=True)
             nodes = nodes.relabel('{}{}'.format(j+1, allele))
             dsg = nodes if edges is None else edges * nodes
             
