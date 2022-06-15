@@ -9,7 +9,7 @@ from scipy.sparse.csr import csr_matrix
 from gpmap.src.genotypes import (select_genotypes, dataframe_to_csr_matrix,
                                  select_d_neighbors, select_genotypes_re,
                                  select_genotypes_ambiguous_seqs,
-                                 select_closest_genotypes)
+                                 select_closest_genotypes, select_local_optima)
 
 
 class GenotypeTests(unittest.TestCase):
@@ -116,6 +116,18 @@ class GenotypeTests(unittest.TestCase):
         assert(np.all(edges['i'] == [0, 1]))
         assert(np.all(edges['j'] == [1, 0]))
         assert(np.all(edges['id'] == [0, 3]))
+    
+    def test_select_local_optima(self):
+        nodes_df = pd.DataFrame({'index': np.arange(4),
+                                 'function': [3, 1, 1, 3]},
+                                index=['AA', 'AB', 'BA', 'BB'])
+        edges_df = pd.DataFrame({'i': [0, 0, 1, 1, 2, 2, 3, 3],
+                                 'j': [1, 2, 0, 3, 0, 3, 1, 2],
+                                 'id': np.arange(8)})
+        
+        local_optima = select_local_optima(nodes_df, edges_df)
+        assert(np.all(local_optima.index == ['AA', 'BB']))
+        assert(np.all(local_optima['function'] == 3))
         
         
 if __name__ == '__main__':

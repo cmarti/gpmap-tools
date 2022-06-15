@@ -155,4 +155,14 @@ def select_closest_genotypes(nodes_df, genotype, n_genotypes, edges=None, axis=N
 
     sel_idxs = np.argsort(sq_distance)[:n_genotypes]
     return(select_genotypes(nodes_df, sel_idxs, edges=edges, is_idx=True))
+
+
+def select_local_optima(nodes_df, edges_df, field_function='function'):
+    f1 = nodes_df[field_function].values[edges_df['i'].values]
+    f2 = nodes_df[field_function].values[edges_df['j'].values]
+    edf = edges_df.loc[f1 > f2, :] 
+    m = csr_matrix((np.ones(edf.shape[0]), (edf['i'].values, edf['j'].values)),
+                   shape=(nodes_df.shape[0], nodes_df.shape[0])).sum(1)
+    idx = np.where(m == m.max())[0]
+    return(select_genotypes(nodes_df, idx, edges=edges_df, is_idx=True)[0])
     
