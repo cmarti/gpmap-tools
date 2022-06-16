@@ -4,22 +4,27 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
+from itertools import product
+from _collections import defaultdict
+
 from scipy.sparse.csr import csr_matrix
+from scipy.sparse._matrix_io import save_npz
+from scipy.sparse.extract import triu
 
 from gpmap.src.seq import translate_seqs, guess_space_configuration
-from gpmap.utils import check_error
+from gpmap.src.utils import get_sparse_diag_matrix, check_error
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
-from scipy.sparse._matrix_io import save_npz
-from scipy.sparse.extract import triu
-from itertools import product
-from _collections import defaultdict
 
 
 class DiscreteSpace(object):
     def __init__(self, adjacency_matrix, function=None, state_labels=None):
         self.init_space(adjacency_matrix, function=function, state_labels=state_labels)
+    
+    def calc_laplacian(self):
+        D = get_sparse_diag_matrix(self.adjacency_matrix.sum(1).A1.flatten())
+        self.laplacian = D - self.adjacency_matrix
     
     def _check_attributes(self, tol=1e-6):
         # TODO: check that the space is connected

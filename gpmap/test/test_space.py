@@ -70,6 +70,17 @@ class SpaceTests(unittest.TestCase):
         assert(n_neighbors['L'] == 51)
         assert(n_neighbors['R'] == 52)
     
+    def test_calc_laplacian(self):
+        space = SequenceSpace(seq_length=1, alphabet_type='dna')
+        space.calc_laplacian()
+        assert(np.all(np.diag(space.laplacian.todense()) == 3))
+        assert(np.all(space.laplacian.sum(1) == 0))
+        
+        space = SequenceSpace(seq_length=2, alphabet_type='dna')
+        space.calc_laplacian()
+        assert(np.all(np.diag(space.laplacian.todense()) == 6))
+        assert(np.all(space.laplacian.sum(1) == 0))
+    
     def test_calc_site_adjacency_matrices(self):
         space = SequenceSpace(seq_length=1, alphabet_type='protein')
         
@@ -229,5 +240,5 @@ class SpaceTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SpaceTests']
+    import sys;sys.argv = ['', 'SpaceTests.test_calc_laplacian']
     unittest.main()
