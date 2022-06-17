@@ -1,29 +1,11 @@
 #!/usr/bin/env python
 import unittest
-from os.path import join
 
 import numpy as np
-import pandas as pd
 from scipy.stats.mstats_basic import pearsonr
 
-from gpmap.src.settings import TEST_DATA_DIR
-from gpmap.src.utils import LogTrack
 from gpmap.src.inference import VCregression
-
-
-def get_test_gpmap(add_missing=False):
-    log = LogTrack()
-    fpath = join(TEST_DATA_DIR, 'pentamer.csv')
-    data = pd.read_csv(fpath).sort_values('seq').set_index('seq')
-    if add_missing:
-        idx = np.random.choice(np.arange(data.shape[0]),
-                               size=int(data.shape[0] * 0.9), replace=False)
-        data = data.iloc[idx, :]
-    
-    gpmap = VCregression(5, 4, log=log)
-    gpmap.load_data(f_obs=data['mean'], variance=data['variance'],
-                    seqs=data.index)
-    return(gpmap)
+from scipy.special._basic import comb
 
 
 class VCTests(unittest.TestCase):
@@ -38,7 +20,6 @@ class VCTests(unittest.TestCase):
         assert(np.all(m[:4, :] == np.eye(4)))
         assert(np.all(m[4:, :] == 0))
         assert(m.shape == (8, 4))
-        
     
     def test_calc_L_powers_unique_entries_matrix(self):
         vc = VCregression()
@@ -51,83 +32,119 @@ class VCTests(unittest.TestCase):
                    [0 ,0 ,0, 0, 0, -120]]
         assert(np.all(exp_mat == vc.L_powers_unique_entries))
     
-    def test_calc_laplacian_powers(self):
+    def test_calc_L_powers(self):
         vc = VCregression()
         vc.init(3, 2)
         
         np.random.seed(0)
         v = np.random.normal(size=8)
-        L_powers = vc.calc_laplacian_powers(v)
+        L_powers = vc.calc_L_powers(v)
         assert(L_powers.shape == (8, 4))
     
-    def xtest_compute_empirical_rho(self):
-        gpmap = get_test_gpmap()
-        gpmap.calc_laplacian()
-        gpmap.calc_MAT()
-        rho_d = gpmap.compute_empirical_rho()[0]
-        
-        expected_rho = [0.3289592165429687, 0.29711601889225264, 0.2829828261439887,
-                        0.27518021926897074, 0.271383375496395, 0.27036637220315385]
-        assert(np.allclose(expected_rho, rho_d))
-        
-    def xtest_vc_inference(self):
-        gpmap = get_test_gpmap()
-        gpmap.estimate_variance_components()
-        expected_lambdas = [2.80160850e02, 1.11396023, 2.56638126e-01,
-                             3.51032105e-02, 1.10928480e-02, 6.69724738e-03]
-        
-        lambdas = gpmap.estimate_variance_components(regularize=False)
-        rho = pearsonr(np.log(lambdas), np.log(expected_lambdas))[0]
-        logd = np.log(lambdas) - np.log(expected_lambdas)
-        assert(rho > 0.99)
-        assert(logd.mean() < 0.1)
-        
-        vc = gpmap.lambdas_to_variance(lambdas)
-        expected_vc = [0.29507236, 0.40941648, 0.1731748, 0.0882358, 0.03410057]
-        assert(np.allclose(vc, expected_vc, atol=0.01))
-    
-        lambdas = gpmap.estimate_variance_components(regularize=True)
-        rho = pearsonr(np.log(lambdas), np.log(expected_lambdas))[0]
-        logd = np.log(lambdas) - np.log(expected_lambdas)
-        assert(rho > 0.99)
-        assert(logd.mean() < 0.1)
-        
-        vc = gpmap.lambdas_to_variance(lambdas)
-        assert(np.allclose(vc, expected_vc, atol=0.05))
-        
-    def xtest_vc_inference2(self):
+    def test_simulate_vc(self):
         np.random.seed(1)
-        lambdas = [0, 100, 10, 1, 0.1, 0.01]
-        vcreg = VCregression(5, 4)
-        vc = vcreg.lambdas_to_variance(lambdas)
-        vcreg.simulate(lambdas=lambdas, sigma=0.1, p_missing=0.1)
+        sigma = 0.1
+        lambdas = np.array([0, 200, 20, 2, 0.2])
         
-        lambdas_inferred = vcreg.estimate_lambdas(regularize=False)
-        vc_inferred = vcreg.lambdas_to_variance(lambdas_inferred)
-        assert(np.allclose(vc, vc_inferred, atol=0.05))
+        vc = VCregression()
+        vc.init(4, 4)
         
-        lambdas_inferred = vcreg.estimate_lambdas(regularize=True)
-        vc_inferred = vcreg.lambdas_to_variance(lambdas_inferred)
-        assert(np.allclose(vc, vc_inferred, atol=0.05))
+        data = vc.simulate(lambdas, sigma)
+        assert(data.shape[0] == 256)
+        
+        data = vc.simulate(lambdas, sigma, p_missing=0.1)
+        assert(data.shape[0] < 256)
     
-    def xtest_estimate_f(self):
+    def test_compute_empirical_rho(self):
+        np.random.seed(1)
+        sigma, lambdas = 0.1, np.array([0, 200, 20, 2, 0.2])
+        
+        seq_length, n_alleles = 4, 4
+        
+        vc = VCregression()
+        vc.init(seq_length, n_alleles)
+        data = vc.simulate(lambdas, sigma)
+        
+        obs_idx = vc.get_obs_idx(data.index)
+        rho, n = vc.compute_empirical_rho(obs_idx, data['function'])
+        
+        # Ensure we get the expected number of pairs per distance category
+        for d in range(seq_length + 1):
+            total_genotypes = n_alleles ** seq_length
+            d_combs = comb(seq_length, d)
+            d_sites_genotypes = (n_alleles - 1) ** d
+            n[d] = total_genotypes * d_combs * d_sites_genotypes
+            
+        # Ensure anticorrelated distances
+        assert(rho[3] < 0)
+        assert(rho[4] < 0)
+    
+    def test_vc_fit(self):
+        np.random.seed(1)
+        sigma, lambdas = 0.2, np.array([0, 200, 20, 2, 0.2, 0.02])
+        loglambdas = np.log10(lambdas[1:])
+        
+        vc = VCregression()
+        vc.init(5, 4)
+        data = vc.simulate(lambdas, sigma, p_missing=0.1)
+        
+        # Ensure MSE is within a small range
+        vc = VCregression()
+        vc.fit(data.index, data['function'], variance=data['variance'],
+               cross_validation=False)
+        assert(np.mean((loglambdas - np.log10(vc.lambdas[1:] + 1e-2))**2) < 0.5)
+        
+        # Try with regularization and CV
+        vc = VCregression()
+        vc.fit(data.index, data['function'], variance=data['variance'],
+               cross_validation=True)
+        assert(np.mean((loglambdas - np.log10(vc.lambdas[1:]))**2) < 0.25)
+    
+    def test_vc_predict(self):
         np.random.seed(0)
-        lambdas = [2.80160850e02, 1.11396023, 2.56638126e-01,
-                   3.51032105e-02, 1.10928480e-02, 6.69724738e-03]
-        exp_f1 = [0.46865088, 0.71775025, 0.32067001, 0.62541312, 0.63366557]
-        exp_f2 = [0.76384838, 0.87255378, 0.94822025, 0.87959252, 0.89394908]
-
-        gpmap = get_test_gpmap()        
-        f = gpmap.estimate_f(lambdas)
-        assert(np.allclose(f[:5], exp_f1))
-        assert(np.allclose(f[-5:], exp_f2))
+        sigma, lambdas = 0.2, np.array([0, 200, 20, 2, 0.2, 0.02])
         
-        gpmap = get_test_gpmap(add_missing=True)
-        f = gpmap.estimate_f(lambdas)
-        assert(f.shape[0] == 1024)
-        assert(np.allclose(f[:5], exp_f1, atol=0.01))
-        assert(np.allclose(f[-5:], exp_f2, atol=0.01))
-    
+        vc = VCregression()
+        vc.init(5, 4)
+        data = vc.simulate(lambdas, sigma)
+        real = vc.real_function
+        
+        # Estimating also the variance components
+        vc = VCregression()
+        vc.fit(data.index, data['function'], variance=data['variance'])
+        pred = vc.predict()
+        mse = np.mean((pred['function'] - real['function']) ** 2)
+        rho = pearsonr(pred['function'], real['function'])[0]
+        assert(rho > 0.95)
+        assert(mse < 0.05)
+        
+        # Using the a priori known variance components
+        vc = VCregression()
+        pred = vc.predict(X=data.index, y=data['function'],
+                          variance=data['variance'], lambdas=lambdas)
+        mse = np.mean((pred['function'] - real['function']) ** 2)
+        rho = pearsonr(pred['function'], real['function'])[0]
+        assert(rho > 0.95)
+        assert(mse < 0.05)
+        
+        # Capture error with incomplete input
+        try:
+            pred = vc.predict(X=data.index, y=data['function'],
+                              variance=data['variance'])
+            self.fail()
+        except ValueError:
+            pass
+        
+        # With incomplete genotype sampling data: larger MSE
+        data = data.loc[np.random.choice(data.index, size=950), :]
+        vc = VCregression()
+        vc.fit(data.index, data['function'], variance=data['variance'])
+        pred = vc.predict()
+        mse = np.mean((pred['function'] - real['function']) ** 2)
+        rho = pearsonr(pred['function'], real['function'])[0]
+        assert(rho > 0.95)
+        assert(mse < 0.3)
+        
     def xtest_estimate_f_variance(self):
         np.random.seed(0)
         lambdas = [2.80160850e02, 1.11396023, 2.56638126e-01,
@@ -137,36 +154,6 @@ class VCTests(unittest.TestCase):
         v = gpmap.estimate_f_variance(lambdas)
         print(v)
         
-    def xtest_simulate_f(self):
-        np.random.seed(1)
-        sigma = 0.01
-        gpmap = VCregression(4, 4)
-        gpmap.calc_L_eigendecomposition()
-        
-        estimated = []
-        for _ in range(100):
-            lambdas = np.array([0, 200, 20, 0, 0])
-            gpmap.simulate(lambdas, sigma)
-            vc = gpmap.lambdas_to_variance(lambdas)
-            lambdas_star = gpmap.estimate_variance_components()
-            vc_star = gpmap.lambdas_to_variance(lambdas_star)
-            record = {'vc': np.abs(vc_star[:2] - vc[:2]).mean(),
-                      'lambda': np.abs(np.log(lambdas_star[1:3] / lambdas[1:3])).mean()}
-            estimated.append(record)
-            
-        estimated = pd.DataFrame(estimated).mean()
-        assert(np.all(estimated < [0.1, 0.3]))
-    
-    def xtest_calc_distance_matrix(self):
-        gpmap = VCregression(2, 2)
-        D = gpmap.calc_distance_matrix()
-        expected_D = np.array([[0, 1, 1, 2],
-                               [1, 0, 2, 1],
-                               [1, 2, 0, 1],
-                               [2, 1, 1, 0]])
-        assert(np.all(D == expected_D))
-        assert(D.dtype == 'int')
-    
     def xtest_W_dot_precision(self):
         gpmap = VCregression(5, 4)
         f = np.random.normal(size=gpmap.n_genotypes)
@@ -207,17 +194,6 @@ class VCTests(unittest.TestCase):
         assert(np.allclose(f_1, f_2))
         assert(np.allclose(f_1, f_3))
     
-    def xtest_stan_model(self):
-        np.random.seed(1)
-        sigma = 0.05
-        gpmap = VCregression(5, 4)
-        lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
-        gpmap.simulate(lambdas, sigma)
-        vc = gpmap.lambdas_to_variance(lambdas)
-        print(vc)
-        fit = gpmap.stan_fit(sigma, recompile=False)
-        print(fit['lambdas'], fit['log_lambda_beta_inv'], fit['log_lambda0'])
-        print(gpmap.lambdas_to_variance(fit['lambdas']))
     
     def xtest_calc_generalized_laplacian(self):
         gpmap = VCregression(2, 2, alphabet_type='custom')

@@ -51,26 +51,38 @@ def grad_Frob(lambdas, M, a):
 
 
 class VCregression(object):
-    def init(self, seq_length=None, n_alleles=None, genotypes=None):
+    def init(self, seq_length=None, n_alleles=None, genotypes=None,
+             alphabet_type='custom'):
+        alphabet = None
+        
         if genotypes is not None:
             configuration = guess_space_configuration(genotypes,
                                                       ensure_full_space=False)
             seq_length = configuration['length']
-            n_alleles = np.max(configuration['n_alleles'])
-            
+            alphabet_type = configuration['alphabet_type']
+            alphabet = set()
+            for alleles in configuration['alphabet']:
+                alphabet = alphabet.union(alleles)
+            alphabet = [sorted(alphabet)] * seq_length
+            self.space = SequenceSpace(seq_length=seq_length, alphabet=alphabet,
+                                       alphabet_type='custom')
+            n_alleles = len(alphabet[0])
+        
         elif n_alleles is None or seq_length is None:
             msg = 'Either genotypes or both seq_length and n_alleles must '
             msg += 'be provided'
             raise ValueError(msg)
         
+        else:
+            self.space = SequenceSpace(seq_length=seq_length, n_alleles=n_alleles,
+                                       alphabet_type=alphabet_type)
+        
         self.seq_length = seq_length
         self.n_alleles = n_alleles
-        self.space = SequenceSpace(seq_length=seq_length, n_alleles=n_alleles,
-                                   alphabet_type='custom')
+        
         self.space.calc_laplacian()
         self.n_genotypes = self.space.n_states
         self.L = self.space.laplacian
-        
         self.calc_L_powers_unique_entries_matrix()
         self.calc_W_kd_matrix()
     
@@ -135,7 +147,7 @@ class VCregression(object):
     
     def calc_L_powers_coeffs(self, lambdas):
         covariance = self.calc_collapsed_covariance_matrix(lambdas)
-        return(np.dot(self.MAT_inv, covariance))
+        return(np.dot(self.L_powers_unique_entries_inv, covariance))
     
     def calc_L_powers(self, v):
         powers = [v]
@@ -143,50 +155,95 @@ class VCregression(object):
             powers.append(self.L.dot(powers[-1]))
         return(np.vstack(powers).T)
     
-    def fit(self, X, y, variance=None, cross_validation=False):
-        '''
-        Infer variance components from the data
-        '''
+    def get_obs_idx(self, seqs):
+        obs_idx = self.space.state_idxs[seqs]
+        return(obs_idx)
+
+    def set_data(self, X, y, variance):
+        obs_idx = self.get_obs_idx(X)
+        if variance is None:
+            variance = np.zeros(obs_idx.shape[0])
         
-        # Organize data
-        obs_idx = self.space.state_idxs[X]
-        
-        
-        # Estimate variance components
-        if cross_validation:
-            second_order_diff_matrix = self.calc_second_order_diff_matrix()
-            self.lambdas = self.solve_for_lambda_cv(obs_idx, y,
-                                                    second_order_diff_matrix)
-        else:
-            self.lambdas = self.solve_for_lambda(obs_idx, y)
+        self.obs_idx = obs_idx
+        self.y = y
+        self.variance = variance
+        self.n_obs = y.shape[0]
     
-    def solve_for_lambda(self, obs_idx, y, betas=None):
+    def fit(self, X, y, variance=None,
+            cross_validation=False, nfolds=10):
+        """
+        Infers the variance components from the provided data, this is, 
+        the relative contribution of the different orders of interaction
+        to the variability in the sequence-function relationships
+        
+        Stores learned `lambdas` in the attribute VCregression.lambdas
+        to use internally for predictions
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Vector containing the genotypes for which have observations provided
+            by `y`
+            
+        y : array-like of shape (n_obs,)
+            Vector containing the observed phenotypes corresponding to `X`
+            sequences
+        
+        variance : array-like of shape (n_obs,)
+            Vector containing the empirical or experimental known variance for
+            the measurements in `y`
+            
+        cross_validation : bool (False)
+            Whether to use cross-validation and regularize the variance
+            components so that their contribution tends to decay exponentially
+            
+        nfolds : int (10)
+            Number of folds to use for cross-validation 
+        
+        """
+        if not hasattr(self, 'space'):
+            self.init(genotypes=X)
+        
+        self.set_data(X, y, variance=variance)
+        
+        if cross_validation:
+            self.second_order_diff_matrix = self.calc_second_order_diff_matrix()
+            self.lambdas = self.estimate_lambdas_cv(self.obs_idx, y, variance,
+                                                    nfolds=nfolds)
+        else:
+            self.lambdas = self.estimate_lambdas(self.obs_idx, y)
+    
+    def estimate_lambdas(self, obs_idx, y, betas=None,
+                         second_order_diff_matrix=None):
         """solve for lambdas using least squares with the given rho_d 
         and N_d"""
         rho_d, N_d = self.compute_empirical_rho(obs_idx, y)
-        M, a = self.construct_M_and_a(rho_d, N_d)
+        
+        # Calculate matrices for calculating Frobenius norm given lambdas
+        M = self.construct_M(N_d)
+        a = self.construct_a(rho_d, N_d) 
 
         if betas is None:        
             # Minimize the objective function Frob with lambda > 0
             M_inv = np.linalg.inv(M)
             lambda0 = np.array(np.dot(M_inv, a)).ravel()
-            res = minimize(fun=Frob, jac=grad_Frob, args=(M, a), x0=lambda0,
-                           method='L-BFGS-B',
+            res = minimize(fun=Frob, jac=grad_Frob, args=(M, a),
+                           x0=lambda0, method='L-BFGS-B',
                            bounds=[(0, None)] * (self.seq_length + 1))
-            if not res.success:
-                self.report(res.message)
             lambdas = res.x
+            
         else:
             lambdas = []
             for beta in betas:
-                res = minimize(fun=self.Frob_reg, args=(M, a, beta),
+                res = minimize(fun=self.Frob_reg, args=(M, a, beta, second_order_diff_matrix),
                                x0=np.zeros(self.seq_length + 1), method='Powell',
                                options={'xtol': 1e-8, 'ftol': 1e-8})
                 lambdas.append(np.exp(res.x))
+                
         return(lambdas)
     
-    def get_cv_indexes(self, nfolds=10):
-        order = np.arange(self.n_obs)
+    def get_cv_indexes(self, n_obs, nfolds=10):
+        order = np.arange(n_obs)
         random.shuffle(order)
         folds = np.array_split(order, nfolds)
         
@@ -195,7 +252,7 @@ class VCregression(object):
             validation_idx = folds[i]
             yield(training_idx, validation_idx)
     
-    def solve_for_lambda_cv(self, nfolds=10, betas=None):
+    def estimate_lambdas_cv(self, obs_idx, y, variance, nfolds=10, betas=None):
         """
         Estimate lambdas using regularized least squares with 
         regularization parameter chosen using cross-validation
@@ -205,20 +262,30 @@ class VCregression(object):
             betas = 10 ** np.arange(-2, 6, .5)
             
         mses = []
-        for training_idx, validation_idx in tqdm(self.get_cv_indexes(nfolds),
+        for training_idx, validation_idx in tqdm(self.get_cv_indexes(y.shape[0], nfolds),
                                                  total=nfolds):
-            lambdas = self.solve_for_lambda(obs_idx=training_idx, betas=betas)
-            rho, n = self.compute_empirical_rho(obs_idx=validation_idx)
-            rho[0] -= np.mean(self.variance[validation_idx])
+            y_train, y_validation = y[training_idx], y[validation_idx]
+
+            # Estimate lambdas from training data
+            lambdas = self.estimate_lambdas(obs_idx=training_idx,
+                                            y=y_train, betas=betas)
+            
+            # Compute covariance on validation and substract the empirical variance
+            rho, n = self.compute_empirical_rho(validation_idx, y_validation)
+            rho[0] -= np.mean(variance[validation_idx])
+            
+            # Compute MSE between the expected and observed covariance matrix
             mses.append([np.sum((self.W_kd.T.dot(lambdas[i]) - rho) ** 2 * (1 / np.sum(n)) * n)
                          for i in range(betas.shape[0])])
+        
+        # Select the beta with best MSE across folds    
         mses = np.array(mses)
         mses = np.mean(mses, axis=0)
         betaopt = betas[np.argmin(mses)]
         
-        lambdas = self.solve_for_lambda(betas=[betaopt])[0]
+        # Re-estimate data
+        lambdas = self.estimate_lambdas(obs_idx, y, betas=[betaopt])[0]
         self.beta_mse = dict(zip(betas, mses))
-        
         return(lambdas)
 
     def get_noise_diag_matrix(self):
@@ -268,30 +335,29 @@ class VCregression(object):
             Diff2[i, i:i + 3] = [-1, 2, -1]
         return(Diff2.T.dot(Diff2))
     
-    
-    
-    def Frob_reg(self, theta, M, a, beta):
+    def Frob_reg(self, theta, M, a, beta, second_order_diff_matrix):
         """cost function for regularized least square method for inferring 
         lambdas"""
         Frob1 = np.exp(theta).dot(M).dot(np.exp(theta))
         Frob2 = 2 * np.exp(theta).dot(a)
-        return Frob1 - Frob2 + beta * theta[1:].dot(self.Rmat).dot(theta[1:])
+        return(Frob1 - Frob2 + beta * theta[1:].dot(self.second_order_diff_matrix).dot(theta[1:]))
     
-    def construct_M_and_a(self, rho_d, N_d):
-        # Construct M
+    def construct_M(self, N_d):
         size = self.seq_length + 1
         M = np.zeros([size, size])
         for i in range(size):
             for j in range(size):
                 for d in range(size):
                     M[i, j] += N_d[d] * self.W_kd[i, d] * self.W_kd[j, d]
+        return(M)
     
-        # Construct a
+    def construct_a(self, rho_d, N_d):
+        size = self.seq_length + 1
         a = np.zeros(size)
         for i in range(size):
             for d in range(size):
                 a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
-        return(M, a)
+        return(a)
     
     def W_dot(self, v, L_powers_coeffs):
         """multiply by the whole covariance matrix. b_k is set by lambdas"""
@@ -301,22 +367,70 @@ class VCregression(object):
         """ multiply by the m by m matrix K_BB + E"""
         return(self.gt2data.T.dot(self.W_dot(self.gt2data.dot(v), L_powers_coeffs)) + self.E_sparse.dot(v))
 
-    def estimate_f(self, lambdas):
-        """compute the MAP"""
-        self.report('Estimating mean phenotypic values')
-        L_powers_coeffs = self.calc_L_powers_coeffs(lambdas)
-        self.gt2data = self.get_gt_to_data_matrix()
+    def predict(self, Xpred=None, X=None, y=None, variance=None, lambdas=None):
+        """
+        Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
+        the provided or all genotypes
+        
+        Parameters
+        ----------
+        Xpred : array-like of shape (n_genotypes,)
+            Vector containing the genotypes for which we want to predict the
+            phenotype. If `n_genotypes == None` then predictions are provided
+            for the whole sequence space
+        
+        X : array-like of shape (n_obs,)
+            Vector containing the genotypes for which have observations provided
+            by `y`
+            
+        y : array-like of shape (n_obs,)
+            Vector containing the observed phenotypes corresponding to `X`
+            sequences
+        
+        variance : array-like of shape (n_obs,)
+            Vector containing the empirical or experimental known variance for
+            the measurements in `y`
+            
+        lambdas : array-like of shape (seq_length + 1,)
+            Vector containing variance components `lambdas` to use to make 
+            predictions given the observed `X`, `y` sequence function
+            relationship 
+        
+        Returns
+        -------
+        function : pd.DataFrame of shape (n_genotypes, 1)
+                   Returns the phenotypic predictions for each input genotype
+                   in the column `function` and genotype labels as row names
+        """
+        
+        if np.all([X is not None, y is not None,
+                   variance is not None, lambdas is not None]):
+            self.init(genotypes=X)
+            self.set_data(X=X, y=y, variance=variance)
+            self.lambdas = lambdas
+        elif np.any([X is not None, y is not None, lambdas is not None]):
+            msg = 'X, y and lambdas must all be provided for prediction or'
+            msg = ' the model should have been previously fitted'
+            raise ValueError(msg)
+        
+        self.get_noise_diag_matrix()
+        L_powers_coeffs = self.calc_L_powers_coeffs(self.lambdas)
+        self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
     
         # Solve 'a' with ys
         matvec = partial(self.K_BB_E_dot, L_powers_coeffs=L_powers_coeffs)
         Kop = LinearOperator((self.n_obs, self.n_obs), matvec=matvec)
-        a_star = minres(Kop, self.obs, tol=1e-9)[0]
+        a_star = minres(Kop, self.y, tol=1e-9)[0]
     
         # Compute posterior mean
         f_star = self.W_dot(self.gt2data.dot(a_star), L_powers_coeffs)
-        self.residuals = self.obs - self.gt2data.T.dot(f_star)
+        self.residuals = self.y - self.gt2data.T.dot(f_star)
         self.res_var = self.residuals.var()
-        return(f_star)
+        
+        pred = pd.DataFrame({'function': f_star}, index=self.space.genotypes)
+        if X is not None:
+            pred = pred.loc[X, :]
+        return(pred)
     
     def estimate_f_variance(self, lambdas):
         """compute posterior variances for a list of sequences"""
@@ -358,52 +472,25 @@ class VCregression(object):
         L_powers_coeffs = self.calc_L_powers_coeffs(np.sqrt(lambdas))
         f = self.W_dot(f_random, L_powers_coeffs)
         
-        f_obs = np.random.normal(f, sigma)
+        if sigma > 0:
+            f_obs = np.random.normal(f, sigma)
+        else:
+            f_obs = f
+            
         variance = np.full(self.n_genotypes, sigma**2)
-        seqs = None
+        seqs = self.space.genotypes
         
         if p_missing > 0:
             n = int((1 - p_missing) * self.n_genotypes)
             sel_idxs = np.random.choice(np.arange(self.n_genotypes), n)
+            
             f_obs = f_obs[sel_idxs]
             variance = variance[sel_idxs]
-            seqs = self.genotype_labels[sel_idxs]
-            
-        self.load_data(f_obs, variance, seqs)
-        return(f)
-    
-    def calc_cov_dense(self, lambdas):
-        covariance = np.dot(self.W_kd.T, lambdas)
-        D = self.calc_distance_matrix()
-        return(covariance[D])
-    
-    def simulate_naive(self, lambdas, sigma=0, chol=False): 
-        covariance = self.calc_cov_dense(lambdas)
-        if chol:
-            Lcov = cholesky(covariance + sigma * np.identity(self.n_genotypes))
-            f_obs = np.dot(Lcov, np.random.normal(0, 1, size=self.n_genotypes))
-        else:
-            m = np.zeros(self.n_genotypes)
-            f_obs = np.random.multivariate_normal(m, covariance)
-            f_obs += np.random.normal(0, sigma, size=self.n_genotypes)
-        variance = np.full(self.n_genotypes, sigma**2)
-        self.load_data(f_obs, variance)
-    
-    def simulate_eig(self, lambdas, sigma=0):
-        l, q = np.round(self.L_lambdas).astype(int), self.L_q
-        l_u = np.unique(l)
+            seqs = seqs[sel_idxs]
         
-        f = 0
-        for k, l_k in zip(range(1, self.seq_length + 1), l_u):
-            idx = l == l_k
-            q_k = q[:, idx]
-            a_k = np.random.normal(size=idx.sum())
-            f_k = np.sqrt(lambdas[k]) * np.dot(q_k, a_k)
-            f += f_k
-            
-        f_obs = np.random.normal(f, sigma)
-        variance = np.full(self.n_genotypes, sigma**2)
-        self.load_data(f_obs, variance)
+        self.real_function = pd.DataFrame({'function': f}, index=self.space.state_labels)     
+        data = pd.DataFrame({'function': f_obs, 'variance': variance}, index=seqs)
+        return(data)
 
 
 class SeqDEFT(SequenceSpace):
