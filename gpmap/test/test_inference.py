@@ -127,6 +127,14 @@ class VCTests(unittest.TestCase):
         assert(rho > 0.95)
         assert(mse < 0.05)
         
+        # Estimate posterior variances
+        vc = VCregression()
+        pred = vc.predict(X=data.index, y=data['function'],
+                          variance=data['variance'], lambdas=lambdas, 
+                          estimate_variance=True)
+        assert('variance' in pred.columns)
+        assert(np.all(pred['variance'] > 0))
+        
         # Capture error with incomplete input
         try:
             pred = vc.predict(X=data.index, y=data['function'],

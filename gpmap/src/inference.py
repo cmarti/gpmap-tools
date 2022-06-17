@@ -9,7 +9,7 @@ from _functools import partial
 import numpy as np
 import pandas as pd
 
-from numpy.linalg.linalg import cholesky, matrix_power
+from numpy.linalg.linalg import matrix_power
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.linalg.interface import LinearOperator
 from scipy.sparse.linalg.isolve import minres
@@ -20,7 +20,6 @@ from scipy.linalg.decomp_svd import orth
 from scipy.linalg.basic import solve
 from scipy.sparse.linalg import cg
 from scipy.special._logsumexp import logsumexp
-
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.space import SequenceSpace
@@ -367,7 +366,8 @@ class VCregression(object):
         """ multiply by the m by m matrix K_BB + E"""
         return(self.gt2data.T.dot(self.W_dot(self.gt2data.dot(v), L_powers_coeffs)) + self.E_sparse.dot(v))
 
-    def predict(self, Xpred=None, X=None, y=None, variance=None, lambdas=None):
+    def predict(self, Xpred=None, X=None, y=None, variance=None, lambdas=None,
+                estimate_variance=False):
         """
         Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
         the provided or all genotypes
@@ -395,6 +395,10 @@ class VCregression(object):
             Vector containing variance components `lambdas` to use to make 
             predictions given the observed `X`, `y` sequence function
             relationship 
+            
+        estimate_variance : bool (False)
+            Option to also return the posterior variances for each individual
+            genotype
         
         Returns
         -------
@@ -428,37 +432,40 @@ class VCregression(object):
         self.res_var = self.residuals.var()
         
         pred = pd.DataFrame({'function': f_star}, index=self.space.genotypes)
-        if X is not None:
-            pred = pred.loc[X, :]
+        if estimate_variance:
+            pred['variance'] = self.estimate_posterior_variance()
+        
+        if Xpred is not None:
+            pred = pred.loc[Xpred, :]
+        
         return(pred)
     
-    def estimate_f_variance(self, lambdas):
+    def estimate_posterior_variance(self, Xpred=None):
         """compute posterior variances for a list of sequences"""
         # TODO: fix response: cannot give negative variance estimates in test
+        # TODO: replace rho by covariance matrix
+        if Xpred is None:
+            Xpred = self.space.state_labels
+        n_pred = Xpred.shape[0]
+        pred_idx = self.get_obs_idx(Xpred)
     
         # Construct rho & b_k
-        rho = self.W_kd.T.dot(lambdas)
-        L_powers_coeffs = np.dot(self.MAT_inv, rho)
-        self.gt2data = self.get_gt_to_data_matrix()
-        
-        K_ii = rho[0]
-        K_Bi = np.zeros([self.n_obs, self.n_genotypes])
-        for i in range(self.n_genotypes):
-            vec = np.zeros(self.n_genotypes)
-            vec[self.obs_idx] = 1
-            K_Bi[:, i] = self.W_dot(vec, L_powers_coeffs)[self.obs_idx]
-    
-        # Compute posterior variance for each target sequence
+        rho = self.W_kd.T.dot(self.lambdas)
+        L_powers_coeffs = np.dot(self.L_powers_unique_entries_inv, rho)
+        self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
         matvec = partial(self.K_BB_E_dot, L_powers_coeffs=L_powers_coeffs)
         Kop = LinearOperator((self.n_obs, self.n_obs), matvec=matvec)
         
+        # Compute posterior variance for each target sequence
+        K_ii = rho[0]
         post_vars = []
-        self.report("computing posterior variance")
-        for i in tqdm(range(self.n_genotypes), total=self.n_genotypes):
-            alph = cg(Kop, K_Bi[:, i])[0]
-            post_vars.append(K_ii - np.sum(K_Bi[:, i] * alph))
+        for i in tqdm(pred_idx, total=n_pred):
+            vec = np.zeros(self.n_genotypes)
+            vec[i] = 1
+            K_Bi = self.W_dot(vec, L_powers_coeffs)[self.obs_idx]
+            alph = cg(Kop, K_Bi)[0]
+            post_vars.append(K_ii - np.sum(K_Bi * alph))
     
-        # Return
         return np.array(post_vars)
     
     def lambdas_to_variance(self, lambdas):
