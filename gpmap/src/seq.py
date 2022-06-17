@@ -70,7 +70,7 @@ def guess_alphabet_type(alphabet):
     return(alphabet_type)
     
 
-def guess_space_configuration(seqs):
+def guess_space_configuration(seqs, ensure_full_space=True):
     alleles = defaultdict(dict)
     for seq in seqs:
         for i, a in enumerate(seq):
@@ -81,9 +81,10 @@ def guess_space_configuration(seqs):
               'alphabet': [[a for a in alleles[i].keys()] for i in range(length)]}
     config['alphabet_type'] = guess_alphabet_type(config['alphabet'])
     
-    msg = 'Number of genotypes does not match the expected from guessed configuration.'
-    msg += ' Ensure that genotypes span the whole sequence space'
-    check_error(np.prod(config['n_alleles']) == seqs.shape[0], msg)
+    if ensure_full_space:
+        msg = 'Number of genotypes does not match the expected from guessed configuration.'
+        msg += ' Ensure that genotypes span the whole sequence space'
+        check_error(np.prod(config['n_alleles']) == seqs.shape[0], msg)
     return(config)
 
 
