@@ -9,7 +9,7 @@ from gpmap.settings import NUCLEOTIDES, COMPLEMENT
 from gpmap.src.utils import check_error
 from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
 from itertools import chain
-from Bio.Data.CodonTable import CodonTable, standard_dna_table
+from Bio.Data.CodonTable import CodonTable
 
 
 def extend_ambigous_seq(seq, mapping):
@@ -71,6 +71,36 @@ def guess_alphabet_type(alphabet):
     
 
 def guess_space_configuration(seqs, ensure_full_space=True):
+    '''
+    Guess the sequence space configuration from a collection of sequences
+    This allows to have different number of alleles per site and maintain 
+    the order in which alleles appear in the sequences when enumerating the 
+    alleles per position
+    
+    Parameters
+    ----------
+    seqs: array-like of shape (n_genotypes,)
+        Vector or list containing the sequences from which we want to infer
+        the space configuration
+        
+    ensure_full_space: bool
+        Option to ensure that the whole sequence space must be represented by 
+        the set of provided sequences. This is a useful feature to identify
+        whether there are missing genotypes before defining the space and
+        random walk to visualize the full landscape.
+    
+       
+    Returns
+    -------
+    
+    config: dict with keys {'length', 'n_alleles', 'alphabet'}
+            Returns a dictionary with the inferred configuration of the discrete
+            space where the sequences come from.
+    
+    
+    '''
+    
+    
     alleles = defaultdict(dict)
     for seq in seqs:
         for i, a in enumerate(seq):
@@ -92,8 +122,17 @@ def get_custom_codon_table(aa_mapping):
     '''
     Builds a biopython CodonTable to use for translation with a custom genetic code
     
-    aa_mapping: pd.DataFrame with columns "Codon" and "Letter" representing the
-    genetic code correspondence. Stop codons should appear as "*"
+    
+    Parameters
+    ----------
+    aa_mapping: pd.DataFrame
+        pandas DataFrame with columns "Codon" and "Letter" representing the
+        genetic code correspondence. Stop codons should appear as "*"
+        
+    Returns
+    -------
+    codon_table: Bio.Data.CodonTable.CodonTable object
+        Standard bioptython codon table object to use for translating sequences
     
     '''
     aa_mapping['Codon'] = [x.replace('U', 'T') for x in aa_mapping['Codon']]
