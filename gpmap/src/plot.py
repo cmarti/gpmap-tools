@@ -138,7 +138,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                label=None, clabel='Function',
                sort=True, sort_by=None, ascending=False, 
                vcenter=None, vmax=None, vmin=None, fontsize=12, legendloc=0,
-               subset=None, autoscale_axis=True):
+               subset=None, autoscale_axis=False):
     if subset is not None:
         nodes_df = nodes_df.loc[subset, :]
     
@@ -430,7 +430,7 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
                    edges_color='grey', edges_width=0.5, edges_cmap='binary',
                    edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
                    sort_nodes=True, ascending=False, sort_by=None,
-                   fontsize=12):
+                   fontsize=12, x='1', y='2'):
     f = rw.space.function
     if fmin is None:
         fmin = f.mean() + 0.05 * (f.max() - f.mean())
@@ -448,7 +448,7 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
         rw.calc_visualization(mean_function=mean_function, n_components=3, eig_tol=0.01)
         
         edges_df = None if not show_edges else rw.space.get_edges_df()
-        plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x='1', y='2',
+        plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x=x, y=y,
                            nodes_color=nodes_color, nodes_size=nodes_size,
                            nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
                            nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
