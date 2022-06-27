@@ -132,7 +132,7 @@ def get_axis_lims(nodes_df, x, y, z=None):
 
 
 def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
-               color='f', size=2.5, cmap='viridis', cbar=True, palette='Set1',
+               color='function', size=2.5, cmap='viridis', cbar=True, palette='Set1',
                alpha=1, zorder=2, max_size=40, min_size=1,
                edgecolor='black', lw=0,
                label=None, clabel='Function',
@@ -218,7 +218,7 @@ def highlight_genotype_groups(axes, nodes_df, genotype_groups,
 
 
 def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
-                       nodes_color='f', nodes_size=2.5, nodes_cmap='viridis',
+                       nodes_color='function', nodes_size=2.5, nodes_cmap='viridis',
                        cbar=True, palette=None, nodes_alpha=1,
                        nodes_min_size=1, nodes_max_size=40,
                        nodes_edgecolor='black', nodes_lw=0, 
@@ -260,7 +260,7 @@ def get_lines_from_edges_df(nodes_df, edges_df, x=1, y=2, z=None,
 
 
 def plot_interactive(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
-                     nodes_color='f', nodes_size=4,
+                     nodes_color='function', nodes_size=4,
                      cmap='viridis', nodes_cmap_label='Function',
                      edges_width=0.5, edges_color='#888', edges_alpha=0.2,
                      text=None):
@@ -317,7 +317,7 @@ def plot_interactive(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
 
 
 def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
-                         nodes_color='f', nodes_size=None, nodes_cmap='viridis',
+                         nodes_color='function', nodes_size=None, nodes_cmap='viridis',
                          nodes_alpha=1, nodes_min_size=1, nodes_max_size=40,
                          nodes_edgecolor='black', nodes_lw=0, 
                          nodes_cmap_label='Function',
@@ -423,7 +423,7 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
 
 def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
                    ncol=4, nrow=3, show_edges=True,
-                   nodes_color='f', nodes_size=2.5, nodes_cmap='viridis', nodes_alpha=1,
+                   nodes_color='function', nodes_size=2.5, nodes_cmap='viridis', nodes_alpha=1,
                    nodes_min_size=1, nodes_max_size=40,
                    nodes_edgecolor='black', nodes_lw=0, 
                    nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
