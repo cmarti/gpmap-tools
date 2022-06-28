@@ -14,7 +14,7 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from holoviews.operation.datashader import datashade
 
 from gpmap.src.settings import PLOTS_FORMAT
-from gpmap.src.utils import guess_configuration
+from gpmap.src.seq import guess_space_configuration
 from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
                                  minimize_nodes_distance)
 
@@ -70,7 +70,8 @@ def create_patches_legend(axes, colors_dict, loc=1, **kwargs):
                 loc=loc, **kwargs)
 
 
-def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False):
+def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
+                          kwargs={}):
     if axes is None and fpath is None:
         msg = 'Either axes or fpath argument must be provided'
         raise ValueError(msg)
@@ -80,9 +81,9 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False):
         fig, axes = init_fig(1, 1, colsize=4, rowsize=3)
     
     axes.plot(decay_df['k'], decay_df['relaxation_time'],
-              linewidth=1, color='purple')
+              linewidth=1, **kwargs)
     axes.scatter(decay_df['k'], decay_df['relaxation_time'],
-                 s=15, c='purple')
+                 s=15, **kwargs)
     if log_scale:
         axes.set(yscale='log')
     axes.set(xlabel=r'Eigenvalue order $k$', 
@@ -379,7 +380,7 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
                        positions=None, position_labels=None, autoscale_axis=True,
                        colsize=3, rowsize=2.7, xpos_label=0.05, ypos_label=0.92):
     
-    config = guess_configuration(nodes_df.index.values)
+    config = guess_space_configuration(nodes_df.index.values)
     length, n_alleles = config['length'], np.max(config['n_alleles'])
 
     if position_labels is None:
@@ -646,7 +647,7 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
     else:
         edges = None
         
-    config = guess_configuration(nodes_df.index.values)
+    config = guess_space_configuration(nodes_df.index.values)
     length, n_alleles = config['length'], np.max(config['n_alleles'])
 
     if position_labels is None:
