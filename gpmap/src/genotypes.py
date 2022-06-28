@@ -9,8 +9,8 @@ from scipy.sparse.csr import csr_matrix
 from scipy.sparse.coo import coo_matrix
 
 from gpmap.src.settings import PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
-from gpmap.src.utils import translante_seqs, check_error, write_log
-from gpmap.src.seq import extend_ambigous_seq
+from gpmap.src.utils import check_error, write_log
+from gpmap.src.seq import extend_ambigous_seq, translate_seqs
 from scipy.sparse._matrix_io import load_npz
 
 
@@ -55,8 +55,8 @@ def get_nodes_df_highlight(nodes_df, genotype_groups, is_prot=False,
     groups_dict = {}
     if is_prot:
         if 'protein' not in nodes_df.columns:
-            nodes_df['protein'] = translante_seqs(nodes_df.index,
-                                                  codon_table=codon_table)
+            nodes_df['protein'] = translate_seqs(nodes_df.index,
+                                                 codon_table=codon_table)
         
         for group in genotype_groups:
             mapping = [PROT_AMBIGUOUS_VALUES] * len(group)
