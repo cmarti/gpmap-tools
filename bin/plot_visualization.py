@@ -8,6 +8,7 @@ from gpmap.plot import figure_visualization
 from gpmap.src.plot import (plot_holoview, figure_allele_grid_datashader,
                             figure_allele_grid, save_holoviews)
 from scipy.sparse._matrix_io import load_npz
+from gpmap.src.genotypes import read_edges
 
         
 def main():
@@ -114,21 +115,7 @@ def main():
     
     log.write('Reading genotype data from {}'.format(nodes_fpath))
     nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-    
-    if edges_fpath is not None:
-        log.write('Reading edges data from {}'.format(edges_fpath))
-        edges_format = edges_fpath.split('.')[-1]
-        if edges_format == 'npz':
-            A = load_npz(edges_fpath).tocoo()
-            edges_df = pd.DataFrame({'i': A.row, 'j': A.col})
-        elif edges_format == 'csv':
-            edges_df = pd.read_csv(edges_fpath)
-        else:
-            raise ValueError('edges format has to be ".npz" or ".csv"')
-         
-    else:
-        log.write('No edges provided for plotting')
-        edges_df = None
+    edges_df = read_edges(edges_fpath)
     
     if genotypes is not None:
         genotypes = str(genotypes).split(',')

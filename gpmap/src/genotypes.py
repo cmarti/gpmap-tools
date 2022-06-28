@@ -9,8 +9,9 @@ from scipy.sparse.csr import csr_matrix
 from scipy.sparse.coo import coo_matrix
 
 from gpmap.src.settings import PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
-from gpmap.src.utils import translante_seqs, check_error
+from gpmap.src.utils import translante_seqs, check_error, write_log
 from gpmap.src.seq import extend_ambigous_seq
+from scipy.sparse._matrix_io import load_npz
 
 
 def get_edges_coords(nodes_df, edges_df, x='1', y='2', z=None, avoid_dups=False):
@@ -165,4 +166,22 @@ def select_local_optima(nodes_df, edges_df, field_function='function'):
                    shape=(nodes_df.shape[0], nodes_df.shape[0])).sum(1)
     idx = np.where(m == m.max())[0]
     return(select_genotypes(nodes_df, idx, edges=edges_df, is_idx=True)[0])
+
+
+def read_edges(fpath, log=None):
+    if fpath is not None:
+        write_log(log, 'Reading edges data from {}'.format(fpath))
+        edges_format = fpath.split('.')[-1]
+        if edges_format == 'npz':
+            A = load_npz(fpath).tocoo()
+            edges_df = pd.DataFrame({'i': A.row, 'j': A.col})
+        elif edges_format == 'csv':
+            edges_df = pd.read_csv(fpath)
+        else:
+            raise ValueError('edges format has to be ".npz" or ".csv"')
+    else:
+        write_log(log, 'No edges provided for plotting')
+        edges_df = None
+    
+    return(edges_df)
     
