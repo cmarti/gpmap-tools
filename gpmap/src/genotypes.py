@@ -104,6 +104,40 @@ def select_edges_from_genotypes(nodes_idxs, edges):
 
 
 def select_genotypes(nodes_df, genotypes, edges=None, is_idx=False):
+    '''
+    Selectes the selected genotypes from nodes_df with the corresponding 
+    edges among the remaining genotypes if edges are provided
+    
+    Parameters
+    ----------
+        nodes_df: pd.DataFrame of shape (n_genotypes, n_features)
+            DataFrame with the genotypes from a full sequence space as index
+            Typically, it will contain, at least, the coordinates of the 
+            visualization for each genotype, but it will keep any other column
+            in the DataFrame for later use
+        
+        genotypes: array-like of shape (n_genotypes,)
+            Array of ordered genotypes to select from the starting landscape
+            It should contain the genotype labels by default, or indexes if
+            option `is_idx` is provided 
+            
+        edges: pd.DataFrame of shape (n_edges, 2) or scipy.sparse.csr_matrix
+               of shape (n_genotypes, n_genotypes)
+            DataFrame or csr_matrix containing the adjacency relationships
+            among genotypes provided in `nodes_df` in the discrete space
+    
+        is_idx: bool
+            The genotypes argument is an array of indexes instead of an
+            array of genotype labels to select genotypes
+        
+    Returns
+    -------
+        output: (nodes_df, edges)
+            Filtered landscape containing the selected genotypes and the 
+            adjacency relationships between them given as a tuple
+    
+    '''
+    
     size = nodes_df.shape[0]
     nodes_df['index'] = np.arange(size)
     if is_idx:
