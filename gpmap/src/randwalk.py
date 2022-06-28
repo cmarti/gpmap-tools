@@ -11,7 +11,7 @@ from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix, check_error,
-                             write_log, check_eigendecomposition, load_pickle)
+                             write_log, check_eigendecomposition)
 
 
 class RandomWalk(object):
@@ -113,15 +113,6 @@ class TimeReversibleRandomWalk(RandomWalk):
             else:
                 msg = 'edges_format can only take values ["npz", "csv"]'
                 raise ValueError(msg)
-        
-    def load(self, fpath, log=None):
-        self.log = log
-        self.report('Loading visualization data from {}'.format(fpath))
-        data = load_pickle(fpath)
-        self.init(data['length'], data['n_alleles'],
-                  alphabet_type=data['alphabet_type'], log=log)
-        for attr, value in data.items():
-            setattr(self, attr, value)
     
 
 class WMWSWalk(TimeReversibleRandomWalk):
