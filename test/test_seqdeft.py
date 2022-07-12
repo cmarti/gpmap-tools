@@ -53,5 +53,5 @@ class SeqDEFTTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_cv_plot']
+    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_bin']
     unittest.main()

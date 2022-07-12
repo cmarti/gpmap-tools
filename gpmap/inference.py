@@ -393,7 +393,8 @@ class SeqDEFT(SequenceSpace):
         self.set_P(P)
         
         # Number of faces
-        self.s = comb(self.length, P) * comb(self.n_alleles, 2) ** P * self.n_alleles ** (self.length - P)
+        self.alpha = self.n_alleles[0]
+        self.s = comb(self.length, P) * comb(self.alpha, 2) ** P * self.alpha ** (self.length - P)
         
         # Prepare D kernel basis
         self.calc_laplacian()
@@ -497,7 +498,7 @@ class SeqDEFT(SequenceSpace):
         assert(np.allclose(self.Q_star.sum(), 1))
     
     def L_opt(self, phi, p=0):
-        return self.L.dot(phi) - p * self.n_alleles * phi
+        return self.L.dot(phi) - p * self.alpha * phi
     
     def get_phi_initial(self, phi_initial=None):
         if phi_initial is None:
@@ -630,8 +631,8 @@ class SeqDEFT(SequenceSpace):
     
     def prepare_D_kernel_basis(self):
         # If the matrix desired has been made already, load it. Otherwise, construct and save it
-        file_name1 = 'D_kernel_basis_alpha'+str(self.n_alleles)+'_l'+str(self.length)+'_P'+str(self.P)+'.npz'
-        file_name2 = 'D_kernel_basis_orth_alpha'+str(self.n_alleles)+'_l'+str(self.length)+'_P'+str(self.P)+'.npz'
+        file_name1 = 'D_kernel_basis_alpha'+str(self.alpha)+'_l'+str(self.length)+'_P'+str(self.P)+'.npz'
+        file_name2 = 'D_kernel_basis_orth_alpha'+str(self.alpha)+'_l'+str(self.length)+'_P'+str(self.P)+'.npz'
         
         fpath1 = join(CACHE_DIR, file_name1)
         fpath2 = join(CACHE_DIR, file_name2)
@@ -644,7 +645,7 @@ class SeqDEFT(SequenceSpace):
     
             D_kernel_dim = 0
             for p in range(self.P):
-                D_kernel_dim += int(comb(self.length, p) * (self.n_alleles-1)**p)
+                D_kernel_dim += int(comb(self.length, p) * (self.alpha-1)**p)
     
         else:
     
@@ -661,7 +662,7 @@ class SeqDEFT(SequenceSpace):
     def construct_D_kernel_basis(self):
     
         # Generate bases and sequences
-        bases = np.array(list(range(self.n_alleles)))
+        bases = np.array(list(range(self.alpha)))
         seqs = np.array(list(product(bases, repeat=self.length)))
     
         # Construct D kernel basis
@@ -675,24 +676,24 @@ class SeqDEFT(SequenceSpace):
     
             # Basis of kernel W(1)
             if p == 1:
-                W1_dim = self.length*(self.n_alleles-1)
+                W1_dim = self.length*(self.alpha-1)
                 W1_basis = np.zeros([self.n_genotypes,W1_dim])
                 for site in range(self.length):
-                    W1_basis[:,site*(self.n_alleles-1):(site+1)*(self.n_alleles-1)] = pd.get_dummies(seqs[:,site], drop_first=True).values
+                    W1_basis[:,site*(self.alpha-1):(site+1)*(self.alpha-1)] = pd.get_dummies(seqs[:,site], drop_first=True).values
                 D_kernel_basis = np.hstack((D_kernel_basis, W1_basis))
     
             # Basis of kernel W(>=2)
             if p >= 2:
-                W2_dim = int(comb(self.length,p) * (self.n_alleles-1)**p)
+                W2_dim = int(comb(self.length,p) * (self.alpha-1)**p)
                 W2_basis = np.ones([self.n_genotypes,W2_dim])
                 site_groups = list(combinations(range(self.length), p))
-                base_groups = list(product(range(1,self.n_alleles), repeat=p))  # because we have dropped first base
+                base_groups = list(product(range(1,self.alpha), repeat=p))  # because we have dropped first base
                 col = 0
                 for site_group in site_groups:
                     for base_group in base_groups:
                         for i in range(p):
                             site, base_idx = site_group[i], base_group[i]-1  # change 'base' to its 'idx'
-                            W2_basis[:,col] *= W1_basis[:,site*(self.n_alleles-1)+base_idx]
+                            W2_basis[:,col] *= W1_basis[:,site*(self.alpha-1)+base_idx]
                         col += 1
                 D_kernel_basis = np.hstack((D_kernel_basis, W2_basis))
     
@@ -714,11 +715,11 @@ class SeqDEFT(SequenceSpace):
 
         D_eig_vals, D_multis = np.zeros(self.length+1), np.zeros(self.length+1)
         for k in range(self.length+1):
-            lambda_k = k * self.n_alleles
+            lambda_k = k * self.alpha
             Lambda_k = 1
             for p in range(self.P):
-                Lambda_k *= lambda_k - p * self.n_alleles
-            m_k = comb(self.length,k) * (self.n_alleles-1)**k
+                Lambda_k *= lambda_k - p * self.alpha
+            m_k = comb(self.length,k) * (self.alpha-1)**k
             D_eig_vals[k], D_multis[k] = Lambda_k/factorial(self.P), m_k
     
         self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
@@ -770,8 +771,8 @@ class SeqDEFT(SequenceSpace):
     def w(self, k, d):
         ss = 0
         for q in range(self.length+1):
-            ss += (-1)**q * (self.n_alleles-1)**(k-q) * comb(d,q) * comb(self.length-d,k-q)
-        return 1/self.n_alleles**self.length * ss
+            ss += (-1)**q * (self.alpha-1)**(k-q) * comb(d,q) * comb(self.length-d,k-q)
+        return 1/self.alpha**self.length * ss
     
     def W_k_opt(self, v):
         max_power = len(self.b_k) - 1
@@ -903,9 +904,9 @@ class SeqDEFT(SequenceSpace):
         savefig(fig, fname)
         
     def write_output(self, fpath):
-        output = pd.DataFrame({'phi_star': self.phi_star,
+        output = pd.DataFrame({'log_Q_star': self.log_Q_star,
                                'Q_star': self.Q_star},
-                              index=self.genotype_labels)
+                              index=self.genotypes)
         output.to_csv(fpath)
 
 
