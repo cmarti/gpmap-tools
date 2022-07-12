@@ -22,6 +22,11 @@ class DiscreteSpace(object):
     def __init__(self, adjacency_matrix, function=None, state_labels=None):
         self.init_space(adjacency_matrix, function=function, state_labels=state_labels)
     
+    @property
+    def is_regular(self):
+        neighbors = np.unique(self.adjacency_matrix.sum(1))
+        return(neighbors.shape[0] == 1)
+    
     def calc_laplacian(self):
         D = get_sparse_diag_matrix(self.adjacency_matrix.sum(1).A1.flatten())
         self.laplacian = D - self.adjacency_matrix
@@ -153,6 +158,10 @@ class SequenceSpace(DiscreteSpace):
             self.set_function(function, use_codon_model=use_codon_model,
                               codon_table=codon_table,
                               stop_function=stop_function)
+    
+    @property
+    def is_regular(self):
+        return(np.unique(self.n_alleles).shape[0] == 1)
     
     @property
     def genotypes(self):
