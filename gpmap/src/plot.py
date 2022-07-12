@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import numpy as np
 import seaborn as sns
+import pandas as pd
 import matplotlib.patches as mpatches
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
@@ -17,6 +18,7 @@ from gpmap.src.settings import PLOTS_FORMAT
 from gpmap.src.seq import guess_space_configuration
 from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
                                  minimize_nodes_distance)
+import warnings
 
 
 # Functions
@@ -632,7 +634,7 @@ def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
 
 def save_holoviews(dsg, fpath):
     fig = hv.render(dsg)
-    savefig(fig, fpath)
+    savefig(fig, fpath, tight=False)
 
 
 def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
@@ -695,3 +697,42 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
     dsg = plots.cols(length)
     fig = hv.render(dsg)
     savefig(fig, fpath, tight=False)
+
+
+def plot_a_optimization(log_Ls, axes):
+    aa = log_Ls['a'].values
+    log_Ls = log_Ls['log_likelihood'].values
+    
+    a_star = aa[log_Ls.argmax()]
+    max_log_L = log_Ls.max()
+    
+    axes.scatter(np.log10(aa), log_Ls, color='blue', s=15, zorder=1)
+    axes.scatter(np.log10(a_star), max_log_L, color='red', s=15, zorder=2)
+    xlims, ylims = axes.get_xlim(), axes.get_ylim()
+    x = xlims[0] + 0.05 * (xlims[1]- xlims[0])
+    y = ylims[0] + 0.9 * (ylims[1]- ylims[0])
+    axes.annotate('a* = {:.1f}'.format(a_star), xy=(x, y))
+    axes.set_xlabel(r'$log_{10}$ (a)')
+    axes.set_ylabel('Out of sample log(L)')
+
+
+def plot_density_vs_frequency(seq_density, axes):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = pd.DataFrame({'logR': np.log10(seq_density['frequency']),
+                             'logQ': np.log10(seq_density['Q_star'])}).dropna()
+                             
+    axes.scatter(data['logR'], data['logQ'],
+                 color='black', s=5, alpha=0.4, zorder=2)
+    xlims, ylims = axes.get_xlim(), axes.get_ylim()
+    lims = min(xlims[0], ylims[0]), max(xlims[1], ylims[1])
+    axes.plot(lims, lims, color='grey', linewidth=0.5, alpha=0.5, zorder=1)
+    axes.set(xlabel=r'$log_{10}$(Frequency)', ylabel=r'$log_{10}$(Q*)', 
+             xlim=lims, ylim=lims)
+
+
+def plot_SeqDEFT_summary(log_Ls, seq_density):
+    fig, subplots = init_fig(1, 2)
+    plot_a_optimization(log_Ls, subplots[0])
+    plot_density_vs_frequency(seq_density, subplots[1])
+    return(fig)
