@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 import random
-import warnings
 from itertools import product, combinations
-from os.path import exists, join
 from tqdm import tqdm
 from _functools import partial
 
@@ -13,7 +11,6 @@ from numpy.linalg.linalg import matrix_power
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.linalg.interface import LinearOperator
 from scipy.sparse.linalg.isolve import minres
-from scipy.sparse._matrix_io import save_npz, load_npz
 from scipy.optimize._minimize import minimize
 from scipy.special._basic import comb, factorial
 from scipy.linalg.decomp_svd import orth
@@ -49,9 +46,10 @@ def grad_Frob(lambdas, M, a):
     return grad_Frob1 - grad_Frob2
 
 
-class VCregression(object):
-    def init(self, seq_length=None, n_alleles=None, genotypes=None,
-             alphabet_type='custom'):
+class LandscapeEstimator(object):
+    
+    def define_space(self, seq_length=None, n_alleles=None, genotypes=None,
+                     alphabet_type='custom'):
         alphabet = None
         
         if genotypes is not None:
@@ -78,12 +76,11 @@ class VCregression(object):
         
         self.seq_length = seq_length
         self.n_alleles = n_alleles
-        
-        self.space.calc_laplacian()
-        self.n_genotypes = self.space.n_states
-        self.L = self.space.laplacian
-        self.calc_L_powers_unique_entries_matrix()
-        self.calc_W_kd_matrix()
+    
+    @property
+    def genotypes(self):
+        return(self.space.genotypes)
+    
     
     def calc_L_powers_unique_entries_matrix(self):
         """Construct entries of powers of L. 
@@ -125,6 +122,19 @@ class VCregression(object):
         # Invert MAT
         self.L_powers_unique_entries_inv = np.linalg.inv(MAT)
         self.L_powers_unique_entries = MAT
+
+
+class VCregression(LandscapeEstimator):
+    def init(self, seq_length=None, n_alleles=None, genotypes=None,
+             alphabet_type='custom'):
+        self.define_space(seq_length=seq_length, n_alleles=n_alleles,
+                          genotypes=genotypes, alphabet_type=alphabet_type)
+        self.space.calc_laplacian()
+        self.n_genotypes = self.space.n_states
+        self.L = self.space.laplacian
+        self.calc_L_powers_unique_entries_matrix()
+        self.calc_W_kd_matrix()
+    
     
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
@@ -157,6 +167,7 @@ class VCregression(object):
     def get_obs_idx(self, seqs):
         obs_idx = self.space.state_idxs[seqs]
         return(obs_idx)
+
 
     def set_data(self, X, y, variance):
         obs_idx = self.get_obs_idx(X)
@@ -500,40 +511,41 @@ class VCregression(object):
         return(data)
 
 
-class SeqDEFT(SequenceSpace):
-    def __init__(self, length, P, n_alleles=None,
-                 alphabet_type='rna', parameters_only=False,
-                 with_kernel_basis=True, log=None):
-        self.init(length, n_alleles=n_alleles, alphabet_type=alphabet_type, log=log)
-        self.set_P(P)
-        
-        # Number of faces
-        self.s = comb(self.seq_length, P) * comb(self.n_alleles, 2) ** P * self.n_alleles ** (self.seq_length - P)
-        
-        # Prepare D kernel basis
-        self.calc_laplacian()
-        self.calc_MAT()
-        
-        if not parameters_only:
-            if with_kernel_basis:
-                self.prepare_D_kernel_basis()
-            self.construct_D_spectrum()
-    
-    def set_P(self, P):
-        if P == (self.seq_length + 1):
-            msg = '"P" = l+1, the optimal density is equal to the empirical frequency.'
-            raise ValueError(msg)
-        elif not 1 <= P <= self.seq_length:
-            msg = '"P" not in the right range.'
-            raise ValueError(msg)
+class SeqDEFT(LandscapeEstimator):
+    def __init__(self, P):
         self.P = P
     
-    def load_data(self, counts):
-        self.counts = counts
-        self.N = counts.sum()
-        self.R = (counts / self.N).values
-        self.data_dict = {'N': self.N,
-                          'R': self.R}
+    def calc_n_p_faces(self, length, P, n_alleles):
+        return(comb(length, P) * comb(n_alleles, 2) ** P * n_alleles ** (length - P))
+        
+    def init(self, seq_length=None, n_alleles=None, genotypes=None,
+             alphabet_type='custom', parameters_only=False,
+             with_kernel_basis=True):
+        
+        self.define_space(seq_length=seq_length, n_alleles=n_alleles,
+                          genotypes=genotypes, alphabet_type=alphabet_type)
+        self.check_P()
+        
+        self.space.calc_laplacian()
+        self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
+        self.n_genotypes = self.space.n_states
+        self.L = self.space.laplacian
+        
+        self.calc_L_powers_unique_entries_matrix()
+        # self.calc_W_kd_matrix()
+    
+        if not parameters_only:
+            if with_kernel_basis:
+                self.D_kernel_basis_orth_sparse = self.construct_D_kernel_basis()
+            self.construct_D_spectrum()
+    
+    def check_P(self):
+        if self.P == (self.seq_length + 1):
+            msg = '"P" = l+1, the optimal density is equal to the empirical frequency.'
+            raise ValueError(msg)
+        elif not 1 <= self.P <= self.seq_length:
+            msg = '"P" not in the right range.'
+            raise ValueError(msg)
     
     def get_phi_0(self, options, scale_by):
         if not hasattr(self, 'phi_0'):
@@ -548,7 +560,7 @@ class SeqDEFT(SequenceSpace):
     
     def calc_a_max(self, max_a_max=1e12, resolution=0.1, fac_max=1,
                    options=None, scale_by=1, gtol=1e-3):
-        a_max = self.s * fac_max
+        a_max = self.n_p_faces * fac_max
         phi_inf = self.get_phi_inf(options, scale_by)
         phi_max = self._fit(a_max, phi_initial=phi_inf, options=options,
                             scale_by=scale_by, gtol=gtol)
@@ -564,7 +576,7 @@ class SeqDEFT(SequenceSpace):
     
     def calc_a_min(self, resolution=0.1, fac_min=1e-6, options=None, scale_by=1,
                    gtol=1e-3):
-        a_min = self.s * fac_min
+        a_min = self.n_p_faces * fac_min
         phi_0 = self.get_phi_0(options, scale_by)
         phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
         phi_min = self._fit(a_min, phi_initial=self.phi_inf, options=options,
@@ -583,33 +595,93 @@ class SeqDEFT(SequenceSpace):
         a_max = self.calc_a_max(max_a_max, resolution, fac_max, options, scale_by, gtol=gtol)
         a_min = self.calc_a_min(resolution, fac_min, options, scale_by, gtol=gtol)
         return(a_min, a_max)
+    
+    def get_a_values(self, resolution=0.1, max_a_max=1e12, num_a=20,
+                     options=None, scale_by=1,
+                     fac_max=0.1, fac_min=1e-6, gtol=1e-3):
+        a_min, a_max = self.find_a_bounds(max_a_max, resolution, fac_max, fac_min,
+                                          options, scale_by, gtol=gtol)
+        a_values = np.geomspace(a_min, a_max, num_a)
+        return(a_values)
+
+    def set_data(self, X, counts):
+        data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
+        data.loc[X] = counts
+        data = data.astype(int)
+        
+        self.counts = data
+        self.N = counts.sum()
+        self.R = (counts / self.N)
+        self.data_dict = {'N': self.N, 'R': self.R}
 
     def counts_to_data_dict(self, counts):
         n = counts.sum()
         return({'N': n, 'R': counts / n})
     
-    def fit(self, counts=None, cv_fold=5, seed=None, resolution=0.1, max_a_max=1e12, 
-            num_a=20, options=None, scale_by=1, fac_max=0.1, fac_min=1e-6, gtol=1e-3):
-        if seed is not None:
-            np.random.seed(seed)
+    def fit(self, X, counts, a_value=None, nfolds=5,
+            resolution=0.1, max_a_max=1e12, 
+            num_a=20, options=None, scale_by=1,
+            fac_max=0.1, fac_min=1e-6, gtol=1e-3):
+        
+        """
+        Infers Sequence density from the provided count data
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Vector containing the genotypes for which have observations provided
+            by `counts`. Missing sequences are assumed to have observed 0 times
             
-        if counts is not None:
-            self.load_data(counts)
+        counts : array-like of shape (n_obs,)
+            Vector containing the number of times each sequence in `X` was
+            observed
+        
+        a_value: float (None)
+            Hyperparameter value to use to interpolate between empirical
+            frequencies and maximum entropy model. It is estimated
+            using Cross-validation unless provided in this argument
+                        
+        nfolds : int (5)
+            Number of folds to use for cross-validation for hyperparameter `a`
+            optimization
+        
+        num_a: int(20)
+            Number of geometrically spaced hyperparameter `a` values to 
+            trace the MAP curve for optimization
+        
+        TODO: fill other parameters 
             
-        a_min, a_max = self.find_a_bounds(max_a_max, resolution, fac_max, fac_min,
-                                          options, scale_by, gtol=gtol)
+            
+        Returns
+        -------
+        
+        seq_densities: pd.DataFrame (n_genotypes, 2)
+            DataFrame containing the observed frequency and the estimated
+            density for each possible sequence
+        
+        """
+        if not hasattr(self, 'space'):
+            self.init(genotypes=X)
+        
+        self.set_data(X, counts)
         phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
+
+        if a_value is None:
+            a_values = self.get_a_values(resolution=resolution, max_a_max=max_a_max,
+                                         num_a=num_a, options=options, scale_by=scale_by,
+                                         fac_max=fac_max, fac_min=fac_min, gtol=gtol)
+            ll = self.compute_log_Ls(a_values, nfolds, options, scale_by, gtol=gtol)
+            a_value = ll.iloc[np.argmax(ll['log_likelihood']), :]['a']
         
-        ll = self.compute_log_Ls(a_max, a_min, num_a, cv_fold, options,
-                                 scale_by, gtol=gtol)
-        self.a_star = ll.iloc[np.argmax(ll['log_likelihood']), :]['a']
-        
-        phi = self._fit(self.a_star, phi_initial=phi_inf, options=options,
+        # Fit model with a_star
+        phi = self._fit(a_value, phi_initial=phi_inf, options=options,
                         scale_by=scale_by, gtol=gtol)
-        
-        self.log_Q_star = -phi - logsumexp(-phi)
-        self.Q_star = np.exp(self.log_Q_star)
-        assert(np.allclose(self.Q_star.sum(), 1))
+        log_Q_star = -phi - logsumexp(-phi)
+        Q_star = np.exp(log_Q_star)
+        seq_densities = pd.DataFrame({'frequency': self.R, 'Q_star': Q_star},
+                                     index=self.genotypes)
+        assert(np.allclose(Q_star.sum(), 1))
+        return(seq_densities)
     
     def L_opt(self, phi, p=0):
         return self.L.dot(phi) - p * self.n_alleles * phi
@@ -670,7 +742,7 @@ class SeqDEFT(SequenceSpace):
             raise(ValueError('"a" not in the right range.'))
     
         # a, N = a * scale_by, N *scale_by
-        return phi
+        return(phi)
     
     def calc_Q(self, phi):
         return(np.exp(-phi) / np.sum(np.exp(-phi)))
@@ -682,7 +754,7 @@ class SeqDEFT(SequenceSpace):
         return Dphi / factorial(self.P)
     
     def S(self, phi, a, N, R):
-        S1 = a/(2*self.s) * np.sum(phi * self.D_opt(phi))
+        S1 = a/(2*self.n_p_faces) * np.sum(phi * self.D_opt(phi))
         S2 = N * np.sum(R * phi)
         S3 = N * np.sum(safe_exp(-phi))
         regularizer = 0
@@ -698,7 +770,7 @@ class SeqDEFT(SequenceSpace):
         return(result)
     
     def grad_S(self, phi, a, N, R):
-        grad_S1 = a/self.s * self.D_opt(phi)
+        grad_S1 = a/self.n_p_faces * self.D_opt(phi)
         grad_S2 = N * R
         grad_S3 = N * safe_exp(-phi)
         regularizer = np.zeros(self.n_genotypes)
@@ -743,38 +815,9 @@ class SeqDEFT(SequenceSpace):
                 regularizer[flags] += 2 * (phi - PHI_LB)[flags]
         return self.D_kernel_basis_orth_sparse.T.dot(grad_S_inf1 - grad_S_inf2 + regularizer)
     
-    def prepare_D_kernel_basis(self):
-        # If the matrix desired has been made already, load it. Otherwise, construct and save it
-        file_name1 = 'D_kernel_basis_alpha'+str(self.n_alleles)+'_l'+str(self.seq_length)+'_P'+str(self.P)+'.npz'
-        file_name2 = 'D_kernel_basis_orth_alpha'+str(self.n_alleles)+'_l'+str(self.seq_length)+'_P'+str(self.P)+'.npz'
-        
-        fpath1 = join(CACHE_DIR, file_name1)
-        fpath2 = join(CACHE_DIR, file_name2)
-        
-        if exists(fpath1) and exists(fpath2):
-    
-            self.report('Loading D kernel basis ...')
-            D_kernel_basis_sparse = load_npz(fpath1)
-            D_kernel_basis_orth_sparse = load_npz(fpath2)
-    
-            D_kernel_dim = 0
-            for p in range(self.P):
-                D_kernel_dim += int(comb(self.seq_length, p) * (self.n_alleles-1)**p)
-    
-        else:
-    
-            self.report('Constructing D kernel basis ...')
-            D_kernel_dim, D_kernel_basis_sparse, D_kernel_basis_orth_sparse = self.construct_D_kernel_basis()
-    
-            save_npz(fpath1, D_kernel_basis_sparse)
-            save_npz(fpath2, D_kernel_basis_orth_sparse)
-        
-        self.D_kernel_dim = D_kernel_dim
-        self.D_kernel_basis_sparse = D_kernel_basis_sparse
-        self.D_kernel_basis_orth_sparse = D_kernel_basis_orth_sparse
-    
     def construct_D_kernel_basis(self):
-    
+        # TODO: think on a way to optimize this for large landscapes
+        
         # Generate bases and sequences
         bases = np.array(list(range(self.n_alleles)))
         seqs = np.array(list(product(bases, repeat=self.seq_length)))
@@ -811,22 +854,11 @@ class SeqDEFT(SequenceSpace):
                         col += 1
                 D_kernel_basis = np.hstack((D_kernel_basis, W2_basis))
     
-        # Get kernel dimension
-        D_kernel_dim = D_kernel_basis.shape[1]
-    
-        # Make D kernel basis orthonormal
-        D_kernel_basis_orth = orth(D_kernel_basis)
-    
-        # Save D_kernel_basis and D_kernel_basis_orth as a sparse matrix
-        D_kernel_basis_sparse = csr_matrix(D_kernel_basis)
-        D_kernel_basis_orth_sparse = csr_matrix(D_kernel_basis_orth)
-    
-        # Return
-        return D_kernel_dim, D_kernel_basis_sparse, D_kernel_basis_orth_sparse
+        D_kernel_basis_orth_sparse = csr_matrix(orth(D_kernel_basis))
+        
+        return(D_kernel_basis_orth_sparse)
     
     def construct_D_spectrum(self):
-        self.report('Constructing D spectrum ...')
-
         D_eig_vals, D_multis = np.zeros(self.seq_length+1), np.zeros(self.seq_length+1)
         for k in range(self.seq_length+1):
             lambda_k = k * self.n_alleles
@@ -847,7 +879,7 @@ class SeqDEFT(SequenceSpace):
         phi_true = np.zeros(self.n_genotypes)
         
         for k in range(self.P, self.seq_length+1):
-            eta_k = np.sqrt(self.s) / np.sqrt(a_true * self.D_eig_vals[k])
+            eta_k = np.sqrt(self.n_p_faces) / np.sqrt(a_true * self.D_eig_vals[k])
             self.solve_b_k(k)
             phi_true += eta_k * self.W_k_opt(v)
     
@@ -939,15 +971,15 @@ class SeqDEFT(SequenceSpace):
             for i, a in enumerate(a_values):
                 yield(k, i, a, train, validation)   
     
-    def compute_log_Ls(self, a_max, a_min, num_a, cv_fold=5,
+    def compute_log_Ls(self, a_values, nfolds=5,
                        options=None, scale_by=1, gtol=1e-3):
-        self.report('Running {} fold cross validation:'.format(cv_fold))
-        a_values = np.geomspace(a_min, a_max, num_a)
         phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
     
-        log_Lss = np.zeros([cv_fold, num_a])
-        cv_data = self.get_cv_iter(cv_fold, a_values)
-        for k, i, a, train, validation in tqdm(cv_data, total=cv_fold * num_a):    
+        log_Lss = np.zeros([nfolds, a_values.shape[0]])
+        cv_data = self.get_cv_iter(nfolds, a_values)
+        n_iters = nfolds * a_values.shape[0]
+        
+        for k, i, a, train, validation in tqdm(cv_data, total=n_iters):    
             log_Lss[k,i] = self.calculate_cv_fold_logL(a, train, validation, phi_inf,
                                                        options=options, scale_by=scale_by,
                                                        gtol=gtol)
@@ -978,49 +1010,11 @@ class SeqDEFT(SequenceSpace):
             validation = self.count_obs(obs[:n_valid])
             yield(train, validation) 
     
-    def plot_a_optimization(self, axes):
-        aa = self.log_Ls['a'].values
-        log_Ls = self.log_Ls['log_likelihood'].values
-        
-        a_star = aa[log_Ls.argmax()]
-        max_log_L = log_Ls.max()
-        
-        axes.scatter(np.log10(aa), log_Ls, color='blue', s=15, zorder=1)
-        axes.scatter(np.log10(a_star), max_log_L, color='red', s=15, zorder=2)
-        xlims, ylims = axes.get_xlim(), axes.get_ylim()
-        x = xlims[0] + 0.05 * (xlims[1]- xlims[0])
-        y = ylims[0] + 0.9 * (ylims[1]- ylims[0])
-        axes.annotate('a* = {:.1f}'.format(a_star), xy=(x, y))
-        axes.set_xlabel(r'$log_{10}$ (a)')
-        axes.set_ylabel('Out of sample log(L)')
-    
-    def plot_density_vs_frequency(self, axes):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            data = pd.DataFrame({'logR': np.log10(self.R),
-                                 'logQ': np.log10(self.Q_star)}).dropna()
-                                 
-        axes.scatter(data['logR'], data['logQ'],
-                     color='black', s=5, alpha=0.4, zorder=2)
-        xlims, ylims = axes.get_xlim(), axes.get_ylim()
-        lims = min(xlims[0], ylims[0]), max(xlims[1], ylims[1])
-        axes.plot(lims, lims, color='grey', linewidth=0.5, alpha=0.5, zorder=1)
-        arrange_plot(axes, xlabel=r'$log_{10}$(Frequency)',
-                     ylabel=r'$log_{10}$(Q*)',
-                     xlims=lims, ylims=lims)
-    
-    def plot_summary(self, fname):
-        fig, subplots = init_fig(1, 2)
-        
-        self.plot_a_optimization(subplots[0])
-        self.plot_density_vs_frequency(subplots[1])
-        
-        savefig(fig, fname)
         
     def write_output(self, fpath):
-        output = pd.DataFrame({'phi_star': self.phi_star,
+        output = pd.DataFrame({'log_Q_star': self.log_Q_star,
                                'Q_star': self.Q_star},
-                              index=self.genotype_labels)
+                              index=self.genotypes)
         output.to_csv(fpath)
 
 
