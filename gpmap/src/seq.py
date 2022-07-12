@@ -97,9 +97,7 @@ def guess_space_configuration(seqs, ensure_full_space=True):
             Returns a dictionary with the inferred configuration of the discrete
             space where the sequences come from.
     
-    
     '''
-    
     
     alleles = defaultdict(dict)
     for seq in seqs:
@@ -113,7 +111,8 @@ def guess_space_configuration(seqs, ensure_full_space=True):
     
     if ensure_full_space:
         msg = 'Number of genotypes does not match the expected from guessed configuration.'
-        msg += ' Ensure that genotypes span the whole sequence space'
+        msg += ' Ensure that genotypes span the whole sequence space or use'
+        msg += '`ensure_full_space` option to avoid this error'
         check_error(np.prod(config['n_alleles']) == seqs.shape[0], msg)
     return(config)
 
