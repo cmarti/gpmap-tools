@@ -379,7 +379,7 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
 def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
                        allele_color='orange', background_color='lightgrey',
                        nodes_size=None, edges_color='grey', edges_width=0.5,
-                       positions=None, position_labels=None, autoscale_axis=True,
+                       positions=None, position_labels=None, autoscale_axis=False,
                        colsize=3, rowsize=2.7, xpos_label=0.05, ypos_label=0.92):
     
     config = guess_space_configuration(nodes_df.index.values)
@@ -732,7 +732,8 @@ def plot_density_vs_frequency(seq_density, axes):
 
 
 def plot_SeqDEFT_summary(log_Ls, seq_density):
-    fig, subplots = init_fig(1, 2)
+    fig, subplots = init_fig(1, 2, colsize=4, rowsize=3.5)
     plot_a_optimization(log_Ls, subplots[0])
     plot_density_vs_frequency(seq_density, subplots[1])
+    fig.tight_layout()
     return(fig)
