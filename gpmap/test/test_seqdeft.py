@@ -61,10 +61,17 @@ class SeqDEFTTests(unittest.TestCase):
     def test_seq_deft_inference(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
         data = pd.read_csv(fpath, index_col=0)
-        
         seqdeft = SeqDEFT(P=2)
+        
+        # Infer hyperparameter using CV
         seq_densities = seqdeft.fit(X=data.index.values,
                                     counts=data['counts'].values)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
+        # Infer with the provided a value
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    counts=data['counts'].values,
+                                    a_value=500)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
     
     def test_seq_deft_cv_plot(self):
@@ -96,5 +103,5 @@ class SeqDEFTTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests.test_construct_D_kernel_basis']
+    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_inference']
     unittest.main()
