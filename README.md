@@ -19,7 +19,7 @@ git clone git@bitbucket.org:cmartiga/gpmap_tools.git
 Install using setuptools
 ```bash
 cd gpmap_tools
-pip install -r requirements.txt
+pip install datashader
 python setup.py install
 ```
 
