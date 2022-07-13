@@ -1037,13 +1037,6 @@ class SeqDEFT(LandscapeEstimator):
             train = self.count_obs(obs[n_valid:])
             validation = self.count_obs(obs[:n_valid])
             yield(train, validation) 
-    
-        
-    def write_output(self, fpath):
-        output = pd.DataFrame({'log_Q_star': self.log_Q_star,
-                               'Q_star': self.Q_star},
-                              index=self.genotypes)
-        output.to_csv(fpath)
 
 
 def D_geo(phi1, phi2):
