@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 import argparse
 
+from os.path import exists
+
 import pandas as pd
 
-from gpmap.utils import LogTrack
-from gpmap.visualization import Visualization
+from gpmap.src.utils import LogTrack
 from gpmap.src.space import SequenceSpace
 from gpmap.src.randwalk import WMWSWalk
 from gpmap.src.seq import guess_space_configuration, get_custom_codon_table
-from os.path import exists
 
         
 def main():
