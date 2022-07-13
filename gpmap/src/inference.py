@@ -519,8 +519,7 @@ class SeqDEFT(LandscapeEstimator):
         return(comb(length, P) * comb(n_alleles, 2) ** P * n_alleles ** (length - P))
         
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
-             alphabet_type='custom', parameters_only=False,
-             with_kernel_basis=True):
+             alphabet_type='custom'):
         
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
