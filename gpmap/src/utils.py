@@ -1,17 +1,10 @@
-import itertools
 import sys
 import time
-import pystan
 
 from time import ctime
-from _pickle import dump, load
-from os.path import join, exists
 
 import numpy as np
 
-from gpmap.settings import NUCLEOTIDES, COMPLEMENT, MODELS_DIR, CODE_DIR
-from Bio.Seq import Seq
-from _collections import defaultdict
 from scipy.sparse.dia import dia_matrix
 
 
