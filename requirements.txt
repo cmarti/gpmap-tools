@@ -47,7 +47,6 @@ grpcio==1.44.0
 h5py==3.6.0
 HeapDict==1.0.1
 holoviews==1.14.8
-httpstan==4.6.1
 idna==3.3
 imageio==2.16.1
 imageio-ffmpeg==0.4.5
@@ -124,7 +123,6 @@ pyparsing==3.0.7
 pyrsistent==0.18.1
 pysam==0.18.0
 pysimdjson==3.2.0
-pystan==2.19.0.0
 python-dateutil==2.8.2
 pytz==2021.3
 pyviz-comms==2.2.0
@@ -143,14 +141,9 @@ six==1.16.0
 sklearn==0.0
 sortedcontainers==2.4.0
 soupsieve==2.3.1
-statsmodels==0.13.2
 tables==3.7.0
 tblib==1.7.0
 tenacity==8.0.1
-tensorboard==2.8.0
-tensorboard-data-server==0.6.1
-tensorboard-plugin-wit==1.8.1
-tensorflow-io-gcs-filesystem==0.24.0
 termcolor==1.1.0
 terminado==0.13.3
 testpath==0.6.0
