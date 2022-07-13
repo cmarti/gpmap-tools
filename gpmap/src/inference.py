@@ -877,6 +877,7 @@ class SeqDEFT(LandscapeEstimator):
         basis = [np.full((self.n_genotypes, 1), 1 / np.sqrt(self.n_genotypes))]
         for p in range(1, self.P):
             for idxs in combinations(range(self.seq_length), p):
+                idxs = np.array(idxs)
                 j = np.zeros(self.seq_length, dtype=int)
                 j[idxs] = 1
                 basis.append(self.get_Vj(tuple(j)))
