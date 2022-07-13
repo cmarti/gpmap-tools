@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 import unittest
+
 from os.path import join
+from subprocess import check_call
 
 import numpy as np
 import pandas as pd
 
 from gpmap.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.inference import SeqDEFT
-from subprocess import check_call
+from gpmap.src.utils import get_sparse_diag_matrix
 
 
 class SeqDEFTTests(unittest.TestCase):
@@ -15,6 +17,46 @@ class SeqDEFTTests(unittest.TestCase):
         a = 1e6
         seqdeft = SeqDEFT(4, 6, P=2)
         data = seqdeft.simulate(N=10000, a_true=a, random_seed=None)
+    
+    def test_construct_D_kernel_basis(self):
+        seqdeft = SeqDEFT(P=2)
+        seqdeft.init(seq_length=5, n_alleles=4, alphabet_type='custom')
+        basis1 = seqdeft.construct_D_kernel_basis()
+        basis2 = seqdeft.construct_D_kernel_basis2()
+        
+        # Ensure basis is orthonormal
+        prod = basis1.T.dot(basis1)
+        identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
+        assert(np.allclose((prod - identity).todense(), 0))
+        
+        prod = basis2.T.dot(basis2)
+        identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
+        assert(np.allclose((prod - identity).todense(), 0))
+        
+        # Ensure basis is sparse
+        max_values = basis1.shape[0] * basis1.shape[1]
+        assert(basis1.data.shape[0] < max_values) 
+        
+        max_values = basis2.shape[0] * basis2.shape[1]
+        assert(basis2.data.shape[0] < max_values) 
+        
+        # Ensure they generate good projection matrices
+        u = np.dot(basis1, basis1.T).dot(basis1)
+        error = (basis1 - u).mean()
+        assert(np.allclose(error, 0))
+        
+        u = np.dot(basis2, basis2.T).dot(basis2)
+        error = (basis2 - u).mean()
+        assert(np.allclose(error, 0))
+        
+        # Ensure both basis represent the same subspace
+        u = np.dot(basis1, basis1.T).dot(basis2)
+        error = (basis2 - u).mean()
+        assert(np.allclose(error, 0))
+        
+        u = np.dot(basis2, basis2.T).dot(basis1)
+        error = (basis1 - u).mean()
+        assert(np.allclose(error, 0))
     
     def test_seq_deft_inference(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
@@ -54,5 +96,5 @@ class SeqDEFTTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_inference']
+    import sys;sys.argv = ['', 'SeqDEFTTests.test_construct_D_kernel_basis']
     unittest.main()

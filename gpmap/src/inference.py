@@ -20,7 +20,7 @@ from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.space import SequenceSpace
-from gpmap.src.utils import get_sparse_diag_matrix
+from gpmap.src.utils import get_sparse_diag_matrix, check_error
 from gpmap.src.seq import guess_space_configuration
 
 
@@ -532,12 +532,12 @@ class SeqDEFT(LandscapeEstimator):
         self.L = self.space.laplacian
         
         self.calc_L_powers_unique_entries_matrix()
-        # self.calc_W_kd_matrix()
-    
-        if not parameters_only:
-            if with_kernel_basis:
-                self.D_kernel_basis_orth_sparse = self.construct_D_kernel_basis()
-            self.construct_D_spectrum()
+
+    @property
+    def D_kernel_basis_orth_sparse(self):
+        if not hasattr(self, '_D_kernel_basis_orth_sparse'):
+            self._D_kernel_basis_orth_sparse = self.construct_D_kernel_basis()
+        return(self._D_kernel_basis_orth_sparse)
     
     def check_P(self):
         if self.P == (self.seq_length + 1):
@@ -815,7 +815,7 @@ class SeqDEFT(LandscapeEstimator):
                 regularizer[flags] += 2 * (phi - PHI_LB)[flags]
         return self.D_kernel_basis_orth_sparse.T.dot(grad_S_inf1 - grad_S_inf2 + regularizer)
     
-    def construct_D_kernel_basis(self):
+    def construct_D_kernel_basis2(self, max_value_to_zero=1e-12):
         # TODO: think on a way to optimize this for large landscapes
         
         # Generate bases and sequences
@@ -823,14 +823,11 @@ class SeqDEFT(LandscapeEstimator):
         seqs = np.array(list(product(bases, repeat=self.seq_length)))
     
         # Construct D kernel basis
-        for p in range(self.P):
-    
-            # Basis of kernel W(0)
-            if p == 0:
-                W0_dim = 1
-                W0_basis = np.ones([self.n_genotypes,W0_dim])
-                D_kernel_basis = W0_basis
-    
+        
+        # Basis of kernel W(0)
+        D_kernel_basis = np.ones([self.n_genotypes, 1])
+        
+        for p in range(1, self.P):
             # Basis of kernel W(1)
             if p == 1:
                 W1_dim = self.seq_length*(self.n_alleles-1)
@@ -854,9 +851,40 @@ class SeqDEFT(LandscapeEstimator):
                         col += 1
                 D_kernel_basis = np.hstack((D_kernel_basis, W2_basis))
     
-        D_kernel_basis_orth_sparse = csr_matrix(orth(D_kernel_basis))
-        
+        D_kernel_basis = orth(D_kernel_basis)    
+        D_kernel_basis[np.abs(D_kernel_basis) < max_value_to_zero] = 0
+        D_kernel_basis_orth_sparse = csr_matrix(D_kernel_basis)
         return(D_kernel_basis_orth_sparse)
+
+    def get_Vj(self, j):
+        if not hasattr(self, 'vj'):
+            site_L = self.n_alleles * np.eye(self.n_alleles) - np.ones((self.n_alleles, self.n_alleles))
+            v0 = np.full((self.n_alleles, 1), 1 / np.sqrt(self.n_alleles)) 
+            v1 = orth(site_L)
+            
+            msg = 'Basis for subspaces V0 and V1 are not orthonormal'
+            check_error(np.allclose(v1.T.dot(v0), 0), msg)
+            
+            self.vj = {0: v0, 1: v1,
+                       (0,): v0, (1,): v1}
+
+        if j not in self.vj:
+            # self.vj[j] = np.tensordot(self.vj[j[0]], self.get_Vj(j[1:]), axes=0)
+            self.vj[j] = np.vstack([np.hstack([x * self.get_Vj(j[1:]) for x in row])
+                                    for row in self.vj[j[0]]])
+        return(self.vj[j])
+
+    def construct_D_kernel_basis(self, max_value_to_zero=1e-12):
+        basis = [np.full((self.n_genotypes, 1), 1 / np.sqrt(self.n_genotypes))]
+        for p in range(1, self.P):
+            for idxs in combinations(range(self.seq_length), p):
+                j = np.zeros(self.seq_length, dtype=int)
+                j[idxs] = 1
+                basis.append(self.get_Vj(tuple(j)))
+        basis = np.hstack(basis)
+        basis[np.abs(basis) < max_value_to_zero] = 0
+        basis = csr_matrix(basis)
+        return(basis)
     
     def construct_D_spectrum(self):
         D_eig_vals, D_multis = np.zeros(self.seq_length+1), np.zeros(self.seq_length+1)
