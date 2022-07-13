@@ -1,17 +1,14 @@
 #!/usr/bin/env python
 import unittest
+
 from os.path import join
 
 import numpy as np
 import pandas as pd
 
-from gpmap.utils import LogTrack
-from gpmap.inference import VCregression
-from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
-from subprocess import check_call
-from gpmap.src.space import SequenceSpace
-from gpmap.src.seq import translate_seqs, guess_alphabet_type, guess_space_configuration,\
-    get_custom_codon_table
+from gpmap.src.settings import TEST_DATA_DIR
+from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
+                           guess_space_configuration, get_custom_codon_table)
 
 
 class SeqTests(unittest.TestCase):
@@ -96,20 +93,6 @@ class SeqTests(unittest.TestCase):
         protein = translate_seqs(dna, codon_table=codon_table)
         assert(np.all(protein == ['S*', 'S*M']))
     
-    def xtest_get_neighbors(self):
-        v = Visualization(3, alphabet_type='rna')
-        seq = 'AAA'
-        
-        idxs = v.get_neighborhood_idxs(seq, max_distance=1)
-        seqs = v.genotypes[idxs]
-        assert(np.all(seqs == ['AAA', 'AAC', 'AAG', 'AAU', 'ACA',
-                               'AGA', 'AUA', 'CAA', 'GAA', 'UAA']))
-        
-        idxs = v.get_neighborhood_idxs(seq, max_distance=2)
-        seqs = v.genotypes[idxs]
-        for seq in seqs:
-            assert('A' in seq)
-        
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'SeqTests']
