@@ -135,7 +135,6 @@ class VCregression(LandscapeEstimator):
         self.calc_L_powers_unique_entries_matrix()
         self.calc_W_kd_matrix()
     
-    
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
         l, a = self.seq_length, self.n_alleles
@@ -208,7 +207,12 @@ class VCregression(LandscapeEstimator):
             components so that their contribution tends to decay exponentially
             
         nfolds : int (10)
-            Number of folds to use for cross-validation 
+            Number of folds to use for cross-validation
+        
+        Returns
+        -------
+        lambdas: array-like of shape (seq_length + 1,)
+            Variances for each order of interaction k inferred from the data
         
         """
         if not hasattr(self, 'space'):
@@ -222,6 +226,7 @@ class VCregression(LandscapeEstimator):
                                                     nfolds=nfolds)
         else:
             self.lambdas = self.estimate_lambdas(self.obs_idx, y)
+        return(self.lambdas)
     
     def estimate_lambdas(self, obs_idx, y, betas=None,
                          second_order_diff_matrix=None):
@@ -415,7 +420,9 @@ class VCregression(LandscapeEstimator):
         -------
         function : pd.DataFrame of shape (n_genotypes, 1)
                    Returns the phenotypic predictions for each input genotype
-                   in the column `function` and genotype labels as row names
+                   in the column `function` and genotype labels as row names.
+                   If `estimate_variance` is True, then it has an additional
+                   column with the posterior variances for each genotype
         """
         
         if np.all([X is not None, y is not None,
