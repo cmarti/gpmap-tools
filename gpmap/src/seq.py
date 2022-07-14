@@ -5,7 +5,7 @@ from _collections import defaultdict
 import numpy as np
 from Bio.Seq import Seq 
 
-from gpmap.settings import NUCLEOTIDES, COMPLEMENT
+from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT
 from gpmap.src.utils import check_error
 from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
 from itertools import chain
