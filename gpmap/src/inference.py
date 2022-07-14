@@ -186,7 +186,7 @@ class VCregression(LandscapeEstimator):
         to the variability in the sequence-function relationships
         
         Stores learned `lambdas` in the attribute VCregression.lambdas
-        to use internally for predictions
+        to use internally for predictions and returns them as output
         
         Parameters
         ----------
