@@ -19,6 +19,39 @@ from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
 
 
 class DiscreteSpace(object):
+    '''
+    Parameters
+    ----------
+    adjacency_matrix: scipy.sparse.csr_matrix of shape (n_states, n_states)
+        Sparse matrix representing the adjacency relationships between
+        states. The ij'th entry contains a 1 if the states `i` and `j`
+        are connected and 0 otherwise
+    
+    function: array-like of shape (n_states,)
+        Quantitative property associated to each state
+    
+    state_labels: array-like of shape (n_genotypes, )
+        State labels in the sequence space
+    
+    Attributes
+    ----------
+    n_states: int
+        Number of states in the discrete space
+    
+    state_labels: array-like of shape (n_genotypes, )
+        State labels in the sequence space
+    
+    state_idxs: pd.Series of shape (n_genotypes, )
+        pd.Series containing the index of each state. It has state_labels as
+        index of the Series and can be used to quickly extract the index
+        corresponding to a set of state labels
+    
+    is_regular: bool
+        Boolean variable storing whether the resulting graph is regular
+        or not, this is, whether each node has the same number of neighbors
+        
+    '''
+    
     def __init__(self, adjacency_matrix, function=None, state_labels=None):
         self.init_space(adjacency_matrix, function=function, state_labels=state_labels)
     
@@ -101,8 +134,8 @@ class DiscreteSpace(object):
         edges_df = pd.DataFrame({'i': i, 'j': j})
         return(edges_df)
     
-    def write_edges_npz(self, fpath, triagular=True):
-        if triagular:
+    def write_edges_npz(self, fpath, triangular=True):
+        if triangular:
             save_npz(fpath, triu(self.adjacency_matrix))
         else:
             save_npz(fpath, self.adjacency_matrix)
@@ -118,6 +151,70 @@ class DiscreteSpace(object):
     
     
 class SequenceSpace(DiscreteSpace):
+    '''
+    Parameters
+    ----------
+    seq_length: int (None)
+        Length of the sequences in the sequence space. If not given, it will be
+        guessed from `alphabet` or `n_alleles`
+    
+    n_alleles: list of size `seq_length` (None)
+        List containing the number of alleles present in each of the sites
+        of the sequence space. It can only be specified for 
+        `alphabet_type=custom`
+    
+    alphabet_type: str ('dna')
+        Sequence type: {'dna', 'rna', 'protein', 'custom'}
+        
+    alphabet: list of `seq_length' lists
+        Every element of the list is itself a list containing the different
+        alleles allowed in each site. Note that the number and type of alleles
+        can be different for every site. It can only be specified for 
+        `alphabet_type=custom`
+        
+    function: array-like of shape (n_genotypes,)
+        Quantitative phenotype or fitness associated to each genotype
+    
+    use_codon_model: bool (False)
+        If the provided space is a complete protein space and `use_codon_model`
+        option is `True`, then an extended nucleotide space will be created
+        based on the provided genetic code with `codon_table`.
+        
+    codon_table: str or Bio.Data.CodonTable
+        NCBI code for an existing genetic code or a custom CodonTable 
+        object to translate nucleotide sequences into protein
+    
+    stop_function: float (-10)
+        Value of the function given for every nucleotide sequence with an
+        in-frame stop codon
+    
+    
+    Attributes
+    ----------
+    n_genotypes: int
+        Number of states in the complete sequence space
+    
+    genotypes: array-like of shape (n_genotypes, )
+        Genotype labels in the sequence space
+        
+    adjacency_matrix: scipy.sparse.csr_matrix of shape (n_genotypes, n_genotypes)
+        Sparse matrix representing the adjacency relationships between
+        genotypes. The ij'th entry contains a 1 if the genotypes `i` and `j`
+        are separated by a single mutation and 0 otherwise
+    
+    function: array-like of shape (n_genotypes,)
+        Quantitative phenotype or fitness associated to each genotype
+        
+    is_regular: bool
+        Boolean variable storing whether the resulting Hamming graph is regular
+        or not. In other words, whether every site has the same number of
+        alleles
+        
+    Methods
+    -------
+    
+    
+    '''
     def __init__(self, seq_length=None, n_alleles=None,
                  alphabet_type='dna', alphabet=None, function=None,
                  use_codon_model=False, codon_table=None, stop_function=-10):
@@ -162,6 +259,10 @@ class SequenceSpace(DiscreteSpace):
     @property
     def is_regular(self):
         return(np.unique(self.n_alleles).shape[0] == 1)
+    
+    @property
+    def n_genotypes(self):
+        return(self.n_states)
     
     @property
     def genotypes(self):
@@ -357,7 +458,7 @@ def read_sequence_space_csv(fpath, function_col, seq_col=0, sort_seqs=True):
     
     function = df[function_col].values
     seqs = df.index.values
-    config = guess_space_configuration(seqs)
+    config = guess_space_configuration(seqs, ensure_full_space=True)
     space = SequenceSpace(alphabet=config['alphabet'], function=function,
                           alphabet_type='custom')
     return(space)

@@ -12,6 +12,9 @@ from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix, check_error,
                              write_log, check_eigendecomposition)
+from scipy.special._basic import comb
+from itertools import combinations
+from scipy.linalg.decomp import eig
 
 
 class RandomWalk(object):
@@ -147,6 +150,71 @@ class WMWSWalk(TimeReversibleRandomWalk):
     
     
     '''
+    def calc_neutral_rates(self, neutral_stat_freqs=None,
+                           exchange_rates=None, site_mut_rates=None):
+        neutral_mixing_rate = np.inf
+        
+        if neutral_stat_freqs is None:
+            neutral_stat_freqs = [np.full(alpha, 1/alpha)
+                                  for alpha in self.space.n_alleles]
+        
+        if exchange_rates is None:
+            exchange_rates = [np.full(int(comb(alpha, 2)), 1/comb(alpha, 2))
+                              for alpha in  self.space.n_alleles]
+        
+        if site_mut_rates is None:
+            site_mut_rates = np.ones(self.space.seq_length)
+        
+        neutral_site_Qs = []
+        for freqs, ex_rates, site_mu in zip(neutral_stat_freqs, exchange_rates, site_mut_rates):
+            
+            msg = 'Ensure that the exchangeability rates matrices are symmetric'
+            msg += 'to ensure neutral time reversible dynamics'
+            check_error(np.all(ex_rates == ex_rates.T), msg=msg)
+            
+            msg = 'Make sure that the neutral stationary rates sum to 1'
+            check_error(freqs.sum() == 1, msg=msg)
+            
+            msg = 'Make sure that all the exchangeability rates sum to 1: {}'.format(ex_rates)
+            check_error(np.allclose(ex_rates.sum(), 1), msg=msg)
+            
+            # Create site matrix from GTR model
+            D = get_sparse_diag_matrix(freqs).todense()
+            ex_rates_m = np.zeros((freqs.shape[0], freqs.shape[0]))
+            idxs = np.arange(freqs.shape[0])
+            for x, (i, j) in zip(ex_rates, combinations(idxs, 2)):
+                ex_rates_m[i, j] = x
+                ex_rates_m[j, i] = x
+            site_Q = np.dot(ex_rates_m, D)
+            site_Q[idxs, idxs] = -site_Q.sum(1).A1
+            
+            msg = 'Rows in the site rate matrix do not add up to 0: {}'.format(site_Q)
+            check_error(np.allclose(site_Q.sum(1), 0), msg=msg)
+            
+            msg = 'The neutral rates matrix is not time reversible'
+            eq_Q = D.dot(site_Q)
+            check_error(np.allclose(eq_Q, eq_Q.T), msg=msg)
+            scaling_factor = - 1 / np.diag(eq_Q).sum()
+            site_Q = scaling_factor * site_Q
+            
+            neutral_site_Qs.append(site_Q)
+            
+            # Create symmetrix matrix to decompose and estimate mixing rates
+            r = np.sqrt(freqs)
+            m = get_sparse_diag_matrix(r).dot(csr_matrix(site_Q)).dot(get_sparse_diag_matrix(1/r))
+            m = (m + m.T) / 2
+            lambdas = eigsh(m, 2, v0=freqs, which='SM', tol=1e-5)[0]
+            if -lambdas[0] < neutral_mixing_rate:
+                neutral_mixing_rate = -lambdas[0]
+            
+        
+        if len(neutral_site_Qs) == 1 and self.space.seq_length > 1:
+            neutral_site_Qs = neutral_site_Qs * self.space.seq_length
+        
+        self.neutral_mixing_rate = neutral_mixing_rate
+        print(neutral_mixing_rate)
+        return(neutral_site_Qs)
+    
     def _calc_delta_function(self, rows, cols):
         return(self.space.function[cols] - self.space.function[rows])
     

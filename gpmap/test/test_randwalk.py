@@ -13,6 +13,8 @@ from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace
 from gpmap.src.randwalk import WMWSWalk
 from gpmap.src.plot import figure_Ns_grid
+from gpmap.src.utils import get_sparse_diag_matrix
+from itertools import product
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -27,6 +29,33 @@ class RandomWalkTests(unittest.TestCase):
         
         mc.set_Ns(mean_function_perc=80)
         assert(np.isclose(mc.Ns, 0.59174))
+    
+    def test_calc_neutral_rates(self):
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc.set_Ns(1)
+        
+        # Ensure uniform neutral dynamics by default
+        sites_neutral_Q = mc.calc_neutral_rates()
+        assert(len(sites_neutral_Q) == 3)
+        
+        for Q in sites_neutral_Q:
+            for i, j in product(np.arange(Q.shape[0]), repeat=2):
+                if i == j:
+                    assert(Q[i, j] == -1)
+                else:
+                    assert(Q[i, j] == 1 / (Q.shape[0]-1))
+            
+        # Test with a single stationary frequency vector
+        neutral_stat_freqs = [np.array([0.4, 0.2, 0.1, 0.3])]
+        D = get_sparse_diag_matrix(neutral_stat_freqs[0]).todense()
+        sites_neutral_Q = mc.calc_neutral_rates(neutral_stat_freqs=neutral_stat_freqs)
+        for Q in sites_neutral_Q:
+            eq_Q = D.dot(Q)
+            assert(np.allclose(eq_Q, eq_Q.T))
+            
+        # Test in neutral rate matrix that the average leaving rate at 
+        # stationarity is 1
+        
     
     def test_stationary_frequencies(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
@@ -161,5 +190,5 @@ class RandomWalkTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests']
+    sys.argv = ['', 'RandomWalkTests.test_calc_neutral_rates']
     unittest.main()
