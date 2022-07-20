@@ -27,7 +27,8 @@ def main():
     options_group.add_argument('-k', '--num_a', default=20, type=int,
                                help='Number of a values to test (20)')
     help_msg = 'P for the Delta(P) operator to build prior (2)'
-    options_group.add_argument('-P', '--delta_P', default=2, help=help_msg)
+    options_group.add_argument('-P', '--delta_P', default=2, help=help_msg,
+                               type=int)
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True,

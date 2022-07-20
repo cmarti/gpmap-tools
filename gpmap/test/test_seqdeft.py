@@ -115,6 +115,9 @@ class SeqDEFTTests(unittest.TestCase):
         
         cmd = [sys.executable, bin_fpath, counts_fpath, '-o', out_fpath]
         check_call(cmd)
+        
+        cmd = [sys.executable, bin_fpath, counts_fpath, '-o', out_fpath, '-P', '3']
+        check_call(cmd)
     
     def test_handle_counts(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
