@@ -2,7 +2,6 @@
 import warnings
 import numpy as np
 import pandas as pd
-import scipy.sparse as sp
 
 from itertools import product
 from _collections import defaultdict
@@ -12,7 +11,8 @@ from scipy.sparse._matrix_io import save_npz
 from scipy.sparse.extract import triu
 
 from gpmap.src.seq import translate_seqs, guess_space_configuration
-from gpmap.src.utils import get_sparse_diag_matrix, check_error
+from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
+                             calc_cartesian_product)
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
@@ -329,41 +329,14 @@ class SequenceSpace(DiscreteSpace):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             site_Kn = [self._calc_site_matrix(a, transitions) for a in alleles]
-
-        self.site_Kn = site_Kn
-    
-    def _istack_matrices(self, m_diag, m_offdiag, pos):
-        rows = []
-        a = self.n_alleles[pos]
-        for j in range(a):
-            row = [m_offdiag] * j + [m_diag] + [m_offdiag] * (a - j - 1)
-            rows.append(sp.hstack(row)) 
-        m = sp.vstack(rows)
-        return(m)
-    
-    def _calc_adjacency_matrix(self, m=None, pos=None):
-        if pos is None:
-            pos = self.seq_length - 1
-            
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            
-            if m is None:
-                m = self.site_Kn[pos]
-    
-            if pos == 0:
-                return(m)
-    
-            i = sp.identity(m.shape[0])
-            m = self._istack_matrices(m, i, pos-1)
-            
-        return(self._calc_adjacency_matrix(m, pos-1))
+        return(site_Kn)
     
     def calc_adjacency_matrix(self, codon_table=None):
         if self.alphabet_type not in ['protein', 'custom']:
             codon_table = None 
-        self._calc_site_adjacency_matrices(self.alphabet, codon_table=codon_table)
-        return(self._calc_adjacency_matrix())
+        sites_A = self._calc_site_adjacency_matrices(self.alphabet, codon_table=codon_table)
+        adjacency_matrix = calc_cartesian_product(sites_A)
+        return(adjacency_matrix)
     
     def _check_alphabet(self, n_alleles, alphabet_type, alphabet):
         if alphabet is not None:

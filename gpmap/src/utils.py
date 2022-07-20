@@ -5,6 +5,11 @@ from time import ctime
 
 import numpy as np
 
+import scipy.sparse as sp
+
+from scipy.sparse.csr import csr_matrix
+from scipy.sparse._matrix_io import save_npz
+from scipy.sparse.extract import triu
 from scipy.sparse.dia import dia_matrix
 
 
@@ -59,3 +64,52 @@ def check_eigendecomposition(matrix, eigenvalues, right_eigenvectors, tol=1e-3):
 
         msg = 'Numeric error in eigendecomposition: abs error = {:.5f} > {:.5f}'
         check_error(abs_err <= tol, msg.format(abs_err, tol))
+
+
+def stack_prod_matrices(m_diag, m_offdiag, a):
+    rows = []
+    for j in range(a):
+        row = [m_offdiag] * j + [m_diag] + [m_offdiag] * (a - j - 1)
+        rows.append(sp.hstack(row)) 
+    m = sp.vstack(rows)
+    return(m)
+
+
+def calc_cartesian_product(matrices):
+    if len(matrices) == 1:
+        return(matrices[0])
+    
+    m1, m2 = matrices[0], calc_cartesian_product(matrices[1:])
+    i = sp.identity(m2.shape[0])
+    
+    rows = []
+    for j in range(m1.shape[0]):
+        row = [m2 if k == j else m1[j, k] * i for k in range(m1.shape[0])]
+        rows.append(sp.hstack(row)) 
+    m = sp.vstack(rows)
+    return(m)
+
+
+def _calc_adjacency_matrix(self, m=None, pos=None):
+    if pos is None:
+        pos = self.seq_length - 1
+        
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        
+        if m is None:
+            m = self.site_Kn[pos]
+
+        if pos == 0:
+            return(m)
+
+        i = sp.identity(m.shape[0])
+        m = self._istack_matrices(m, i, pos-1)
+        
+    return(self._calc_adjacency_matrix(m, pos-1))
+
+def calc_adjacency_matrix(self, codon_table=None):
+    if self.alphabet_type not in ['protein', 'custom']:
+        codon_table = None 
+    self._calc_site_adjacency_matrices(self.alphabet, codon_table=codon_table)
+    return(self._calc_adjacency_matrix())

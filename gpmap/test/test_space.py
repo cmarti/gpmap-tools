@@ -85,28 +85,28 @@ class SpaceTests(unittest.TestCase):
         space = SequenceSpace(seq_length=1, alphabet_type='protein')
         
         # Without taking into account genetic code
-        space._calc_site_adjacency_matrices(alleles=[['T', 'V']])
-        m = space.site_Kn[0].todense()
-        assert(np.all(m == [[0, 1], [1, 0]]))
-        assert(np.all(space.site_Kn[0].data == 1))
+        sites_A = space._calc_site_adjacency_matrices(alleles=[['T', 'V']])
+        m = sites_A[0]
+        assert(np.all(m == np.array([[0, 1], [1, 0]])))
+        assert(np.all(m.data == 1))
         
         # Inaccessible aminoacids
-        space._calc_site_adjacency_matrices(alleles=[['T', 'V']], codon_table='Standard')
-        m = space.site_Kn[0].todense()
-        assert(np.all(m == 0))
-        assert(np.all(space.site_Kn[0].data == 1))
+        sites_A = space._calc_site_adjacency_matrices(alleles=[['T', 'V']], codon_table='Standard')
+        m = sites_A[0]
+        assert(np.all(m.todense() == 0))
+        assert(np.all(m.data == 1))
         
         # Accessible aminoacids
-        space._calc_site_adjacency_matrices(alleles=[['A', 'V']], codon_table='Standard')
-        m = space.site_Kn[0].todense()
-        assert(np.all(m == [[0, 1], [1, 0]]))
-        assert(np.all(space.site_Kn[0].data == 1))
+        sites_A = space._calc_site_adjacency_matrices(alleles=[['A', 'V']], codon_table='Standard')
+        m = sites_A[0]
+        assert(np.all(m == np.array([[0, 1], [1, 0]])))
+        assert(np.all(m.data == 1))
         
         # Indirect T-V connection
-        space._calc_site_adjacency_matrices(alleles=[['A', 'V', 'T']], codon_table='Standard')
-        m = space.site_Kn[0].todense()
-        assert(np.all(m == [[0, 1, 1], [1, 0, 0], [1, 0, 0]]))
-        assert(np.all(space.site_Kn[0].data == 1))
+        sites_A = space._calc_site_adjacency_matrices(alleles=[['A', 'V', 'T']], codon_table='Standard')
+        m = sites_A[0]
+        assert(np.all(m == np.array([[0, 1, 1], [1, 0, 0], [1, 0, 0]])))
+        assert(np.all(m.data == 1))
     
     def test_protein_space_codon_restricted(self):
         alphabet = [['A', 'V'],
@@ -240,5 +240,5 @@ class SpaceTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SpaceTests.test_calc_laplacian']
+    import sys;sys.argv = ['', 'SpaceTests']
     unittest.main()
