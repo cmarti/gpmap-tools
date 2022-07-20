@@ -616,8 +616,8 @@ class SeqDEFT(LandscapeEstimator):
         data = data.astype(int)
         
         self.counts = data
-        self.N = counts.sum()
-        self.R = (counts / self.N)
+        self.N = data.sum()
+        self.R = (data / self.N)
         self.data_dict = {'N': self.N, 'R': self.R}
 
     def counts_to_data_dict(self, counts):

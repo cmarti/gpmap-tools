@@ -11,6 +11,7 @@ from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.inference import SeqDEFT
 from gpmap.src.utils import get_sparse_diag_matrix
 from gpmap.src.plot import plot_SeqDEFT_summary, savefig
+from scipy.stats.stats import pearsonr
 
 
 class SeqDEFTTests(unittest.TestCase):
@@ -61,19 +62,33 @@ class SeqDEFTTests(unittest.TestCase):
     
     def test_seq_deft_inference(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
-        data = pd.read_csv(fpath, index_col=0)
         seqdeft = SeqDEFT(P=2)
         
         # Infer hyperparameter using CV
+        data = pd.read_csv(fpath, index_col=0)
         seq_densities = seqdeft.fit(X=data.index.values,
                                     counts=data['counts'].values)
+        Q = seq_densities['Q_star']
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
         # Infer with the provided a value
+        data = pd.read_csv(fpath, index_col=0)
         seq_densities = seqdeft.fit(X=data.index.values,
                                     counts=data['counts'].values,
                                     a_value=500)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
+        # Inference with disordered and missing sequences for the 0
+        data = pd.read_csv(fpath, index_col=0)
+        data = data.loc[data['counts'] > 0, :]
+        rownames = data.index.values.copy()
+        np.random.shuffle(rownames)
+        data = data.loc[rownames, :]
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    counts=data['counts'].values,
+                                    a_value=500)
+        r = pearsonr(np.log(seq_densities['Q_star']), np.log(Q))[0]
+        assert(r > 0.98)
         
         # Save results
         fpath = join(TEST_DATA_DIR, 'seqdeft_output.csv')
