@@ -11,7 +11,8 @@ from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix, check_error,
-                             write_log, check_eigendecomposition)
+                             write_log, check_eigendecomposition,
+    calc_cartesian_product)
 from scipy.special._basic import comb
 from itertools import combinations
 from scipy.linalg.decomp import eig
@@ -36,13 +37,22 @@ class TimeReversibleRandomWalk(RandomWalk):
         self.diag_freq = get_sparse_diag_matrix(sqrt_freqs) 
         self.diag_freq_inv = get_sparse_diag_matrix(1 / sqrt_freqs)
     
-    def _ensure_time_reversibility(self, rate_matrix, tol=1e-8):
+    def _ensure_time_reversibility(self, rate_matrix, freqs=None, tol=1e-8):
         '''D_pi^{1/2} Q D_pi^{-1/2} has to be symmetric'''
         self.report('Checking numerical time reversibility')
-        sandwich_rate_m = self.diag_freq.dot(rate_matrix).dot(self.diag_freq_inv)
+        
+        if freqs is None:
+            diag_freq = self.diag_freq
+            diag_freq_inv = self.diag_freq_inv
+        else:
+            r = np.sqrt(freqs)
+            diag_freq = get_sparse_diag_matrix(r)
+            diag_freq_inv = get_sparse_diag_matrix(1/r)
+        
+        sandwich_rate_m = diag_freq.dot(rate_matrix).dot(diag_freq_inv)
         sandwich_rate_m = (sandwich_rate_m + sandwich_rate_m.T) / 2
         check_symmetric(sandwich_rate_m, tol=tol)
-        rate_matrix = self.diag_freq_inv.dot(sandwich_rate_m).dot(self.diag_freq)
+        rate_matrix = diag_freq_inv.dot(sandwich_rate_m).dot(diag_freq)
         return(rate_matrix, sandwich_rate_m)
     
     def calc_eigendecomposition(self, n_components=10, tol=1e-14, eig_tol=1e-2):
@@ -150,70 +160,122 @@ class WMWSWalk(TimeReversibleRandomWalk):
     
     
     '''
-    def calc_neutral_rates(self, neutral_stat_freqs=None,
-                           exchange_rates=None, site_mut_rates=None):
-        neutral_mixing_rate = np.inf
-        
-        if neutral_stat_freqs is None:
-            neutral_stat_freqs = [np.full(alpha, 1/alpha)
+    def ex_rates_vector_to_matrix(self, ex_rates, n_alleles):
+        ex_rates_m = np.zeros((n_alleles, n_alleles))
+        idxs = np.arange(n_alleles)
+        for x, (i, j) in zip(ex_rates, combinations(idxs, 2)):
+            ex_rates_m[i, j] = x
+            ex_rates_m[j, i] = x
+        return(ex_rates_m)
+    
+    def calc_GTR_rate_matrix(self, freqs, ex_rates):
+        ex_rates_m = self.ex_rates_vector_to_matrix(ex_rates, freqs.shape[0])
+
+        D = get_sparse_diag_matrix(freqs).todense()
+        site_Q = csr_matrix(np.dot(ex_rates_m, D))
+        site_Q.setdiag(-site_Q.sum(1).A1)
+        site_Q = self._ensure_time_reversibility(site_Q, freqs=freqs)[0]
+        return(site_Q)
+    
+    def calc_sites_GTR_mut_matrices(self, sites_stat_freqs=None,
+                                    exchange_rates=None, site_mut_rates=None,
+                                    force_constant_leaving_rate=False):
+        if sites_stat_freqs is None:
+            sites_stat_freqs = [np.ones(alpha)
                                   for alpha in self.space.n_alleles]
         
         if exchange_rates is None:
-            exchange_rates = [np.full(int(comb(alpha, 2)), 1/comb(alpha, 2))
+            exchange_rates = [np.ones(int(comb(alpha, 2)))
                               for alpha in  self.space.n_alleles]
         
         if site_mut_rates is None:
             site_mut_rates = np.ones(self.space.seq_length)
         
         neutral_site_Qs = []
-        for freqs, ex_rates, site_mu in zip(neutral_stat_freqs, exchange_rates, site_mut_rates):
+        for freqs, ex_rates, site_mu in zip(sites_stat_freqs, exchange_rates, site_mut_rates):
+            n_alleles = freqs.shape[0]
+
+            # Normalize frequencies to make sure they add up to 1
+            freqs = freqs / freqs.sum()
+            site_mu = site_mu / site_mu.mean()
             
-            msg = 'Ensure that the exchangeability rates matrices are symmetric'
-            msg += 'to ensure neutral time reversible dynamics'
-            check_error(np.all(ex_rates == ex_rates.T), msg=msg)
+            # Calculate rate matrix
+            site_Q = self.calc_GTR_rate_matrix(freqs, ex_rates)
             
-            msg = 'Make sure that the neutral stationary rates sum to 1'
-            check_error(freqs.sum() == 1, msg=msg)
-            
-            msg = 'Make sure that all the exchangeability rates sum to 1: {}'.format(ex_rates)
-            check_error(np.allclose(ex_rates.sum(), 1), msg=msg)
-            
-            # Create site matrix from GTR model
-            D = get_sparse_diag_matrix(freqs).todense()
-            ex_rates_m = np.zeros((freqs.shape[0], freqs.shape[0]))
-            idxs = np.arange(freqs.shape[0])
-            for x, (i, j) in zip(ex_rates, combinations(idxs, 2)):
-                ex_rates_m[i, j] = x
-                ex_rates_m[j, i] = x
-            site_Q = np.dot(ex_rates_m, D)
-            site_Q[idxs, idxs] = -site_Q.sum(1).A1
-            
-            msg = 'Rows in the site rate matrix do not add up to 0: {}'.format(site_Q)
-            check_error(np.allclose(site_Q.sum(1), 0), msg=msg)
-            
-            msg = 'The neutral rates matrix is not time reversible'
-            eq_Q = D.dot(site_Q)
-            check_error(np.allclose(eq_Q, eq_Q.T), msg=msg)
-            scaling_factor = - 1 / np.diag(eq_Q).sum()
-            site_Q = scaling_factor * site_Q
-            
+            # Normalize to have a specific leaving rate at stationarity
+            eq_Q = self.calc_stationary_rate_matrix(site_Q, freqs)
+            leaving_rates = eq_Q.diagonal()
+            if force_constant_leaving_rate:
+                scaling_factor = - 1 / leaving_rates.sum()
+            else:
+                scaling_factor = - (n_alleles-1) / leaving_rates.sum()
+            site_Q = scaling_factor * site_Q * site_mu
             neutral_site_Qs.append(site_Q)
             
-            # Create symmetrix matrix to decompose and estimate mixing rates
-            r = np.sqrt(freqs)
-            m = get_sparse_diag_matrix(r).dot(csr_matrix(site_Q)).dot(get_sparse_diag_matrix(1/r))
-            m = (m + m.T) / 2
-            lambdas = eigsh(m, 2, v0=freqs, which='SM', tol=1e-5)[0]
-            if -lambdas[0] < neutral_mixing_rate:
-                neutral_mixing_rate = -lambdas[0]
-            
-        
         if len(neutral_site_Qs) == 1 and self.space.seq_length > 1:
             neutral_site_Qs = neutral_site_Qs * self.space.seq_length
         
-        self.neutral_mixing_rate = neutral_mixing_rate
-        print(neutral_mixing_rate)
         return(neutral_site_Qs)
+
+    def calc_neutral_stat_freqs(self, sites_stat_freqs):
+        if len(sites_stat_freqs) == 1:
+            return(sites_stat_freqs[0])
+        
+        site1 = sites_stat_freqs[0]
+        site2 = self.calc_neutral_stat_freqs(sites_stat_freqs[1:])
+        freqs = np.hstack([f * site2 for f in site1])
+        return(freqs)
+        
+    def calc_neutral_rate_matrix(self, sites_stat_freqs=None,
+                                 exchange_rates=None, site_mut_rates=None,
+                                 force_constant_leaving_rate=False):
+        sites_Q = self.calc_sites_GTR_mut_matrices(sites_stat_freqs=sites_stat_freqs,
+                                                   exchange_rates=exchange_rates,
+                                                   site_mut_rates=site_mut_rates,
+                                                   force_constant_leaving_rate=force_constant_leaving_rate)
+        for Q in sites_Q:
+            Q.setdiag(0)
+        
+        neutral_rate_matrix = calc_cartesian_product(sites_Q)
+        
+        # Re-scale to a given leaving rate at stationarity
+        leaving_rates = neutral_rate_matrix.sum(1).A1
+        neutral_rate_matrix.setdiag(-leaving_rates)
+        
+        if force_constant_leaving_rate:
+            scaling_factor = 1 / leaving_rates.sum()
+        else:
+            scaling_factor = (np.array(self.space.n_alleles)-1).sum() / leaving_rates.sum()
+        
+        neutral_rate_matrix = scaling_factor * neutral_rate_matrix
+        return(neutral_rate_matrix)
+        
+
+    def calc_neutral_mixing_rates(self, neutral_site_Qs=None,
+                                  neutral_stat_freqs=None, site_weights=None):
+        '''
+        Calculates the neutral mixing rates for a SequenceSpace
+        In case no GTR mutation model is specified, then the neutral
+        mixing rates is limited by the site with the least number of alleles.
+        Otherwise, as we assume that mutations are site-independent, 
+        the slowest neutral mixing rate is going to by limited by the slowest
+        site, provided by the smallest of second eigenvalues in the site
+        rate matrices
+                        
+        '''
+        if neutral_site_Qs is None:
+            neutral_mixing_rate = np.min(self.space.n_alleles)
+        else:
+            neutral_mixing_rate = np.inf
+            
+            for freqs, site_Q, site_w in zip(neutral_stat_freqs, neutral_site_Qs, site_weights):
+                r = np.sqrt(freqs)
+                m = get_sparse_diag_matrix(r).dot(csr_matrix(site_w*site_Q)).dot(get_sparse_diag_matrix(1/r))
+                m = (m + m.T) / 2
+                lambdas = eigsh(m, 2, v0=freqs, which='SM', tol=1e-5)[0]
+                if -lambdas[0] < neutral_mixing_rate:
+                    neutral_mixing_rate = -lambdas[0]
+        return(neutral_mixing_rate)
     
     def _calc_delta_function(self, rows, cols):
         return(self.space.function[cols] - self.space.function[rows])
@@ -304,3 +366,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
         rate_matrix, sandwich_rate_m = self._ensure_time_reversibility(rate_matrix, tol=tol)
         self.rate_matrix = rate_matrix
         self.sandwich_rate_matrix = sandwich_rate_m
+    
+    def calc_stationary_rate_matrix(self, rate_matrix, freqs):
+        D = get_sparse_diag_matrix(freqs)
+        return(D.dot(rate_matrix))

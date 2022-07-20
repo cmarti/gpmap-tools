@@ -30,32 +30,72 @@ class RandomWalkTests(unittest.TestCase):
         mc.set_Ns(mean_function_perc=80)
         assert(np.isclose(mc.Ns, 0.59174))
     
-    def test_calc_neutral_rates(self):
+    def calc_neutral_stat_freqs(self):
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        
+        sites_stat_freqs = [np.array([0.4, 0.6]), np.array([0.3, 0.7])]
+        freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
+        assert(np.allclose(freqs, [0.12, 0.28, 0.18, 0.42]))
+    
+    def test_calc_sites_mut_rates(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
         mc.set_Ns(1)
         
         # Ensure uniform neutral dynamics by default
-        sites_neutral_Q = mc.calc_neutral_rates()
+        sites_neutral_Q = mc.calc_sites_GTR_mut_matrices()
         assert(len(sites_neutral_Q) == 3)
         
         for Q in sites_neutral_Q:
             for i, j in product(np.arange(Q.shape[0]), repeat=2):
                 if i == j:
-                    assert(Q[i, j] == -1)
+                    assert(Q[i, j] == -Q.shape[0]+1)
                 else:
-                    assert(Q[i, j] == 1 / (Q.shape[0]-1))
+                    assert(Q[i, j] == 1)
             
         # Test with a single stationary frequency vector
-        neutral_stat_freqs = [np.array([0.4, 0.2, 0.1, 0.3])]
-        D = get_sparse_diag_matrix(neutral_stat_freqs[0]).todense()
-        sites_neutral_Q = mc.calc_neutral_rates(neutral_stat_freqs=neutral_stat_freqs)
+        sites_stat_freqs = [np.array([0.4, 0.2, 0.1, 0.3])]
+        D = get_sparse_diag_matrix(sites_stat_freqs[0])
+        sites_neutral_Q = mc.calc_sites_GTR_mut_matrices(sites_stat_freqs=sites_stat_freqs)
         for Q in sites_neutral_Q:
             eq_Q = D.dot(Q)
-            assert(np.allclose(eq_Q, eq_Q.T))
             
-        # Test in neutral rate matrix that the average leaving rate at 
-        # stationarity is 1
+            # Test that rows sum to 0
+            assert(np.allclose(Q.sum(1), 0))
+            
+            # Test time-reversibility
+            assert(np.allclose((eq_Q-eq_Q.T).todense().A1, 0))
+            
+            # Test time units in expected number of mutations per site
+            assert(np.allclose(eq_Q.diagonal().sum(), -3))
         
+        # Force sites to have the same leaving rate: 1
+        sites_stat_freqs = [np.array([0.4, 0.2, 0.1, 0.3])]
+        D = get_sparse_diag_matrix(sites_stat_freqs[0])
+        sites_neutral_Q = mc.calc_sites_GTR_mut_matrices(sites_stat_freqs=sites_stat_freqs,
+                                                         force_constant_leaving_rate=True)
+        for Q in sites_neutral_Q:
+            eq_Q = D.dot(Q)
+            
+            # Test time units in expected number of mutations per site
+            assert(np.allclose(eq_Q.diagonal().sum(), -1))
+    
+    def test_calc_neutral_rate_matrix(self):
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+
+        # Uniform mutation rates
+        neutral_rate_matrix = mc.calc_neutral_rate_matrix()
+        assert(np.allclose(neutral_rate_matrix.diagonal(), -9/64))
+        assert(np.allclose(neutral_rate_matrix.sum(1), 0))
+        
+        neutral_rate_matrix = mc.calc_neutral_rate_matrix(force_constant_leaving_rate=True)
+        assert(np.allclose(neutral_rate_matrix.diagonal(), -1/64))
+        assert(np.allclose(neutral_rate_matrix.sum(1), 0))
+
+        # Variable rates
+        sites_stat_freqs = [np.array([0.4, 0.2, 0.1, 0.3])]
+        neutral_rate_matrix = mc.calc_neutral_rate_matrix(sites_stat_freqs=sites_stat_freqs)
+        assert(np.allclose(neutral_rate_matrix.diagonal().sum(), -9))
+        assert(np.allclose(neutral_rate_matrix.sum(1), 0))
     
     def test_stationary_frequencies(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
@@ -190,5 +230,5 @@ class RandomWalkTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests.test_calc_neutral_rates']
+    sys.argv = ['', 'RandomWalkTests']
     unittest.main()
