@@ -124,7 +124,7 @@ class RandomWalkTests(unittest.TestCase):
         # Ensure calculation with uniform frequencies
         mc.stationary_freqs = np.ones(mc.space.n_states) / mc.space.n_states
         mean_function = mc.calc_stationary_mean_function()
-        assert(np.allclose(mean_function, mc.space.function.mean()))
+        assert(np.allclose(mean_function, mc.space.y.mean()))
     
     def test_calc_visualization(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))

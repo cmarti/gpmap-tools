@@ -439,7 +439,7 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
                    edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
                    sort_nodes=True, ascending=False, sort_by=None,
                    fontsize=12, x='1', y='2'):
-    f = rw.space.function
+    f = rw.space.y
     if fmin is None:
         fmin = f.mean() + 0.05 * (f.max() - f.mean())
     if fmax is None:

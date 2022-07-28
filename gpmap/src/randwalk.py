@@ -86,7 +86,7 @@ class TimeReversibleRandomWalk(RandomWalk):
         self.nodes_df = pd.DataFrame(scaling_factors.dot(self.right_eigenvectors[:, 1:].T).T,
                                      index=self.space.state_labels,
                                      columns=np.arange(1, self.n_components).astype(str))
-        self.nodes_df['function'] = self.space.function
+        self.nodes_df['function'] = self.space.y
         self.nodes_df['stationary_freq'] = self.stationary_freqs
         
     def calc_relaxation_times(self):
@@ -278,10 +278,10 @@ class WMWSWalk(TimeReversibleRandomWalk):
         return(neutral_mixing_rate)
     
     def _calc_delta_function(self, rows, cols):
-        return(self.space.function[cols] - self.space.function[rows])
+        return(self.space.y[cols] - self.space.y[rows])
     
     def _calc_stationary_frequencies(self, Ns):
-        log_phi = Ns * self.space.function
+        log_phi = Ns * self.space.y
         log_total = logsumexp(log_phi)
         log_stationary_freqs = log_phi - log_total
         return(np.exp(log_stationary_freqs))
@@ -299,7 +299,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
     def calc_stationary_mean_function(self):
         check_error(hasattr(self, 'stationary_freqs'),
                     'Calculate the stationary frequencies first')
-        self.fmean = np.sum(self.space.function * self.stationary_freqs)
+        self.fmean = np.sum(self.space.y * self.stationary_freqs)
         return(self.fmean)
     
     def set_Ns(self, Ns=None, mean_function=None, mean_function_perc=None,
@@ -309,7 +309,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
             return(Ns)
         
         if mean_function_perc is not None:
-            mean_function = np.percentile(self.space.function, mean_function_perc)
+            mean_function = np.percentile(self.space.y, mean_function_perc)
         elif mean_function is None:
             msg = 'Either stationary_function or percentile must be provided'
             raise ValueError(msg)
@@ -317,7 +317,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
         msg = 'Optimizing Ns to reach a stationary state with mean(f)={}'
         self.report(msg.format(mean_function))
         
-        function = self.space.function
+        function = self.space.y
         def calc_stationary_function_error(logNs):
             freqs = self._calc_stationary_frequencies(np.exp(logNs))
             x = np.sum(function * freqs)
