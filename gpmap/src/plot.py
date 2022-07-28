@@ -135,7 +135,8 @@ def get_axis_lims(nodes_df, x, y, z=None):
 
 
 def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
-               color='function', size=2.5, cmap='viridis', cbar=True, palette='Set1',
+               color='function', size=2.5, cmap='viridis',
+               cbar=True, cbar_axes=None, palette='Set1',
                alpha=1, zorder=2, max_size=40, min_size=1,
                edgecolor='black', lw=0,
                label=None, clabel='Function',
@@ -195,7 +196,10 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                           vmax=vmax, vmin=vmin, norm=norm)
     
     if add_cbar and cbar:
-        plt.colorbar(sc, ax=axes, fraction=0.1, pad=0.02).set_label(label=clabel, fontsize=fontsize)
+        if cbar_axes is None:
+            plt.colorbar(sc, ax=axes, fraction=0.1, pad=0.02).set_label(label=clabel, fontsize=fontsize)
+        else:
+            plt.colorbar(sc, cax=cbar_axes, fraction=0.1, pad=0.02).set_label(label=clabel, fontsize=fontsize)
     if add_legend:
         create_patches_legend(axes, palette, loc=legendloc, fontsize=fontsize)
         
@@ -222,7 +226,7 @@ def highlight_genotype_groups(axes, nodes_df, genotype_groups,
 
 def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
                        nodes_color='function', nodes_size=2.5, nodes_cmap='viridis',
-                       cbar=True, palette=None, nodes_alpha=1,
+                       cbar=True, cbar_axes=None, palette=None, nodes_alpha=1,
                        nodes_min_size=1, nodes_max_size=40,
                        nodes_edgecolor='black', nodes_lw=0, 
                        nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
@@ -236,7 +240,8 @@ def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
         nodes_df = minimize_nodes_distance(nodes_df, prev_nodes_df, axis)
     
     plot_nodes(axes, nodes_df=nodes_df, x=x, y=y, z=z,
-               color=nodes_color, size=nodes_size, cmap=nodes_cmap, cbar=cbar,
+               color=nodes_color, size=nodes_size, cmap=nodes_cmap,
+               cbar=cbar, cbar_axes=cbar_axes,
                palette=palette, alpha=nodes_alpha, zorder=2,
                max_size=nodes_max_size, min_size=nodes_min_size,
                edgecolor=nodes_edgecolor, lw=nodes_lw,
@@ -443,17 +448,21 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
     mean_fs = np.linspace(fmin, fmax, ncol*nrow)
     
     fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7)
+    fig.subplots_adjust(right=0.90)
+    cbar_axes = fig.add_axes([0.92, 0.15, 0.02, 0.7])
     subplots = subplots.flatten()
     
     prev_nodes_df = None
     xmin, xmax, ymin, ymax = None, None, None, None
     for i, (mean_function, axes) in enumerate(zip(mean_fs, subplots)):
         rw.calc_visualization(mean_function=mean_function, n_components=3, eig_tol=0.01)
+        is_last_plot = i == mean_fs.shape[0] - 1
         
         edges_df = None if not show_edges else rw.space.get_edges_df()
         plot_visualization(axes, rw.nodes_df, edges_df=edges_df, x=x, y=y,
                            nodes_color=nodes_color, nodes_size=nodes_size,
                            nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
+                           cbar=is_last_plot, cbar_axes=cbar_axes if is_last_plot else None, 
                            nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
                            nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
                            nodes_cmap_label=nodes_cmap_label if (i+1) % ncol == 0 else None,
@@ -492,7 +501,7 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
     for axes in subplots:
         axes.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
     
-    savefig(fig, fpath)
+    savefig(fig, fpath, tight=False)
 
 
 def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',

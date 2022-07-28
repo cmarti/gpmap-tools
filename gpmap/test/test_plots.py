@@ -13,8 +13,11 @@ from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             figure_allele_grid_datashader, plot_nodes,
                             plot_edges, savefig, init_fig, figure_visualization,
                             figure_allele_grid, save_holoviews,
-                            plot_relaxation_times, plot_interactive)
+                            plot_relaxation_times, plot_interactive,
+    figure_Ns_grid)
 from gpmap.src.genotypes import select_genotypes
+from gpmap.src.randwalk import WMWSWalk
+from gpmap.src.space import CodonSpace
         
 
 class PlottingTests(unittest.TestCase):
@@ -106,10 +109,13 @@ class PlottingTests(unittest.TestCase):
         plot_fpath = join(TEST_DATA_DIR, 'serine.plot.alleles')
         nodes_df = pd.read_csv(nodes_fpath, index_col=0)
         edges_df = pd.read_csv(edges_fpath)
+
+        # Test with all alleles per site
+        figure_allele_grid(nodes_df, fpath=plot_fpath, edges_df=edges_df, x='1', y='2')
         
+        # Test with different number of alleles per site
         genotypes = np.array([seq[-3] != 'C' for seq in nodes_df.index])
         nodes_df, edges_df = select_genotypes(nodes_df, genotypes, edges=edges_df)
-        
         figure_allele_grid(nodes_df, fpath=plot_fpath, edges_df=edges_df, x='1', y='2')
         
     def test_datashader_alleles_variable_sites(self):  
@@ -143,6 +149,11 @@ class PlottingTests(unittest.TestCase):
         plot_nodes(axes, nodes_df, color='white', size='function', lw=0.2, vcenter=0)
         plot_edges(axes, nodes_df, edges_df)
         savefig(fig, plot_fpath)
+    
+    def test_Ns_grid(self):
+        rw = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        fpath = join(TEST_DATA_DIR, 'serine.Ns')
+        figure_Ns_grid(rw, fpath)
     
     def test_figure_visualization(self):
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
