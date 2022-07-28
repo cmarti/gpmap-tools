@@ -28,7 +28,7 @@ class DiscreteSpace(object):
         states. The ij'th entry contains a 1 if the states `i` and `j`
         are connected and 0 otherwise
     
-    function: array-like of shape (n_states,)
+    y: array-like of shape (n_states,)
         Quantitative property associated to each state
     
     state_labels: array-like of shape (n_genotypes, )
@@ -53,8 +53,8 @@ class DiscreteSpace(object):
         
     '''
     
-    def __init__(self, adjacency_matrix, function=None, state_labels=None):
-        self.init_space(adjacency_matrix, function=function, state_labels=state_labels)
+    def __init__(self, adjacency_matrix, y=None, state_labels=None):
+        self.init_space(adjacency_matrix, y=y, state_labels=state_labels)
     
     @property
     def is_regular(self):
@@ -80,15 +80,15 @@ class DiscreteSpace(object):
         check_error(self.adjacency_matrix.shape[0] == self.state_labels.shape[0],
                     msg='Size of adjacency_matrix and state_labels does not match')
     
-    def _check_function(self):
-        check_error(self.function.shape[0] == self.state_labels.shape[0],
-                    msg='Size of adjacency_matrix and function does not match')
+    def _check_y(self):
+        check_error(self.y.shape[0] == self.state_labels.shape[0],
+                    msg='Size of adjacency_matrix and y does not match')
     
-    def set_function(self, function):
-        self.function = function
-        self._check_function()
+    def set_y(self, y):
+        self.y = y
+        self._check_y()
     
-    def init_space(self, adjacency_matrix, function=None, state_labels=None):
+    def init_space(self, adjacency_matrix, y=None, state_labels=None):
         # State labels
         state_idxs = np.arange(adjacency_matrix.shape[0])
         if state_labels is None:
@@ -105,10 +105,10 @@ class DiscreteSpace(object):
         self._check_attributes()
         
         # Function
-        if function is not None:
-            if not isinstance(function, np.ndarray):
-                function = np.array(function)
-            self.set_function(function)
+        if y is not None:
+            if not isinstance(y, np.ndarray):
+                y = np.array(y)
+            self.set_y(y)
     
     def get_state_idxs(self, states):
         return(self.state_idxs.loc[states])
@@ -146,19 +146,27 @@ class DiscreteSpace(object):
         edges_df.to_csv(fpath, index=False)
     
     def write_csv(self, fpath):
-        df = pd.DataFrame({'function': self.function}, 
+        df = pd.DataFrame({'y': self.y}, 
                           index=self.state_labels)
         df.to_csv(fpath)
     
     
 class SequenceSpace(DiscreteSpace):
     '''
+    Class for creating a Sequence space characterized by having sequences as
+    states. States are connected in the discrete space if they differ by a 
+    single position in the sequence. It can be created in two different ways:
+    
+        - From a set of sequences and function values X, y
+        - By specifying the properties of the sequence space (alphabet,
+          sequence length, number of alleles per site and type of alphabet)
+    
     Parameters
     ----------
     X: array-like of shape (n_genotypes,)
         Sequences to use as state labels of the discrete sequence space
     
-    function: array-like of shape (n_genotypes,)
+    y: array-like of shape (n_genotypes,)
         Quantitative phenotype or fitness associated to each genotype
     
     seq_length: int (None)
@@ -192,7 +200,7 @@ class SequenceSpace(DiscreteSpace):
         genotypes. The ij'th entry contains a 1 if the genotypes `i` and `j`
         are separated by a single mutation and 0 otherwise
     
-    function: array-like of shape (n_genotypes,)
+    y: array-like of shape (n_genotypes,)
         Quantitative phenotype or fitness associated to each genotype
         
     is_regular: bool
@@ -205,16 +213,22 @@ class SequenceSpace(DiscreteSpace):
     
     
     '''
-    def __init__(self, seq_length=None, n_alleles=None,
-                 alphabet_type='dna', alphabet=None, function=None,
-                 use_codon_model=False, codon_table=None, stop_function=-10):
-        self._init(seq_length=seq_length, n_alleles=n_alleles, 
-                   alphabet_type=alphabet_type, alphabet=alphabet,
-                   function=function)
+    def __init__(self, X=None, y=None, seq_length=None, n_alleles=None,
+                 alphabet_type='dna', alphabet=None):
+        
+        self._init(X=X, y=y, seq_length=seq_length, n_alleles=n_alleles, 
+                   alphabet_type=alphabet_type, alphabet=alphabet)
     
-    def _init(self, seq_length=None, n_alleles=None,
-              alphabet_type='dna', alphabet=None,
-              function=None):
+    def _init(self, X=None, y=None,
+              seq_length=None, n_alleles=None,
+              alphabet_type='dna', alphabet=None):
+        
+        if X is not None and y is not None:
+            config = guess_space_configuration(X, ensure_full_space=True)
+            seq_length = config['length']
+            alphabet = config['alphabet']
+            alphabet_type = 'custom'
+            y = pd.Series(y, index=X)
         
         self.set_seq_length(seq_length, n_alleles, alphabet)
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles,
@@ -228,8 +242,10 @@ class SequenceSpace(DiscreteSpace):
         state_labels = self.get_genotypes()
         self.init_space(adjacency_matrix, state_labels=state_labels)
         
-        if function is not None:
-            self.set_function(function)
+        if y is not None:
+            if X is None:
+                X = self.genotypes
+            self.set_y(X, y)
     
     @property
     def is_regular(self):
@@ -243,14 +259,14 @@ class SequenceSpace(DiscreteSpace):
     def genotypes(self):
         return(self.state_labels)
     
-    def set_function(self, function):
-        if isinstance(function, pd.Series):
-            function = function.values
+    def set_y(self, X, y):
+        y = pd.Series(y, index=X)
+        y = y.reindex(self.genotypes).values
             
-        self.function = function
-        self._check_function()
+        self.y = y
+        self._check_y()
         
-    def to_nucleotide_space(self, codon_table='Standard', stop_function=None,
+    def to_nucleotide_space(self, codon_table='Standard', stop_y=None,
                             alphabet_type='dna'):
         '''
         Transforms a protein space into a nucleotide space using a codon table
@@ -262,7 +278,7 @@ class SequenceSpace(DiscreteSpace):
             NCBI code for an existing genetic code or a custom CodonTable 
             object to translate nucleotide sequences into protein
         
-        stop_function: float (None)
+        stop_y: float (None)
             Value of the function given for every nucleotide sequence with an
             in-frame stop codon. If 'None', it will use the minimum
             value found across of the sequences, assumed to be equal to a 
@@ -294,11 +310,11 @@ class SequenceSpace(DiscreteSpace):
         prot = pd.Series(translate_seqs(nc_space.genotypes, codon_table),
                          index=nc_space.genotypes)
 
-        if stop_function is None:
-            stop_function = self.function.min()
-        function = pd.Series(self.function, index=self.genotypes)
-        function = function.reindex(prot).fillna(stop_function).values
-        nc_space.set_function(function)
+        if stop_y is None:
+            stop_y = self.y.min()
+        y = pd.Series(self.y, index=self.genotypes)
+        y = y.reindex(prot).fillna(stop_y).values
+        nc_space.set_y(nc_space.genotypes, y)
         return(nc_space)
     
     def remove_codon_incompatible_transitions(self, codon_table='Standard'):
@@ -442,27 +458,27 @@ def CodonSpace(allowed_aminoacids, codon_table='Standard',
     if not isinstance(allowed_aminoacids, np.ndarray):
         allowed_aminoacids = np.array(allowed_aminoacids)
     
-    function = pd.Series(np.ones(20), index=PROTEIN_ALPHABET)
-    function.loc[allowed_aminoacids] = 2
+    y = pd.Series(np.ones(20), index=PROTEIN_ALPHABET)
+    y.loc[allowed_aminoacids] = 2
     
-    prot_space = SequenceSpace(seq_length=1, alphabet_type='protein', function=function)
-    nuc_space = prot_space.to_nucleotide_space(codon_table=codon_table, stop_function=0)
+    prot_space = SequenceSpace(seq_length=1, alphabet_type='protein', y=y)
+    nuc_space = prot_space.to_nucleotide_space(codon_table=codon_table, stop_y=0)
     
     if add_variation:
         if seed is not None:
             np.random.seed(seed)
-        nuc_space.function += 1 / 10 * np.random.normal(size=nuc_space.n_genotypes)
+        nuc_space.y += 1 / 10 * np.random.normal(size=nuc_space.n_genotypes)
     return(nuc_space)
 
 
-def read_sequence_space_csv(fpath, function_col, seq_col=0, sort_seqs=True):
+def read_sequence_space_csv(fpath, y_col, seq_col=0, sort_seqs=True):
     df = pd.read_csv(fpath, index_col=seq_col)
     if sort_seqs:
         df.sort_index(inplace=True)
     
-    function = df[function_col].values
+    y = df[y_col].values
     seqs = df.index.values
     config = guess_space_configuration(seqs, ensure_full_space=True)
-    space = SequenceSpace(alphabet=config['alphabet'], function=function,
+    space = SequenceSpace(alphabet=config['alphabet'], y=y,
                           alphabet_type='custom')
     return(space)

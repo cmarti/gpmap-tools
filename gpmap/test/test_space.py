@@ -38,10 +38,10 @@ class SpaceTests(unittest.TestCase):
         adjacency_matrix = csr_matrix(np.array([[0, 1, 0],
                                                 [1, 0, 1],
                                                 [0, 1, 0]]))
-        function = np.array([1, 0, 1])
+        y = np.array([1, 0, 1])
         space = DiscreteSpace(csr_matrix(adjacency_matrix),
-                              function=function)
-        assert(np.all(function == space.function))
+                              y=y)
+        assert(np.all(y == space.y))
     
     def test_discrete_space_line_function_error(self):
         adjacency_matrix = csr_matrix(np.array([[0, 1, 0],
@@ -51,7 +51,7 @@ class SpaceTests(unittest.TestCase):
                            np.array([0, 1, 1, 1])]
         for function in wrong_functions:
             try:
-                DiscreteSpace(csr_matrix(adjacency_matrix), function=function)
+                DiscreteSpace(csr_matrix(adjacency_matrix), y=function)
                 self.fail('DiscreteSpace did not capture erroneous function')
             except ValueError:
                 pass
@@ -128,30 +128,30 @@ class SpaceTests(unittest.TestCase):
         assert(s.n_states == 64)
         assert(s.state_labels[0] == 'AAA')
         codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
-        assert(np.all(s.state_labels[s.function > 1.5] == codons))
+        assert(np.all(s.state_labels[s.y > 1.5] == codons))
         
         s = CodonSpace(['K'], add_variation=True, seed=0)
-        assert(np.all(s.state_labels[s.function > 1.5] == ['AAA', 'AAG']))
+        assert(np.all(s.state_labels[s.y > 1.5] == ['AAA', 'AAG']))
         
     def test_n_alleles(self):
         s = SequenceSpace(seq_length=2, alphabet_type='dna')
         assert(s.n_alleles == [4, 4])
         
-        s = SequenceSpace(2, alphabet_type='protein')
+        s = SequenceSpace(seq_length=2, alphabet_type='protein')
         assert(s.n_alleles == [20, 20])
         
-        s = SequenceSpace(2, n_alleles=2, alphabet_type='custom')
+        s = SequenceSpace(seq_length=2, n_alleles=2, alphabet_type='custom')
         assert(s.n_alleles == [2, 2])
 
         # Raise error when n_alleles is specified for non custom alphabets        
         try:
-            s = SequenceSpace(2, n_alleles=4)
+            s = SequenceSpace(seq_length=2, n_alleles=4)
             self.fail()
         except ValueError:
             pass
         
         # Try variable number of alleles per site
-        s = SequenceSpace(4, n_alleles=[2, 4, 2, 2], alphabet_type='custom')
+        s = SequenceSpace(seq_length=4, n_alleles=[2, 4, 2, 2], alphabet_type='custom')
         assert(s.n_states == 32)
         assert(s.genotypes.shape[0] == 32)
     
@@ -190,18 +190,18 @@ class SpaceTests(unittest.TestCase):
         assert(np.all(A == expected_A))
     
     def test_adjacency_matrix(self):
-        s = SequenceSpace(1, alphabet_type='dna')
+        s = SequenceSpace(seq_length=1, alphabet_type='dna')
         A = s.adjacency_matrix.todense()
         assert(np.all(np.diag(A) == 0))
         assert(np.all(A + np.eye(4) == 1))
         
-        s = SequenceSpace(2, 2, alphabet_type='custom')
+        s = SequenceSpace(seq_length=2, n_alleles=2, alphabet_type='custom')
         A = s.adjacency_matrix.todense()
         assert(np.all(np.diag(A) == 0))
         assert(np.all(A + np.eye(4) + np.fliplr(np.eye(4)) == 1))
     
     def test_get_neighbors(self):
-        s = SequenceSpace(3, alphabet_type='rna')
+        s = SequenceSpace(seq_length=3, alphabet_type='rna')
         seq = 'AAA'
         
         seqs = s.get_neighbors(seq, max_distance=1)
@@ -219,22 +219,32 @@ class SpaceTests(unittest.TestCase):
         
         df = pd.read_csv(fpath, index_col=0)
         codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
-        assert(np.all(df[df['function'] > 1.5].index.values == codons))
+        assert(np.all(df[df['y'] > 1.5].index.values == codons))
     
-    def test_read_space(self):
+    def test_build_space_from_sequences(self):
         fpath = join(TEST_DATA_DIR, 'serine.csv')
-        s = read_sequence_space_csv(fpath, function_col='function')
-        
+        data = pd.read_csv(fpath, index_col=0)
         codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
-        assert(np.all(s.state_labels[s.function > 1.5] == codons))
+        
+        s = SequenceSpace(X=data.index.values, y=data['y'].values)
+        assert(np.all(s.state_labels[s.y > 1.5] == codons))
+
+        # Shuffle sequences before
+        labels = data.index.values.copy()
+        np.random.shuffle(labels)
+        data = data.loc[labels, :]
+        
+        s = SequenceSpace(X=data.index.values, y=data['y'].values)
+        assert(np.all(sorted(s.state_labels[s.y > 1.5]) == sorted(codons)))
+        
     
     def test_write_edges_npz(self):
-        s = SequenceSpace(seq_length=9, alphabet_type='dna')
+        s = SequenceSpace(seq_length=6, alphabet_type='dna')
         with NamedTemporaryFile('w') as fhand:
             s.write_edges_npz(fhand.name)
     
     def test_write_edges_csv(self):
-        s = SequenceSpace(seq_length=9, alphabet_type='dna')
+        s = SequenceSpace(seq_length=6, alphabet_type='dna')
         with NamedTemporaryFile('w') as fhand:
             s.write_edges_csv(fhand.name)
 
