@@ -111,8 +111,8 @@ class SpaceTests(unittest.TestCase):
     def test_protein_space_codon_restricted(self):
         alphabet = [['A', 'V'],
                     ['A', 'V', 'T']]
-        space = SequenceSpace(alphabet=alphabet, alphabet_type='custom',
-                              codon_table='Standard')
+        space = SequenceSpace(alphabet=alphabet, alphabet_type='custom')
+        space.remove_codon_incompatible_transitions(codon_table='Standard')
         assert(np.all(space.genotypes == ['AA', 'AV', 'AT', 'VA', 'VV', 'VT']))
         
         m = space.adjacency_matrix.tocsr()

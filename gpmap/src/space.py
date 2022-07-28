@@ -16,6 +16,7 @@ from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
+from build.lib.gpmap.src.seq import guess_alphabet_type
 
 
 class DiscreteSpace(object):
@@ -154,6 +155,12 @@ class SequenceSpace(DiscreteSpace):
     '''
     Parameters
     ----------
+    X: array-like of shape (n_genotypes,)
+        Sequences to use as state labels of the discrete sequence space
+    
+    function: array-like of shape (n_genotypes,)
+        Quantitative phenotype or fitness associated to each genotype
+    
     seq_length: int (None)
         Length of the sequences in the sequence space. If not given, it will be
         guessed from `alphabet` or `n_alleles`
@@ -171,23 +178,6 @@ class SequenceSpace(DiscreteSpace):
         alleles allowed in each site. Note that the number and type of alleles
         can be different for every site. It can only be specified for 
         `alphabet_type=custom`
-        
-    function: array-like of shape (n_genotypes,)
-        Quantitative phenotype or fitness associated to each genotype
-    
-    use_codon_model: bool (False)
-        If the provided space is a complete protein space and `use_codon_model`
-        option is `True`, then an extended nucleotide space will be created
-        based on the provided genetic code with `codon_table`.
-        
-    codon_table: str or Bio.Data.CodonTable
-        NCBI code for an existing genetic code or a custom CodonTable 
-        object to translate nucleotide sequences into protein
-    
-    stop_function: float (-10)
-        Value of the function given for every nucleotide sequence with an
-        in-frame stop codon
-    
     
     Attributes
     ----------
@@ -220,41 +210,26 @@ class SequenceSpace(DiscreteSpace):
                  use_codon_model=False, codon_table=None, stop_function=-10):
         self._init(seq_length=seq_length, n_alleles=n_alleles, 
                    alphabet_type=alphabet_type, alphabet=alphabet,
-                   function=function, use_codon_model=use_codon_model, 
-                   codon_table=codon_table, stop_function=stop_function)
+                   function=function)
     
     def _init(self, seq_length=None, n_alleles=None,
               alphabet_type='dna', alphabet=None,
-              function=None, use_codon_model=False,
-              codon_table=None, stop_function=-10):
-        
-        if use_codon_model:
-            seq_length = seq_length * 3
-            alphabet_type = 'dna'
+              function=None):
         
         self.set_seq_length(seq_length, n_alleles, alphabet)
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles,
                                alphabet=alphabet)
-        self.use_codon_model = use_codon_model
         self.n_states = np.prod(self.n_alleles)
         
-        # Check number of states to avoid memory problems with very big 
-        # landscapes before building the adjacency matrix
         msg='Sequence space is too big to handle ({})'.format(self.n_states)
         check_error(self.n_states <= MAX_STATES, msg=msg)
         
-        if use_codon_model:
-            adjacency_matrix = self.calc_adjacency_matrix()
-        else:
-            adjacency_matrix = self.calc_adjacency_matrix(codon_table=codon_table)
-            
+        adjacency_matrix = self.calc_adjacency_matrix()
         state_labels = self.get_genotypes()
         self.init_space(adjacency_matrix, state_labels=state_labels)
         
         if function is not None:
-            self.set_function(function, use_codon_model=use_codon_model,
-                              codon_table=codon_table,
-                              stop_function=stop_function)
+            self.set_function(function)
     
     @property
     def is_regular(self):
@@ -268,25 +243,80 @@ class SequenceSpace(DiscreteSpace):
     def genotypes(self):
         return(self.state_labels)
     
-    def set_function(self, function, use_codon_model=False,
-                     codon_table=None, stop_function=-10):
-        if use_codon_model:
-            # Check errors
-            msg = 'Only 3n-long sequences can be translated'
-            check_error(self.seq_length % 3 == 0, msg)
-            msg = 'codon_table should be provided for translating sequences'
-            check_error(codon_table is not None, msg)
-            
-            # Translate and transfer function to codon space
-            prot = pd.Series(translate_seqs(self.genotypes, codon_table),
-                             index=self.state_labels)
-            function = function.reindex(prot).fillna(stop_function).values
-        elif isinstance(function, pd.Series):
+    def set_function(self, function):
+        if isinstance(function, pd.Series):
             function = function.values
             
         self.function = function
         self._check_function()
+        
+    def to_nucleotide_space(self, codon_table='Standard', stop_function=None,
+                            alphabet_type='dna'):
+        '''
+        Transforms a protein space into a nucleotide space using a codon table
+        for translating the sequence
+        
+        Parameters
+        ----------
+        codon_table: str or Bio.Data.CodonTable
+            NCBI code for an existing genetic code or a custom CodonTable 
+            object to translate nucleotide sequences into protein
+        
+        stop_function: float (None)
+            Value of the function given for every nucleotide sequence with an
+            in-frame stop codon. If 'None', it will use the minimum
+            value found across of the sequences, assumed to be equal to a 
+            complete loss of function
+        
+        alphabet_type: str ('dna')
+            Sequence type to use in the resulting nucleotide space
+            It can only take one of the following values {'dna', 'rna'}
+        
+        Returns
+        -------
+        SequenceSpace
+            Nucleotide sequence space with 4 alleles per site and 3 times 
+            the number of sites of the current space
+        '''
+        
+        
+        msg = 'Only protein spaces can be transformed to nucleotide space'
+        msg += ' through a codon model: {} not allowed'.format(self.alphabet_type)
+        check_error(self.alphabet_type == 'protein', msg)
+        
+        msg = '`alphabet_type` must be one of ["dna", "rna"]'
+        check_error(alphabet_type in ['dna', 'rna'], msg)
+            
+        
+        
+        nc_space = SequenceSpace(seq_length=3*self.seq_length,
+                                 alphabet_type=alphabet_type)
+        prot = pd.Series(translate_seqs(nc_space.genotypes, codon_table),
+                         index=nc_space.genotypes)
+
+        if stop_function is None:
+            stop_function = self.function.min()
+        function = pd.Series(self.function, index=self.genotypes)
+        function = function.reindex(prot).fillna(stop_function).values
+        nc_space.set_function(function)
+        return(nc_space)
     
+    def remove_codon_incompatible_transitions(self, codon_table='Standard'):
+        '''
+        Recalculates the adjacency matrix of the discrete space to only allow
+        transitions that are compatible with the specified codon table
+        
+        Parameters
+        ----------
+        codon_table: str or Bio.Data.CodonTable
+            NCBI code for an existing genetic code or a custom CodonTable 
+            object to translate nucleotide sequences into protein
+
+        '''
+        msg = 'alphabet must be at least a subset of the protein alphabet'
+        check_error(guess_alphabet_type(self.alphabet) == 'protein', msg)
+        self.adjacency_matrix = self.calc_adjacency_matrix(codon_table=codon_table)
+        
     def calc_transitions(self, codon_table):
         seqs = [''.join(x) for x in product(DNA_ALPHABET, repeat=3)]
         
@@ -403,25 +433,26 @@ class SequenceSpace(DiscreteSpace):
         return(np.array([x for x in self._get_seqs_from_alleles(self.alphabet)]))
         
     
-class CodonSpace(SequenceSpace):
-    def __init__(self, allowed_aminoacids, codon_table='Standard',
-                 add_variation=False, seed=None):
-        if isinstance(allowed_aminoacids, str):
-            allowed_aminoacids = np.array([allowed_aminoacids])
-        
-        if not isinstance(allowed_aminoacids, np.ndarray):
-            allowed_aminoacids = np.array(allowed_aminoacids)
-        
-        function = pd.Series(np.ones(20), index=PROTEIN_ALPHABET)
-        function.loc[allowed_aminoacids] = 2
-        
-        self._init(seq_length=1,
-                   function=function, use_codon_model=True,
-                   codon_table=codon_table, stop_function=0)
-        if add_variation:
-            if seed is not None:
-                np.random.seed(seed)
-            self.function += 1 / 10 * np.random.normal(size=self.n_states)
+def CodonSpace(allowed_aminoacids, codon_table='Standard',
+               add_variation=False, seed=None):
+    
+    if isinstance(allowed_aminoacids, str):
+        allowed_aminoacids = np.array([allowed_aminoacids])
+    
+    if not isinstance(allowed_aminoacids, np.ndarray):
+        allowed_aminoacids = np.array(allowed_aminoacids)
+    
+    function = pd.Series(np.ones(20), index=PROTEIN_ALPHABET)
+    function.loc[allowed_aminoacids] = 2
+    
+    prot_space = SequenceSpace(seq_length=1, alphabet_type='protein', function=function)
+    nuc_space = prot_space.to_nucleotide_space(codon_table=codon_table, stop_function=0)
+    
+    if add_variation:
+        if seed is not None:
+            np.random.seed(seed)
+        nuc_space.function += 1 / 10 * np.random.normal(size=nuc_space.n_genotypes)
+    return(nuc_space)
 
 
 def read_sequence_space_csv(fpath, function_col, seq_col=0, sort_seqs=True):
