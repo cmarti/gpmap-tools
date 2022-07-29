@@ -10,13 +10,13 @@ from scipy.sparse.csr import csr_matrix
 from scipy.sparse._matrix_io import save_npz
 from scipy.sparse.extract import triu
 
-from gpmap.src.seq import translate_seqs, guess_space_configuration
+from gpmap.src.seq import (translate_seqs, guess_space_configuration,
+                           guess_alphabet_type)
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_cartesian_product)
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
-from build.lib.gpmap.src.seq import guess_alphabet_type
 
 
 class DiscreteSpace(object):
@@ -184,8 +184,7 @@ class SequenceSpace(DiscreteSpace):
     alphabet: list of `seq_length' lists
         Every element of the list is itself a list containing the different
         alleles allowed in each site. Note that the number and type of alleles
-        can be different for every site. It can only be specified for 
-        `alphabet_type=custom`
+        can be different for every site.
     
     Attributes
     ----------
