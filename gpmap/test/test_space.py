@@ -236,7 +236,14 @@ class SpaceTests(unittest.TestCase):
         
         s = SequenceSpace(X=data.index.values, y=data['y'].values)
         assert(np.all(sorted(s.state_labels[s.y > 1.5]) == sorted(codons)))
+    
+    def test_to_codon_space(self):
+        fpath = join(TEST_DATA_DIR, 'serine.protein.csv')
+        data = pd.read_csv(fpath, index_col=0)
         
+        s = SequenceSpace(X=data.index.values, y=data['function'].values)
+        s = s.to_nucleotide_space(codon_table='Standard', stop_y=0)
+        assert(s.n_genotypes == 64)
     
     def test_write_edges_npz(self):
         s = SequenceSpace(seq_length=6, alphabet_type='dna')

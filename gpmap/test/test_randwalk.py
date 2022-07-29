@@ -162,8 +162,7 @@ class RandomWalkTests(unittest.TestCase):
         fpath = join(TEST_DATA_DIR, 'serine.csv')
         
         out_fpath = join(TEST_DATA_DIR, 'serine') 
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90',
-               '-A', 'rna', '-e']
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90', '-e']
         check_call(cmd)
         
         df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
@@ -178,8 +177,7 @@ class RandomWalkTests(unittest.TestCase):
         fpath = join(TEST_DATA_DIR, 'test.csv')
         
         out_fpath = join(TEST_DATA_DIR, 'test') 
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.5',
-               '-A', 'guess', '-e']
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.5', '-e']
         check_call(cmd)
     
     def test_calc_visualization_codon_restricted(self):
@@ -188,15 +186,14 @@ class RandomWalkTests(unittest.TestCase):
         
         # run with standard genetic code
         out_fpath = join(TEST_DATA_DIR, 'test') 
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65', '-e',
-               '-A', 'guess']
+        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65', '-e']
         check_call(cmd)
         edges1 = load_npz('{}.edges.npz'.format(out_fpath))
         
         # run with bacterial genetic code 11
         out_fpath = join(TEST_DATA_DIR, 'test.codon') 
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
-               '-e', '-c', '11', '-A', 'guess']
+               '-e', '-c', '11']
         check_call(cmd)
         
         df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
@@ -214,7 +211,7 @@ class RandomWalkTests(unittest.TestCase):
         # standard genetic code
         out_fpath = join(TEST_DATA_DIR, 'serine.codon')
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
-               '-e', '-C', '-A', 'dna', '-c', 'Standard']
+               '-e', '-C', '-c', 'Standard']
         check_call(cmd)
         nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
         assert(nodes.shape[0] == 64)
@@ -223,12 +220,12 @@ class RandomWalkTests(unittest.TestCase):
         out_fpath = join(TEST_DATA_DIR, 'serine.codon.custom')
         codon_fpath = join(TEST_DATA_DIR, 'code_6037.csv')
         cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
-               '-e', '-C', '-A', 'dna', '-c', codon_fpath]
+               '-e', '-C', '-c', codon_fpath]
         check_call(cmd)
         nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
         assert(nodes.shape[0] == 64)
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests']
+    sys.argv = ['', 'RandomWalkTests.test_calc_visualization_codon_bin']
     unittest.main()

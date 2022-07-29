@@ -226,8 +226,8 @@ class SequenceSpace(DiscreteSpace):
         if X is not None and y is not None:
             config = guess_space_configuration(X, ensure_full_space=True)
             seq_length = config['length']
+            alphabet_type = config['alphabet_type']
             alphabet = config['alphabet']
-            alphabet_type = 'custom'
             y = pd.Series(y, index=X)
         
         self.set_seq_length(seq_length, n_alleles, alphabet)
@@ -388,8 +388,12 @@ class SequenceSpace(DiscreteSpace):
         if alphabet is not None:
             msg = 'n_alleles cannot be specified when the alphabet is provided'
             check_error(n_alleles is None, msg=msg)
-            msg = 'alphabet can only be provided for alphabet_type="custom"'
-            check_error(alphabet_type == 'custom', msg=msg)
+            
+            if alphabet_type != 'custom':
+                atype = guess_alphabet_type(alphabet)
+                msg = 'The provided alphabet is not compatible with the'
+                msg += ' alphabet_type {}'.format(alphabet_type)
+                check_error(alphabet_type == atype, msg=msg)
             
         elif alphabet_type == 'custom':
             msg = 'n_alleles must be provided for alphabet_type="custom"'
