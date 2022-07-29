@@ -83,13 +83,13 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
         fig, axes = init_fig(1, 1, colsize=4, rowsize=3)
     
     axes.plot(decay_df['k'], decay_df['relaxation_time'],
-              linewidth=1, **kwargs)
+              linewidth=1, **kwargs, label='Selection')
     axes.scatter(decay_df['k'], decay_df['relaxation_time'],
                  s=15, **kwargs)
     xlims = axes.get_xlim()
     if neutral_time is not None:
         axes.plot(xlims, (neutral_time, neutral_time), lw=0.5, c='orange',
-                  linestyle='--', label='Neutral relaxation time')
+                  linestyle='--', label='Neutral')
     
     if log_scale:
         axes.set(yscale='log')
