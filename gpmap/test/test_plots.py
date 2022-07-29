@@ -251,7 +251,7 @@ class PlottingTests(unittest.TestCase):
         decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
         fpath = join(TEST_DATA_DIR, 'serine.decay_rates')
         df = pd.read_csv(decay_fpath)
-        plot_relaxation_times(df, fpath=fpath)
+        plot_relaxation_times(df, fpath=fpath, neutral_time=1/4)
     
     def test_plot_relaxation_times_bin(self):    
         bin_fpath = join(BIN_DIR, 'plot_relaxation_times.py')
