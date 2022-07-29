@@ -8,7 +8,7 @@ import pandas as pd
 from gpmap.src.utils import LogTrack
 from gpmap.src.space import SequenceSpace
 from gpmap.src.randwalk import WMWSWalk
-from gpmap.src.seq import guess_space_configuration, get_custom_codon_table
+from gpmap.src.seq import get_custom_codon_table
 
         
 def main():
@@ -23,18 +23,14 @@ def main():
     help_msg = 'CSV file with sequence-function map sorted by sequence'
     input_group.add_argument('input', help=help_msg)
 
-    options_group = parser.add_argument_group('Landscape options')
-    options_group.add_argument('-A', '--alphabet_type', default='guess',
-                               help='Alphabet type [guess, dna, rna, protein, custom] (guess)')
-    options_group.add_argument('-a', '--n_alleles', default=None, type=int,
-                               help='Number of alleles to use for custom alphabet')
-    
     coding_group = parser.add_argument_group('Coding options')
     coding_group.add_argument('-C', '--use_codon_model', default=False,
                               action='store_true',
                               help='Use codon model for visualization of protein landscape')
     help_msg = 'NCBI Codon table to use for equivalence (None) or '
-    help_msg += 'CSV file with codon-aa correspondance information'
+    help_msg += 'CSV file with codon-aa correspondance information. If provided'
+    help_msg += 'without -C option, it will restrict transitions in protein '
+    help_msg += 'sequences to those allowed by this codon table'
     coding_group.add_argument('-c', '--codon_table', default=None, help=help_msg)
     coding_group.add_argument('-sf', '--stop_f', default=-10, type=float,
                               help='Function for stop codons')
@@ -65,8 +61,6 @@ def main():
     # Parse arguments
     parsed_args = parser.parse_args()
     data_fpath = parsed_args.input
-    alphabet_type = parsed_args.alphabet_type
-    n_alleles = parsed_args.n_alleles
     
     n_components = parsed_args.n_components
     Ns = parsed_args.Ns
@@ -75,7 +69,7 @@ def main():
     
     use_codon_model = parsed_args.use_codon_model
     codon_table = parsed_args.codon_table
-    stop_function = parsed_args.stop_f
+    stop_y = parsed_args.stop_f
     
     out_fpath = parsed_args.output
     write_edges = parsed_args.edges
@@ -85,34 +79,29 @@ def main():
     log = LogTrack()
     log.write('Start analysis')
     data = pd.read_csv(data_fpath, index_col=0)
-    genotypes = data.index.values
-    seq_length = len(genotypes[0])
-
-    alphabet = None
-    if alphabet_type == 'guess':
-        config = guess_space_configuration(genotypes)
-        seq_length = config['length']
-        alphabet = config['alphabet']
-        alphabet_type = 'custom'
-        n_alleles = None
+    
+    # Build space
+    X, y = data.index.values, data.iloc[:, 0].values 
+    space = SequenceSpace(X=X, y=y)
         
-    # Select codon table if file is provided
-    if codon_table is not None and exists(codon_table):
-        aa_mapping = pd.read_csv(codon_table)
-        codon_table = get_custom_codon_table(aa_mapping)
+    # Transform to nucleotide space if required
+    if codon_table is not None:
+        if exists(codon_table):
+            aa_mapping = pd.read_csv(codon_table)
+            codon_table = get_custom_codon_table(aa_mapping)
+        
+        if use_codon_model:
+            space = space.to_nucleotide_space(codon_table, stop_y)
+        else:
+            space.remove_codon_incompatible_transitions(codon_table)
     
-    # Load annotation data
-    space = SequenceSpace(seq_length=seq_length, n_alleles=n_alleles,
-                          alphabet=alphabet, alphabet_type=alphabet_type,
-                          function=data.iloc[:, 0],
-                          use_codon_model=use_codon_model, 
-                          codon_table=codon_table, stop_function=stop_function)
-    
-    mc = WMWSWalk(space)
-    mc.calc_visualization(Ns=Ns, mean_function=mean_function,
+    # Create random walk and calculate coordinates
+    rw = WMWSWalk(space)
+    rw.calc_visualization(Ns=Ns, mean_function=mean_function,
                           mean_function_perc=mean_function_perc,
                           n_components=n_components)
-    mc.write_tables(out_fpath, write_edges=write_edges, edges_format=edges_format)
+    rw.write_tables(out_fpath, write_edges=write_edges,
+                    edges_format=edges_format)
     
     log.finish()
 
