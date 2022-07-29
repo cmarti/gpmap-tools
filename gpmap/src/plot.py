@@ -95,7 +95,7 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
         axes.set(yscale='log')
         
     axes.set(xlabel=r'Eigenvalue order $k$', 
-             ylabel=r'Relaxation time $\frac{-1}{\sqrt{\lambda_{k}}}$',
+             ylabel=r'Relaxation time $\frac{-1}{\lambda_{k}}$',
              xticks=decay_df['k'], xlim=xlims)
     
     if fig is not None:
