@@ -73,7 +73,7 @@ def create_patches_legend(axes, colors_dict, loc=1, **kwargs):
 
 
 def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
-                          kwargs={}):
+                          neutral_time=None, kwargs={}):
     if axes is None and fpath is None:
         msg = 'Either axes or fpath argument must be provided'
         raise ValueError(msg)
@@ -86,11 +86,17 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
               linewidth=1, **kwargs)
     axes.scatter(decay_df['k'], decay_df['relaxation_time'],
                  s=15, **kwargs)
+    xlims = axes.get_xlim()
+    if neutral_time is not None:
+        axes.plot(xlims, (neutral_time, neutral_time), lw=0.5, c='orange',
+                  linestyle='--')
+    
     if log_scale:
         axes.set(yscale='log')
+        
     axes.set(xlabel=r'Eigenvalue order $k$', 
              ylabel=r'Relaxation time $\frac{-1}{\sqrt{\lambda_{k}}}$',
-             xticks=decay_df['k'])
+             xticks=decay_df['k'], xlim=xlims)
     
     if fig is not None:
         savefig(fig, fpath)
