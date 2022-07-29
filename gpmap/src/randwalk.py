@@ -86,6 +86,10 @@ class TimeReversibleRandomWalk(RandomWalk):
         self.nodes_df = pd.DataFrame(scaling_factors.dot(self.right_eigenvectors[:, 1:].T).T,
                                      index=self.space.state_labels,
                                      columns=np.arange(1, self.n_components).astype(str))
+        for col in self.nodes_df.columns:
+            if self.nodes_df[col].mean() < 0:
+                self.nodes_df[col] = -self.nodes_df[col]
+        
         self.nodes_df['function'] = self.space.y
         self.nodes_df['stationary_freq'] = self.stationary_freqs
         
