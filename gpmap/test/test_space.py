@@ -4,8 +4,7 @@ import unittest
 import pandas as pd
 import numpy as np
 
-from gpmap.src.space import SequenceSpace, DiscreteSpace, CodonSpace,\
-    read_sequence_space_csv
+from gpmap.src.space import SequenceSpace, DiscreteSpace, CodonSpace
 from scipy.sparse.csr import csr_matrix
 from gpmap.src.settings import TEST_DATA_DIR
 from os.path import join
