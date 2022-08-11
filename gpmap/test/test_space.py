@@ -64,6 +64,14 @@ class SpaceTests(unittest.TestCase):
                 self.fail('DiscreteSpace did not capture erroneous function')
             except ValueError:
                 pass
+    
+    def test_seq_space_str(self):
+        space = SequenceSpace(seq_length=1, alphabet_type='protein')
+        expected_str = 'Sequence Space:\n\tType: protein\n\tSequence length: 1\n\t'
+        expected_str += 'Number of alleles per site: [20]\n\tGenotypes: '
+        expected_str += '[A,C,D,...,V,W,Y]\n\tFunction y: undefined'
+        assert(space.__str__() == expected_str)
+    
     def test_calc_transitions(self):
         space = SequenceSpace(seq_length=1, alphabet_type='protein')
         transitions = space.calc_transitions(codon_table='Standard')

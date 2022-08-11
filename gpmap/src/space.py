@@ -240,6 +240,18 @@ class SequenceSpace(DiscreteSpace):
         self._init(X=X, y=y, seq_length=seq_length, n_alleles=n_alleles, 
                    alphabet_type=alphabet_type, alphabet=alphabet)
     
+    def __str__(self):
+        s = 'Sequence Space:\n'
+        s += '\tType: {}\n'.format(self.alphabet_type)
+        s += '\tSequence length: {}\n'.format(self.seq_length)
+        s += '\tNumber of alleles per site: {}\n'.format(self.n_alleles)
+        s += '\tGenotypes: {}\n'.format(self.format_list_ends(self.genotypes))
+        if hasattr(self, 'y'):
+            s += '\tFunction y: {}'.format(self.format_list_ends(self.y))
+        else:
+            s += '\tFunction y: undefined'
+        return(s)
+    
     def _init(self, X=None, y=None,
               seq_length=None, n_alleles=None,
               alphabet_type='dna', alphabet=None):
