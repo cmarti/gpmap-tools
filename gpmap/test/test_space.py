@@ -32,6 +32,16 @@ class SpaceTests(unittest.TestCase):
         space = DiscreteSpace(csr_matrix(adjacency_matrix))
         assert(space.n_states == 3)
         assert(np.all(space.state_labels == ['0', '1', '2']))
+    
+    def test_discrete_space_str(self):
+        adjacency_matrix = csr_matrix(np.array([[0, 1, 0],
+                                                [1, 0, 1],
+                                                [0, 1, 0]]))
+        space = DiscreteSpace(csr_matrix(adjacency_matrix))
+        expected_str = 'Discrete Space:\n\tNumber of states: 3\n\tState labels: '
+        expected_str += '[0,1,2]\n\tStates function values: undefined\n\t'
+        expected_str += 'Number of edges: 4'
+        assert(space.__str__() == expected_str)
         
     def test_discrete_space_line_function(self):    
         adjacency_matrix = csr_matrix(np.array([[0, 1, 0],

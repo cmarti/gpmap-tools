@@ -56,10 +56,32 @@ class DiscreteSpace(object):
     def __init__(self, adjacency_matrix, y=None, state_labels=None):
         self.init_space(adjacency_matrix, y=y, state_labels=state_labels)
     
+    def format_list_ends(self, values, k=3):
+        if values.shape[0] > 2*k:
+            v1 = [str(x) for x in values[:k]]
+            v2 = [str(x) for x in values[-k:]]
+            label = '[{},...,{}]'.format(','.join(v1), ','.join(v2))
+        else:
+            v = [str(x) for x in values]
+            label = '[{}]'.format(','.join(v))  
+        return(label)
+    
+    def __str__(self):
+        s = 'Discrete Space:\n\tNumber of states: {}\n'.format(self.n_states)
+        s += '\tState labels: {}\n'.format(self.format_list_ends(self.state_labels))
+        if hasattr(self, 'y'):
+            s += '\tStates function values: {}\n'.format(self.format_list_ends(self.y))
+        else:
+            s += '\tStates function values: undefined\n'
+        s += '\tNumber of edges: {}'.format(self.adjacency_matrix.sum().sum())
+        return(s)
+    
     @property
     def is_regular(self):
-        neighbors = np.unique(self.adjacency_matrix.sum(1))
-        return(neighbors.shape[0] == 1)
+        if not hasattr(self, '_is_regular'):
+            neighbors = np.unique(self.adjacency_matrix.sum(1))
+            self._is_regular = neighbors.shape[0] == 1
+        return(self._is_regular)
     
     def calc_laplacian(self):
         D = get_sparse_diag_matrix(self.adjacency_matrix.sum(1).A1.flatten())
