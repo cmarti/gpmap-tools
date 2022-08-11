@@ -56,13 +56,19 @@ class DiscreteSpace(object):
     def __init__(self, adjacency_matrix, y=None, state_labels=None):
         self.init_space(adjacency_matrix, y=y, state_labels=state_labels)
     
+    def format_values(self, values):
+        if values.dtype == float:
+            v = ['{:.2f}'.format(x) for x in values]
+        else:
+            v = ['{}'.format(x) for x in values] 
+        return(v)
+    
     def format_list_ends(self, values, k=3):
         if values.shape[0] > 2*k:
-            v1 = [str(x) for x in values[:k]]
-            v2 = [str(x) for x in values[-k:]]
+            v1, v2 = self.format_values(values[:k]), self.format_values(values[-k:])
             label = '[{},...,{}]'.format(','.join(v1), ','.join(v2))
         else:
-            v = [str(x) for x in values]
+            v = self.format_values(values)
             label = '[{}]'.format(','.join(v))  
         return(label)
     
