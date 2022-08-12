@@ -12,3 +12,4 @@ In this section the user can find several use cases in which we applied GPMAP-to
     usage/2_GB1.ipynb
     usage/3_ParD.ipynb
     usage/4_SeqDEFT.ipynb
+    usage/5_Codon.ipynb
