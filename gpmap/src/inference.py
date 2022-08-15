@@ -486,6 +486,10 @@ class VCregression(LandscapeEstimator):
     
         return np.array(post_vars)
     
+    def calc_eigenvalue_multiplicity(self):
+        self.lambdas_multiplicity = np.array([comb(self.length, k) * (self.n_alleles - 1) ** k
+                                              for k in range(self.length + 1)], dtype=int)
+    
     def lambdas_to_variance(self, lambdas):
         self.calc_eigenvalue_multiplicity()
         variance_components = (lambdas * self.lambdas_multiplicity)[1:]
