@@ -55,6 +55,8 @@ def main():
                            help='Resolution for datashader plotting of nodes (600)')
     fig_group.add_argument('-er', '--edges_resolution', default=1200, type=int,
                            help='Resolution for datashader plotting of edges (1200)')
+    fig_group.add_argument('-f', '--format', default='png',
+                           help='Figure format (png)')
     
     highlight_group = parser.add_argument_group('Highlight genotypes options')    
     help_msg = 'Comma separated list of IUPAC codes to highlight genotypes'
@@ -106,6 +108,7 @@ def main():
 
     alleles_grid = parsed_args.alleles
     
+    fmt = parsed_args.format
     out_fpath = parsed_args.output
     
     # Load data
@@ -125,14 +128,15 @@ def main():
             figure_allele_grid_datashader(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
                                           edges_cmap='grey', background_color='white',
                                           nodes_resolution=nodes_resolution,
-                                          edges_resolution=edges_resolution)
+                                          edges_resolution=edges_resolution,
+                                          fmt=fmt)
         else:
             dsg = plot_holoview(nodes_df, x=x, y=y, edges_df=edges_df,
                                 nodes_color=nodes_color, nodes_cmap=nodes_cmap,
                                 edges_cmap='grey', background_color='white',
                                 nodes_resolution=nodes_resolution,
                                 edges_resolution=edges_resolution)
-            save_holoviews(dsg, out_fpath)
+            save_holoviews(dsg, out_fpath, fmt=fmt)
     else:
         if alleles_grid:
             figure_allele_grid(nodes_df, edges_df=edges_df, fpath=out_fpath, x=x, y=y,
@@ -141,7 +145,8 @@ def main():
                                edges_width=edges_width,
                                autoscale_axis=False,
                                colsize=3, rowsize=2.7,
-                               xpos_label=0.05, ypos_label=0.92)
+                               xpos_label=0.05, ypos_label=0.92,
+                               fmt=fmt)
         else:
             figure_visualization(nodes_df, edges_df=edges_df,
                                  fpath=out_fpath, x=x, y=y, z=z, 
@@ -152,7 +157,7 @@ def main():
                                  sort_by=sort_by, ascending=ascending, sort_nodes=True,
                                  highlight_genotypes=genotypes,
                                  is_prot=is_prot, interactive=interactive,
-                                 alphabet_type=alphabet_type)
+                                 alphabet_type=alphabet_type, fmt=fmt)
     
     log.finish()
 

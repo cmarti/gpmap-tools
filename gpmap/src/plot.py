@@ -344,7 +344,7 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
                          highlight_genotypes=None, is_prot=False,
                          highlight_size=200, palette='colorblind',
                          figsize=None, unit_size=2, interactive=False, 
-                         alphabet_type=None):
+                         alphabet_type=None, fmt='png'):
     
     if nodes_size is None:
         nodes_size = 15 if z is None else 4 if interactive else 50
@@ -385,14 +385,15 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
                                       is_prot=is_prot, x=x, y=y, z=z,
                                       alphabet_type=alphabet_type,
                                       size=highlight_size, palette=palette)
-        savefig(fig, fpath)
+        savefig(fig, fpath, fmt=fmt)
 
 
 def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
                        allele_color='orange', background_color='lightgrey',
                        nodes_size=None, edges_color='grey', edges_width=0.5,
                        positions=None, position_labels=None, autoscale_axis=False,
-                       colsize=3, rowsize=2.7, xpos_label=0.05, ypos_label=0.92):
+                       colsize=3, rowsize=2.7, xpos_label=0.05, ypos_label=0.92,
+                       fmt='png'):
     
     config = guess_space_configuration(nodes_df.index.values)
     length, n_alleles = config['length'], np.max(config['n_alleles'])
@@ -433,7 +434,7 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
             except IndexError:
                 empty_axes(axes)
     
-    savefig(fig, fpath)
+    savefig(fig, fpath, fmt=fmt)
     
 
 def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
@@ -656,8 +657,8 @@ def save_holoviews(dsg, fpath, fmt='png'):
 def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
                                   positions=None, position_labels=None,
                                   edges_cmap='grey', background_color='white',
-                                  nodes_resolution=800, edges_resolution=1200):
-    
+                                  nodes_resolution=800, edges_resolution=1200,
+                                  fmt='png'):
     if edges_df is not None:
         edges = plot_edges_datashader(nodes_df, edges_df, x, y,
                                       cmap=edges_cmap,
@@ -712,7 +713,7 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
                 plots += dsg
     dsg = plots.cols(length)
     fig = hv.render(dsg)
-    savefig(fig, fpath, tight=False)
+    savefig(fig, fpath, tight=False, fmt=fmt)
 
 
 def plot_a_optimization(log_Ls, axes):
