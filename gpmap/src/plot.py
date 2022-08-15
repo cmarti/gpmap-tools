@@ -648,9 +648,9 @@ def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
     return(dsg)
 
 
-def save_holoviews(dsg, fpath):
+def save_holoviews(dsg, fpath, fmt='png'):
     fig = hv.render(dsg)
-    savefig(fig, fpath, tight=False)
+    savefig(fig, fpath, tight=False, fmt=fmt)
 
 
 def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
