@@ -99,6 +99,8 @@ class TimeReversibleRandomWalk(RandomWalk):
         k = np.arange(1, decay_rates.shape[0] + 1)
         self.decay_rates_df = pd.DataFrame({'k': k, 'decay_rates': decay_rates,
                                             'relaxation_time': relaxation_times})
+        # neutral_decay = pd.DataFrame({'k': 'neutral',
+        #                               'decay_rates': self.calc_neutral_mixing_rates()})
     
     def calc_visualization(self, Ns=None, mean_function=None, 
                            mean_function_perc=None, n_components=10,
