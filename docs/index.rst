@@ -16,7 +16,8 @@ GPMAP-tools is written for Python 3 and is provided under an MIT open source lic
     :caption: Table of Contents
 
     installation
-    usage 
+    usage
+    api 
 
 References
 ==========

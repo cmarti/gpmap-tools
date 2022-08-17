@@ -21,6 +21,10 @@ from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
 
 class DiscreteSpace(object):
     '''
+    Class to define an arbitrary discrete space characterized uniquely by the
+    connectivity between the different states and optionally by the function
+    e.g. fitness or energy at each state of the discrete space
+    
     Parameters
     ----------
     adjacency_matrix: scipy.sparse.csr_matrix of shape (n_states, n_states)
@@ -180,14 +184,14 @@ class DiscreteSpace(object):
     
     
 class SequenceSpace(DiscreteSpace):
-    '''
+    """
     Class for creating a Sequence space characterized by having sequences as
     states. States are connected in the discrete space if they differ by a 
     single position in the sequence. It can be created in two different ways:
     
         - From a set of sequences and function values X, y
         - By specifying the properties of the sequence space (alphabet,
-          sequence length, number of alleles per site and type of alphabet)
+          sequence length, number of alleles per site and type of alphabet).
     
     Parameters
     ----------
@@ -233,13 +237,9 @@ class SequenceSpace(DiscreteSpace):
     is_regular: bool
         Boolean variable storing whether the resulting Hamming graph is regular
         or not. In other words, whether every site has the same number of
-        alleles
-        
-    Methods
-    -------
+        alleles   
     
-    
-    '''
+    """
     def __init__(self, X=None, y=None, seq_length=None, n_alleles=None,
                  alphabet_type='dna', alphabet=None):
         
