@@ -435,6 +435,10 @@ class WMWSWalk(TimeReversibleRandomWalk):
         return(rate)
     
     def calc_rate_matrix(self, tol=1e-8):
+        '''
+        Calculates the rate matrix for the random walk in the discrete space
+        '''
+        
         self.report('Calculating rate matrix with Ns={}'.format(self.Ns))
         i, j = self.space.get_neighbor_pairs()
         delta_function = self._calc_delta_function(i, j)
