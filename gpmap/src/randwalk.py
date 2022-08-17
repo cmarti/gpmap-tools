@@ -103,6 +103,34 @@ class TimeReversibleRandomWalk(RandomWalk):
     def calc_visualization(self, Ns=None, mean_function=None, 
                            mean_function_perc=None, n_components=10,
                            tol=1e-12, eig_tol=1e-2):
+        '''
+        Calculates the genotype coordinates to use for visualization 
+        of the provided discrete space under a given time-reversible
+        random walk. The coordinates consist on the right eigenvectors 
+        of the associate rate matrix `Q`, re-scaled by the corresponding
+        quantity so that the embedding is in units of square root of
+        time
+        
+        Parameters
+        ----------
+        Ns : float
+            Scaled effective population size to use in the underlying
+            evolutionary model
+        
+        mean_function : float
+            Mean function at stationarity to derive the associated Ns
+            
+        mean_function_perc: float
+            Percentile that the mean function at stationarity takes within
+            the distribution of function values along sequence space e.g.
+            if `mean_function_perc=98`, then the mean function at stationarity
+            is set to be at the 98th percentile across all the function values
+        
+        n_components: int (10)
+            Number of eigenvectors or diffusion axis to calculate
+        
+        '''
+        
         if Ns is None and mean_function is None and mean_function_perc is None:
             msg = 'One of [Ns,  mean_function, mean_function_perc]'
             msg += 'is required to calculate the rate matrix'
@@ -117,6 +145,38 @@ class TimeReversibleRandomWalk(RandomWalk):
         self.calc_relaxation_times()
     
     def write_tables(self, prefix, write_edges=False, edges_format='npz'):
+        '''
+        Write the output of the visualization in tables with a common prefix.
+        The output can consist in 2 to 3 different tables, as one of them
+        may not be always necessarily stored multiple times
+        
+            - nodes coordantes : contains the coordinates for each genotype and
+            the associated function values and stationary frequencies.
+            It is stored in CSV format with suffix "nodes.csv"
+            - decay rates : contains the decay rates and relaxation times
+            associated to each component or diffusion axis. It is stored
+            in CSV format with suffix "decay_rates.csv"
+            - edges : contains the adjacency relationship between genotypes.
+            It is not stored by default unless `write_edges=True`, as it will 
+            remain unchanged for any visualization on the same SequenceSpace.
+            Therefore, so it only needs to be stored once. It can be stored in 
+            CSV format, or in the more efficent npz format for sparse matrices
+            
+        Parameters
+        ----------
+        
+        prefix: str
+            Prefix of the files to store the different tables
+            
+        write_edges: bool (False)
+            Option to write also the information about the adjacency relationships
+            between pairs for genotypes for plotting the edges
+        
+        edges_format: str {'npz', 'csv'}
+            Format to store the edges information. npz is more efficient but CSV
+            can be used in smaller cases for plain text storage.
+        
+        '''
         self.nodes_df.to_csv('{}.nodes.csv'.format(prefix))
         self.decay_rates_df.to_csv('{}.decay_rates.csv'.format(prefix),
                                    index=False)
@@ -133,9 +193,12 @@ class TimeReversibleRandomWalk(RandomWalk):
     
 
 class WMWSWalk(TimeReversibleRandomWalk):
-    '''Class for Weak Mutation Weak Selection Random Walk on a SequenceSpace
+    '''
+    Class for Weak Mutation Weak Selection Random Walk on a SequenceSpace.
+    It is a time-reversible continuous time Markov Chain where the transition
+    rates depend on the differences in fitnesses between two genotypes 
+    scaled by the effective population size `Ns` . 
     
-    ...
 
     Attributes
     ----------
@@ -185,8 +248,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
                                     exchange_rates=None, site_mut_rates=None,
                                     force_constant_leaving_rate=False):
         if sites_stat_freqs is None:
-            sites_stat_freqs = [np.ones(alpha)
-                                  for alpha in self.space.n_alleles]
+            sites_stat_freqs = [np.ones(alpha) for alpha in self.space.n_alleles]
         
         if exchange_rates is None:
             exchange_rates = [np.ones(int(comb(alpha, 2)))
@@ -233,6 +295,23 @@ class WMWSWalk(TimeReversibleRandomWalk):
     def calc_neutral_rate_matrix(self, sites_stat_freqs=None,
                                  exchange_rates=None, site_mut_rates=None,
                                  force_constant_leaving_rate=False):
+        '''
+        Calculates the rate matrix for the neutral process under possibly
+        site-dependent biased mutation rates under the assumption of neutral
+        General Time-Reversible (GTR) dynamics.
+        
+        The neutral GTR model is parametrized through:
+        
+            - Stationary frequencies
+            - Exchange rates
+        
+        Parameters
+        ----------
+        sites_stat_freqs: array-like of shape (n_alleles)
+        
+        
+        '''
+        
         sites_Q = self.calc_sites_GTR_mut_matrices(sites_stat_freqs=sites_stat_freqs,
                                                    exchange_rates=exchange_rates,
                                                    site_mut_rates=site_mut_rates,
