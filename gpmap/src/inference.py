@@ -724,7 +724,7 @@ class SeqDEFT(LandscapeEstimator):
         res = minimize(fun=self.S, jac=self.grad_S, args=(a,N,R),
                        x0=phi_initial, method=method, options=options)
         if not res.success:
-            self.report(res.message)
+            print(res.message)
         return(res.x)
     
     def _fit(self, a, phi_initial=None, data_dict=None,
@@ -768,14 +768,17 @@ class SeqDEFT(LandscapeEstimator):
         S2 = N * np.sum(R * phi)
         S3 = N * np.sum(safe_exp(-phi))
         regularizer = 0
+        
         if np.isfinite(PHI_UB):
             flags = (phi > PHI_UB)
-            if flags.sum() > 0:
-                regularizer += np.sum((phi - PHI_UB)[flags]**2)
+            if flags.any() > 0:
+                regularizer += np.sum((phi[flags] - PHI_UB)**2)
+                
         if np.isfinite(PHI_LB):
             flags = (phi < PHI_LB)
-            if flags.sum() > 0:
-                regularizer += np.sum((phi - PHI_LB)[flags]**2)
+            if flags.any() > 0:
+                regularizer += np.sum((phi[flags] - PHI_LB)**2)
+                
         result = S1 + S2 + S3 + regularizer
         return(result)
     
@@ -800,15 +803,19 @@ class SeqDEFT(LandscapeEstimator):
         S_inf1 = N * np.sum(R * phi)
         S_inf2 = N * np.sum(safe_exp(-phi))
         regularizer = 0
+        
         if np.isfinite(PHI_UB):
             flags = (phi > PHI_UB)
-            if flags.sum() > 0:
-                regularizer += np.sum((phi - PHI_UB)[flags]**2)
+            if np.any(flags):
+                regularizer += np.sum((phi[flags] - PHI_UB)**2)
+                
         if np.isfinite(PHI_LB):
             flags = (phi < PHI_LB)
-            if flags.sum() > 0:
-                regularizer += np.sum((phi - PHI_LB)[flags]**2)
-        return S_inf1 + S_inf2 + regularizer
+            if np.any(flags):
+                regularizer += np.sum((phi[flags] - PHI_LB)**2)
+        
+        result = S_inf1 + S_inf2 + regularizer
+        return(result)
     
     def grad_S_inf(self, b, N, R):
         phi = self.D_kernel_basis_orth_sparse.dot(b)
@@ -993,7 +1000,7 @@ class SeqDEFT(LandscapeEstimator):
         return(log_L)
     
     def phi_to_Q(self, phi):
-        return(np.exp(-phi) / np.sum(np.exp(-phi)))
+        return(np.exp(-phi - logsumexp(-phi)))
     
     def calculate_cv_fold_logL(self, a, train, validation, phi,
                                options=None, scale_by=1, gtol=1e-3):

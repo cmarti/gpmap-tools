@@ -129,7 +129,57 @@ class SeqDEFTTests(unittest.TestCase):
         counts = seqdeft.count_obs(obs)
         assert(np.all(counts == data['counts'].values))
     
+    def test_missing_alleles(self):
+        fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
+        seqdeft = SeqDEFT(P=2)
+        
+        # Load data and remove two alleles in one site
+        data = pd.read_csv(fpath, index_col=0)
+        data = data.loc[[x[0] not in ['A', 'C'] for x in data.index], :]
+        
+        # Ensure that it runs even if the allele was not observed at all
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    counts=data['counts'].values)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
+        # Ensure that the alleles were never observed and that the estimated
+        # densities are very small
+        missing = seq_densities.loc[[x[0] == 'A' for x in seq_densities.index], :]
+        assert(missing['frequency'].sum() == 0)
+        assert(missing['Q_star'].sum() < 1e-8)
+        
+        # Load data and set counts to 0
+        data = pd.read_csv(fpath, index_col=0)
+        selected = [x[0] not in ['A', 'C'] for x in data.index]
+        data.loc[selected, 'counts'] = 0
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    counts=data['counts'].values)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
+    
+    def test_very_few_sequences(self):
+        np.random.seed(0)
+        fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
+        seqdeft = SeqDEFT(P=2)
+        
+        # Load data and select a few sequences to be observed only
+        data = pd.read_csv(fpath, index_col=0)
+        seqs = np.random.choice(data.index, size=100)
+        data.loc[seqs, 'counts'] = 0
+        
+        # Ensure that it runs
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    counts=data['counts'].values)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
+        # Even with missing alleles
+        data = data.loc[[x[0] not in ['A'] for x in data.index], :]
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    counts=data['counts'].values)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
+    
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests']
+    import sys;sys.argv = ['', 'SeqDEFTTests.test_very_few_sequences']
     unittest.main()
