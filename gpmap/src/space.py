@@ -146,6 +146,25 @@ class DiscreteSpace(object):
         return(self.state_idxs.loc[states])
     
     def get_neighbors(self, states, max_distance=1):
+        '''
+        Returns the unique state labels corresponding to the d-neighbors of the
+        provided states, where the distance is specified by `max_distance`
+        
+        Parameters
+        ----------
+        states : array-like of shape (state_number,)
+            np.array or list of states from which to select the neighbors
+        
+        max_distance : int (1)
+            The maximal distance at which neighbors from the provided states
+            will be returned
+            
+        Returns
+        -------
+        neighbor_states : np.array
+            Array containing the state labels in the d-neighborhood of `states
+        
+        '''
         idxs = self.get_state_idxs(states)
         adj_csr = self.adjacency_matrix.tocsr()
         for _ in range(max_distance):
