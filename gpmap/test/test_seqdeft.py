@@ -155,8 +155,24 @@ class SeqDEFTTests(unittest.TestCase):
         seq_densities = seqdeft.fit(X=data.index.values,
                                     counts=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
-        
     
+    def test_2_consecutive_fits(self):
+        np.random.seed(0)
+        fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
+        seqdeft = SeqDEFT(P=2)
+        
+        # Load data and select a few sequences to be observed only
+        data = pd.read_csv(fpath, index_col=0)
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    counts=data['counts'].values)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
+        seqs = np.random.choice(data.index, size=200)
+        data.loc[seqs, 'counts'] = 0
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    counts=data['counts'].values)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
     def test_very_few_sequences(self):
         np.random.seed(0)
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
@@ -164,7 +180,7 @@ class SeqDEFTTests(unittest.TestCase):
         
         # Load data and select a few sequences to be observed only
         data = pd.read_csv(fpath, index_col=0)
-        seqs = np.random.choice(data.index, size=100)
+        seqs = np.random.choice(data.index, size=200)
         data.loc[seqs, 'counts'] = 0
         
         # Ensure that it runs
@@ -172,14 +188,7 @@ class SeqDEFTTests(unittest.TestCase):
                                     counts=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
-        # Even with missing alleles
-        data = data.loc[[x[0] not in ['A'] for x in data.index], :]
-        seq_densities = seqdeft.fit(X=data.index.values,
-                                    counts=data['counts'].values)
-        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
-        
-    
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests.test_very_few_sequences']
+    import sys;sys.argv = ['', 'SeqDEFTTests']
     unittest.main()

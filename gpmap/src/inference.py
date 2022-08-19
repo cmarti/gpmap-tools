@@ -558,12 +558,12 @@ class SeqDEFT(LandscapeEstimator):
             raise ValueError(msg)
     
     def get_phi_0(self, options, scale_by):
-        if not hasattr(self, 'phi_0'):
+        if not hasattr(self, 'phi_0') or self.phi_0 is None:
             self.phi_0 = self._fit(0, options=options, scale_by=scale_by)
         return(self.phi_0)
     
     def get_phi_inf(self, options, scale_by, gtol=1e-3):
-        if not hasattr(self, 'phi_inf'):
+        if not hasattr(self, 'phi_inf')  or self.phi_inf is None:
             self.phi_inf = self._fit(np.inf, options=options,
                                      scale_by=scale_by, gtol=gtol)
         return(self.phi_inf)
@@ -670,10 +670,12 @@ class SeqDEFT(LandscapeEstimator):
             density for each possible sequence
         
         """
-        if not hasattr(self, 'space'):
-            self.init(genotypes=X)
-        
+        self.init(genotypes=X)
         self.set_data(X, counts)
+        
+        # Reset these values in case there is a previous fit in the object
+        self.phi_0, self.phi_inf = None, None
+        
         phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
 
         if a_value is None:
@@ -682,7 +684,7 @@ class SeqDEFT(LandscapeEstimator):
                                          fac_max=fac_max, fac_min=fac_min, gtol=gtol)
             ll = self.compute_log_Ls(a_values, nfolds, options, scale_by, gtol=gtol)
             a_value = ll.iloc[np.argmax(ll['log_likelihood']), :]['a']
-        
+            
         # Fit model with a_star
         phi = self._fit(a_value, phi_initial=phi_inf, options=options,
                         scale_by=scale_by, gtol=gtol)
