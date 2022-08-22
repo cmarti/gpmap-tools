@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPMAP-tools: tools for visualization and inference of large complete fitness landscapes &mdash; Visualization of fitness landscapes 0.1.0 documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation Instructions" href="installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="#" class="icon icon-home"> Visualization of fitness landscapes
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Table of Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation Instructions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">Visualization of fitness landscapes</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home"></a> &raquo;</li>
+      <li>GPMAP-tools: tools for visualization and inference of large complete fitness landscapes</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<section id="gpmap-tools-tools-for-visualization-and-inference-of-large-complete-fitness-landscapes">
+<h1>GPMAP-tools: tools for visualization and inference of large complete fitness landscapes<a class="headerlink" href="#gpmap-tools-tools-for-visualization-and-inference-of-large-complete-fitness-landscapes" title="Permalink to this headline"></a></h1>
+<p>GPMAP-tools <a class="footnote-reference brackets" href="#marti-gomez2022" id="id1">1</a> is a python library to create low dimensional visualizations for large fitness landscapes or the structure of any sequence-function relationship for large genotypic spaces, up to several millions. It provides an open-source and easy to use interface of a slightly modified version of the original method <a class="footnote-reference brackets" href="#mccandlish2011" id="id2">4</a>. Briefly, genotypes are embedded into a low dimensional representation such that the square distances are proportional to the required time to evolve from one genotype to another under a Weak Mutation Weak Selection evolutionary model.</p>
+<p>The main limitation for the applicability of these method for visualizing a landscape is that we need to have a full characterization of the funcion associated to each possible genotype in the sequence space. As the total number of genotypes scales exponentially with sequence length, this method is inherently limited to the study of relatively short sequences. Another limitation that derives from the difficulty to experimentally assess every possible sequence in a high throughput experiment reliably. To tackle this issue, we provide also a simple interface to previously published methods for inference of quantitative sequence-function relationships in presence of complex epistatic interactions, either from high throughput experiments <a class="footnote-reference brackets" href="#zhou2022" id="id3">2</a> or from the number of times a sequences has been observed in nature <a class="footnote-reference brackets" href="#chen2021" id="id4">3</a>.</p>
+<p>GPMAP-tools is written for Python 3 and is provided under an MIT open source license. The documentation provided here is meant guide users through the basic principles underlying the method as well as explain how to use it for calculating the embedding coordinates and use the functionalities provided for advanced plotting of their own fitness landscapes. Please do not hesitate to contact us with any questions or suggestions for improvements. For technical assistance or to report bugs, please contact Carlos Marti (<a class="reference external" href="mailto:martigo&#37;&#52;&#48;cshl&#46;edu">Email: martigo<span>&#64;</span>cshl<span>&#46;</span>edu</a>, <a class="reference external" href="https://twitter.com/cmarti_ga">Twitter: &#64;cmarti_ga</a>) . For more general correspondence, please contact David McCandlish (<a class="reference external" href="mailto:mccandlish&#37;&#52;&#48;cshl&#46;edu">Email: mccandlish<span>&#64;</span>cshl<span>&#46;</span>edu</a>, <a class="reference external" href="https://twitter.com/TheDMMcC">Twitter: &#64;TheDMMcC</a>).</p>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Table of Contents</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation Instructions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+</div>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Permalink to this headline"></a></h2>
+<dl class="footnote brackets">
+<dt class="label" id="marti-gomez2022"><span class="brackets"><a class="fn-backref" href="#id1">1</a></span></dt>
+<dd><p>Marti-Gomez C, McCandlish DM.
+GPMAP-tools: a python library for visualizing large fitness landscapes.
+Biorxiv (2022). <a class="reference external" href="https://doi.org/10.1101/2020.07.14.201475">https://doi.org/10.1101/2020.07.14.201475</a></p>
+</dd>
+<dt class="label" id="zhou2022"><span class="brackets"><a class="fn-backref" href="#id3">2</a></span></dt>
+<dd><p>Zhou J, Wong MS, Chen WC, Krainer AR, Kinney JB, McCandlsih DM.
+Higher order epistasis and phenotypic prediction.
+Biorxiv (2022) &lt;<a class="reference external" href="https://www.biorxiv.org/content/10.1101/2020.10.14.339804v3">https://www.biorxiv.org/content/10.1101/2020.10.14.339804v3</a>&gt;_</p>
+</dd>
+<dt class="label" id="chen2021"><span class="brackets"><a class="fn-backref" href="#id4">3</a></span></dt>
+<dd><p>Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM.
+Field theoretic density estimation for biological sequence space with
+applications to 5’ splice site diversity and aneuploidy in cancer.
+PNAS (2021) &lt;<a class="reference external" href="https://www.pnas.org/doi/10.1073/pnas.2025782118">https://www.pnas.org/doi/10.1073/pnas.2025782118</a>&gt;_</p>
+</dd>
+<dt class="label" id="mccandlish2011"><span class="brackets"><a class="fn-backref" href="#id2">4</a></span></dt>
+<dd><p>McCandlish DM.
+Visualizing fitness landscapes.
+Evolution (2011). <a class="reference external" href="https://onlinelibrary.wiley.com/doi/10.1111/j.1558-5646.2011.01236.x">https://onlinelibrary.wiley.com/doi/10.1111/j.1558-5646.2011.01236.x</a></p>
+</dd>
+</dl>
+</section>
+<section id="links">
+<h2>Links<a class="headerlink" href="#links" title="Permalink to this headline"></a></h2>
+<ul class="simple">
+<li><p><a class="reference external" href="https://www.cshl.edu/research/faculty-staff/david-mccandlish/#research">McCandlish Lab</a></p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-right" title="Installation Instructions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Carlos Martí, David McCandlish.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
