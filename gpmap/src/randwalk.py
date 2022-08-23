@@ -463,6 +463,9 @@ class WMWSWalk(TimeReversibleRandomWalk):
             Genotype stationary frequencies in the selective regime
         
         '''
+        if neutral_stat_freqs is None and hasattr(self, 'neutral_stat_freqs'):
+            neutral_stat_freqs = self.neutral_stat_freqs
+        
         log_phi = Ns * self.space.y
         if neutral_stat_freqs is not None:
             log_phi = neutral_stat_freqs + np.log(neutral_stat_freqs)
@@ -489,6 +492,9 @@ class WMWSWalk(TimeReversibleRandomWalk):
         elif mean_function is None:
             msg = 'Either stationary_function or percentile must be provided'
             raise ValueError(msg)
+        
+        if neutral_stat_freqs is None and hasattr(self, 'neutral_stat_freqs'):
+            neutral_stat_freqs = self.neutral_stat_freqs
             
         msg = 'Optimizing Ns to reach a stationary state with mean(f)={}'
         self.report(msg.format(mean_function))
@@ -548,6 +554,8 @@ class WMWSWalk(TimeReversibleRandomWalk):
             are assumed
             
         '''
+        if neutral_rate_matrix is None and hasattr(self, 'neutral_rate_matrix'):
+            neutral_rate_matrix = self.neutral_rate_matrix
         
         self.report('Calculating rate matrix with Ns={}'.format(Ns))
         i, j = self.space.get_neighbor_pairs()
