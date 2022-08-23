@@ -15,7 +15,6 @@ from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix,
                              calc_cartesian_product)
 from scipy.special._basic import comb
 from itertools import combinations
-from scipy.sparse.linalg.isolve.iterative import bicgstab
 from gpmap.src.settings import DNA_ALPHABET
 
 
