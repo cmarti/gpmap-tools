@@ -141,7 +141,7 @@ class TimeReversibleRandomWalk(RandomWalk):
         self.set_Ns(Ns=Ns, mean_function=mean_function,
                     mean_function_perc=mean_function_perc)
         self.calc_stationary_frequencies()
-        self.calc_rate_matrix(tol=tol)
+        self.calc_rate_matrix(Ns=Ns, tol=tol)
         self.calc_eigendecomposition(n_components, tol=tol, eig_tol=eig_tol)
         self.calc_diffusion_axis()
         self.calc_relaxation_times()
@@ -286,6 +286,23 @@ class WMWSWalk(TimeReversibleRandomWalk):
         return(neutral_site_Qs)
 
     def calc_neutral_stat_freqs(self, sites_stat_freqs):
+        '''
+        Calculates the neutral stationary frequencies assuming site independence
+        
+        Parameters
+        ----------
+        sites_stat_freqs: array-like of shape (seq_length, n_alleles)
+            Matrix containing the site stationary frequencies that are used to
+            parameterize the neutral dynamics with mutational biases for each
+            independent site
+            
+        Returns
+        -------
+        stat_freqs : array-like of shape (n_genotypes,)
+            Genotype stationary frequencies resulting from the product of the
+            site-level stationary frequencies
+        
+        '''
         if len(sites_stat_freqs) == 1:
             return(sites_stat_freqs[0])
         
@@ -302,15 +319,38 @@ class WMWSWalk(TimeReversibleRandomWalk):
         site-dependent biased mutation rates under the assumption of neutral
         General Time-Reversible (GTR) dynamics.
         
-        The neutral GTR model is parametrized through:
+        The neutral GTR model is parameterized through:
         
             - Stationary frequencies
             - Exchange rates
         
         Parameters
         ----------
-        sites_stat_freqs: array-like of shape (n_alleles)
+        sites_stat_freqs : array-like of shape (seq_length, n_alleles)
+            Matrix containing the site stationary frequencies that are used to
+            parameterize the neutral dynamics with mutational biases for each
+            independent site. If not provided, uniform stationary frequencies
+            are assumed for the neutral process
         
+        exchange_rates : array-like of shape (seq_length, n_alleles choose 2)
+            Matrix containing the exchangeability rates matrix for each of the
+            sites in the sequence and for every pairwise combination of alleles
+            If not provided, they are assumed to be equal. 
+        
+        site_mut_rates : array-like of shape (seq_length,)
+            Vector containing the relative mutation rates of the different 
+            sites. If not provided, all sites are assumed to mutate at the
+            same rate
+        
+        force_constant_leaving_rate: bool (False)
+            Force the leaving rate at each site to be the same. By default, 
+            The leaving rate is scaled to be `n_alleles-1` for each site.
+        
+        Returns
+        -------
+        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+            Sparse matrix containin the neutral transition rates for the 
+            whole sequence space
         
         '''
         
@@ -346,6 +386,32 @@ class WMWSWalk(TimeReversibleRandomWalk):
         the slowest neutral mixing rate is going to by limited by the slowest
         site, provided by the smallest of second eigenvalues in the site
         rate matrices
+        
+        Parameters
+        ----------
+        neutral_site_Qs : list of array-like of shape (n_alleles, n_alleles)
+            List containing site-specific rate matrices to use for calculating
+            the limiting mixing in the neutral case. If not provided, uniform
+            mutation rates are assumed.
+            
+        neutral_stat_freqs : list of array-like of shape (n_alleles,)
+            List containing vectors with the stationary frequencies under
+            neutrality for each site. They are used to calculate the eigenvalues
+            of the time reversible site specific neutral chain. By default,
+            they are assumed to be uniform across sites and alleles.
+        
+        site_weights : array-like of shape (seq_length,)
+            Vector containing the relative weight associated to each site. This
+            value is used to scale the individually normalized rates matrices
+            to ensure this specific leaving rate. By default, all weights
+            are equal
+            
+        Returns
+        -------
+        neutral_mixing_rate: float
+            Neutral mixing rate as the smallest second largest eigenvalue across
+            sites.
+        
                         
         '''
         if neutral_site_Qs is None:
@@ -436,16 +502,16 @@ class WMWSWalk(TimeReversibleRandomWalk):
         rate[idxs] = self._calc_rate(delta_function[idxs], Ns)
         return(rate)
     
-    def calc_rate_matrix(self, tol=1e-8):
+    def calc_rate_matrix(self, Ns, tol=1e-8):
         '''
         Calculates the rate matrix for the random walk in the discrete space
         '''
         
-        self.report('Calculating rate matrix with Ns={}'.format(self.Ns))
+        self.report('Calculating rate matrix with Ns={}'.format(Ns))
         i, j = self.space.get_neighbor_pairs()
         delta_function = self._calc_delta_function(i, j)
         size = (self.space.n_states, self.space.n_states)
-        rate_ij = self._calc_rate_vector(delta_function, self.Ns)
+        rate_ij = self._calc_rate_vector(delta_function, Ns)
         rate_matrix = csr_matrix((rate_ij, (i, j)), shape=size)
         
         with warnings.catch_warnings():
