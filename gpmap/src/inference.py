@@ -1004,16 +1004,6 @@ class SeqDEFT(LandscapeEstimator):
     def phi_to_Q(self, phi):
         return(np.exp(-phi - logsumexp(-phi)))
     
-    def calculate_cv_fold_logL(self, a, train, validation, phi,
-                               options=None, scale_by=1, gtol=1e-3):
-        data_dict = self.counts_to_data_dict(train)
-        phi = self._fit(a, phi_initial=phi, data_dict=data_dict,
-                                         options=options, scale_by=scale_by,
-                                         gtol=gtol)
-        Q = self.phi_to_Q(phi)
-        logL = self.calc_log_likelihood(a, validation, Q)
-        return(logL)
-    
     def get_cv_iter(self, cv_fold, a_values):
         for k, (train, validation) in enumerate(self.split_cv(cv_fold)):        
             for i, a in enumerate(a_values):
@@ -1027,12 +1017,16 @@ class SeqDEFT(LandscapeEstimator):
         cv_data = self.get_cv_iter(nfolds, a_values)
         n_iters = nfolds * a_values.shape[0]
         
-        for k, i, a, train, validation in tqdm(cv_data, total=n_iters):    
-            log_Lss[k,i] = self.calculate_cv_fold_logL(a, train, validation, phi_inf,
-                                                       options=options, scale_by=scale_by,
-                                                       gtol=gtol)
+        for k, i, a, train, validation in tqdm(cv_data, total=n_iters):
+            data_dict = self.counts_to_data_dict(train)
+            phi = self._fit(a, phi_initial=phi_inf, data_dict=data_dict,
+                            options=options, scale_by=scale_by, gtol=gtol)
+            Q = self.phi_to_Q(phi)
+            log_Lss[k,i] = self.calc_log_likelihood(a, validation, Q)
         
-        log_Ls = pd.DataFrame({'a': a_values, 'log_likelihood': log_Lss.mean(axis=0)})
+        log_Ls = pd.DataFrame({'a': a_values,
+                               'log_likelihood_mean': log_Lss.mean(axis=0),
+                               'log_likelihood_sd': log_Lss.std(axis=0)})
         self.log_Ls = log_Ls
         return(log_Ls)
     
