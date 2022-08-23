@@ -41,12 +41,12 @@ def init_single_fig(figsize=None, style='ticks',
     return(fig, axes)
 
 
-def savefig(fig, fpath=None, tight=True, fmt=PLOTS_FORMAT):
+def savefig(fig, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360):
     if tight:
         fig.tight_layout()
     if fpath is not None:
         fpath = '{}.{}'.format(fpath, fmt)
-        fig.savefig(fpath, format=fmt, dpi=240)
+        fig.savefig(fpath, format=fmt, dpi=dpi)
         plt.close()
     else:
         plt.show()
