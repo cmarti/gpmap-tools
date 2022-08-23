@@ -36,7 +36,11 @@ class RandomWalkTests(unittest.TestCase):
         sites_stat_freqs = [np.array([0.4, 0.6]), np.array([0.3, 0.7])]
         freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
         assert(np.allclose(freqs, [0.12, 0.28, 0.18, 0.42]))
-    
+        
+        sites_stat_freqs = np.array([[0.4, 0.6], [0.3, 0.7]])
+        freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
+        assert(np.allclose(freqs, [0.12, 0.28, 0.18, 0.42]))
+        
     def test_calc_sites_mut_rates(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
         mc.set_Ns(1)
@@ -78,7 +82,21 @@ class RandomWalkTests(unittest.TestCase):
             
             # Test time units in expected number of mutations per site
             assert(np.allclose(eq_Q.diagonal().sum(), -1))
-    
+        
+        # Test with variable exchangeability rates
+        exchange_rates = [np.array([1, 2, 1, 2, 1, 2])]
+        sites_neutral_Q = mc.calc_sites_GTR_mut_matrices(exchange_rates=exchange_rates)
+        for Q in sites_neutral_Q:
+            
+            # Ensure Q is symmetric
+            assert(np.allclose((Q - Q.T).todense(), 0))
+            
+            # Ensure normalized leaving rate at stationarity
+            assert(np.allclose(Q.diagonal().mean(), -3))
+            
+            # Ensure heterogeneous leaving rates from alleles
+            assert(np.unique(Q.diagonal()).shape[0] > 1)
+        
     def test_calc_neutral_rate_matrix(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
 
@@ -97,22 +115,71 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.allclose(neutral_rate_matrix.diagonal().sum(), -9))
         assert(np.allclose(neutral_rate_matrix.sum(1), 0))
     
+    def test_calc_model_neutral_rate_matrix(self):
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+
+        # Ensure uniform stationary frequencies for K80 model
+        exchange_rates = {'a': 1, 'b': 2}        
+        mc.calc_model_neutral_rate_matrix(model='K80', exchange_rates=exchange_rates)
+        assert(np.allclose(mc.neutral_stat_freqs, 1. / 64))
+        assert(np.allclose(np.unique(mc.neutral_rate_matrix.data),
+                           [-0.140625, 0.01171875, 0.0234375 ]))
+        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
+        
+        # F81 model
+        stat_freqs = {'A': 0.4, 'C': 0.2, 'G': 0.1, 'T': 0.3}        
+        mc.calc_model_neutral_rate_matrix(model='F81', stat_freqs=stat_freqs)
+        assert(np.unique(mc.neutral_rate_matrix.data).shape[0] > 3)
+        assert(not np.allclose(mc.neutral_stat_freqs, 1. / 64))
+        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
+        
+        # SYM model
+        exchange_rates = {'a': 1, 'b': 2, 'c': 1, 'd': 1, 'e': 3, 'f': 2.5}        
+        mc.calc_model_neutral_rate_matrix(model='SYM', exchange_rates=exchange_rates)
+        assert(np.allclose(mc.neutral_stat_freqs, 1. / 64))
+        assert(np.unique(mc.neutral_rate_matrix.data).shape[0] > 3)
+        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
+        
     def test_stationary_frequencies(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
-        mc.set_Ns(1)
-        mc.calc_stationary_frequencies()
+        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
+        codon_idxs = mc.space.get_state_idxs(codons)
+        stop_codons = ['TGA', 'TAG', 'TAA']
+        stop_codon_idxs = mc.space.get_state_idxs(stop_codons)
         
         # Check serine codons have high frequencies
-        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
-        assert(np.all(mc.stationary_freqs[mc.space.get_state_idxs(codons)] > 0.03))
+        stat_freqs = mc.calc_stationary_frequencies(Ns=1)
+        codon_freqs1 = stat_freqs[codon_idxs]
+        assert(np.all(codon_freqs1 > 0.03))
         
         # Check stop codons have low frequencies
-        codons = ['TGA', 'TAG', 'TAA']
-        assert(np.all(mc.stationary_freqs[mc.space.get_state_idxs(codons)] < 0.01))
+        assert(np.all(stat_freqs[stop_codon_idxs] < 0.01))
+        
+        # Check with biased neutral dynamics
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        sites_stat_freqs = [np.array([0.4, 0.2, 0.1, 0.3])] * 3
+        neutral_freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
+        assert(np.allclose(neutral_freqs.sum(), 1))
+        
+        freqs2 = mc.calc_stationary_frequencies(Ns=1,
+                                                neutral_stat_freqs=neutral_freqs)
+        assert(np.allclose(freqs2.sum(), 1))
+        
+        # Ensure frequencies have changed
+        assert(not np.allclose(freqs2, stat_freqs))
+        
+        # Check with biases that should increase the frequency of high fitness
+        # genotypes
+        sites_stat_freqs = [np.array([0.4, 0.05, 0.05, 0.5]),
+                            np.array([0.05, 0.5, 0.4, 0.05]),
+                            np.array([0.4, 0.1, 0.1, 0.4])]
+        neutral_freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
+        freqs2 = mc.calc_stationary_frequencies(Ns=1,
+                                                neutral_stat_freqs=neutral_freqs)
+        assert(freqs2[codon_idxs].sum() > codon_freqs1.sum())
     
     def test_stationary_function(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
-        mc.set_Ns(Ns=1)
         
         # Ensure failure when stationary frequencies are not calculated
         try:
@@ -125,12 +192,42 @@ class RandomWalkTests(unittest.TestCase):
         mc.stationary_freqs = np.ones(mc.space.n_states) / mc.space.n_states
         mean_function = mc.calc_stationary_mean_function()
         assert(np.allclose(mean_function, mc.space.y.mean()))
+        
+        # Calculation with non uniform frequencies
+        Ns = mc.set_Ns(mean_function=1.5)
+        mc.calc_stationary_frequencies(Ns=Ns)
+        mean_function = mc.calc_stationary_mean_function()
+        assert(np.allclose(mean_function, 1.5))
+        
+        # See changes with modified neutral rates
+        sites_stat_freqs = [np.array([0.4, 0.2, 0.1, 0.3])] * 3
+        neutral_freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
+        mc.calc_stationary_frequencies(Ns=Ns, neutral_stat_freqs=neutral_freqs)
+        mean_function = mc.calc_stationary_mean_function()
+        assert(mean_function < 1.5)
+        
+        # Check increased mean function by mutational biases in neutrality
+        sites_stat_freqs = [np.array([0.4, 0.05, 0.05, 0.5]),
+                            np.array([0.05, 0.5, 0.4, 0.05]),
+                            np.array([0.4, 0.1, 0.1, 0.4])]
+        neutral_freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
+        mc.stationary_freqs = neutral_freqs
+        mean_function = mc.calc_stationary_mean_function()
+        assert(mean_function > mc.space.y.mean())
+        
+        # Check increased mean function by mutational biases with selection
+        mc.calc_stationary_frequencies(Ns=1)
+        f1 = mc.calc_stationary_mean_function()
+        
+        mc.calc_stationary_frequencies(Ns=1, neutral_stat_freqs=neutral_freqs)
+        f2 = mc.calc_stationary_mean_function()
+        assert(f2 > f1)
     
     def test_calc_visualization(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
 
         mc.calc_visualization(Ns=1, n_components=20)
-        assert(np.allclose(mc.decay_rates_df['decay_rates'][0], 0.3914628))
+        assert(np.allclose(mc.decay_rates_df['relaxation_time'][0], 0.3914628))
 
         # Ensure extreme genotypes in axis 1 have high function       
         df = mc.nodes_df
@@ -227,5 +324,5 @@ class RandomWalkTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests.test_calc_visualization_codon_bin']
+    sys.argv = ['', 'RandomWalkTests']
     unittest.main()

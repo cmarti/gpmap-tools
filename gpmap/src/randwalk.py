@@ -10,12 +10,13 @@ from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
-from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix, check_error,
-                             write_log, check_eigendecomposition,
-    calc_cartesian_product)
+from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix,
+                             check_error, write_log, check_eigendecomposition,
+                             calc_cartesian_product)
 from scipy.special._basic import comb
 from itertools import combinations
-from scipy.linalg.decomp import eig
+from scipy.sparse.linalg.isolve.iterative import bicgstab
+from gpmap.src.settings import DNA_ALPHABET
 
 
 class RandomWalk(object):
@@ -99,11 +100,10 @@ class TimeReversibleRandomWalk(RandomWalk):
         k = np.arange(1, decay_rates.shape[0] + 1)
         self.decay_rates_df = pd.DataFrame({'k': k, 'decay_rates': decay_rates,
                                             'relaxation_time': relaxation_times})
-        # neutral_decay = pd.DataFrame({'k': 'neutral',
-        #                               'decay_rates': self.calc_neutral_mixing_rates()})
     
     def calc_visualization(self, Ns=None, mean_function=None, 
                            mean_function_perc=None, n_components=10,
+                           neutral_rate_matrix=None, neutral_stat_freqs=None,
                            tol=1e-12, eig_tol=1e-2):
         '''
         Calculates the genotype coordinates to use for visualization 
@@ -131,17 +131,30 @@ class TimeReversibleRandomWalk(RandomWalk):
         n_components: int (10)
             Number of eigenvectors or diffusion axis to calculate
         
+        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+            Sparse matrix containing the neutral transition rates for the 
+            whole sequence space. If not provided, uniform mutational dynamics
+            are assumed.
+        
+        neutral_stat_freqs : array-like of shape (n_genotypes,)
+            Genotype stationary frequencies at neutrality
+            
         '''
         
+        # Set or find Ns value to use
         if Ns is None and mean_function is None and mean_function_perc is None:
             msg = 'One of [Ns,  mean_function, mean_function_perc]'
             msg += 'is required to calculate the rate matrix'
             raise ValueError(msg)
         
-        self.set_Ns(Ns=Ns, mean_function=mean_function,
-                    mean_function_perc=mean_function_perc)
-        self.calc_stationary_frequencies()
-        self.calc_rate_matrix(Ns=Ns, tol=tol)
+        Ns = self.set_Ns(Ns=Ns, mean_function=mean_function,
+                         mean_function_perc=mean_function_perc,
+                         neutral_stat_freqs=neutral_stat_freqs)
+        
+        # Calculate rate matrix and re-scaled visualization coordinates
+        self.set_stationary_freqs(self.calc_stationary_frequencies(Ns, neutral_stat_freqs))
+        self.calc_rate_matrix(Ns=Ns, neutral_rate_matrix=neutral_rate_matrix,
+                              tol=tol)
         self.calc_eigendecomposition(n_components, tol=tol, eig_tol=eig_tol)
         self.calc_diffusion_axis()
         self.calc_relaxation_times()
@@ -152,7 +165,7 @@ class TimeReversibleRandomWalk(RandomWalk):
         The output can consist in 2 to 3 different tables, as one of them
         may not be always necessarily stored multiple times
         
-            - nodes coordantes : contains the coordinates for each genotype and
+            - nodes coordinates : contains the coordinates for each genotype and
             the associated function values and stationary frequencies.
             It is stored in CSV format with suffix "nodes.csv"
             - decay rates : contains the decay rates and relaxation times
@@ -206,7 +219,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
     ----------
     space : DiscreteSpace class
         Space on which the random walk takes place
-    Ns : real 
+    Ns : float 
         Scaled effective population size for the evolutionary model
     rate_matrix : csr_matrix
         Rate matrix defining the continuous time process
@@ -239,7 +252,6 @@ class WMWSWalk(TimeReversibleRandomWalk):
     
     def calc_GTR_rate_matrix(self, freqs, ex_rates):
         ex_rates_m = self.ex_rates_vector_to_matrix(ex_rates, freqs.shape[0])
-
         D = get_sparse_diag_matrix(freqs).todense()
         site_Q = csr_matrix(np.dot(ex_rates_m, D))
         site_Q.setdiag(-site_Q.sum(1).A1)
@@ -291,16 +303,16 @@ class WMWSWalk(TimeReversibleRandomWalk):
         
         Parameters
         ----------
-        sites_stat_freqs: array-like of shape (seq_length, n_alleles)
+        sites_stat_freqs: list of array-like of shape (n_alleles,)
             Matrix containing the site stationary frequencies that are used to
             parameterize the neutral dynamics with mutational biases for each
             independent site
             
         Returns
         -------
-        stat_freqs : array-like of shape (n_genotypes,)
+        neutral_stat_freqs : array-like of shape (n_genotypes,)
             Genotype stationary frequencies resulting from the product of the
-            site-level stationary frequencies
+            site-level stationary frequencies at neutrality
         
         '''
         if len(sites_stat_freqs) == 1:
@@ -377,7 +389,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
         
 
     def calc_neutral_mixing_rates(self, neutral_site_Qs=None,
-                                  neutral_stat_freqs=None, site_weights=None):
+                                  neutral_site_freqs=None, site_weights=None):
         '''
         Calculates the neutral mixing rates for a SequenceSpace
         In case no GTR mutation model is specified, then the neutral
@@ -394,7 +406,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
             the limiting mixing in the neutral case. If not provided, uniform
             mutation rates are assumed.
             
-        neutral_stat_freqs : list of array-like of shape (n_alleles,)
+        neutral_site_freqs : list of array-like of shape (n_alleles,)
             List containing vectors with the stationary frequencies under
             neutrality for each site. They are used to calculate the eigenvalues
             of the time reversible site specific neutral chain. By default,
@@ -419,7 +431,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
         else:
             neutral_mixing_rate = np.inf
             
-            for freqs, site_Q, site_w in zip(neutral_stat_freqs, neutral_site_Qs, site_weights):
+            for freqs, site_Q, site_w in zip(neutral_site_freqs, neutral_site_Qs, site_weights):
                 r = np.sqrt(freqs)
                 m = get_sparse_diag_matrix(r).dot(csr_matrix(site_w*site_Q)).dot(get_sparse_diag_matrix(1/r))
                 m = (m + m.T) / 2
@@ -431,20 +443,32 @@ class WMWSWalk(TimeReversibleRandomWalk):
     def _calc_delta_function(self, rows, cols):
         return(self.space.y[cols] - self.space.y[rows])
     
-    def _calc_stationary_frequencies(self, Ns):
-        log_phi = Ns * self.space.y
-        log_total = logsumexp(log_phi)
-        log_stationary_freqs = log_phi - log_total
-        return(np.exp(log_stationary_freqs))
-    
-    def calc_stationary_frequencies(self):
+    def calc_stationary_frequencies(self, Ns, neutral_stat_freqs=None):
         '''Calculates the genotype stationary frequencies using Ns stored in 
         the object and stores the corresponding diagonal matrices with the
         sqrt transformation and its inverse
+        
+        Parameters
+        ----------
+        Ns : real 
+            Scaled effective population size for the evolutionary model
+        
+        neutral_stat_freqs : array-like of shape (n_genotypes,)
+            Genotype stationary frequencies resulting from the product of the
+            site-level stationary frequencies at neutrality
+        
+        Returns
+        -------
+        stationary_freqs : array-like of shape (n_genotypes,)
+            Genotype stationary frequencies in the selective regime
+        
         '''
-        check_error(hasattr(self, 'Ns'),
-                    'Ns must be set for calculating stationary frequencies')
-        self.set_stationary_freqs(self._calc_stationary_frequencies(self.Ns))
+        log_phi = Ns * self.space.y
+        if neutral_stat_freqs is not None:
+            log_phi = neutral_stat_freqs + np.log(neutral_stat_freqs)
+        log_total = logsumexp(log_phi)
+        log_stationary_freqs = log_phi - log_total
+        self.stationary_freqs = np.exp(log_stationary_freqs)
         return(self.stationary_freqs)
     
     def calc_stationary_mean_function(self):
@@ -454,6 +478,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
         return(self.fmean)
     
     def set_Ns(self, Ns=None, mean_function=None, mean_function_perc=None,
+               neutral_stat_freqs=None,
                tol=1e-4, maxiter=100, max_attempts=10):
         if Ns is not None:
             self.Ns = Ns
@@ -470,7 +495,8 @@ class WMWSWalk(TimeReversibleRandomWalk):
         
         function = self.space.y
         def calc_stationary_function_error(logNs):
-            freqs = self._calc_stationary_frequencies(np.exp(logNs))
+            Ns = np.exp(logNs)
+            freqs = self.calc_stationary_frequencies(Ns, neutral_stat_freqs=neutral_stat_freqs)
             x = np.sum(function * freqs)
             sq_error = (mean_function - x) ** 2
             return(sq_error)
@@ -479,7 +505,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
             result = minimize(calc_stationary_function_error, x0=0, tol=tol,
                               options={'maxiter': maxiter})
             Ns = np.exp(result.x[0])
-            freqs = self._calc_stationary_frequencies(Ns)
+            freqs = self.calc_stationary_frequencies(Ns, neutral_stat_freqs)
             inferred_mean_function = np.sum(function * freqs)
             if calc_stationary_function_error(result.x[0]) < tol:
                 break
@@ -496,32 +522,147 @@ class WMWSWalk(TimeReversibleRandomWalk):
         S = Ns * delta_function
         return(S / (1 - np.exp(-S)))
 
-    def _calc_rate_vector(self, delta_function, Ns):
+    def _calc_rate_vector(self, delta_function, Ns, neutral_rate_matrix=None):
         rate = np.ones(delta_function.shape[0])
         idxs = np.isclose(delta_function, 0) == False
         rate[idxs] = self._calc_rate(delta_function[idxs], Ns)
+        if neutral_rate_matrix is not None:
+            rate = rate * neutral_rate_matrix.data
+        
         return(rate)
     
-    def calc_rate_matrix(self, Ns, tol=1e-8):
+    def calc_rate_matrix(self, Ns, neutral_rate_matrix=None, tol=1e-8,
+                         ensure_time_reversible=True):
         '''
         Calculates the rate matrix for the random walk in the discrete space
+        and stores it in the attribute `rate_matrix`
+        
+        Parameters
+        ----------
+        Ns : real 
+            Scaled effective population size for the evolutionary model
+        
+        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+            Sparse matrix containing the neutral transition rates for the 
+            whole sequence space. If not provided, uniform mutational dynamics
+            are assumed
+            
         '''
         
         self.report('Calculating rate matrix with Ns={}'.format(Ns))
         i, j = self.space.get_neighbor_pairs()
         delta_function = self._calc_delta_function(i, j)
         size = (self.space.n_states, self.space.n_states)
-        rate_ij = self._calc_rate_vector(delta_function, Ns)
+        rate_ij = self._calc_rate_vector(delta_function, Ns,
+                                         neutral_rate_matrix=neutral_rate_matrix)
         rate_matrix = csr_matrix((rate_ij, (i, j)), shape=size)
         
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             rate_matrix.setdiag(-rate_matrix.sum(1).A1)
     
-        rate_matrix, sandwich_rate_m = self._ensure_time_reversibility(rate_matrix, tol=tol)
+        if ensure_time_reversible:
+            rate_matrix, sandwich_rate_m = self._ensure_time_reversibility(rate_matrix, tol=tol)
+            self.sandwich_rate_matrix = sandwich_rate_m
+            
         self.rate_matrix = rate_matrix
-        self.sandwich_rate_matrix = sandwich_rate_m
     
     def calc_stationary_rate_matrix(self, rate_matrix, freqs):
         D = get_sparse_diag_matrix(freqs)
         return(D.dot(rate_matrix))
+    
+    def calc_model_neutral_rate_matrix(self, model, exchange_rates={}, 
+                                       stat_freqs={}, site_mut_rates=None,
+                                       force_constant_leaving_rate=False):
+        '''
+        Calculate the neutral rate matrix for classic nucleotide substitution
+        rates parameterized as in 
+        
+        https://en.wikipedia.org/wiki/Substitution_model
+        
+        Parameters
+        ----------
+        model : str {'F81', 'K80', 'HKY85', 'K81', 'TN93', 'SYM', 'GTR'}
+            Specific nucleotide substitution model to use for every site in 
+            the nucleotide sequence
+            
+        exchange_rates : dict with keys {'a', 'b', 'c', 'd', 'e', 'f'}
+            Parameter values to use for each of the models. Only some of them 
+            need to be specified for each of the models
+            
+        stat_freqs : dict with keys {'A', 'C', 'G', 'T'}
+            Dictionary containing the allele stationary frequencies to use
+            in the models that allow them to be different
+            
+        site_mut_rates : array-like of shape (seq_length,)
+            Vector containing the relative mutation rates of the different 
+            sites. If not provided, all sites are assumed to mutate at the
+            same rate
+        
+        force_constant_leaving_rate: bool (False)
+            Force the leaving rate at each site to be the same. By default, 
+            The leaving rate is scaled to be `n_alleles-1` for each site.
+
+        Returns
+        -------
+        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+            Sparse matrix containin the neutral transition rates for the 
+            whole sequence space
+        
+        '''
+        
+        msg = 'Ensure the space is a "dna" space for using nucleotide '
+        msg += 'substitution models for the neutral dynamics'
+        check_error(self.space.alphabet_type == 'dna', msg)
+        
+        if model == 'F81':
+            exchange_rates = np.ones(6)
+            stat_freqs = [stat_freqs[a] for a in DNA_ALPHABET]
+        elif model == 'K80':
+            exchange_rates = [exchange_rates['a'], exchange_rates['b'],
+                              exchange_rates['a'], exchange_rates['a'],
+                              exchange_rates['b'], exchange_rates['a']]
+            stat_freqs = np.full(4, 1/4)
+        elif model == 'HKY85':
+            exchange_rates = [exchange_rates['a'], exchange_rates['b'],
+                              exchange_rates['a'], exchange_rates['a'],
+                              exchange_rates['b'], exchange_rates['a']]
+            stat_freqs = [stat_freqs[a] for a in DNA_ALPHABET]
+        elif model == 'K81':
+            exchange_rates = [exchange_rates['a'], exchange_rates['b'],
+                              exchange_rates['c'], exchange_rates['c'],
+                              exchange_rates['b'], exchange_rates['a']]
+            stat_freqs = np.full(4, 1/4)
+        elif model == 'TN93':
+            exchange_rates = [exchange_rates['a'], exchange_rates['b'],
+                              exchange_rates['a'], exchange_rates['a'],
+                              exchange_rates['e'], exchange_rates['a']]
+            stat_freqs = [stat_freqs[a] for a in DNA_ALPHABET]
+        elif model == 'SYM':
+            exchange_rates = [exchange_rates[x]
+                              for x in ['a', 'b', 'c', 'd', 'e', 'f']]
+            stat_freqs = np.full(4, 1/4)
+        elif model == 'GTR': 
+            exchange_rates = [exchange_rates[x]
+                              for x in ['a', 'b', 'c', 'd', 'e', 'f']]
+            stat_freqs = [stat_freqs[a] for a in DNA_ALPHABET]
+        else:
+            msg = 'Model not supported: {}. Try one of the '.format(model)
+            msg += 'following: [F81, K80, HKY85, K81, TN93, GTR]'
+            raise ValueError(msg)
+
+        msg = 'Ensure that the provided stationary frequencies add up to 1'
+        check_error(np.sum(stat_freqs) == 1, msg=msg)
+
+        # Create the corresponding rate matrix        
+        exchange_rates = [np.array(exchange_rates)]
+        sites_stat_freqs = [np.array(stat_freqs)]
+        
+        Q = self.calc_neutral_rate_matrix(sites_stat_freqs=sites_stat_freqs,
+                                          exchange_rates=exchange_rates,
+                                          site_mut_rates=site_mut_rates,
+                                          force_constant_leaving_rate=force_constant_leaving_rate)
+        self.neutral_rate_matrix = Q
+        sites_stat_freqs = sites_stat_freqs * self.space.seq_length
+        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(sites_stat_freqs)
+        return(Q)
