@@ -21,3 +21,23 @@ Random walks
 .. autoclass:: gpmap.src.randwalk.WMWSWalk
     :members: calc_neutral_mixing_rates, calc_neutral_rate_matrix, 
         calc_stationary_frequencies, calc_rate_matrix
+
+Landscape Inference
+-------------------
+
+.. autoclass:: gpmap.src.inference.VCregression
+    :members: fit, predict, lambdas_to_variance
+
+.. autoclass:: gpmap.src.inference.SeqDEFT
+    :members: fit
+
+Sequence utils
+--------------
+
+.. autofunction:: gpmap.src.seq.guess_space_configuration
+.. autofunction:: gpmap.src.seq.get_custom_codon_table
+
+Genotypes handling
+------------------
+
+.. autofunction:: gpmap.src.genotypes.select_genotypes
