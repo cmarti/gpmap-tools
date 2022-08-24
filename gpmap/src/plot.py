@@ -74,6 +74,38 @@ def create_patches_legend(axes, colors_dict, loc=1, **kwargs):
 
 def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
                           neutral_time=None, kwargs={}):
+    '''
+    Plots the relaxation times associated to each of the calculated components
+    from using ```WMWSWalk.calc_visualization`
+    
+    Parameters
+    ----------
+    decay_df : pd.DataFrame of shape (n_components, 3)
+        ``pd.DataFrame`` containing the decay rates and the associated mean
+        relaxation times for each of the calculated components
+        
+    axes : matplotlib Axes object (None)
+        ``Axes`` where to plot. If not provided, a new figure will be created 
+        automatically for this plot and save in the path provided by ``fpath``
+        
+    fpath : str (None)
+        File path to store the plot. If ``fpath=None``, ``axes`` argument must
+        be provided for plotting.
+        
+    log_scale : bool (False)
+        Plot the relaxation times in log scale
+        
+    neutral_time : float (None)
+        If provided, an additional horizontal line will be plotted representing
+        the relaxation time associated to the neutral process. This is useful
+        when selecting the number of relevant dimensions to plot
+    
+    kwargs :  dict 
+        Additional key-word arguments dictionary provided for ``axes.plot`` and
+        ``axes.scatter`` e.g. color.
+    
+    '''
+    
     if axes is None and fpath is None:
         msg = 'Either axes or fpath argument must be provided'
         raise ValueError(msg)
@@ -107,6 +139,71 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
                color='grey', width=0.5, cmap='binary',
                alpha=0.1, zorder=1, avoid_dups=False,
                max_width=1, min_width=0.1):
+    '''
+    Plots the edges representing the connections between states that are conneted
+    in the discrete space under a particular embedding
+    
+    Parameters
+    ----------
+    axes : matplotlib ``Axes`` in which to plot the edges.
+    
+    nodes_df : pd.DataFrame of shape (n_genotypes, n_components + 2)
+        ``pd.DataFrame`` containing the coordinates in every of the ``n_components``
+        in addition to the "function" and "stationary_freq" columns. Additional
+        columns are also allowed
+        
+    edges_df : pd.DataFrame of shape (n_edges, 2)
+        ``pd.DataFrame`` the connectivity information between states of the
+        discrete space to plot. It has columns "i" and "j" for the indexes
+        of the pairs of states that are connected.
+    
+    x : str ('1')
+        Column in ``nodes_df`` to use for plotting the genotypes on the x-axis
+    
+    y : str ('2')
+        Column in ``nodes_df`` to use for plotting the genotypes on the y-axis 
+    
+    z : str (None)
+        Column in ``nodes_df`` to use for plotting the genotypes on the z-axis.
+        If provided, then a 3D plot will be produced as long as the provided
+        ``axes`` object allows it.
+    
+    color : str  ('grey')
+        Column name for the values according to which edges will be colored or
+        the specific color to use for plotting the edges
+    
+    width : float or str
+        Width of the lines representing the edges. If a ``float`` is provided,
+        that will be the width used to plot every edges. If ``str``, then
+        widths will be scaled according to the corresponding column
+        in ``nodes_df``.  
+    
+    cmap :  colormap or str
+        Colormap to use for coloring the edges according to column ``color``
+    
+    alpha : float (0.1)
+        Transparency of lines representing the edges
+    
+    zorder : int (1)
+        Order in which the edges will be rendered relative to other elements.
+        Generally, we would want this to be smaller than the ``zorder``
+        used for plotting the nodes
+    
+    avoid_dups : bool (False)
+        Plot edges after removing redundant lines representing connections
+        between the same genotypes in two different directions
+    
+    max_width : float (1)
+        Maximum linewidth for the edges when scaled by
+        
+    min_width : float (0.1)
+        Maximum linewidth for the edges when scaled by
+    
+    Returns
+    -------
+    line_collection : LineCollection or Line3DCollection
+    
+    '''
     # TODO: get colors and width as either fixed values or from edges_df
     edges_coords = get_edges_coords(nodes_df, edges_df, x=x, y=y, z=z,
                                     avoid_dups=avoid_dups)
@@ -144,15 +241,117 @@ def get_axis_lims(nodes_df, x, y, z=None):
 def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                color='function', size=2.5, cmap='viridis',
                cbar=True, cbar_axes=None, palette='Set1',
+               clabel='Function',
                alpha=1, zorder=2, max_size=40, min_size=1,
-               edgecolor='black', lw=0,
-               label=None, clabel='Function',
+               edgecolor='black', lw=0, label=None,
                sort=True, sort_by=None, ascending=False, 
                vcenter=None, vmax=None, vmin=None, fontsize=12, legendloc=0,
-               subset=None, autoscale_axis=False):
-    if subset is not None:
-        nodes_df = nodes_df.loc[subset, :]
+               autoscale_axis=False):
+    '''
+    Plots the nodes representing the states of the discrete space on the
+    provided coordinates
     
+    Parameters
+    ----------
+    axes : matplotlib ``Axes`` in which to plot the nodes or states.
+    
+    nodes_df : pd.DataFrame of shape (n_genotypes, n_components + 2)
+        ``pd.DataFrame`` containing the coordinates in every of the ``n_components``
+        in addition to the "function" and "stationary_freq" columns. Additional
+        columns are also allowed
+        
+    x : str ('1')
+        Column in ``nodes_df`` to use for plotting the genotypes on the x-axis
+    
+    y : str ('2')
+        Column in ``nodes_df`` to use for plotting the genotypes on the y-axis 
+    
+    z : str (None)
+        Column in ``nodes_df`` to use for plotting the genotypes on the z-axis.
+        If provided, then a 3D plot will be produced as long as the provided
+        ``axes`` object allows it.
+    
+    color : str  ('grey')
+        Column name for the values according to which states will be colored or
+        the specific color to use for plotting the states
+        
+    vmax : float
+        Maximum value to show in the colormap
+    
+    vmin : float
+        Minimum value to show in the colormap
+        
+    cmap : colormap or str
+        Colormap to use for coloring the nodes according to column ``color``
+    
+    clabel : str
+        Label for the colorbar associated to the nodes color scale
+    
+    cbar : bool
+        Boolean variable representing whether to show the colorbar
+    
+    cbar_axes : matplotlib ``Axes`` 
+        Axes to plot the colorbar. If not provided, it will be automatically
+        adjusted to the current Axes
+    
+    palette : dict
+        Dictionary containing the colors associated to the categories specified
+        by the column ``color`` in ``nodes_df``, if they express categories
+        rather than numerical values
+    
+    size : float (2.5)
+        Size of the markers provided for plotting to ``axes.scatter``. If a
+        ``float`` is provided, that will be the size used to plot every nodes.
+        If ``str``, then node sizes will be scaled according to the
+        corresponding column in ``nodes_df``.  
+    
+    alpha : float (1)
+        Transparency of markers representing the nodes
+    
+    zorder : int (2)
+        Order in which the nodes will be rendered relative to other elements.
+        Generally, we would want this to be bigger than the ``zorder``
+        used for plotting the edges
+    
+    max_size : float (1)
+        Maximum linewidth for the edges when scaled by
+        
+    min_size : float (0.1)
+        Maximum linewidth for the edges when scaled by
+    
+    edgecolor : str ('black')
+        Color of the line edges delimiting the markers representing the nodes
+        
+    lw : float (0)
+        Width of the line edges delimiting the markers representing the nodes
+        
+    sort : bool (True)
+        Whether to plot nodes in according to the order of values in column
+        ``sort_by``
+    
+    sort_by : str (None)
+        Column name in ``nodes_df`` to specify the order in which nodes are
+        plotted
+    
+    ascending : bool (False)
+        Use ascending order as nodes plotting order
+     
+    fontsize : float (12)
+        Fontsize to use for axis and legend labels
+    
+    legendloc : int or tuple
+        Location of the legend in case of coloring according to a categoric 
+        variable
+        
+    autoscale_axis : bool (False)
+        Scale axis limits so that the span the same range of values on all axis
+        for a more realistic representation of distances
+    
+    Returns
+    -------
+    line_collection : LineCollection or Line3DCollection
+    
+    '''
     add_cbar, add_legend = False, False
     if color in nodes_df.columns:
         

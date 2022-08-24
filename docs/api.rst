@@ -41,3 +41,10 @@ Genotypes handling
 ------------------
 
 .. autofunction:: gpmap.src.genotypes.select_genotypes
+
+Plotting
+--------
+
+.. autofunction:: gpmap.src.plot.plot_relaxation_times
+.. autofunction:: gpmap.src.plot.plot_edges
+.. autofunction:: gpmap.src.plot.plot_nodes
