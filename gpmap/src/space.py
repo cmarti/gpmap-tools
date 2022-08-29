@@ -88,6 +88,10 @@ class DiscreteSpace(object):
     
     @property
     def is_regular(self):
+        '''
+        Attribute characterizing whether the space is regular, this is, every
+        state has the same number of neighbors
+        '''
         if not hasattr(self, '_is_regular'):
             neighbors = np.unique(self.adjacency_matrix.sum(1))
             self._is_regular = neighbors.shape[0] == 1
@@ -143,6 +147,10 @@ class DiscreteSpace(object):
             self.set_y(y)
     
     def get_state_idxs(self, states):
+        '''
+        Returns the indexes for the provided state labels
+        '''
+        
         return(self.state_idxs.loc[states])
     
     def get_neighbors(self, states, max_distance=1):
@@ -172,6 +180,11 @@ class DiscreteSpace(object):
         return(self.state_labels[np.unique(idxs)])
     
     def get_neighbor_pairs(self):
+        '''
+        Returns a tuple with two arrays of indexes corresponding to the states
+        that are connected to each other in the DiscreteSpace
+        '''
+        
         if not hasattr(self, 'neighbor_pairs'):
             A = self.adjacency_matrix
             try:
