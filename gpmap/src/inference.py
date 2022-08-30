@@ -81,6 +81,111 @@ class LandscapeEstimator(object):
     def genotypes(self):
         return(self.space.genotypes)
     
+    def calc_eigenvalues(self):
+        lambdas = np.arange(self.seq_length + 1) * self.n_alleles
+        return(lambdas)
+    
+    def calc_eigenvalue_multiplicity(self):
+        self.lambdas_multiplicity = np.array([comb(self.seq_length, k) * (self.n_alleles - 1) ** k
+                                              for k in range(self.seq_length + 1)], dtype=int)
+    
+    def calc_eig_vandermonde_matrix(self, lambdas=None):
+        if lambdas is None:
+            lambdas = np.arange(self.seq_length + 1) * self.n_alleles
+        V = np.vstack([lambdas ** i for i in range(self.seq_length + 1)]).T
+        return(V)
+    
+    def calc_L_polynomial_coeffs_num(self):
+        self.B = np.linalg.inv(self.calc_eig_vandermonde_matrix())
+        return(self.B)
+    
+    def calc_L_polynomial_coeffs(self):
+        '''
+        Calculates the coefficients of the polynomial in L that represent 
+        projection matrices into each of the kth eigenspaces.
+        
+        Returns
+        -------
+        B : array-like of shape (seq_length + 1, seq_length + 1)
+            Matrix containing the b_i,k coefficients for power i on rows
+            and order k on columns. One can obtain the coefficients for any
+            combination of $\lambda_k$ values by scaling the coefficients 
+            for each eigenspace by its eigenvalue and adding them up across
+            different powers
+        '''
+        
+        l = self.seq_length
+        lambdas = self.calc_eigenvalues()
+        s = l + 1
+        B = np.zeros((s, s))
+        
+        idx = np.arange(s)
+        
+        for k in idx:
+            k_idx = idx != k
+            k_lambdas = lambdas[k_idx]
+            norm_factor = 1 / np.prod(k_lambdas - lambdas[k])
+
+            for power in idx:
+                p = np.sum([np.product(v) for v in combinations(k_lambdas, l - power)])
+                B[power, k] = norm_factor * (-1) ** (power) * p
+        
+        self.B = B
+        return(B)
+    
+    def calc_scaled_L_polynomial_coeffs(self, lambdas):
+        if not hasattr(self, 'B') or self.B.shape[0] != self.seq_length + 1:
+            self.calc_L_polynomial_coeffs()
+        return(self.B.dot(lambdas))
+
+    def calc_L_powers(self, v):
+        powers = [v]
+        for _ in range(self.seq_length):
+            powers.append(self.L.dot(powers[-1]))
+        return(np.vstack(powers).T)
+
+    def calc_L_polynomial(self, coefficients, v):
+        powers = self.calc_L_powers(v)
+        return(powers.dot(coefficients))
+    
+    def project(self, y, k=None, lambdas=None):
+        '''
+        Projects the function ``y`` into the ``k``th eigenspace of the 
+        graph Laplacian
+        
+        Parameters
+        ----------
+        y : array-like of shape (n_genotypes,)
+            Vector with the function values associated to each of the genotypes
+            ordered as in ``genotypes`` attribute
+        
+        k : int
+            Order of the eigenspace in which to project the function ``y``
+        
+        lambdas : array-like of shape (seq_length + 1,)
+            Vector containing the variance components by which to scale 
+            the projection of ``y`` into each of the ``k``th eigenspaces
+            
+        Returns
+        -------
+        yk : array-like of shape (n_genotypes,)
+            Vector containing the pure ``k``th order component of the function
+            ``y`` or the sum of the projections into each component scaled by
+            ``lambda[k]`` if ``lambdas`` is provided 
+        '''
+        
+        if not hasattr(self, 'B'):
+            self.calc_L_polynomial_coeffs()
+        
+        msg = 'k and lambdas cannot be provided simultaneously'
+        check_error(lambdas is None or k is None, msg=msg)
+        
+        if lambdas is not None:
+            coeffs = self.calc_scaled_L_polynomial_coeffs(lambdas)
+        else:
+            coeffs = self.B[:, k].ravel() 
+        
+        return(self.calc_L_polynomial(coeffs, y))
     
     def calc_L_powers_unique_entries_matrix(self):
         """Construct entries of powers of L. 
@@ -122,7 +227,7 @@ class LandscapeEstimator(object):
         # Invert MAT
         self.L_powers_unique_entries_inv = np.linalg.inv(MAT)
         self.L_powers_unique_entries = MAT
-
+        
 
 class VCregression(LandscapeEstimator):
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
@@ -132,9 +237,10 @@ class VCregression(LandscapeEstimator):
         self.space.calc_laplacian()
         self.n_genotypes = self.space.n_states
         self.L = self.space.laplacian
+        self.calc_L_polynomial_coeffs()
         self.calc_L_powers_unique_entries_matrix()
         self.calc_W_kd_matrix()
-    
+        
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
         l, a = self.seq_length, self.n_alleles
@@ -150,23 +256,9 @@ class VCregression(LandscapeEstimator):
             for d in range(self.seq_length + 1):
                 self.W_kd[k, d] = self.calc_w(k, d)
     
-    def calc_collapsed_covariance_matrix(self, lambdas):
-        return(np.dot(self.W_kd.T, lambdas))
-    
-    def calc_L_powers_coeffs(self, lambdas):
-        covariance = self.calc_collapsed_covariance_matrix(lambdas)
-        return(np.dot(self.L_powers_unique_entries_inv, covariance))
-    
-    def calc_L_powers(self, v):
-        powers = [v]
-        for _ in range(self.seq_length):
-            powers.append(self.L.dot(powers[-1]))
-        return(np.vstack(powers).T)
-    
     def get_obs_idx(self, seqs):
         obs_idx = self.space.state_idxs[seqs]
         return(obs_idx)
-
 
     def set_data(self, X, y, variance):
         obs_idx = self.get_obs_idx(X)
@@ -332,17 +424,13 @@ class VCregression(LandscapeEstimator):
         correlation, distance_class_ns = np.zeros(size), np.zeros(size)
         for d in range(size):
             c_k = self.L_powers_unique_entries_inv[:, d]
-            distance_class_n = np.sum(observed_seqs * self.calc_L_polynomial_product(c_k, observed_seqs))
-            correlation[d] = reciprocal(np.sum(seq_values * self.calc_L_polynomial_product(c_k, seq_values)), 
+            distance_class_n = np.sum(observed_seqs * self.calc_L_polynomial(c_k, observed_seqs))
+            correlation[d] = reciprocal(np.sum(seq_values * self.calc_L_polynomial(c_k, seq_values)), 
                                         distance_class_n)
             distance_class_ns[d] = distance_class_n
             
         return(correlation, distance_class_ns)
 
-    def calc_L_polynomial_product(self, coefficients, v):
-        powers = self.calc_L_powers(v)
-        return(powers.dot(coefficients))
-    
     def calc_second_order_diff_matrix(self):
         """Construct second order difference matrix for regularization"""
         Diff2 = np.zeros((self.seq_length - 2, self.seq_length))
@@ -374,14 +462,12 @@ class VCregression(LandscapeEstimator):
                 a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
         return(a)
     
-    def W_dot(self, v, L_powers_coeffs):
-        """multiply by the whole covariance matrix. b_k is set by lambdas"""
-        return(self.calc_L_powers(v).dot(L_powers_coeffs))
+    def lambdas_to_variance(self, lambdas):
+        self.calc_eigenvalue_multiplicity()
+        variance_components = (lambdas * self.lambdas_multiplicity)[1:]
+        variance_components = variance_components / variance_components.sum()
+        return(variance_components)
     
-    def K_BB_E_dot(self, v, L_powers_coeffs):
-        """ multiply by the m by m matrix K_BB + E"""
-        return(self.gt2data.T.dot(self.W_dot(self.gt2data.dot(v), L_powers_coeffs)) + self.E_sparse.dot(v))
-
     def predict(self, Xpred=None, X=None, y=None, variance=None, lambdas=None,
                 estimate_variance=False):
         """
@@ -420,8 +506,8 @@ class VCregression(LandscapeEstimator):
         -------
         function : pd.DataFrame of shape (n_genotypes, 1)
                    Returns the phenotypic predictions for each input genotype
-                   in the column `function` and genotype labels as row names.
-                   If `estimate_variance` is True, then it has an additional
+                   in the column ``ypred`` and genotype labels as row names.
+                   If ``estimate_variance=True``, then it has an additional
                    column with the posterior variances for each genotype
         """
         
@@ -430,33 +516,36 @@ class VCregression(LandscapeEstimator):
             self.init(genotypes=X)
             self.set_data(X=X, y=y, variance=variance)
             self.lambdas = lambdas
+            
         elif np.any([X is not None, y is not None, lambdas is not None]):
             msg = 'X, y and lambdas must all be provided for prediction or'
             msg = ' the model should have been previously fitted'
             raise ValueError(msg)
         
         self.get_noise_diag_matrix()
-        L_powers_coeffs = self.calc_L_powers_coeffs(self.lambdas)
         self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
     
-        # Solve 'a' with ys
+        # Minimize error given lambdas
+        L_powers_coeffs = self.calc_scaled_L_polynomial_coeffs(self.lambdas)
         matvec = partial(self.K_BB_E_dot, L_powers_coeffs=L_powers_coeffs)
         Kop = LinearOperator((self.n_obs, self.n_obs), matvec=matvec)
         a_star = minres(Kop, self.y, tol=1e-9)[0]
-    
-        # Compute posterior mean
-        f_star = self.W_dot(self.gt2data.dot(a_star), L_powers_coeffs)
-        self.residuals = self.y - self.gt2data.T.dot(f_star)
-        self.res_var = self.residuals.var()
-        
-        pred = pd.DataFrame({'function': f_star}, index=self.space.genotypes)
-        if estimate_variance:
-            pred['variance'] = self.estimate_posterior_variance()
-        
+        ypred = self.calc_L_polynomial(L_powers_coeffs, self.gt2data.dot(a_star))
+        pred = pd.DataFrame({'ypred': ypred}, index=self.space.genotypes)
+
         if Xpred is not None:
             pred = pred.loc[Xpred, :]
+
+        if estimate_variance:
+            pred['var'] = self.estimate_posterior_variance(Xpred=pred.index)
         
         return(pred)
+    
+    def K_BB_E_dot(self, v, L_powers_coeffs):
+        """ multiply by the m by m matrix K_BB + E"""
+        yhat = self.calc_L_polynomial(L_powers_coeffs, self.gt2data.dot(v))
+        ynoise = yhat + self.gt2data.dot(self.E_sparse.dot(v))
+        return(self.gt2data.T.dot(ynoise))
     
     def estimate_posterior_variance(self, Xpred=None):
         """compute posterior variances for a list of sequences"""
@@ -464,61 +553,70 @@ class VCregression(LandscapeEstimator):
         # TODO: replace rho by covariance matrix
         if Xpred is None:
             Xpred = self.space.state_labels
-        n_pred = Xpred.shape[0]
-        pred_idx = self.get_obs_idx(Xpred)
+        n_pred, pred_idx = Xpred.shape[0], self.get_obs_idx(Xpred)
     
-        # Construct rho & b_k
-        rho = self.W_kd.T.dot(self.lambdas)
-        L_powers_coeffs = np.dot(self.L_powers_unique_entries_inv, rho)
+        # Build linear operator
         self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
+        L_powers_coeffs = self.calc_scaled_L_polynomial_coeffs(self.lambdas)
         matvec = partial(self.K_BB_E_dot, L_powers_coeffs=L_powers_coeffs)
         Kop = LinearOperator((self.n_obs, self.n_obs), matvec=matvec)
         
         # Compute posterior variance for each target sequence
-        K_ii = rho[0]
+        covariance_distance = self.W_kd.T.dot(self.lambdas)
+        K_ii = covariance_distance[0]
         post_vars = []
         for i in tqdm(pred_idx, total=n_pred):
             vec = np.zeros(self.n_genotypes)
             vec[i] = 1
-            K_Bi = self.W_dot(vec, L_powers_coeffs)[self.obs_idx]
+            K_Bi = self.calc_L_polynomial(L_powers_coeffs, vec)[self.obs_idx]
+            # Posibility to optimize with a good preconditioner
             alph = cg(Kop, K_Bi)[0]
             post_vars.append(K_ii - np.sum(K_Bi * alph))
     
-        return np.array(post_vars)
-    
-    def calc_eigenvalue_multiplicity(self):
-        self.lambdas_multiplicity = np.array([comb(self.seq_length, k) * (self.n_alleles - 1) ** k
-                                              for k in range(self.seq_length + 1)], dtype=int)
-    
-    def lambdas_to_variance(self, lambdas):
-        self.calc_eigenvalue_multiplicity()
-        variance_components = (lambdas * self.lambdas_multiplicity)[1:]
-        variance_components = variance_components / variance_components.sum()
-        return(variance_components)
+        return(np.array(post_vars))
     
     def simulate(self, lambdas, sigma=0, p_missing=0):
-        f_random = np.random.normal(size=self.n_genotypes)
-        L_powers_coeffs = self.calc_L_powers_coeffs(np.sqrt(lambdas))
-        f = self.W_dot(f_random, L_powers_coeffs)
+        '''
+        Simulates data under the specified Variance component priors
         
-        if sigma > 0:
-            f_obs = np.random.normal(f, sigma)
-        else:
-            f_obs = f
+        Parameters
+        ----------
+        lambdas : array-like of shape (seq_length + 1,)
+            Vector containing the variance of each of the ``seq_length``
+            components characterizing the prior
+        
+        sigma : real
+            Standard deviation of the experimental noise additional to the
+            variance components
+        
+        p_missing : float between 0 and 1
+            Probability of randomly missing genotypes in the simulated output
+            data
             
+        Returns
+        -------
+        data : pd.DataFrame of shape (n_genotypes, 3)
+            DataFrame with the columns ``y_true``, ``y``and ``var`` corresponding
+            to the true function at each genotype, the observed values and the
+            variance of the measurement respectively for each sequence or
+             genotype indicated in the ``DataFrame.index`` 
+        
+        '''
+        
+        a = np.random.normal(size=self.n_genotypes)
+        # TODO: find out why this needs to be sqrt
+        yhat = self.project(a, lambdas=np.sqrt(lambdas))
+        y = np.random.normal(yhat, sigma) if sigma > 0 else yhat
         variance = np.full(self.n_genotypes, sigma**2)
-        seqs = self.space.genotypes
         
         if p_missing > 0:
             n = int((1 - p_missing) * self.n_genotypes)
             sel_idxs = np.random.choice(np.arange(self.n_genotypes), n)
-            
-            f_obs = f_obs[sel_idxs]
-            variance = variance[sel_idxs]
-            seqs = seqs[sel_idxs]
+            y[sel_idxs] = np.nan
+            variance[sel_idxs] = np.nan
         
-        self.real_function = pd.DataFrame({'function': f}, index=self.space.state_labels)     
-        data = pd.DataFrame({'function': f_obs, 'variance': variance}, index=seqs)
+        data = pd.DataFrame({'y_true': yhat, 'y': y, 'var': variance},
+                            index=self.space.state_labels)
         return(data)
 
 
