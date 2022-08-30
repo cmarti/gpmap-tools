@@ -176,7 +176,7 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
         Width of the lines representing the edges. If a ``float`` is provided,
         that will be the width used to plot every edges. If ``str``, then
         widths will be scaled according to the corresponding column
-        in ``nodes_df``.  
+        in ``edges_df``.  
     
     cmap :  colormap or str
         Colormap to use for coloring the edges according to column ``color``
@@ -475,16 +475,80 @@ def get_lines_from_edges_df(nodes_df, edges_df, x=1, y=2, z=None,
 
 def plot_interactive(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
                      nodes_color='function', nodes_size=4,
-                     cmap='viridis', nodes_cmap_label='Function',
+                     nodes_cmap='viridis', nodes_cmap_label='Function',
                      edges_width=0.5, edges_color='#888', edges_alpha=0.2,
                      text=None):
+    '''
+    Makes an interactive plot of fitness landscape with genotypes as nodes
+    and single point mutations as edges using plotly 
+    
+    Parameters
+    ----------
+    nodes_df : pd.DataFrame of shape (n_genotypes, n_components + 2)
+        ``pd.DataFrame`` containing the coordinates in every of the ``n_components``
+        in addition to the "function" and "stationary_freq" columns. Additional
+        columns are also allowed
+    
+    edges_df : pd.DataFrame of shape (n_edges, 2)
+        ``pd.DataFrame`` the connectivity information between states of the
+        discrete space to plot. It has columns "i" and "j" for the indexes
+        of the pairs of states that are connected.
+        
+    fpath : str
+        File path in which to store the interactive plot as an html file
+        
+    x : str ('1')
+        Column in ``nodes_df`` to use for plotting the genotypes on the x-axis
+    
+    y : str ('2')
+        Column in ``nodes_df`` to use for plotting the genotypes on the y-axis 
+    
+    z : str (None)
+        Column in ``nodes_df`` to use for plotting the genotypes on the z-axis.
+        If provided, then a 3D plot will be produced as long as the provided
+        ``axes`` object allows it.
+    
+    nodes_color : str  ('function')
+        Column name for the values according to which states will be colored or
+        the specific color to use for plotting the states
+    
+    nodes_size : float (2.5)
+        Size of the markers provided for plotting to ``axes.scatter``. If a
+        ``float`` is provided, that will be the size used to plot every nodes.
+        If ``str``, then node sizes will be scaled according to the
+        corresponding column in ``nodes_df``.
+        
+    nodes_cmap : colormap or str
+        Colormap to use for coloring the nodes according to column ``color``
+    
+    nodes_cmap_label : str
+        Label for colorbar
+    
+    edges_width : float or str
+        Width of the lines representing the edges. If a ``float`` is provided,
+        that will be the width used to plot every edges. If ``str``, then
+        widths will be scaled according to the corresponding column
+        in ``edges_df``.  
+    
+    edges_color : str
+        Column name for the values according to which edges will be colored or
+        the specific color to use for plotting the edges
+     
+    edges_alpha : float (0.2)
+        Transparency of lines representing the edges
+     
+    text : array-like of shape (nodes_df.shape[0]) (None)
+        Labels to show for each state when hovering over the markers representing
+        them. If not provided, rownames of the nodes_df DataFrame will be used
+    '''
+    
     # Create figure
     fig = go.Figure()
 
     # Create nodes plot
     colorbar = dict(thickness=25, title=nodes_cmap_label, xanchor='left',
                     titleside='right', len=0.8)
-    marker = dict(showscale=True, colorscale=cmap, reversescale=False,
+    marker = dict(showscale=True, colorscale=nodes_cmap, reversescale=False,
                   color=nodes_df[nodes_color], size=nodes_size, colorbar=colorbar,
                   line_width=2)
     if text is None:
