@@ -49,3 +49,4 @@ Plotting
 .. autofunction:: gpmap.src.plot.plot_relaxation_times
 .. autofunction:: gpmap.src.plot.plot_edges
 .. autofunction:: gpmap.src.plot.plot_nodes
+.. autofunction:: gpmap.src.plot.plot_interactive
