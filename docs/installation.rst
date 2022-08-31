@@ -4,7 +4,7 @@ Installation Instructions
 =========================
 
 Soon but not yet, using the ``pip`` package manager by executing the following at the
-commandline: ::
+command line: ::
 
     $ pip install gpmap-tools
 
@@ -15,5 +15,11 @@ this at the command line: ::
     $ git clone git@bitbucket.org:cmartiga/gpmap_tools.git
 
 and install it in the current python environment: ::
+    
+    $ python setup.py install
+
+There are sometimes problems with the installation of `datashader <https://datashader.org/>` 
+and their own dependencies. We are still trying to figure out incompatibilities
+in the dependencies but generally we find that installing it first seems to work: ::
     
     $ python setup.py install

@@ -23,8 +23,8 @@ References
 ==========
 
 .. [#Marti-Gomez2022] Marti-Gomez C, McCandlish DM.
-    GPMAP-tools: a python library for visualizing large fitness landscapes. 
-    Biorxiv (2022). `<https://doi.org/10.1101/2020.07.14.201475>`_
+    GPMAP-tools: a python library for visualizing large fitness landscapes (2022)
+    In process
 
 .. [#Zhou2022] Zhou J, Wong MS, Chen WC, Krainer AR, Kinney JB, McCandlsih DM.
     Higher order epistasis and phenotypic prediction.
