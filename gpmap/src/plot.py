@@ -454,7 +454,7 @@ def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
                label=None, clabel=nodes_cmap_label,
                sort=sort_nodes, sort_by=sort_by, ascending=ascending, 
                vmax=nodes_vmax, vmin=nodes_vmin, fontsize=fontsize,
-               subset=None, autoscale_axis=autoscale_axis)
+               autoscale_axis=autoscale_axis)
     
     if edges_df is not None:
         plot_edges(axes, nodes_df, edges_df, x=x, y=y, z=z,
