@@ -26,8 +26,11 @@ Random walks
 Landscape Inference
 -------------------
 
+.. autoclass:: gpmap.src.inference.LandscapeEstimator
+    :members: project
+
 .. autoclass:: gpmap.src.inference.VCregression
-    :members: fit, predict, lambdas_to_variance
+    :members: fit, predict, lambdas_to_variance, project, simulate
 
 .. autoclass:: gpmap.src.inference.SeqDEFT
     :members: fit
