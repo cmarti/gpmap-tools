@@ -22,4 +22,4 @@ There are sometimes problems with the installation of `datashader <https://datas
 and their own dependencies. We are still trying to figure out incompatibilities
 in the dependencies but generally we find that installing it first seems to work: ::
     
-    $ python setup.py install
+    $ pip install datashader==0.13
