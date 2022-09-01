@@ -227,12 +227,22 @@ class RandomWalkTests(unittest.TestCase):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
 
         mc.calc_visualization(Ns=1, n_components=20)
+        nd1 = mc.nodes_df
         assert(np.allclose(mc.decay_rates_df['relaxation_time'][0], 0.3914628))
 
         # Ensure extreme genotypes in axis 1 have high function       
         df = mc.nodes_df
         assert(df.iloc[np.argmax(df['1']), :]['function'] > 1.5)
         assert(df.iloc[np.argmin(df['1']), :]['function'] > 1.5)
+        
+        # Calculate visualization with biased mutation rates
+        mc.calc_model_neutral_rate_matrix(model='HKY85',
+                                          exchange_rates={'a': 1, 'b': 2},
+                                          stat_freqs={'A': 0.2, 'T': 0.2,
+                                                      'C': 0.3, 'G': 0.3})
+        mc.calc_visualization(Ns=1, n_components=20)
+        nd2 = mc.nodes_df
+        assert(not np.allclose(nd2['1'], nd1['1']))
     
     def test_figure_Ns(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))

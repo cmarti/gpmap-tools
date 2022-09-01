@@ -532,7 +532,10 @@ class WMWSWalk(TimeReversibleRandomWalk):
         idxs = np.isclose(delta_function, 0) == False
         rate[idxs] = self._calc_rate(delta_function[idxs], Ns)
         if neutral_rate_matrix is not None:
-            rate = rate * neutral_rate_matrix.data
+            m = neutral_rate_matrix.copy()
+            m.setdiag(0)
+            m.eliminate_zeros()
+            rate = rate * m.data
         
         return(rate)
     
