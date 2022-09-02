@@ -96,6 +96,22 @@ class RandomWalkTests(unittest.TestCase):
             
             # Ensure heterogeneous leaving rates from alleles
             assert(np.unique(Q.diagonal()).shape[0] > 1)
+            
+        # Test with site-specific mutation rates
+        exchange_rates = [np.array([1, 2, 1, 2, 1, 2])]
+        site_rates = np.array([1, 1, 2])
+        sites_neutral_Q = mc.calc_sites_GTR_mut_matrices(exchange_rates=exchange_rates,
+                                                         site_mut_rates=site_rates)
+        for Q in sites_neutral_Q:
+            
+            # Ensure Q is symmetric
+            assert(np.allclose((Q - Q.T).todense(), 0))
+            
+            # Ensure normalized leaving rate at stationarity
+            assert(np.allclose(Q.diagonal().mean(), -3))
+            
+            # Ensure heterogeneous leaving rates from alleles
+            assert(np.unique(Q.diagonal()).shape[0] > 1)
         
     def test_calc_neutral_rate_matrix(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
