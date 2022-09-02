@@ -628,7 +628,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
         if not stat_freqs:
             stat_freqs = {a: 0.25 for a in DNA_ALPHABET}
         
-        ex_rates_def = {v : 1 for v in ['abcdef']}
+        ex_rates_def = {v : 1 for v in 'abcdef'}
         ex_rates_def.update(exchange_rates)
         exchange_rates = ex_rates_def
         
