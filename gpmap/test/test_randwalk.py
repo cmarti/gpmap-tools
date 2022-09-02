@@ -165,6 +165,13 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.unique(mc.neutral_rate_matrix.data).shape[0] == 3)
         assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
         
+        # Check variable rates across sites
+        site_mut_rates = np.array([1, 1, 2])
+        mc.calc_model_neutral_rate_matrix(model='K80', site_mut_rates=site_mut_rates)
+        assert(np.allclose(mc.neutral_stat_freqs, 1. / 64))
+        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
+        assert(np.unique(mc.neutral_rate_matrix.data).shape[0] > 2)
+        
         
     def test_stationary_frequencies(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
@@ -360,5 +367,5 @@ class RandomWalkTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests.test_calc_neutral_rate_matrix']
+    sys.argv = ['', 'RandomWalkTests']
     unittest.main()

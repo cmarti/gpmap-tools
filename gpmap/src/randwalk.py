@@ -671,14 +671,13 @@ class WMWSWalk(TimeReversibleRandomWalk):
         check_error(np.sum(stat_freqs) == 1, msg=msg)
 
         # Create the corresponding rate matrix        
-        exchange_rates = [np.array(exchange_rates)]
-        sites_stat_freqs = [np.array(stat_freqs)]
+        exchange_rates = [np.array(exchange_rates)] * self.space.seq_length
+        sites_stat_freqs = [np.array(stat_freqs)] * self.space.seq_length
         
         Q = self.calc_neutral_rate_matrix(sites_stat_freqs=sites_stat_freqs,
                                           exchange_rates=exchange_rates,
                                           site_mut_rates=site_mut_rates,
                                           force_constant_leaving_rate=force_constant_leaving_rate)
         self.neutral_rate_matrix = Q
-        sites_stat_freqs = sites_stat_freqs * self.space.seq_length
         self.neutral_stat_freqs = self.calc_neutral_stat_freqs(sites_stat_freqs)
         return(Q)
