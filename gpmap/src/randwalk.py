@@ -625,6 +625,12 @@ class WMWSWalk(TimeReversibleRandomWalk):
         msg += 'substitution models for the neutral dynamics'
         check_error(self.space.alphabet_type == 'dna', msg)
         
+        if not stat_freqs:
+            stat_freqs = {a: 0.25 for a in DNA_ALPHABET}
+        
+        ex_rates_def = {v : 1 for v in ['abcdef']}
+        ex_rates_def.update(exchange_rates)
+        
         if model == 'F81':
             exchange_rates = np.ones(6)
             stat_freqs = [stat_freqs[a] for a in DNA_ALPHABET]

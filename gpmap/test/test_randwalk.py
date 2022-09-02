@@ -140,6 +140,14 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.unique(mc.neutral_rate_matrix.data).shape[0] > 3)
         assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
         
+        # Taking in default parameters if not specified
+        exchange_rates = {'a': 1, 'b': 2}
+        mc.calc_model_neutral_rate_matrix(model='HKY85', exchange_rates=exchange_rates)
+        assert(np.allclose(mc.neutral_stat_freqs, 1. / 64))
+        assert(np.unique(mc.neutral_rate_matrix.data).shape[0] == 3)
+        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
+        
+        
     def test_stationary_frequencies(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
         codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
