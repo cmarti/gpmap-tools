@@ -630,6 +630,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
         
         ex_rates_def = {v : 1 for v in ['abcdef']}
         ex_rates_def.update(exchange_rates)
+        exchange_rates = ex_rates_def
         
         if model == 'F81':
             exchange_rates = np.ones(6)
