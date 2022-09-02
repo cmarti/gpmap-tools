@@ -278,7 +278,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
             freqs = freqs / freqs.sum()
             
             # Calculate rate matrix
-            site_Q = site_mu * self.calc_GTR_rate_matrix(freqs, ex_rates)
+            site_Q = self.calc_GTR_rate_matrix(freqs, ex_rates)
             
             # Normalize to have a specific leaving rate at stationarity
             eq_Q = self.calc_stationary_rate_matrix(site_Q, freqs)
@@ -287,7 +287,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
                 scaling_factor = - 1 / leaving_rates.sum()
             else:
                 scaling_factor = - (n_alleles-1) / leaving_rates.sum()
-            site_Q = scaling_factor * site_Q
+            site_Q = scaling_factor * site_Q * site_mu
             neutral_site_Qs.append(site_Q)
             
         if len(neutral_site_Qs) == 1 and self.space.seq_length > 1:

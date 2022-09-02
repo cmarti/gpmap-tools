@@ -98,20 +98,15 @@ class RandomWalkTests(unittest.TestCase):
             assert(np.unique(Q.diagonal()).shape[0] > 1)
             
         # Test with site-specific mutation rates
-        exchange_rates = [np.array([1, 2, 1, 2, 1, 2])]
         site_rates = np.array([1, 1, 2])
-        sites_neutral_Q = mc.calc_sites_GTR_mut_matrices(exchange_rates=exchange_rates,
-                                                         site_mut_rates=site_rates)
-        for Q in sites_neutral_Q:
+        sites_neutral_Q = mc.calc_sites_GTR_mut_matrices(site_mut_rates=site_rates)
+        for Q, mu in zip(sites_neutral_Q, site_rates):
             
             # Ensure Q is symmetric
             assert(np.allclose((Q - Q.T).todense(), 0))
             
             # Ensure normalized leaving rate at stationarity
-            assert(np.allclose(Q.diagonal().mean(), -3))
-            
-            # Ensure heterogeneous leaving rates from alleles
-            assert(np.unique(Q.diagonal()).shape[0] > 1)
+            assert(np.allclose(Q.diagonal().mean(), -3 * mu))
         
     def test_calc_neutral_rate_matrix(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
@@ -130,6 +125,13 @@ class RandomWalkTests(unittest.TestCase):
         neutral_rate_matrix = mc.calc_neutral_rate_matrix(sites_stat_freqs=sites_stat_freqs)
         assert(np.allclose(neutral_rate_matrix.diagonal().sum(), -9))
         assert(np.allclose(neutral_rate_matrix.sum(1), 0))
+        
+        # Variable rates across sites
+        sites_mu = np.array([1, 1, 2])
+        neutral_rate_matrix = mc.calc_neutral_rate_matrix(site_mut_rates=sites_mu)
+        assert(np.allclose(neutral_rate_matrix.diagonal().sum(), -9))
+        assert(np.allclose(neutral_rate_matrix.sum(1), 0))
+        assert(np.unique(neutral_rate_matrix.data).shape[0] > 2)
     
     def test_calc_model_neutral_rate_matrix(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
@@ -358,5 +360,5 @@ class RandomWalkTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests']
+    sys.argv = ['', 'RandomWalkTests.test_calc_neutral_rate_matrix']
     unittest.main()
