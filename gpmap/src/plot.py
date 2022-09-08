@@ -979,19 +979,23 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
     savefig(fig, fpath, tight=False, fmt=fmt)
 
 
-def plot_a_optimization(log_Ls, axes):
-    aa = log_Ls['a'].values
-    log_Ls = log_Ls['log_likelihood_mean'].values
-    log_Ls_sd = log_Ls['log_likelihood_sd'].values
+def plot_a_optimization(log_Ls_df, axes, show_err_bars=True):
+    aa = log_Ls_df['a'].values
+    logaa = np.log10(aa)
+    log_Ls = log_Ls_df['log_likelihood_mean'].values
+    log_Ls_sd = log_Ls_df['log_likelihood_sd']
     
     a_star = aa[log_Ls.argmax()]
+    log_a_star = np.log10(a_star)
     max_log_L = log_Ls.max()
     
-    axes.scatter(np.log10(aa), log_Ls, color='blue', s=15, zorder=1)
-    axes.scatter(np.log10(a_star), max_log_L, color='red', s=15, zorder=2)
+    axes.scatter(logaa, log_Ls, color='blue', s=15, zorder=1)
+    axes.scatter(log_a_star, max_log_L, color='red', s=15, zorder=2)
     
-    for a, m, s in zip(aa, log_Ls, log_Ls_sd):
-        axes.plot((a, a), (m-s, m+s), lw=1, color='blue')
+    if show_err_bars:
+        for a, m, s in zip(logaa, log_Ls, log_Ls_sd):
+            color = 'red' if a == log_a_star else 'blue'
+            axes.plot((a, a), (m-s, m+s), lw=1, color=color)
     
     xlims, ylims = axes.get_xlim(), axes.get_ylim()
     x = xlims[0] + 0.05 * (xlims[1]- xlims[0])
@@ -1016,9 +1020,40 @@ def plot_density_vs_frequency(seq_density, axes):
              xlim=lims, ylim=lims)
 
 
-def plot_SeqDEFT_summary(log_Ls, seq_density):
-    fig, subplots = init_fig(1, 2, colsize=4, rowsize=3.5)
-    plot_a_optimization(log_Ls, subplots[0])
-    plot_density_vs_frequency(seq_density, subplots[1])
-    fig.tight_layout()
+def plot_SeqDEFT_summary(log_Ls, seq_density=None, show_err_bars=True):
+    '''
+    Generates a 2 panel figure showing how the cross-validated likelihood
+    changes with ``a`` hyperparameter and the best selected value for model
+    fitting.  
+    
+    Parameters
+    ----------
+        log_Ls : pd.DataFrame of shape (num_a, 3)
+            DataFrame containing the column names ``a``, ``log_likelihood_mean``
+            and ``log_likelihood_sd``
+        
+        seq_density : pd.DataFrame of shape (n_genotypes, >= 2)
+            DataFrame with column names ``frequency``, ``Q_star`` with the 
+            observed frequencies and estimated densities for each possible sequence
+            respectively. If not provided only a 1 panel figure with the
+            cross-validated likelihood curve will be provided
+            
+        show_err_bars : bool
+            Boolean value corresponding to whether to show error bars for the
+            cross-validated log-likelihood in the plot
+            
+    Returns
+    -------
+        fig : matplotlib.figure object
+            ``Figure`` object containing the resulting plots
+    
+    '''
+    if seq_density is None:
+        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
+        plot_a_optimization(log_Ls, axes, show_err_bars=show_err_bars)
+    else:
+        fig, subplots = init_fig(1, 2, colsize=4, rowsize=3.5)
+        plot_a_optimization(log_Ls, subplots[0], show_err_bars=show_err_bars)
+        plot_density_vs_frequency(seq_density, subplots[1])
+        fig.tight_layout()
     return(fig)

@@ -14,7 +14,7 @@ from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             plot_edges, savefig, init_fig, figure_visualization,
                             figure_allele_grid, save_holoviews,
                             plot_relaxation_times, plot_interactive,
-    figure_Ns_grid)
+                            figure_Ns_grid, plot_SeqDEFT_summary)
 from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWSWalk
 from gpmap.src.space import CodonSpace
@@ -275,6 +275,14 @@ class PlottingTests(unittest.TestCase):
         plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
                          nodes_color='function', nodes_size=10,
                          edges_width=1, z='3')
+    
+    def test_plot_SeqDEFT_summary(self):
+        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.csv')
+        logl = pd.read_csv(fpath)
+        
+        fig = plot_SeqDEFT_summary(logl)
+        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.png')
+        savefig(fig, fpath)
         
     def xtest_visualize_reactive_paths(self):
         np.random.seed(0)

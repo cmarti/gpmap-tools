@@ -50,3 +50,5 @@ Plotting
 .. autofunction:: gpmap.src.plot.plot_edges
 .. autofunction:: gpmap.src.plot.plot_nodes
 .. autofunction:: gpmap.src.plot.plot_interactive
+.. autofunction:: gpmap.src.plot.plot_SeqDEFT_summary
+
