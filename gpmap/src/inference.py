@@ -781,7 +781,7 @@ class SeqDEFT(LandscapeEstimator):
                                          num_a=num_a, options=options, scale_by=scale_by,
                                          fac_max=fac_max, fac_min=fac_min, gtol=gtol)
             ll = self.compute_log_Ls(a_values, nfolds, options, scale_by, gtol=gtol)
-            a_value = ll.iloc[np.argmax(ll['log_likelihood']), :]['a']
+            a_value = ll.iloc[np.argmax(ll['log_likelihood_mean']), :]['a']
             
         # Fit model with a_star
         phi = self._fit(a_value, phi_initial=phi_inf, options=options,
