@@ -53,9 +53,7 @@ def savefig(fig, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360):
     
 
 def save_plotly(fig, fpath=None):
-    if fpath is None:
-        fig.show()
-    else:
+    if fpath is not None:
         fpath = '{}.html'.format(fpath)
         fig.write_html(fpath)
 
