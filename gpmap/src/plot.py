@@ -981,13 +981,18 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
 
 def plot_a_optimization(log_Ls, axes):
     aa = log_Ls['a'].values
-    log_Ls = log_Ls['log_likelihood'].values
+    log_Ls = log_Ls['log_likelihood_mean'].values
+    log_Ls_sd = log_Ls['log_likelihood_sd'].values
     
     a_star = aa[log_Ls.argmax()]
     max_log_L = log_Ls.max()
     
     axes.scatter(np.log10(aa), log_Ls, color='blue', s=15, zorder=1)
     axes.scatter(np.log10(a_star), max_log_L, color='red', s=15, zorder=2)
+    
+    for a, m, s in zip(aa, log_Ls, log_Ls_sd):
+        axes.plot((a, a), (m-s, m+s), lw=1, color='blue')
+    
     xlims, ylims = axes.get_xlim(), axes.get_ylim()
     x = xlims[0] + 0.05 * (xlims[1]- xlims[0])
     y = ylims[0] + 0.9 * (ylims[1]- ylims[0])
