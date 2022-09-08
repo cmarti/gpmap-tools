@@ -592,6 +592,7 @@ def plot_interactive(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
                       scene=scene)
     
     save_plotly(fig, fpath=fpath)
+    return(fig)
 
 
 def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
