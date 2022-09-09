@@ -620,7 +620,7 @@ class VCregression(LandscapeEstimator):
         return(data)
 
 
-class SeqDEFT(LandscapeEstimator):
+class DeltaPEstimator(LandscapeEstimator):
     def __init__(self, P):
         self.P = P
     
@@ -640,7 +640,7 @@ class SeqDEFT(LandscapeEstimator):
         self.L = self.space.laplacian
         
         self.calc_L_powers_unique_entries_matrix()
-
+    
     @property
     def D_kernel_basis_orth_sparse(self):
         if not hasattr(self, '_D_kernel_basis_orth_sparse'):
@@ -655,6 +655,144 @@ class SeqDEFT(LandscapeEstimator):
             msg = '"P" not in the right range.'
             raise ValueError(msg)
     
+    def L_opt(self, phi, p=0):
+        return(self.L.dot(phi) - p * self.n_alleles * phi)
+    
+    def D_opt(self, phi):
+        Dphi = phi.copy()
+        for p in range(self.P):
+            Dphi = self.L_opt(Dphi, p)
+        return Dphi / factorial(self.P)
+    
+    def calc_log_prior_prob(self, phi, a):
+        S1 = a/(2*self.n_p_faces) * np.sum(phi * self.D_opt(phi))
+        regularizer = 0
+        
+        if np.isfinite(PHI_UB):
+            flags = (phi > PHI_UB)
+            if flags.any() > 0:
+                regularizer += np.sum((phi[flags] - PHI_UB)**2)
+                
+        if np.isfinite(PHI_LB):
+            flags = (phi < PHI_LB)
+            if flags.any() > 0:
+                regularizer += np.sum((phi[flags] - PHI_LB)**2)
+                
+        return(S1 + regularizer)
+    
+    def calc_log_prior_prob_grad(self, phi, a):
+        grad_S1 = a/self.n_p_faces * self.D_opt(phi)
+        regularizer = np.zeros(self.n_genotypes)
+        
+        if np.isfinite(PHI_UB):
+            flags = (phi > PHI_UB)
+            if flags.sum() > 0:
+                regularizer[flags] += 2 * (phi - PHI_UB)[flags]
+                
+        if np.isfinite(PHI_LB):
+            flags = (phi < PHI_LB)
+            if flags.sum() > 0:
+                regularizer[flags] += 2 * (phi - PHI_LB)[flags]
+                
+        result = grad_S1 + regularizer
+        return(result)
+    
+    def S(self, phi, a):
+        S1 = self.calc_log_prior_prob(phi, a)
+        S2 = self.calc_neg_log_likelihood() 
+        return(S1 + S2)
+    
+    def S_grad(self, phi, a):
+        S1_grad = self.calc_log_prior_prob_grad(phi, a)
+        S2_grad = self.calc_neg_log_likelihood_grad() 
+        return(S1_grad + S2_grad)
+    
+    def construct_D_kernel_basis2(self, max_value_to_zero=1e-12):
+        # TODO: think on a way to optimize this for large landscapes
+        
+        # Generate bases and sequences
+        bases = np.array(list(range(self.n_alleles)))
+        seqs = np.array(list(product(bases, repeat=self.seq_length)))
+    
+        # Construct D kernel basis
+        
+        # Basis of kernel W(0)
+        D_kernel_basis = np.ones([self.n_genotypes, 1])
+        
+        for p in range(1, self.P):
+            # Basis of kernel W(1)
+            if p == 1:
+                W1_dim = self.seq_length*(self.n_alleles-1)
+                W1_basis = np.zeros([self.n_genotypes,W1_dim])
+                for site in range(self.seq_length):
+                    W1_basis[:,site*(self.n_alleles-1):(site+1)*(self.n_alleles-1)] = pd.get_dummies(seqs[:,site], drop_first=True).values
+                D_kernel_basis = np.hstack((D_kernel_basis, W1_basis))
+    
+            # Basis of kernel W(>=2)
+            if p >= 2:
+                W2_dim = int(comb(self.seq_length,p) * (self.n_alleles-1)**p)
+                W2_basis = np.ones([self.n_genotypes,W2_dim])
+                site_groups = list(combinations(range(self.seq_length), p))
+                base_groups = list(product(range(1,self.n_alleles), repeat=p))  # because we have dropped first base
+                col = 0
+                for site_group in site_groups:
+                    for base_group in base_groups:
+                        for i in range(p):
+                            site, base_idx = site_group[i], base_group[i]-1  # change 'base' to its 'idx'
+                            W2_basis[:,col] *= W1_basis[:,site*(self.n_alleles-1)+base_idx]
+                        col += 1
+                D_kernel_basis = np.hstack((D_kernel_basis, W2_basis))
+    
+        D_kernel_basis = orth(D_kernel_basis)    
+        D_kernel_basis[np.abs(D_kernel_basis) < max_value_to_zero] = 0
+        D_kernel_basis_orth_sparse = csr_matrix(D_kernel_basis)
+        return(D_kernel_basis_orth_sparse)
+
+    def get_Vj(self, j):
+        if not hasattr(self, 'vj'):
+            site_L = self.n_alleles * np.eye(self.n_alleles) - np.ones((self.n_alleles, self.n_alleles))
+            v0 = np.full((self.n_alleles, 1), 1 / np.sqrt(self.n_alleles)) 
+            v1 = orth(site_L)
+            
+            msg = 'Basis for subspaces V0 and V1 are not orthonormal'
+            check_error(np.allclose(v1.T.dot(v0), 0), msg)
+            
+            self.vj = {0: v0, 1: v1,
+                       (0,): v0, (1,): v1}
+
+        if j not in self.vj:
+            # self.vj[j] = np.tensordot(self.vj[j[0]], self.get_Vj(j[1:]), axes=0)
+            self.vj[j] = np.vstack([np.hstack([x * self.get_Vj(j[1:]) for x in row])
+                                    for row in self.vj[j[0]]])
+        return(self.vj[j])
+
+    def construct_D_kernel_basis(self, max_value_to_zero=1e-12):
+        basis = [np.full((self.n_genotypes, 1), 1 / np.sqrt(self.n_genotypes))]
+        for p in range(1, self.P):
+            for idxs in combinations(range(self.seq_length), p):
+                idxs = np.array(idxs)
+                j = np.zeros(self.seq_length, dtype=int)
+                j[idxs] = 1
+                basis.append(self.get_Vj(tuple(j)))
+        basis = np.hstack(basis)
+        basis[np.abs(basis) < max_value_to_zero] = 0
+        basis = csr_matrix(basis)
+        return(basis)
+    
+    def construct_D_spectrum(self):
+        D_eig_vals, D_multis = np.zeros(self.seq_length+1), np.zeros(self.seq_length+1)
+        for k in range(self.seq_length+1):
+            lambda_k = k * self.n_alleles
+            Lambda_k = 1
+            for p in range(self.P):
+                Lambda_k *= lambda_k - p * self.n_alleles
+            m_k = comb(self.seq_length,k) * (self.n_alleles-1)**k
+            D_eig_vals[k], D_multis[k] = Lambda_k/factorial(self.P), m_k
+    
+        self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
+    
+
+class SeqDEFT(DeltaPEstimator):
     def get_phi_0(self, options, scale_by):
         if not hasattr(self, 'phi_0') or self.phi_0 is None:
             self.phi_0 = self._fit(0, options=options, scale_by=scale_by)
@@ -786,15 +924,10 @@ class SeqDEFT(LandscapeEstimator):
         # Fit model with a_star
         phi = self._fit(a_value, phi_initial=phi_inf, options=options,
                         scale_by=scale_by, gtol=gtol)
-        log_Q_star = -phi - logsumexp(-phi)
-        Q_star = np.exp(log_Q_star)
+        Q_star = self.phi_to_Q(phi)
         seq_densities = pd.DataFrame({'frequency': self.R, 'Q_star': Q_star},
                                      index=self.genotypes)
-        assert(np.allclose(Q_star.sum(), 1))
         return(seq_densities)
-    
-    def L_opt(self, phi, p=0):
-        return self.L.dot(phi) - p * self.n_alleles * phi
     
     def get_phi_initial(self, phi_initial=None):
         if phi_initial is None:
@@ -854,15 +987,16 @@ class SeqDEFT(LandscapeEstimator):
         # a, N = a * scale_by, N *scale_by
         return(phi)
     
-    def calc_Q(self, phi):
-        return(np.exp(-phi) / np.sum(np.exp(-phi)))
+    def calc_neg_log_likelihood(self, phi, R, N):
+        S2 = N * np.sum(R * phi)
+        S3 = N * np.sum(safe_exp(-phi))
+        return(S2 + S3)
     
-    def D_opt(self, phi):
-        Dphi = phi.copy()
-        for p in range(self.P):
-            Dphi = self.L_opt(Dphi, p)
-        return Dphi / factorial(self.P)
-    
+    def calc_neg_log_likelihood_grad(self, phi, R, N):
+        grad_S2 = N * R
+        grad_S3 = N * safe_exp(-phi)
+        return(grad_S2 + grad_S3)
+        
     def S(self, phi, a, N, R):
         S1 = a/(2*self.n_p_faces) * np.sum(phi * self.D_opt(phi))
         S2 = N * np.sum(R * phi)
@@ -932,90 +1066,6 @@ class SeqDEFT(LandscapeEstimator):
                 regularizer[flags] += 2 * (phi - PHI_LB)[flags]
         return self.D_kernel_basis_orth_sparse.T.dot(grad_S_inf1 - grad_S_inf2 + regularizer)
     
-    def construct_D_kernel_basis2(self, max_value_to_zero=1e-12):
-        # TODO: think on a way to optimize this for large landscapes
-        
-        # Generate bases and sequences
-        bases = np.array(list(range(self.n_alleles)))
-        seqs = np.array(list(product(bases, repeat=self.seq_length)))
-    
-        # Construct D kernel basis
-        
-        # Basis of kernel W(0)
-        D_kernel_basis = np.ones([self.n_genotypes, 1])
-        
-        for p in range(1, self.P):
-            # Basis of kernel W(1)
-            if p == 1:
-                W1_dim = self.seq_length*(self.n_alleles-1)
-                W1_basis = np.zeros([self.n_genotypes,W1_dim])
-                for site in range(self.seq_length):
-                    W1_basis[:,site*(self.n_alleles-1):(site+1)*(self.n_alleles-1)] = pd.get_dummies(seqs[:,site], drop_first=True).values
-                D_kernel_basis = np.hstack((D_kernel_basis, W1_basis))
-    
-            # Basis of kernel W(>=2)
-            if p >= 2:
-                W2_dim = int(comb(self.seq_length,p) * (self.n_alleles-1)**p)
-                W2_basis = np.ones([self.n_genotypes,W2_dim])
-                site_groups = list(combinations(range(self.seq_length), p))
-                base_groups = list(product(range(1,self.n_alleles), repeat=p))  # because we have dropped first base
-                col = 0
-                for site_group in site_groups:
-                    for base_group in base_groups:
-                        for i in range(p):
-                            site, base_idx = site_group[i], base_group[i]-1  # change 'base' to its 'idx'
-                            W2_basis[:,col] *= W1_basis[:,site*(self.n_alleles-1)+base_idx]
-                        col += 1
-                D_kernel_basis = np.hstack((D_kernel_basis, W2_basis))
-    
-        D_kernel_basis = orth(D_kernel_basis)    
-        D_kernel_basis[np.abs(D_kernel_basis) < max_value_to_zero] = 0
-        D_kernel_basis_orth_sparse = csr_matrix(D_kernel_basis)
-        return(D_kernel_basis_orth_sparse)
-
-    def get_Vj(self, j):
-        if not hasattr(self, 'vj'):
-            site_L = self.n_alleles * np.eye(self.n_alleles) - np.ones((self.n_alleles, self.n_alleles))
-            v0 = np.full((self.n_alleles, 1), 1 / np.sqrt(self.n_alleles)) 
-            v1 = orth(site_L)
-            
-            msg = 'Basis for subspaces V0 and V1 are not orthonormal'
-            check_error(np.allclose(v1.T.dot(v0), 0), msg)
-            
-            self.vj = {0: v0, 1: v1,
-                       (0,): v0, (1,): v1}
-
-        if j not in self.vj:
-            # self.vj[j] = np.tensordot(self.vj[j[0]], self.get_Vj(j[1:]), axes=0)
-            self.vj[j] = np.vstack([np.hstack([x * self.get_Vj(j[1:]) for x in row])
-                                    for row in self.vj[j[0]]])
-        return(self.vj[j])
-
-    def construct_D_kernel_basis(self, max_value_to_zero=1e-12):
-        basis = [np.full((self.n_genotypes, 1), 1 / np.sqrt(self.n_genotypes))]
-        for p in range(1, self.P):
-            for idxs in combinations(range(self.seq_length), p):
-                idxs = np.array(idxs)
-                j = np.zeros(self.seq_length, dtype=int)
-                j[idxs] = 1
-                basis.append(self.get_Vj(tuple(j)))
-        basis = np.hstack(basis)
-        basis[np.abs(basis) < max_value_to_zero] = 0
-        basis = csr_matrix(basis)
-        return(basis)
-    
-    def construct_D_spectrum(self):
-        D_eig_vals, D_multis = np.zeros(self.seq_length+1), np.zeros(self.seq_length+1)
-        for k in range(self.seq_length+1):
-            lambda_k = k * self.n_alleles
-            Lambda_k = 1
-            for p in range(self.P):
-                Lambda_k *= lambda_k - p * self.n_alleles
-            m_k = comb(self.seq_length,k) * (self.n_alleles-1)**k
-            D_eig_vals[k], D_multis[k] = Lambda_k/factorial(self.P), m_k
-    
-        self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
-
     def simulate(self, N, a_true, random_seed=None):
         # Set random seed
         np.random.seed(random_seed)
@@ -1098,6 +1148,9 @@ class SeqDEFT(LandscapeEstimator):
         else:
             log_L = np.sum(counts * np.log(Q))
         return(log_L)
+    
+    def phi_to_logQ(self, phi):
+        return(-phi - logsumexp(-phi))
     
     def phi_to_Q(self, phi):
         return(np.exp(-phi - logsumexp(-phi)))
