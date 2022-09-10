@@ -621,9 +621,28 @@ class VCregression(LandscapeEstimator):
 
 
 class DeltaPEstimator(LandscapeEstimator):
-    def __init__(self, P):
+    def __init__(self, P, a=None, num_a=20, nfolds=5,
+                 resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
+                 opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
+                 gtol=1e-3):
         self.P = P
-    
+        self.a = a
+        self.nfolds = nfolds
+        
+        # Attributes to generate a values
+        self.num_a = num_a
+        self.a_resolution = resolution
+        self.max_a_max = max_a_max
+        self.scale_by = scale_by
+        self.fac_max = fac_max
+        self.fac_min = fac_min
+        
+        # Optimization attributes
+        self.opt_method = opt_method
+        optimization_opts['gtol'] = gtol
+        optimization_opts['ftol'] = 0
+        self.optimization_opts = optimization_opts
+        
     def calc_n_p_faces(self, length, P, n_alleles):
         return(comb(length, P) * comb(n_alleles, 2) ** P * n_alleles ** (length - P))
         
@@ -638,8 +657,6 @@ class DeltaPEstimator(LandscapeEstimator):
         self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
         self.n_genotypes = self.space.n_states
         self.L = self.space.laplacian
-        
-        self.calc_L_powers_unique_entries_matrix()
     
     @property
     def D_kernel_basis_orth_sparse(self):
@@ -791,63 +808,80 @@ class DeltaPEstimator(LandscapeEstimator):
     
         self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
     
+    def fit_a_cv(self):
+        
+        if self.a is None:
+            a_values = self.get_a_values()
+            ll = self.compute_log_Ls(a_values, nfolds, options, scale_by, gtol=gtol)
+            a_value = ll.iloc[np.argmax(ll['log_likelihood_mean']), :]['a']
+    
+    def fit(self, X, data):
+        """
+        Infers the sequence-function relationship under the specified
+        \Delta^{(P)} prior 
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Vector containing the genotypes for which have observations provided
+            by `counts`. Missing sequences are assumed to have observed 0 times
+            
+        data : array-like of shape (n_obs,) or (n_obs, n_cols)
+            Vector or matrix containing the expeted type of data for each model
+            
+        Returns
+        -------
+        
+        landscape : pd.DataFrame (n_genotypes, 2)
+            DataFrame containing the estimated function for each possible
+            sequence in the space
+        
+        """
+        self.init(genotypes=X)
+        self.set_data(X, data)
+        
+        if self.a is None:
+            self.a = self.fit_a_cv()
+        
+        # Fit model with a_star
+        phi = self._fit(self.a)
+        output = self.phi_to_output(phi)
+        return(output)
+    
 
 class SeqDEFT(DeltaPEstimator):
-    def get_phi_0(self, options, scale_by):
-        if not hasattr(self, 'phi_0') or self.phi_0 is None:
-            self.phi_0 = self._fit(0, options=options, scale_by=scale_by)
-        return(self.phi_0)
-    
-    def get_phi_inf(self, options, scale_by, gtol=1e-3):
-        if not hasattr(self, 'phi_inf')  or self.phi_inf is None:
-            self.phi_inf = self._fit(np.inf, options=options,
-                                     scale_by=scale_by, gtol=gtol)
-        return(self.phi_inf)
-    
-    def calc_a_max(self, max_a_max=1e12, resolution=0.1, fac_max=1,
-                   options=None, scale_by=1, gtol=1e-3):
-        a_max = self.n_p_faces * fac_max
-        phi_inf = self.get_phi_inf(options, scale_by)
-        phi_max = self._fit(a_max, phi_initial=phi_inf, options=options,
-                            scale_by=scale_by, gtol=gtol)
+    def calc_a_max(self, phi_inf):
+        a_max = self.n_p_faces * self.fac_max
+        
+        phi_max = self._fit(a_max, phi_initial=phi_inf)
         distance = D_geo(phi_max, phi_inf)
         
-        while distance > resolution and a_max < max_a_max:
+        while distance > self.resolution and a_max < self.max_a_max:
             a_max *= 10
-            phi_max = self._fit(a_max, phi_initial=phi_inf, options=options,
-                                scale_by=scale_by, gtol=gtol)
+            phi_max = self._fit(a_max, phi_initial=phi_inf)
             distance = D_geo(phi_max, phi_inf)
             
         return(a_max)
     
-    def calc_a_min(self, resolution=0.1, fac_min=1e-6, options=None, scale_by=1,
-                   gtol=1e-3):
-        a_min = self.n_p_faces * fac_min
-        phi_0 = self.get_phi_0(options, scale_by)
-        phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
-        phi_min = self._fit(a_min, phi_initial=self.phi_inf, options=options,
-                            scale_by=scale_by, gtol=gtol)
+    def calc_a_min(self, phi_inf):
+        a_min = self.n_p_faces * self.fac_min
+        
+        phi_0 = self._fit(0)
+        phi_min = self._fit(a_min, phi_initial=phi_inf)
+        
         distance = D_geo(phi_min, phi_0)
         
-        while distance > resolution:
+        while distance > self.resolution:
             a_min /= 10
-            phi_min = self._fit(a_min, phi_initial=phi_inf, options=options,
-                                scale_by=scale_by, gtol=gtol)
+            phi_min = self._fit(a_min, phi_initial=phi_inf)
             distance = D_geo(phi_min, phi_0)
         return(a_min)
 
-    def find_a_bounds(self, max_a_max=1e12, resolution=0.1, fac_max=0.1,
-                      fac_min=1e-6, options=None, scale_by=1, gtol=1e-3):
-        a_max = self.calc_a_max(max_a_max, resolution, fac_max, options, scale_by, gtol=gtol)
-        a_min = self.calc_a_min(resolution, fac_min, options, scale_by, gtol=gtol)
-        return(a_min, a_max)
-    
-    def get_a_values(self, resolution=0.1, max_a_max=1e12, num_a=20,
-                     options=None, scale_by=1,
-                     fac_max=0.1, fac_min=1e-6, gtol=1e-3):
-        a_min, a_max = self.find_a_bounds(max_a_max, resolution, fac_max, fac_min,
-                                          options, scale_by, gtol=gtol)
-        a_values = np.geomspace(a_min, a_max, num_a)
+    def get_a_values(self):
+        phi_inf = self._fit(np.inf)
+        a_min = self.calc_a_min(phi_inf) 
+        a_max = self.calc_a_max(phi_inf)
+        a_values = np.geomspace(a_min, a_max, self.num_a)
         return(a_values)
 
     def set_data(self, X, counts):
@@ -855,15 +889,15 @@ class SeqDEFT(DeltaPEstimator):
         data.loc[X] = counts
         data = data.astype(int)
         
-        self.counts = data
         self.N = data.sum()
         self.R = (data / self.N)
-        self.data_dict = {'N': self.N, 'R': self.R}
-
-    def counts_to_data_dict(self, counts):
-        n = counts.sum()
-        return({'N': n, 'R': counts / n})
     
+    def phi_to_output(self, phi):
+        Q_star = self.phi_to_Q(phi)
+        seq_densities = pd.DataFrame({'frequency': self.R, 'Q_star': Q_star},
+                                     index=self.genotypes)
+        return(seq_densities)
+
     def fit(self, X, counts, a_value=None, nfolds=5,
             resolution=0.1, max_a_max=1e12, 
             num_a=20, options=None, scale_by=1,
@@ -953,48 +987,40 @@ class SeqDEFT(DeltaPEstimator):
         phi = self.D_kernel_basis_orth_sparse.dot(b_a)
         return(phi)
     
-    def _fit_a(self, N, R, a, phi_initial, method, options):
+    def _fit_a(self, N, R, a, phi_initial):
         res = minimize(fun=self.S, jac=self.grad_S, args=(a,N,R),
-                       x0=phi_initial, method=method, options=options)
+                       x0=phi_initial, method=self.opt_method,
+                       options=self.optimization_opts)
         if not res.success:
             print(res.message)
         return(res.x)
     
-    def _fit(self, a, phi_initial=None, data_dict=None,
-             method='L-BFGS-B', options=None, scale_by=1, gtol=1e-3):
+    def _fit(self, a, phi_initial=None, data_dict=None):
         N, R = self.get_data(data_dict=data_dict)
         
-        # Solution is the same if we scale these values: may be useful if 
-        # running into numerical problems
-        a, N = a / scale_by, N / scale_by
         phi_initial = self.get_phi_initial(phi_initial=phi_initial)
-        
-        if options is None:
-            options = {}
-        options['gtol'] = gtol
-        options['ftol'] = 0
         
         if a == 0:
             with np.errstate(divide='ignore'):
                 phi = -np.log(R)
         elif 0 < a < np.inf:
-            phi = self._fit_a(N, R, a, phi_initial, method, options)
+            phi = self._fit_a(N, R, a, phi_initial)
         elif a == np.inf:
-            phi = self._fit_a_inf(N, R, phi_initial, method, options)
+            phi = self._fit_a_inf(N, R, phi_initial)
         else:
             raise(ValueError('"a" not in the right range.'))
     
         # a, N = a * scale_by, N *scale_by
         return(phi)
     
-    def calc_neg_log_likelihood(self, phi, R, N):
-        S2 = N * np.sum(R * phi)
-        S3 = N * np.sum(safe_exp(-phi))
+    def calc_neg_log_likelihood(self, phi):
+        S2 = self.N * np.sum(self.R * phi)
+        S3 = self.N * np.sum(safe_exp(-phi))
         return(S2 + S3)
     
-    def calc_neg_log_likelihood_grad(self, phi, R, N):
-        grad_S2 = N * R
-        grad_S3 = N * safe_exp(-phi)
+    def calc_neg_log_likelihood_grad(self, phi):
+        grad_S2 = self.N * self.R
+        grad_S3 = self.N * safe_exp(-phi)
         return(grad_S2 + grad_S3)
         
     def S(self, phi, a, N, R):
