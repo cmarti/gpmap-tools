@@ -807,15 +807,36 @@ class DeltaPEstimator(LandscapeEstimator):
             D_eig_vals[k], D_multis[k] = Lambda_k/factorial(self.P), m_k
     
         self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
+        
+    def get_cv_iter(self, a_values):
+        for train, validation in self.split_cv():        
+            for a in a_values:
+                yield(a, train, validation)   
     
     def fit_a_cv(self):
+        cv_log_L = []
+        a_values = self.get_a_values()
+        cv_data = self.get_cv_iter(a_values)
         
-        if self.a is None:
-            a_values = self.get_a_values()
-            ll = self.compute_log_Ls(a_values, nfolds, options, scale_by, gtol=gtol)
-            a_value = ll.iloc[np.argmax(ll['log_likelihood_mean']), :]['a']
+        for a, train, test in tqdm(cv_data, total=self.nfolds * self.num_a):
+            X_train, y_train = train
+            X_test, y_test = test
+
+            self.set_data(X=X_train, y=y_train)
+            phi = self._fit(a)
+            
+            self.set_data(X=X_test, y=y_test)
+            test_logL = -self.calc_neg_log_likelihood(phi) 
+            
+            cv_log_L.append({'a': a, 'logL': test_logL})
+        
+        cv_log_L = pd.DataFrame(cv_log_L)
+        cv_log_L = cv_log_L.groupby('a', as_index=False).agg({'logL': ('mean', 'std')})
+        cv_log_L.columns = ['a', 'log_likelihood_mean', 'log_likelihood_sd']
+        self.cv_log_L = cv_log_L
+        self.a = cv_log_L['a'][np.argmax(cv_log_L['log_likelihood_mean'])]
     
-    def fit(self, X, data):
+    def fit(self, X, data, force_fit_a=True):
         """
         Infers the sequence-function relationship under the specified
         \Delta^{(P)} prior 
@@ -829,6 +850,10 @@ class DeltaPEstimator(LandscapeEstimator):
         data : array-like of shape (n_obs,) or (n_obs, n_cols)
             Vector or matrix containing the expeted type of data for each model
             
+        force_fit_a : bool 
+            Whether to re-fit ``a`` using cross-validation even if it is already
+            defined a priori
+            
         Returns
         -------
         
@@ -840,8 +865,9 @@ class DeltaPEstimator(LandscapeEstimator):
         self.init(genotypes=X)
         self.set_data(X, data)
         
-        if self.a is None:
-            self.a = self.fit_a_cv()
+        if self.a is None and force_fit_a:
+            self.fit_a_cv()
+            self.set_data(X, data)
         
         # Fit model with a_star
         phi = self._fit(self.a)
@@ -884,13 +910,25 @@ class SeqDEFT(DeltaPEstimator):
         a_values = np.geomspace(a_min, a_max, self.num_a)
         return(a_values)
 
-    def set_data(self, X, counts):
+    def fill_zeros_counts(self, X, y):
         data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
-        data.loc[X] = counts
+        data.loc[X] = y
         data = data.astype(int)
+        return(data)
+
+    def set_data(self, X, y):
+        self.X = X
+        self.y = y
         
+        data = self.fill_zeros_counts(X, y)
         self.N = data.sum()
         self.R = (data / self.N)
+    
+    def phi_to_logQ(self, phi):
+        return(-phi - logsumexp(-phi))
+    
+    def phi_to_Q(self, phi):
+        return(np.exp(-phi - logsumexp(-phi)))
     
     def phi_to_output(self, phi):
         Q_star = self.phi_to_Q(phi)
@@ -1175,59 +1213,23 @@ class SeqDEFT(DeltaPEstimator):
             log_L = np.sum(counts * np.log(Q))
         return(log_L)
     
-    def phi_to_logQ(self, phi):
-        return(-phi - logsumexp(-phi))
+    def counts_to_seqs(self):
+        seqs = []
+        for seq, counts in zip(self.X, self.y):
+            seqs.extend([seq] * counts)
+        seqs = np.array(seqs)
+        return(seqs)
     
-    def phi_to_Q(self, phi):
-        return(np.exp(-phi - logsumexp(-phi)))
-    
-    def get_cv_iter(self, cv_fold, a_values):
-        for k, (train, validation) in enumerate(self.split_cv(cv_fold)):        
-            for i, a in enumerate(a_values):
-                yield(k, i, a, train, validation)   
-    
-    def compute_log_Ls(self, a_values, nfolds=5,
-                       options=None, scale_by=1, gtol=1e-3):
-        phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
-    
-        log_Lss = np.zeros([nfolds, a_values.shape[0]])
-        cv_data = self.get_cv_iter(nfolds, a_values)
-        n_iters = nfolds * a_values.shape[0]
+    def split_cv(self):
+        seqs = self.counts_to_seqs()
+        np.random.shuffle(seqs)
+        n_test = np.round(self.N / self.nfolds).astype(int)
         
-        for k, i, a, train, validation in tqdm(cv_data, total=n_iters):
-            data_dict = self.counts_to_data_dict(train)
-            phi = self._fit(a, phi_initial=phi_inf, data_dict=data_dict,
-                            options=options, scale_by=scale_by, gtol=gtol)
-            Q = self.phi_to_Q(phi)
-            log_Lss[k,i] = self.calc_log_likelihood(a, validation, Q)
-        
-        log_Ls = pd.DataFrame({'a': a_values,
-                               'log_likelihood_mean': log_Lss.mean(axis=0),
-                               'log_likelihood_sd': log_Lss.std(axis=0)})
-        self.log_Ls = log_Ls
-        return(log_Ls)
-    
-    def expand_counts(self):
-        obs = []
-        for i, c in enumerate(self.counts):
-            obs.extend([i] * c)
-        obs = np.array(obs)
-        np.random.shuffle(obs)
-        return(obs)
-    
-    def count_obs(self, obs):
-        v, c = np.unique(obs, return_counts=True)
-        counts = pd.DataFrame(c, index=v).reindex(np.arange(self.n_genotypes)).fillna(0).astype(int).values[:, 0]
-        return(counts)
-    
-    def split_cv(self, cv_fold):
-        obs = self.expand_counts()
-        n_valid = np.round(self.N / cv_fold).astype(int)
-        for _ in range(cv_fold):
-            np.random.shuffle(obs)
-            train = self.count_obs(obs[n_valid:])
-            validation = self.count_obs(obs[:n_valid])
-            yield(train, validation) 
+        for i in np.arange(0, seqs.shape[0], n_test):
+            test = np.unique(seqs[i:i+n_test], return_counts=True)
+            train = np.unique(np.append(seqs[:i], seqs[i+n_test:]),
+                              return_counts=True)
+            yield(train, test) 
 
 
 def D_geo(phi1, phi2):

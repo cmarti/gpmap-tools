@@ -128,6 +128,29 @@ class SeqDEFTTests(unittest.TestCase):
         obs = seqdeft.expand_counts()
         counts = seqdeft.count_obs(obs)
         assert(np.all(counts == data['counts'].values))
+        
+    def test_split_cv(self):
+        fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
+        data = pd.read_csv(fpath, index_col=0)
+        
+        seqdeft = SeqDEFT(2)
+        seqdeft.init(genotypes=data.index.values)
+        seqdeft.set_data(data.index.values, data['counts'].values)
+        
+        test_sets = []
+        for train, test in seqdeft.split_cv():
+            X_train, y_train = train
+            X_test, y_test = test
+            
+            test = pd.DataFrame({'seq': X_test, 'counts': y_test})
+            train = pd.DataFrame({'seq': X_train, 'counts': y_train})
+            test_sets.append(test)
+            
+            merged = pd.concat([test, train]).groupby('seq')['counts'].sum()
+            assert(np.all(merged.values == data.loc[merged.index, 'counts'].values))
+            
+        merged = pd.concat(test_sets).groupby('seq')['counts'].sum()
+        assert(np.all(merged.values == data.loc[merged.index, 'counts'].values))
     
     def test_missing_alleles(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
