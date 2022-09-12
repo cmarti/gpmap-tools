@@ -62,20 +62,20 @@ class SeqDEFTTests(unittest.TestCase):
     
     def test_seq_deft_inference(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
-        seqdeft = SeqDEFT(P=2)
-        
-        # Infer hyperparameter using CV
         data = pd.read_csv(fpath, index_col=0)
-        seq_densities = seqdeft.fit(X=data.index.values,
-                                    counts=data['counts'].values)
-        Q = seq_densities['Q_star']
-        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
+        # Try invalid a
+        try:
+            SeqDEFT(P=2, a=-500)
+            self.fail()
+        except ValueError:
+            pass
         
         # Infer with the provided a value
-        data = pd.read_csv(fpath, index_col=0)
+        seqdeft = SeqDEFT(P=2, a=500)
         seq_densities = seqdeft.fit(X=data.index.values,
-                                    counts=data['counts'].values,
-                                    a_value=500)
+                                    y=data['counts'].values)
+        Q = seq_densities['Q_star']
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
         # Inference with disordered and missing sequences for the 0
@@ -84,18 +84,18 @@ class SeqDEFTTests(unittest.TestCase):
         rownames = data.index.values.copy()
         np.random.shuffle(rownames)
         data = data.loc[rownames, :]
+        seqdeft = SeqDEFT(P=2, a=500)
         seq_densities = seqdeft.fit(X=data.index.values,
-                                    counts=data['counts'].values,
-                                    a_value=500)
+                                    y=data['counts'].values)
         r = pearsonr(np.log(seq_densities['Q_star']), np.log(Q))[0]
         assert(r > 0.98)
         
-        # Save results
-        fpath = join(TEST_DATA_DIR, 'seqdeft_output.csv')
-        seq_densities.to_csv(fpath)
+        # Infer hyperparameter using CV
+        seqdeft = SeqDEFT(P=2)
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    y=data['counts'].values)
         
-        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.csv')
-        seqdeft.log_Ls.to_csv(fpath)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
     
     def test_seq_deft_cv_plot(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_output.csv')
@@ -115,19 +115,6 @@ class SeqDEFTTests(unittest.TestCase):
         
         cmd = [sys.executable, bin_fpath, counts_fpath, '-o', out_fpath]
         check_call(cmd)
-        
-        cmd = [sys.executable, bin_fpath, counts_fpath, '-o', out_fpath, '-P', '3']
-        check_call(cmd)
-    
-    def test_handle_counts(self):
-        fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
-        data = pd.read_csv(fpath, index_col=0)
-        seqdeft = SeqDEFT(2)
-        seqdeft.init(genotypes=data.index.values)
-        seqdeft.set_data(data.index.values, data['counts'].values)
-        obs = seqdeft.expand_counts()
-        counts = seqdeft.count_obs(obs)
-        assert(np.all(counts == data['counts'].values))
         
     def test_split_cv(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
@@ -162,7 +149,7 @@ class SeqDEFTTests(unittest.TestCase):
         
         # Ensure that it runs even if the allele was not observed at all
         seq_densities = seqdeft.fit(X=data.index.values,
-                                    counts=data['counts'].values)
+                                    y=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
         # Ensure that the alleles were never observed and that the estimated
@@ -176,7 +163,7 @@ class SeqDEFTTests(unittest.TestCase):
         selected = [x[0] not in ['A', 'C'] for x in data.index]
         data.loc[selected, 'counts'] = 0
         seq_densities = seqdeft.fit(X=data.index.values,
-                                    counts=data['counts'].values)
+                                    y=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
     
     def test_2_consecutive_fits(self):
@@ -187,13 +174,13 @@ class SeqDEFTTests(unittest.TestCase):
         # Load data and select a few sequences to be observed only
         data = pd.read_csv(fpath, index_col=0)
         seq_densities = seqdeft.fit(X=data.index.values,
-                                    counts=data['counts'].values)
+                                    y=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
         seqs = np.random.choice(data.index, size=200)
         data.loc[seqs, 'counts'] = 0
         seq_densities = seqdeft.fit(X=data.index.values,
-                                    counts=data['counts'].values)
+                                    y=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
     def test_very_few_sequences(self):
@@ -208,7 +195,7 @@ class SeqDEFTTests(unittest.TestCase):
         
         # Ensure that it runs
         seq_densities = seqdeft.fit(X=data.index.values,
-                                    counts=data['counts'].values)
+                                    y=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
         
