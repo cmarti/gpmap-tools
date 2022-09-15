@@ -189,71 +189,43 @@ class VCTests(unittest.TestCase):
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
         assert(rho > 0.95)
         assert(mse < 0.3)
-        
-    def xtest_estimate_f_variance(self):
-        np.random.seed(0)
-        lambdas = [2.80160850e02, 1.11396023, 2.56638126e-01,
-                   3.51032105e-02, 1.10928480e-02, 6.69724738e-03]
-
-        gpmap = get_test_gpmap()        
-        v = gpmap.estimate_f_variance(lambdas)
-        print(v)
-        
-    def xtest_W_dot_precision(self):
-        gpmap = VCregression(5, 4)
-        f = np.random.normal(size=gpmap.n_genotypes)
-        
-        ### Test first with pure 2nd order ###
-        k = 2
-
-        # Calculating projection directly        
-        D = gpmap.calc_distance_matrix()
-        W_k = gpmap.W_kd[k][D]
-        f_k1 = W_k.dot(f)
-
-        # Use Laplacian powers
-        lambdas = np.zeros(gpmap.length + 1)
-        lambdas[k] = 1
-        L_powers_coeffs = gpmap.calc_L_powers_coeffs(lambdas)
-        f_k2 = gpmap.W_dot(f, L_powers_coeffs)
-        assert(np.allclose(f_k1, f_k2))
-        
-        ### Test first all orders simultaneously ###
-        
-        # Calculating projection directly 
-        lambdas = [0, 10, 5, 2, 1, 0.1]
-        D = gpmap.calc_distance_matrix()
-        W = 0
-        for k in range(gpmap.length + 1):
-            W += gpmap.W_kd[k][D] * lambdas[k]
-        f_1 = W.dot(f)
-
-        # Use Laplacian powers
-        L_powers_coeffs = gpmap.calc_L_powers_coeffs(lambdas)
-        f_2 = gpmap.W_dot(f, L_powers_coeffs)
-        
-        # Use cov matrix directly
-        W = gpmap.calc_cov_dense(lambdas)
-        f_3 = W.dot(f)
-        
-        assert(np.allclose(f_1, f_2))
-        assert(np.allclose(f_1, f_3))
     
-    
-    def xtest_calc_generalized_laplacian(self):
-        gpmap = VCregression(2, 2, alphabet_type='custom')
-        p = np.array([[0.3, 0.5],
-                      [0.7, 0.5]])
-        gpmap.calc_generalized_laplacian(p)
-        L = np.array([[ 1.2, -0.5, -0.45825757, 0.],
-                      [-0.5,  1.2,  0.,  -0.45825757],
-                      [-0.45825757,  0.,   0.8, -0.5],
-                      [ 0., -0.45825757, -0.5, 0.8]])
-        assert(np.allclose(gpmap.L.todense(), L))
-        assert(np.allclose(gpmap.L.dot(np.sqrt(gpmap.probability)), 0))
-        l = np.linalg.eigvalsh(gpmap.L.todense())
-        assert(np.allclose(l,  [0, 1, 1, 2]))
-    
+    def test_skewed_VC(self):
+        ps = np.array([[0.4, 0.6],
+                       [0.3, 0.7]])
+        sk_vc = VCregression()
+        sk_vc.init(2, 2, ps=ps)
+        
+        vc = VCregression()
+        vc.init(2, 2)
+        
+        # Ensure that we maintain the right eigenvalues
+        lambdas = np.linalg.eig(sk_vc.M.todense())[0]
+        assert(np.allclose(lambdas, [2, 1, 0, 1]))
+        
+        # Ensure that stationary frequencies add up to 1
+        assert(sk_vc.D_pi.data.sum() == 1)
+        
+        # Test projection into the constant subspace
+        f = np.random.normal(0, 1, size=sk_vc.n_genotypes)
+        sk_f_0 = sk_vc.project(f, k=0)
+        assert(np.allclose(sk_f_0, sk_f_0[0]))
+
+        # Test simulation and projection consistency
+        f = sk_vc.simulate(lambdas=[10, 5, 1])['y_true'].values
+        f_0 = sk_vc.project(f, k=0)
+        f_1 = sk_vc.project(f, k=1)
+        f_2 = sk_vc.project(f, k=2)
+        assert(np.allclose(f, f_0 + f_1 + f_2))
+        
+        # Ensure D_pi orthogonality of projections
+        assert(np.allclose(sk_vc.project(f_0, k=1), 0))
+        assert(np.allclose(sk_vc.project(f_0, k=2), 0))
+        assert(np.allclose(sk_vc.project(f_1, k=0), 0))
+        assert(np.allclose(sk_vc.project(f_1, k=2), 0))
+        assert(np.allclose(sk_vc.project(f_2, k=0), 0))
+        assert(np.allclose(sk_vc.project(f_2, k=1), 0))
+        
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'VCTests']

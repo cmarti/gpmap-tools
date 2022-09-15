@@ -21,7 +21,8 @@ from scipy.special._logsumexp import logsumexp
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_matrix_polynomial_dot, Frob, grad_Frob,
-                             reciprocal, calc_Kn_matrix, calc_cartesian_product)
+                             reciprocal, calc_Kn_matrix, calc_cartesian_product,
+    calc_cartesian_prod_freqs)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
 
@@ -206,6 +207,17 @@ class VCregression(LandscapeEstimator):
             If not provided, regular VC regression will be applied
             
     '''
+    def init(self, seq_length=None, n_alleles=None, genotypes=None,
+             alphabet_type='custom', ps=None):
+        self.define_space(seq_length=seq_length, n_alleles=n_alleles,
+                          genotypes=genotypes, alphabet_type=alphabet_type)
+        self.calc_sparse_matrix_for_polynomial(ps=ps)
+        self.calc_polynomial_coeffs()
+        
+        # For estimating lambdas
+        self.calc_L_powers_unique_entries_matrix()
+        self.calc_W_kd_matrix()
+    
     def calc_eigenvalues(self):
         lambdas = np.arange(self.seq_length + 1)
         if not self.skewed:
@@ -216,28 +228,17 @@ class VCregression(LandscapeEstimator):
         '''calc L or Q'''
         
         self.skewed = ps is not None
+        self.ps = ps
 
         if self.skewed:
             sites_matrices = [calc_Kn_matrix(p=p) for p in ps]
-            sites_D_pi = [get_sparse_diag_matrix(p) for p in ps]
-            self.D_pi = calc_cartesian_product(sites_D_pi)
+            self.D_pi = get_sparse_diag_matrix(calc_cartesian_prod_freqs(ps))
         else:
             sites_matrices = [calc_Kn_matrix(self.n_alleles)] * self.seq_length
         
         M = calc_cartesian_product(sites_matrices)
         M = get_sparse_diag_matrix(M.sum(1).A1.flatten()) - M
         self.M = M
-    
-    def init(self, seq_length=None, n_alleles=None, genotypes=None,
-             alphabet_type='custom'):
-        self.define_space(seq_length=seq_length, n_alleles=n_alleles,
-                          genotypes=genotypes, alphabet_type=alphabet_type)
-        self.calc_sparse_matrix_for_polynomial()
-        self.calc_polynomial_coeffs()
-        
-        # For estimating lambdas
-        self.calc_L_powers_unique_entries_matrix()
-        self.calc_W_kd_matrix()
         
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
@@ -258,15 +259,14 @@ class VCregression(LandscapeEstimator):
         obs_idx = self.genotype_idxs[seqs]
         return(obs_idx)
 
-    def set_data(self, X, y, variance):
-        obs_idx = self.get_obs_idx(X)
-        if variance is None:
-            variance = np.zeros(obs_idx.shape[0])
-        
-        self.obs_idx = obs_idx
+    def set_data(self, X, y, variance=None):
+        self.obs_idx = self.get_obs_idx(X)
         self.y = y
-        self.variance = variance
         self.n_obs = y.shape[0]
+
+        if variance is None:
+            variance = np.zeros(y.shape[0])        
+        self.variance = variance
     
     def fit(self, X, y, variance=None,
             cross_validation=False, nfolds=10):
@@ -607,6 +607,9 @@ class VCregression(LandscapeEstimator):
         '''
         
         a = np.random.normal(size=self.n_genotypes)
+        if hasattr(self, 'D_pi'):
+            a = self.D_pi.dot(a)
+        
         # TODO: find out why this needs to be sqrt
         yhat = self.project(a, lambdas=np.sqrt(lambdas))
         y = np.random.normal(yhat, sigma) if sigma > 0 else yhat

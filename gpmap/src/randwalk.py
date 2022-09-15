@@ -313,12 +313,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
             site-level stationary frequencies at neutrality
         
         '''
-        if len(sites_stat_freqs) == 1:
-            return(sites_stat_freqs[0])
-        
-        site1 = sites_stat_freqs[0]
-        site2 = self.calc_neutral_stat_freqs(sites_stat_freqs[1:])
-        freqs = np.hstack([f * site2 for f in site1])
+        freqs = calc_cartesian_product(sites_stat_freqs)
         return(freqs)
         
     def calc_neutral_rate_matrix(self, sites_stat_freqs=None,
