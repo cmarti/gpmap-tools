@@ -5,7 +5,7 @@ from _collections import defaultdict
 import numpy as np
 from Bio.Seq import Seq 
 
-from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT
+from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT, ALPHABETS, ALPHABET
 from gpmap.src.utils import check_error
 from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
 from itertools import chain
@@ -71,7 +71,7 @@ def guess_alphabet_type(alphabet):
     
 
 def guess_space_configuration(seqs, ensure_full_space=True):
-    '''
+    """
     Guess the sequence space configuration from a collection of sequences
     This allows to have different number of alleles per site and maintain 
     the order in which alleles appear in the sequences when enumerating the 
@@ -92,12 +92,11 @@ def guess_space_configuration(seqs, ensure_full_space=True):
        
     Returns
     -------
-    
     config: dict with keys {'length', 'n_alleles', 'alphabet'}
             Returns a dictionary with the inferred configuration of the discrete
             space where the sequences come from.
     
-    '''
+    """
     
     alleles = defaultdict(dict)
     for seq in seqs:
@@ -143,3 +142,47 @@ def get_custom_codon_table(aa_mapping):
     codon_table.id = -1
     codon_table.names = ['Custom']
     return(codon_table)
+
+
+def get_seqs_from_alleles(alphabet):
+    if not alphabet:
+        yield('')
+    else:
+        for allele in alphabet[0]:
+            for seq in get_seqs_from_alleles(alphabet[1:]):
+                yield(allele + seq)
+                
+                
+def get_alphabet(n_alleles=None, alphabet_type=None):
+    '''
+    Returns the resulting alphabet from specifying either the type or the
+    number of alleles per site
+    
+    Parameters
+    ----------
+    n_alleles : int
+        Number of alleles per site
+        
+    alphabet_type : str
+        Type of alphabet to use out of {None, 'dna', 'rna', 'protein'}
+        
+    Returns
+    -------
+    
+    alphabet : list
+        List containing the alleles in the desired alphabet
+        
+    '''
+    
+    if alphabet_type is None or alphabet_type == 'custom':
+        if n_alleles <= 10:
+            alphabet = [str(x) for x in np.arange(n_alleles)]
+        else:
+            alphabet = [ALPHABET for x in np.arange(n_alleles)]
+            
+    elif alphabet_type in ALPHABETS:
+        alphabet = ALPHABETS[alphabet_type]
+        
+    else:
+        raise ValueError('Unknwon alphabet type. Try any of: {}'.format(ALPHABETS.keys()))
+    return(alphabet)

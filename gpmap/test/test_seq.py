@@ -8,7 +8,8 @@ import pandas as pd
 
 from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
-                           guess_space_configuration, get_custom_codon_table)
+                           guess_space_configuration, get_custom_codon_table,
+    get_seqs_from_alleles)
 
 
 class SeqTests(unittest.TestCase):
@@ -92,6 +93,11 @@ class SeqTests(unittest.TestCase):
         dna = np.array(['ATGTGA', 'ATGTGATGG'])
         protein = translate_seqs(dna, codon_table=codon_table)
         assert(np.all(protein == ['S*', 'S*M']))
+    
+    def test_get_seqs_from_alleles(self):
+        alleles = [['a', 'b'], ['0', '1']]
+        seqs = list(get_seqs_from_alleles(alleles))
+        assert(np.all(seqs == ['a0', 'a1', 'b0', 'b1']))
     
         
 if __name__ == '__main__':
