@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import random
-from itertools import product, combinations
+from itertools import product, combinations, chain
 from tqdm import tqdm
 from _functools import partial
 
@@ -19,67 +19,36 @@ from scipy.sparse.linalg import cg
 from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
-from gpmap.src.space import SequenceSpace
-from gpmap.src.utils import get_sparse_diag_matrix, check_error
-from gpmap.src.seq import guess_space_configuration
-
-
-def reciprocal(x, y):
-    """calculate reciprocal of variable, if variable=0, return 0"""
-    if y == 0:
-        return 0
-    else:
-        return x / y
-
-
-def Frob(lambdas, M, a):
-    """calculate the cost function given lambdas and a"""
-    Frob1 = np.dot(lambdas, M).dot(lambdas)
-    Frob2 = 2 * np.sum(lambdas * a)
-    return Frob1 - Frob2
-
-
-def grad_Frob(lambdas, M, a):
-    """gradient of the function Frob(lambdas, M, a)"""
-    grad_Frob1 = 2 * M.dot(lambdas)
-    grad_Frob2 = 2 * a
-    return grad_Frob1 - grad_Frob2
+from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
+                             calc_matrix_polynomial_dot, Frob, grad_Frob,
+                             reciprocal, calc_Kn_matrix, calc_cartesian_product)
+from gpmap.src.seq import (guess_space_configuration, get_alphabet,
+                           get_seqs_from_alleles)
 
 
 class LandscapeEstimator(object):
-    
-    def define_space(self, seq_length=None, n_alleles=None, genotypes=None,
-                     alphabet_type='custom'):
-        alphabet = None
-        
+    def define_space(self, seq_length=None, n_alleles=None, alphabet=None,
+                     alphabet_type=None, genotypes=None):
         if genotypes is not None:
             configuration = guess_space_configuration(genotypes,
                                                       ensure_full_space=False)
             seq_length = configuration['length']
-            alphabet_type = configuration['alphabet_type']
-            alphabet = set()
-            for alleles in configuration['alphabet']:
-                alphabet = alphabet.union(alleles)
-            alphabet = [sorted(alphabet)] * seq_length
-            self.space = SequenceSpace(seq_length=seq_length, alphabet=alphabet,
-                                       alphabet_type='custom')
-            n_alleles = len(alphabet[0])
+            alphabet = np.unique(list(chain(configuration['alphabet'])))
+            n_alleles = alphabet.shape[0]
+            
+        msg = 'Either genotypes or both seq_length and n_alleles must  be provided'
+        check_error(n_alleles is not None and seq_length is not None, msg=msg)
         
-        elif n_alleles is None or seq_length is None:
-            msg = 'Either genotypes or both seq_length and n_alleles must '
-            msg += 'be provided'
-            raise ValueError(msg)
-        
-        else:
-            self.space = SequenceSpace(seq_length=seq_length, n_alleles=n_alleles,
-                                       alphabet_type=alphabet_type)
+        if alphabet is None:
+            alphabet = get_alphabet(n_alleles=n_alleles,
+                                    alphabet_type=alphabet_type)
         
         self.seq_length = seq_length
         self.n_alleles = n_alleles
-    
-    @property
-    def genotypes(self):
-        return(self.space.genotypes)
+        self.n_genotypes = n_alleles ** seq_length
+        self.genotypes = np.array(list(get_seqs_from_alleles([alphabet] * seq_length)))
+        self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
+                                       index=self.genotypes)
     
     def calc_eigenvalues(self):
         lambdas = np.arange(self.seq_length + 1) * self.n_alleles
@@ -95,11 +64,7 @@ class LandscapeEstimator(object):
         V = np.vstack([lambdas ** i for i in range(self.seq_length + 1)]).T
         return(V)
     
-    def calc_L_polynomial_coeffs_num(self):
-        self.B = np.linalg.inv(self.calc_eig_vandermonde_matrix())
-        return(self.B)
-    
-    def calc_L_polynomial_coeffs(self):
+    def calc_polynomial_coeffs(self, numeric=False):
         '''
         Calculates the coefficients of the polynomial in L that represent 
         projection matrices into each of the kth eigenspaces.
@@ -113,41 +78,43 @@ class LandscapeEstimator(object):
             for each eigenspace by its eigenvalue and adding them up across
             different powers
         '''
-        
-        l = self.seq_length
-        lambdas = self.calc_eigenvalues()
-        s = l + 1
-        B = np.zeros((s, s))
-        
-        idx = np.arange(s)
-        
-        for k in idx:
-            k_idx = idx != k
-            k_lambdas = lambdas[k_idx]
-            norm_factor = 1 / np.prod(k_lambdas - lambdas[k])
+        if numeric:
+            self.B = np.linalg.inv(self.calc_eig_vandermonde_matrix())
 
-            for power in idx:
-                p = np.sum([np.product(v) for v in combinations(k_lambdas, l - power)])
-                B[power, k] = norm_factor * (-1) ** (power) * p
-        
-        self.B = B
-        return(B)
+        else:        
+            l = self.seq_length
+            lambdas = self.calc_eigenvalues()
+            s = l + 1
+            B = np.zeros((s, s))
+            
+            idx = np.arange(s)
+            
+            for k in idx:
+                k_idx = idx != k
+                k_lambdas = lambdas[k_idx]
+                norm_factor = 1 / np.prod(k_lambdas - lambdas[k])
     
-    def calc_scaled_L_polynomial_coeffs(self, lambdas):
-        if not hasattr(self, 'B') or self.B.shape[0] != self.seq_length + 1:
-            self.calc_L_polynomial_coeffs()
-        return(self.B.dot(lambdas))
-
-    def calc_L_powers(self, v):
-        powers = [v]
-        for _ in range(self.seq_length):
-            powers.append(self.L.dot(powers[-1]))
-        return(np.vstack(powers).T)
-
-    def calc_L_polynomial(self, coefficients, v):
-        powers = self.calc_L_powers(v)
-        return(powers.dot(coefficients))
+                for power in idx:
+                    p = np.sum([np.product(v) for v in combinations(k_lambdas, l - power)])
+                    B[power, k] = norm_factor * (-1) ** (power) * p
+            
+            self.B = B
+            
+        return(self.B)
     
+    def get_polynomial_coeffs(self, k=None, lambdas=None):
+        msg = 'Only one "k" or "lambdas" can and must be provided'
+        check_error((lambdas is None) ^ (k is None), msg=msg)
+        
+        if lambdas is not None:
+            if not hasattr(self, 'B') or self.B.shape[0] != self.seq_length + 1:
+                self.calc_polynomial_coeffs()
+            coeffs = self.B.dot(lambdas)
+        else:
+            coeffs = self.B[:, k].ravel() 
+        
+        return(coeffs)
+
     def project(self, y, k=None, lambdas=None):
         '''
         Projects the function ``y`` into the ``k``th eigenspace of the 
@@ -173,19 +140,12 @@ class LandscapeEstimator(object):
             ``y`` or the sum of the projections into each component scaled by
             ``lambda[k]`` if ``lambdas`` is provided 
         '''
-        
-        if not hasattr(self, 'B'):
-            self.calc_L_polynomial_coeffs()
-        
         msg = 'k and lambdas cannot be provided simultaneously'
         check_error(lambdas is None or k is None, msg=msg)
         
-        if lambdas is not None:
-            coeffs = self.calc_scaled_L_polynomial_coeffs(lambdas)
-        else:
-            coeffs = self.B[:, k].ravel() 
-        
-        return(self.calc_L_polynomial(coeffs, y))
+        coeffs = self.get_polynomial_coeffs(k=k, lambdas=lambdas)
+        projection = calc_matrix_polynomial_dot(coeffs, self.M, y)
+        return(projection)
     
     def calc_L_powers_unique_entries_matrix(self):
         """Construct entries of powers of L. 
@@ -230,14 +190,52 @@ class LandscapeEstimator(object):
         
 
 class VCregression(LandscapeEstimator):
+    '''
+        Variance Component regression model that allows inference and prediction
+        of a scalar function in sequence spaces under a Gaussian Process prior
+        parametrized by the contribution of the different orders of interaction
+        to the observed genetic variability of a continuous phenotype
+        
+        It requires the use of the same number of alleles per sites
+        
+        Parameters
+        ----------
+        p : np.array of shape (seq_length, n_alleles)
+            Stationary frequencies of alleles under a simple random walk
+            to use for the generalized or skewed variance component regression.
+            If not provided, regular VC regression will be applied
+            
+    '''
+    def calc_eigenvalues(self):
+        lambdas = np.arange(self.seq_length + 1)
+        if not self.skewed:
+            lambdas *= self.n_alleles
+        return(lambdas)
+    
+    def calc_sparse_matrix_for_polynomial(self, ps=None):
+        '''calc L or Q'''
+        
+        self.skewed = ps is not None
+
+        if self.skewed:
+            sites_matrices = [calc_Kn_matrix(p=p) for p in ps]
+            sites_D_pi = [get_sparse_diag_matrix(p) for p in ps]
+            self.D_pi = calc_cartesian_product(sites_D_pi)
+        else:
+            sites_matrices = [calc_Kn_matrix(self.n_alleles)] * self.seq_length
+        
+        M = calc_cartesian_product(sites_matrices)
+        M = get_sparse_diag_matrix(M.sum(1).A1.flatten()) - M
+        self.M = M
+    
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom'):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
-        self.space.calc_laplacian()
-        self.n_genotypes = self.space.n_states
-        self.L = self.space.laplacian
-        self.calc_L_polynomial_coeffs()
+        self.calc_sparse_matrix_for_polynomial()
+        self.calc_polynomial_coeffs()
+        
+        # For estimating lambdas
         self.calc_L_powers_unique_entries_matrix()
         self.calc_W_kd_matrix()
         
@@ -257,7 +255,7 @@ class VCregression(LandscapeEstimator):
                 self.W_kd[k, d] = self.calc_w(k, d)
     
     def get_obs_idx(self, seqs):
-        obs_idx = self.space.state_idxs[seqs]
+        obs_idx = self.genotype_idxs[seqs]
         return(obs_idx)
 
     def set_data(self, X, y, variance):
@@ -400,7 +398,7 @@ class VCregression(LandscapeEstimator):
     
     def get_gt_to_data_matrix(self, idx=None, subset_idx=None):
         if idx is None:
-            idx = self.space.state_idxs.values
+            idx = self.genotype_idxs.values
         
         if subset_idx is None:
             obs_idx = idx.copy()
@@ -424,9 +422,13 @@ class VCregression(LandscapeEstimator):
         correlation, distance_class_ns = np.zeros(size), np.zeros(size)
         for d in range(size):
             c_k = self.L_powers_unique_entries_inv[:, d]
-            distance_class_n = np.sum(observed_seqs * self.calc_L_polynomial(c_k, observed_seqs))
-            correlation[d] = reciprocal(np.sum(seq_values * self.calc_L_polynomial(c_k, seq_values)), 
-                                        distance_class_n)
+            
+            polynomial = calc_matrix_polynomial_dot(c_k, self.M, observed_seqs)
+            distance_class_n = np.sum(observed_seqs * polynomial)
+            
+            polynomial = calc_matrix_polynomial_dot(c_k, self.M, seq_values)
+            correlation[d] = reciprocal(np.sum(seq_values * polynomial), distance_class_n)
+            
             distance_class_ns[d] = distance_class_n
             
         return(correlation, distance_class_ns)
@@ -526,12 +528,13 @@ class VCregression(LandscapeEstimator):
         self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
     
         # Minimize error given lambdas
-        L_powers_coeffs = self.calc_scaled_L_polynomial_coeffs(self.lambdas)
-        matvec = partial(self.K_BB_E_dot, L_powers_coeffs=L_powers_coeffs)
-        Kop = LinearOperator((self.n_obs, self.n_obs), matvec=matvec)
+        coeffs = self.get_polynomial_coeffs(lambdas=self.lambdas)
+        Kop = LinearOperator((self.n_obs, self.n_obs),
+                             matvec=partial(self.K_BB_E_dot, coeffs=coeffs))
         a_star = minres(Kop, self.y, tol=1e-9)[0]
-        ypred = self.calc_L_polynomial(L_powers_coeffs, self.gt2data.dot(a_star))
-        pred = pd.DataFrame({'ypred': ypred}, index=self.space.genotypes)
+        
+        ypred = calc_matrix_polynomial_dot(coeffs, self.M, self.gt2data.dot(a_star))
+        pred = pd.DataFrame({'ypred': ypred}, index=self.genotypes)
 
         if Xpred is not None:
             pred = pred.loc[Xpred, :]
@@ -541,9 +544,9 @@ class VCregression(LandscapeEstimator):
         
         return(pred)
     
-    def K_BB_E_dot(self, v, L_powers_coeffs):
+    def K_BB_E_dot(self, v, coeffs):
         """ multiply by the m by m matrix K_BB + E"""
-        yhat = self.calc_L_polynomial(L_powers_coeffs, self.gt2data.dot(v))
+        yhat = calc_matrix_polynomial_dot(coeffs, self.M, self.gt2data.dot(v))
         ynoise = yhat + self.gt2data.dot(self.E_sparse.dot(v))
         return(self.gt2data.T.dot(ynoise))
     
@@ -557,9 +560,9 @@ class VCregression(LandscapeEstimator):
     
         # Build linear operator
         self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
-        L_powers_coeffs = self.calc_scaled_L_polynomial_coeffs(self.lambdas)
-        matvec = partial(self.K_BB_E_dot, L_powers_coeffs=L_powers_coeffs)
-        Kop = LinearOperator((self.n_obs, self.n_obs), matvec=matvec)
+        coeffs = self.get_polynomial_coeffs(lambdas=self.lambdas)
+        Kop = LinearOperator((self.n_obs, self.n_obs),
+                             matvec=partial(self.K_BB_E_dot, coeffs=coeffs))
         
         # Compute posterior variance for each target sequence
         covariance_distance = self.W_kd.T.dot(self.lambdas)
@@ -568,7 +571,7 @@ class VCregression(LandscapeEstimator):
         for i in tqdm(pred_idx, total=n_pred):
             vec = np.zeros(self.n_genotypes)
             vec[i] = 1
-            K_Bi = self.calc_L_polynomial(L_powers_coeffs, vec)[self.obs_idx]
+            K_Bi = calc_matrix_polynomial_dot(coeffs, self.M, vec)[self.obs_idx]
             # Posibility to optimize with a good preconditioner
             alph = cg(Kop, K_Bi)[0]
             post_vars.append(K_ii - np.sum(K_Bi * alph))
@@ -616,7 +619,7 @@ class VCregression(LandscapeEstimator):
             variance[sel_idxs] = np.nan
         
         data = pd.DataFrame({'y_true': yhat, 'y': y, 'var': variance},
-                            index=self.space.state_labels)
+                            index=self.genotypes)
         return(data)
 
 

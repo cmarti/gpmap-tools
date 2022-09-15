@@ -66,6 +66,20 @@ def check_eigendecomposition(matrix, eigenvalues, right_eigenvectors, tol=1e-3):
         check_error(abs_err <= tol, msg.format(abs_err, tol))
 
 
+def calc_Kn_matrix(k=None, p=None):
+    msg = 'One and only one of "k" or "p" must be provided'
+    check_error((k is None) ^ (p is None), msg=msg)
+    
+    if p is not None:
+        k = p.shape[0]
+        m = np.vstack([p] * k)
+    else:
+        m = np.ones((k, k))
+
+    np.fill_diagonal(m, np.zeros(k))
+    return(csr_matrix(m))
+
+
 def stack_prod_matrices(m_diag, m_offdiag, a):
     rows = []
     for j in range(a):
@@ -90,26 +104,34 @@ def calc_cartesian_product(matrices):
     return(m)
 
 
-def _calc_adjacency_matrix(self, m=None, pos=None):
-    if pos is None:
-        pos = self.seq_length - 1
-        
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        
-        if m is None:
-            m = self.site_Kn[pos]
+def reciprocal(x, y):
+    """calculate reciprocal of variable, if variable=0, return 0"""
+    if y == 0:
+        return 0
+    else:
+        return x / y
 
-        if pos == 0:
-            return(m)
 
-        i = sp.identity(m.shape[0])
-        m = self._istack_matrices(m, i, pos-1)
-        
-    return(self._calc_adjacency_matrix(m, pos-1))
+def Frob(lambdas, M, a):
+    """calculate the cost function given lambdas and a"""
+    Frob1 = np.dot(lambdas, M).dot(lambdas)
+    Frob2 = 2 * np.sum(lambdas * a)
+    return Frob1 - Frob2
 
-def calc_adjacency_matrix(self, codon_table=None):
-    if self.alphabet_type not in ['protein', 'custom']:
-        codon_table = None 
-    self._calc_site_adjacency_matrices(self.alphabet, codon_table=codon_table)
-    return(self._calc_adjacency_matrix())
+
+def grad_Frob(lambdas, M, a):
+    """gradient of the function Frob(lambdas, M, a)"""
+    grad_Frob1 = 2 * M.dot(lambdas)
+    grad_Frob2 = 2 * a
+    return grad_Frob1 - grad_Frob2
+
+
+def calc_matrix_polynomial_dot(coefficients, matrix, v):
+    power = v
+    polynomial = coefficients[0] * v
+    
+    for c in coefficients[1:]:
+        power = matrix.dot(power)
+        polynomial += c * power
+    
+    return(polynomial)

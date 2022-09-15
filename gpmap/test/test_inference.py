@@ -21,28 +21,28 @@ class VCTests(unittest.TestCase):
         assert(np.all(m[4:, :] == 0))
         assert(m.shape == (8, 4))
     
-    def test_calc_L_polynomial_coeffs(self):
+    def test_calc_polynomial_coeffs(self):
         vc = VCregression()
         vc.init(2, 2)
         lambdas = np.ones(vc.seq_length + 1)
         
         # Ensure that if all eigenvalues are 1 then we would end up with I
-        vc.calc_L_polynomial_coeffs()
+        vc.calc_polynomial_coeffs()
         assert(np.allclose(vc.B.sum(1), [1, 0, 0]))
 
         # The same using the method        
-        bs = vc.calc_scaled_L_polynomial_coeffs(lambdas)
+        bs = vc.get_polynomial_coeffs(lambdas=lambdas)
         assert(np.allclose(bs, [1, 0, 0]))
         
-    def test_calc_L_polynomial_coeffs_analytical(self):
+    def test_calc_polynomial_coeffs_analytical(self):
         for l in range(3, 9):
             vc = VCregression()
             vc.init(l, 4)
             y = np.random.normal(size=vc.n_genotypes)
             
-            b1 = vc.calc_L_polynomial_coeffs()
+            b1 = vc.calc_polynomial_coeffs()
             p1 = vc.project(y, k=l-1)
-            b2 = vc.calc_L_polynomial_coeffs_num()
+            b2 = vc.calc_polynomial_coeffs(numeric=True)
             p2 = vc.project(y, k=l-1)
             
             # Test coefficients of the polynomials
@@ -74,15 +74,6 @@ class VCTests(unittest.TestCase):
         assert(np.allclose(y0.T.dot(y1), 0))
         assert(np.allclose(y0.T.dot(y2), 0))
         assert(np.allclose(y1.T.dot(y2), 0))
-    
-    def test_calc_L_powers(self):
-        vc = VCregression()
-        vc.init(3, 2)
-        
-        np.random.seed(0)
-        v = np.random.normal(size=8)
-        L_powers = vc.calc_L_powers(v)
-        assert(L_powers.shape == (8, 4))
     
     def test_simulate_vc(self):
         np.random.seed(1)

@@ -180,7 +180,7 @@ class SeqDEFTTests(unittest.TestCase):
         
         # Load data and select a few sequences to be observed only
         data = pd.read_csv(fpath, index_col=0)
-        seqs = np.random.choice(data.index, size=200)
+        seqs = np.random.choice(data.index, size=240)
         data.loc[seqs, 'counts'] = 0
         
         # Ensure that it runs

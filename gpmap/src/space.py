@@ -512,14 +512,6 @@ class SequenceSpace(DiscreteSpace):
             n_alleles = [len(a) for a in self.alphabet]
         self.n_alleles = n_alleles
     
-    def _get_seqs_from_alleles(self, alphabet):
-        if not alphabet:
-            yield('')
-        else:
-            for allele in alphabet[0]:
-                for seq in self._get_seqs_from_alleles(alphabet[1:]):
-                    yield(allele + seq)
-    
     def get_genotypes(self):
         return(np.array([x for x in self._get_seqs_from_alleles(self.alphabet)]))
         

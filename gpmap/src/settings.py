@@ -20,9 +20,9 @@ RNA_ALPHABET = ['A', 'C', 'G', 'U']
 PROTEIN_ALPHABET = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L',
                     'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
 
-ALPHABET_N_ALLELES = {'dna': len(DNA_ALPHABET),
-                      'rna': RNA_ALPHABET,
-                      'protein': PROTEIN_ALPHABET}
+ALPHABETS = {'dna': DNA_ALPHABET,
+             'rna': RNA_ALPHABET,
+             'protein': PROTEIN_ALPHABET}
 
 PROT_AMBIGUOUS_VALUES = {'X': ''.join(PROTEIN_ALPHABET)}
 PROT_AMBIGUOUS_VALUES.update(dict(zip(PROTEIN_ALPHABET, PROTEIN_ALPHABET)))
