@@ -14,7 +14,7 @@ from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             plot_edges, savefig, init_fig, figure_visualization,
                             figure_allele_grid, save_holoviews,
                             plot_relaxation_times, plot_interactive,
-                            figure_Ns_grid)
+                            figure_Ns_grid, plot_SeqDEFT_summary)
 from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWSWalk
 from gpmap.src.space import CodonSpace
@@ -275,8 +275,118 @@ class PlottingTests(unittest.TestCase):
         plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
                          nodes_color='function', nodes_size=10,
                          edges_width=1, z='3')
+    
+    def test_plot_SeqDEFT_summary(self):
+        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.csv')
+        logl = pd.read_csv(fpath)
         
+        fig = plot_SeqDEFT_summary(logl)
+        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.png')
+        savefig(fig, fpath)
+        
+    def xtest_visualize_reactive_paths(self):
+        np.random.seed(0)
+        v = CodonFitnessLandscape(add_variation=True)
+        Ns = v.calc_Ns(stationary_function=1.3)
+        v.calc_stationary_frequencies(Ns)
+        v.calc_visualization(Ns, n_components=5)
+        
+        gt1, gt2 = ['TCT', 'TCA', 'TCC', 'TCG'], ['AGT', 'AGC']
+        fpath = join(TEST_DATA_DIR, 'reactive_path')
+        # v.figure(fpath=fpath, size=40, cmap='coolwarm', 
+        #                  genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
+        #                  dominant_paths=False, p_reactive_paths=True)
+        
+        v.figure(fpath=fpath, size=40, cmap='coolwarm', 
+                         genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
+                         dominant_paths=True, edge_widths=2,
+                         edges_cmap='Greens', p_reactive_paths=True)
+    
+    def xtest_visualization_grid_allele(self):
+        v = CodonFitnessLandscape(add_variation=True, seed=0)
+        v.calc_visualization(Ns=1)
+        
+        fpath = join(TEST_DATA_DIR, 'codon_v.alleles')
+        figure_allele_grid(v.nodes_df, edges_df=v.edges_df, fpath=fpath)
+    
+    def xtest_visualization_grid_shifts(self):
+        v = CodonFitnessLandscape(add_variation=True, seed=0)
+        v.calc_visualization(Ns=1)
+        
+        fpath = join(TEST_DATA_DIR, 'codon_v.shifts')
+        figure_shifts_grid(v.nodes_df, seq='AU', edges_df=v.edges_df,
+                           fpath=fpath, alphabet_type='rna',
+                           labels_full_seq=True)
+    
+    def xtest_figure_Ns_grid(self):
+        log = LogTrack()
+        np.random.seed(1)
+        length = 8
+        lambdas = np.array([0, 1e6, 1e5, 1e4,
+                            1e3, 1e2, 1e1, 1e0, 0])
+    
+        log.write('Simulate data')
+        vc = VCregression(length, n_alleles=4, log=log, alphabet_type='custom')
+        v = Visualization(length, log=log)
+        v.set_function(vc.simulate(lambdas))
+        
+        fig_fpath = join(TEST_DATA_DIR, 'fgrid')
+        figure_Ns_grid(v, fig_fpath, ncol=3)
+    
+    def xtest_get_edges(self):
+        v = Visualization(length=3, n_alleles=4)
+        v.set_random_function(0)
+        v.calc_visualization(n_components=20)
+        x, y, z = v.get_nodes_coord(z=4)
+        edges = v.get_edges_coord(x, y, z)
+        assert(np.all(edges.shape == (576, 2, 3)))
+    
+    def xtest_rotate_coords(self):
+        np.random.seed(0)
+        
+        v = CodonFitnessLandscape(add_variation=True)
+        v.calc_visualization()
+        c = np.vstack([v.axis['Axis 2'],
+                       v.axis['Axis 3'],
+                       v.axis['Axis 4']])
+        c2 = v.rotate_coords(c, theta=np.pi / 2, axis='x')
+        assert(np.allclose(c[0], c2[0]))
+        assert(np.allclose(c[1], c2[2]))
+        assert(np.allclose(c[2], -c2[1]))
+        
+        c2 = v.rotate_coords(c, theta=0, axis='x')
+        assert(np.allclose(c, c2))
+        
+    def xtest_smn1_visualization(self):
+        fpath = join(DATA_DIR, 'smn1.csv')
+        data = pd.read_csv(fpath)
+        data.loc[data['phenotype'] > 100, 'phenotype'] = 100
+        v = Visualization(length=8, n_alleles=4, label='smn1',
+                                  ns=1, cache_prefix='smn1')
+        v.load_function(data['phenotype'])
+        v.calc_stationary_frequencies()
+        v.tune_ns(stationary_function=80)
+        v.calc_visualization(n_components=10, recalculate=True)
+        v.plot_visual()
+    
+    def xtest_rotation_movie(self):
+        np.random.seed(0)
+    
+        v = CodonFitnessLandscape(add_variation=True)
+        v.calc_visualization(Ns=1)
+        dpath = join(TEST_DATA_DIR, 'rotation_movie')
+        v.plot_rotation_movie(dpath=dpath, nframes=60,
+                                      lims=(-2, 2), force=True)
+    
+    def xtest_ns_movie(self):
+        np.random.seed(0)
+        v = CodonFitnessLandscape(add_variation=True)
+        dpath = join(TEST_DATA_DIR, 'ns_movie')
+        v.plot_ns_movie(dpath, nframes=60, fmax=1.64,
+                                n_components=20, force=True)
+
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'PlottingTests']
     unittest.main()
+
