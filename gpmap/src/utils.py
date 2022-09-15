@@ -29,6 +29,14 @@ def get_sparse_diag_matrix(values):
     return(m)
 
 
+def get_length(x):
+    try:
+        length = x.shape[0]
+    except AttributeError:
+        length = len(x)
+    return(length)
+
+
 class LogTrack(object):
     '''Logger class'''
 
@@ -135,3 +143,12 @@ def calc_matrix_polynomial_dot(coefficients, matrix, v):
         polynomial += c * power
     
     return(polynomial)
+
+
+def calc_cartesian_prod_freqs(site_freqs):
+    if get_length(site_freqs) == 1:
+            return(site_freqs[0])
+    site1 = site_freqs[0]
+    site2 = calc_cartesian_prod_freqs(site_freqs[1:])
+    freqs = np.hstack([f * site2 for f in site1])
+    return(freqs)
