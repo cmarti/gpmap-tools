@@ -11,7 +11,7 @@ from scipy.sparse._matrix_io import save_npz
 from scipy.sparse.extract import triu
 
 from gpmap.src.seq import (translate_seqs, guess_space_configuration,
-                           guess_alphabet_type)
+                           guess_alphabet_type, get_seqs_from_alleles)
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_cartesian_product)
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
@@ -513,7 +513,7 @@ class SequenceSpace(DiscreteSpace):
         self.n_alleles = n_alleles
     
     def get_genotypes(self):
-        return(np.array([x for x in self._get_seqs_from_alleles(self.alphabet)]))
+        return(np.array([x for x in get_seqs_from_alleles(self.alphabet)]))
         
     
 def CodonSpace(allowed_aminoacids, codon_table='Standard',
