@@ -3,13 +3,16 @@ import itertools
 from _collections import defaultdict
 
 import numpy as np
+import scipy.sparse as sp
+
+from itertools import chain
+from scipy.sparse.csr import csr_matrix
 from Bio.Seq import Seq 
+from Bio.Data.CodonTable import CodonTable
 
 from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT, ALPHABETS, ALPHABET
-from gpmap.src.utils import check_error
+from gpmap.src.utils import check_error, get_sparse_diag_matrix
 from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
-from itertools import chain
-from Bio.Data.CodonTable import CodonTable
 
 
 def extend_ambigous_seq(seq, mapping):
@@ -151,7 +154,40 @@ def get_seqs_from_alleles(alphabet):
         for allele in alphabet[0]:
             for seq in get_seqs_from_alleles(alphabet[1:]):
                 yield(allele + seq)
-                
+
+def get_one_hot_from_alleles(alphabet):
+    '''
+    Returns a one hot encoding CSR matrix for a complete combinatorial space
+    It uses a fast recursive method to avoid repetition of building 
+    common blocks in the full matrix
+    
+    Parameters
+    ----------
+    alphabet : list of list
+        List containing lists of alleles per site in a sequence space
+        
+    Returns : scipy.sparse.csr_matrix of shape (n_genotypes, total_n_alleles)
+        csr matrix containing the one hot encoding of the full sequence space
+        as with genotypes sorted lexicographically
+    
+    '''
+    if not alphabet:
+        raise ValueError('alphabet must not be empty')
+
+    n_alleles = len(alphabet[0])
+    if len(alphabet) == 1:
+        m = get_sparse_diag_matrix(np.ones(n_alleles))
+        return(m)
+    else:
+        m1 = get_one_hot_from_alleles(alphabet[1:])
+        nrows = m1.shape[0]
+        row_idxs = np.arange(nrows * n_alleles)
+        col_idxs = np.hstack([i * np.ones(nrows, dtype=int) for i in range(n_alleles)])
+        data = np.ones(nrows * n_alleles)
+        m0 = csr_matrix((data, (row_idxs, col_idxs)))
+        m = sp.hstack([m0, sp.vstack([m1] * n_alleles)])
+        return(m)
+    
                 
 def get_alphabet(n_alleles=None, alphabet_type=None):
     '''

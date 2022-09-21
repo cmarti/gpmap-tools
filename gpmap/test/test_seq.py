@@ -9,7 +9,7 @@ import pandas as pd
 from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
                            guess_space_configuration, get_custom_codon_table,
-    get_seqs_from_alleles)
+    get_seqs_from_alleles, get_one_hot_from_alleles)
 
 
 class SeqTests(unittest.TestCase):
@@ -98,6 +98,25 @@ class SeqTests(unittest.TestCase):
         alleles = [['a', 'b'], ['0', '1']]
         seqs = list(get_seqs_from_alleles(alleles))
         assert(np.all(seqs == ['a0', 'a1', 'b0', 'b1']))
+    
+    def test_get_one_hot_from_alleles(self):
+        alphabet = [['A', 'T'], ['C', 'G']]
+        onehot = get_one_hot_from_alleles(alphabet)
+        exp_onehot = np.array([[1, 0, 1, 0],
+                               [1, 0, 0, 1],
+                               [0, 1, 1, 0],
+                               [0, 1, 0, 1]])
+        assert(np.allclose(onehot.todense(), exp_onehot))
+        
+        alphabet = [['A', 'T', 'C'], ['C', 'G']]
+        onehot = get_one_hot_from_alleles(alphabet)
+        exp_onehot = np.array([[1, 0, 0, 1, 0],
+                               [1, 0, 0, 0, 1],
+                               [0, 1, 0, 1, 0],
+                               [0, 1, 0, 0, 1],
+                               [0, 0, 1, 1, 0],
+                               [0, 0, 1, 0, 1]])
+        assert(np.allclose(onehot.todense(), exp_onehot))
     
         
 if __name__ == '__main__':
