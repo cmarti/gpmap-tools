@@ -37,11 +37,14 @@ Sequence utils
 
 .. autofunction:: gpmap.src.seq.guess_space_configuration
 .. autofunction:: gpmap.src.seq.get_custom_codon_table
+.. autofunction:: gpmap.src.seq.get_one_hot_from_alleles
+.. autofunction:: gpmap.src.seq.get_alphabet
 
 Genotypes handling
 ------------------
 
 .. autofunction:: gpmap.src.genotypes.select_genotypes
+.. autofunction:: gpmap.src.genotypes.read_edges
 
 Plotting
 --------

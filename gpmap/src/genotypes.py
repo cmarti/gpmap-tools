@@ -203,6 +203,25 @@ def select_local_optima(nodes_df, edges_df, field_function='function'):
 
 
 def read_edges(fpath, log=None):
+    '''
+    Reads the incidence matrix containing the adjacency information among 
+    genotypes from a sequence space
+    
+    Parameters
+    ----------
+    fpath : str
+        File path containing the edges of a sequence space. The extension will 
+        be used to differentiate between csv and the more efficient npz 
+        format
+        
+    Returns
+    -------
+    edges_df : pd.DataFrame of shape (n_edges, 2)
+        DataFrame with column names ``i`` and ``j`` containing the indexes
+        of the genotypes that are separated by a single mutation in a 
+        sequence space
+    
+    '''
     if fpath is not None:
         write_log(log, 'Reading edges data from {}'.format(fpath))
         edges_format = fpath.split('.')[-1]
