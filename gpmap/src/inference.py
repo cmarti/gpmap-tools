@@ -57,6 +57,8 @@ class LandscapeEstimator(object):
                                                       ensure_full_space=False)
             seq_length = configuration['length']
             alphabet_type = configuration['alphabet_type']
+            # TODO: issue when there are same number of alleles per site but
+            # they are different
             alphabet = set()
             for alleles in configuration['alphabet']:
                 alphabet = alphabet.union(alleles)
