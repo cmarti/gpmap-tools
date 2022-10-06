@@ -21,11 +21,47 @@ class RandomWalkTests(unittest.TestCase):
     def test_set_Ns(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
 
+        freqs = mc.calc_stationary_frequencies(Ns=0)
+        assert(np.unique(freqs).shape[0] == 1)
+
+        # Specify Ns directly
         mc.set_Ns(Ns=1)
         assert(mc.Ns == 1)
         
+        try:
+            mc.set_Ns(Ns=-1)
+            self.fail()
+        except ValueError:
+            pass
+        
+        # Specify through the mean function at stationarity
+        try: 
+            mc.set_Ns(mean_function=0)
+            self.fail()
+        except ValueError:
+            pass
+        
+        try: 
+            mc.set_Ns(mean_function=3)
+            self.fail()
+        except ValueError:
+            pass
+        
         mc.set_Ns(mean_function=1.22743)
         assert(np.isclose(mc.Ns, 1))
+        
+        # Specify through the percentile at stationarity
+        try: 
+            mc.set_Ns(mean_function_perc=-1)
+            self.fail()
+        except ValueError:
+            pass
+        
+        try: 
+            mc.set_Ns(mean_function_perc=102)
+            self.fail()
+        except ValueError:
+            pass
         
         mc.set_Ns(mean_function_perc=80)
         assert(np.isclose(mc.Ns, 0.59174))
@@ -360,5 +396,5 @@ class RandomWalkTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests.test_calc_neutral_rate_matrix']
+    sys.argv = ['', 'RandomWalkTests']
     unittest.main()

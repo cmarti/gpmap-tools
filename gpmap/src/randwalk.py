@@ -16,6 +16,7 @@ from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix,
 from scipy.special._basic import comb
 from itertools import combinations
 from gpmap.src.settings import DNA_ALPHABET
+from scipy.optimize.zeros import VALUEERR
 
 
 class RandomWalk(object):
@@ -464,7 +465,14 @@ class WMWSWalk(TimeReversibleRandomWalk):
         if neutral_stat_freqs is None and hasattr(self, 'neutral_stat_freqs'):
             neutral_stat_freqs = self.neutral_stat_freqs
         
-        log_phi = Ns * self.space.y
+        if Ns < 0:
+            msg = 'Ns must be non-negative'
+            raise ValueError(msg)
+        elif Ns == 0:
+            log_phi = np.ones(self.space.n_states)
+        else:
+            log_phi = Ns * self.space.y
+        
         if neutral_stat_freqs is not None:
             log_phi = neutral_stat_freqs + np.log(neutral_stat_freqs)
         log_total = logsumexp(log_phi)
@@ -482,14 +490,25 @@ class WMWSWalk(TimeReversibleRandomWalk):
                neutral_stat_freqs=None,
                tol=1e-4, maxiter=100, max_attempts=10):
         if Ns is not None:
+            if Ns < 0:
+                msg = 'Ns must be non-negative'
+                raise ValueError(msg)
             self.Ns = Ns
             return(Ns)
         
         if mean_function_perc is not None:
+            msg = 'mean_function_perc must be between 0 and 100'
+            check_error(mean_function_perc > 0 or mean_function_perc < 100, msg=msg)
             mean_function = np.percentile(self.space.y, mean_function_perc)
         elif mean_function is None:
             msg = 'Either stationary_function or percentile must be provided'
             raise ValueError(msg)
+        
+        min_mean_function = self.space.y.mean() # neutrality
+        max_mean_function = self.space.y.max() # best genotype
+        msg = 'mean_function must be between the function mean ({:.2f}) and the maximum function value (:.2f)'
+        msg = msg.format(min_mean_function, max_mean_function)
+        check_error(mean_function > min_mean_function and mean_function < max_mean_function, msg=msg)
         
         if neutral_stat_freqs is None and hasattr(self, 'neutral_stat_freqs'):
             neutral_stat_freqs = self.neutral_stat_freqs
