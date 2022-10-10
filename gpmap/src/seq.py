@@ -51,6 +51,12 @@ def add_random_flanks(seq, length, only_upstream=False):
     return(new_seq)
 
 
+def transcribe_seqs(seqs, code):
+    new_seqs = np.array([''.join([sdict[a] for a, sdict in zip(seq, code)])
+                         for seq in seqs])
+    return(new_seqs)
+
+
 def translate_seqs(seqs, codon_table='Standard'):
     prot_genotypes = np.array([str(Seq(seq).translate(table=codon_table))
                                for seq in seqs])
@@ -117,8 +123,8 @@ def guess_space_configuration(seqs, ensure_full_space=True):
     return(config)
 
 
-def generate_freq_reduced_alphabet(seqs, n_alleles, counts=None,
-                                   keep_allele_names=True, last_character='X'):
+def generate_freq_reduced_code(seqs, n_alleles, counts=None,
+                               keep_allele_names=True, last_character='X'):
     '''
     Returns a list of dictionaries with the mapping from each allele in the
     observed sequences to a reduced alphabet with at most ``n_alleles`` per site.
@@ -149,7 +155,7 @@ def generate_freq_reduced_alphabet(seqs, n_alleles, counts=None,
         
     Returns
     -------
-    reduced_alphabet : list of dict of length seq_length
+    code : list of dict of length seq_length
         List of dictionaries containing the new allele corresponding to each
         of the original alleles for each site.
     
