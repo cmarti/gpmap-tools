@@ -5,7 +5,7 @@ from _collections import defaultdict
 import numpy as np
 from Bio.Seq import Seq 
 
-from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT
+from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT, ALPHABET
 from gpmap.src.utils import check_error
 from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
 from itertools import chain
@@ -115,6 +115,74 @@ def guess_space_configuration(seqs, ensure_full_space=True):
         msg += '`ensure_full_space` option to avoid this error'
         check_error(np.prod(config['n_alleles']) == seqs.shape[0], msg)
     return(config)
+
+
+def generate_freq_reduced_alphabet(seqs, n_alleles, counts=None,
+                                   keep_allele_names=True, last_character='X'):
+    '''
+    Returns a list of dictionaries with the mapping from each allele in the
+    observed sequences to a reduced alphabet with at most ``n_alleles`` per site.
+    The least frequent alleles are pooled together into a single allele
+    
+    Parameters
+    ----------
+    seqs : array-like of shape (n_genotypes,) or (n_obs,)
+        Observed sequences. If ``counts=None``, then every sequence is counted
+        once. Otherwise, frequencies are calculated using the counts as the
+        number of times a certain sequence appears in the data
+    
+    n_alleles : int or array-like of shape (seq_length, )
+        Maximal number of alleles per site allowed. If a list or array is provided
+        each site will use the specified number of alleles. Otherwise, all
+        sites will have the same maximum number of alleles
+        
+    counts : None or array-like of shape (n_genotypes, )
+        Number of times every sequence in ``seqs`` appears in the data. If
+        not provided, every provided sequence is assumed to appear exactly once
+        
+    keep_allele_names : bool
+        If ``keep_allele_names=True``, then allele names are preserved. Otherwise
+        they are replace by new alleles taken from the alphabet
+        
+    last_character : str
+        Character to use for remaining alleles when ``keep_allele_names=True``
+        
+    Returns
+    -------
+    reduced_alphabet : list of dict of length seq_length
+        List of dictionaries containing the new allele corresponding to each
+        of the original alleles for each site.
+    
+    '''
+
+    if counts is None:
+        counts = itertools.cycle([1])
+    else:
+        msg = 'counts must have the same shape as seqs'
+        check_error(counts.shape == seqs.shape, msg=msg)
+    
+    seq_length = len(seqs[0])
+    freqs = [defaultdict(lambda: 0) for _ in range(seq_length)]
+    for seq, c in zip(seqs, counts):
+        for i, allele in enumerate(seq):
+            freqs[i][allele] += c
+    
+    alleles = [sorted(site_freqs.keys(), key=lambda x: site_freqs[x], reverse=True)
+               for site_freqs in freqs]
+    
+    if keep_allele_names:
+        new_alleles = [a[:n_alleles] + [last_character] for a in alleles]
+    else:
+        new_alleles = [ALPHABET[:n_alleles]] * seq_length
+        
+    reduced_alphabet = []
+    for site_alleles, site_new_alleles in zip(alleles, new_alleles):
+        site_dict = defaultdict(lambda : last_character)
+        for a1, a2 in zip(site_alleles[:n_alleles], site_new_alleles):
+            site_dict[a1] = a2
+        reduced_alphabet.append(site_dict)
+    
+    return(reduced_alphabet)
 
 
 def get_custom_codon_table(aa_mapping):

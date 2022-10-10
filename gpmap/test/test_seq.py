@@ -8,7 +8,8 @@ import pandas as pd
 
 from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
-                           guess_space_configuration, get_custom_codon_table)
+                           guess_space_configuration, get_custom_codon_table,
+    generate_freq_reduced_alphabet)
 
 
 class SeqTests(unittest.TestCase):
@@ -92,6 +93,38 @@ class SeqTests(unittest.TestCase):
         dna = np.array(['ATGTGA', 'ATGTGATGG'])
         protein = translate_seqs(dna, codon_table=codon_table)
         assert(np.all(protein == ['S*', 'S*M']))
+    
+    def test_get_freq_reduced_dict(self):
+        seqs = np.array(['AG', 'AA', 'CG', 'CA', 'TG', 'GC'])
+        
+        reduced_alphabet = generate_freq_reduced_alphabet(seqs, 2)
+        assert(reduced_alphabet[0]['A'] == 'A')
+        assert(reduced_alphabet[0]['C'] == 'C')
+        assert(reduced_alphabet[0]['G'] == 'X')
+        assert(reduced_alphabet[1]['A'] == 'A')
+        assert(reduced_alphabet[1]['G'] == 'G')
+        assert(reduced_alphabet[1]['C'] == 'X')
+        
+        # Changing allele names by new alphabet across all sites
+        reduced_alphabet = generate_freq_reduced_alphabet(seqs, 2,
+                                                          keep_allele_names=False)
+        assert(reduced_alphabet[0]['A'] == 'A')
+        assert(reduced_alphabet[0]['C'] == 'B')
+        assert(reduced_alphabet[0]['G'] == 'X')
+        assert(reduced_alphabet[1]['A'] == 'B')
+        assert(reduced_alphabet[1]['G'] == 'A')
+        assert(reduced_alphabet[1]['C'] == 'X')
+        
+        # Using counts
+        counts = np.array([1, 1, 1, 1, 5, 5])
+        reduced_alphabet = generate_freq_reduced_alphabet(seqs, 2, counts=counts)
+        assert(reduced_alphabet[0]['A'] == 'X')
+        assert(reduced_alphabet[0]['C'] == 'X')
+        assert(reduced_alphabet[0]['G'] == 'G')
+        assert(reduced_alphabet[0]['T'] == 'T')
+        assert(reduced_alphabet[1]['A'] == 'X')
+        assert(reduced_alphabet[1]['G'] == 'G')
+        assert(reduced_alphabet[1]['C'] == 'C')
     
         
 if __name__ == '__main__':

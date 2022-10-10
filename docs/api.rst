@@ -37,6 +37,7 @@ Sequence utils
 
 .. autofunction:: gpmap.src.seq.guess_space_configuration
 .. autofunction:: gpmap.src.seq.get_custom_codon_table
+.. autofunction:: gpmap.src.seq.generate_freq_reduced_alphabet
 
 Genotypes handling
 ------------------
