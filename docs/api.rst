@@ -45,6 +45,7 @@ Genotypes handling
 
 .. autofunction:: gpmap.src.genotypes.select_genotypes
 .. autofunction:: gpmap.src.genotypes.read_edges
+.. autofunction:: gpmap.src.genotypes.get_genotypes_from_region
 
 Plotting
 --------
