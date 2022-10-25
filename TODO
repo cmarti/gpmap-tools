@@ -1,0 +1,10 @@
+- Implement more memory and computationally efficient method for SeqDEFT computations: define a class 
+for the Laplacian that uses the adjacency matrix with binary values to run calculations
+- Avoid storing rate matrices in the visualization
+- Remove dependency on specific alleles for building up SeqDEFT sequence space
+as long as n_alleles is the same across sites. Use the guessed alphabet to do so
+- Implement new likelihood functions for DeltaP based priors: poisson and binomial at least, maybe something
+similar to GLM for regression like approaches: have likelihood function classes with log-likelihood and gradient methods
+
+
+
