@@ -47,6 +47,8 @@ def grad_Frob(lambdas, M, a):
 
 
 class LandscapeEstimator(object):
+    def __init__(self, expand_alphabet=True):
+        self.expand_alphabet = expand_alphabet
     
     def define_space(self, seq_length=None, n_alleles=None, genotypes=None,
                      alphabet_type='custom'):
@@ -57,12 +59,22 @@ class LandscapeEstimator(object):
                                                       ensure_full_space=False)
             seq_length = configuration['length']
             alphabet_type = configuration['alphabet_type']
-            # TODO: issue when there are same number of alleles per site but
-            # they are different
-            alphabet = set()
-            for alleles in configuration['alphabet']:
-                alphabet = alphabet.union(alleles)
-            alphabet = [sorted(alphabet)] * seq_length
+            n_alleles = configuration['n_alleles']
+            
+            if np.unique(n_alleles).shape[0] > 1:
+                if self.expand_alphabet:
+                    alphabet = set()
+                    for alleles in configuration['alphabet']:
+                        alphabet = alphabet.union(alleles)
+                    alphabet = [sorted(alphabet)] * seq_length
+                else:
+                    msg = 'All sites must have the same number of alleles'
+                    msg += 'per site or set "expand_alphabet=True" for filling'
+                    msg += 'in the missing alleles observed at other sites'
+                    raise ValueError(msg)
+            else:
+                alphabet = configuration['alphabet']
+                
             self.space = SequenceSpace(seq_length=seq_length, alphabet=alphabet,
                                        alphabet_type='custom')
             n_alleles = len(alphabet[0])
