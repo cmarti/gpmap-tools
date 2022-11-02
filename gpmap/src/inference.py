@@ -28,17 +28,42 @@ from gpmap.src.seq import (guess_space_configuration, get_alphabet,
 
 
 class LandscapeEstimator(object):
-    def define_space(self, seq_length=None, n_alleles=None, alphabet=None,
-                     alphabet_type=None, genotypes=None):
+    def __init__(self, expand_alphabet=True):
+        self.expand_alphabet = expand_alphabet
+    
+    def define_space(self, seq_length=None, n_alleles=None, genotypes=None,
+                     alphabet_type='custom'):
+        alphabet = None
+        
         if genotypes is not None:
             configuration = guess_space_configuration(genotypes,
                                                       ensure_full_space=False)
             seq_length = configuration['length']
-            alphabet = np.unique(list(chain(configuration['alphabet'])))
-            n_alleles = alphabet.shape[0]
+            alphabet_type = configuration['alphabet_type']
+            n_alleles = configuration['n_alleles']
             
-        msg = 'Either genotypes or both seq_length and n_alleles must  be provided'
-        check_error(n_alleles is not None and seq_length is not None, msg=msg)
+            if np.unique(n_alleles).shape[0] > 1:
+                if self.expand_alphabet:
+                    alphabet = set()
+                    for alleles in configuration['alphabet']:
+                        alphabet = alphabet.union(alleles)
+                    alphabet = [sorted(alphabet)] * seq_length
+                else:
+                    msg = 'All sites must have the same number of alleles'
+                    msg += 'per site or set "expand_alphabet=True" for filling'
+                    msg += 'in the missing alleles observed at other sites'
+                    raise ValueError(msg)
+            else:
+                alphabet = configuration['alphabet']
+                
+            self.space = SequenceSpace(seq_length=seq_length, alphabet=alphabet,
+                                       alphabet_type='custom')
+            n_alleles = len(alphabet[0])
+        
+        elif n_alleles is None or seq_length is None:
+            msg = 'Either genotypes or both seq_length and n_alleles must '
+            msg += 'be provided'
+            raise ValueError(msg)
         
         if alphabet is None:
             alphabet = get_alphabet(n_alleles=n_alleles,
@@ -627,9 +652,39 @@ class VCregression(LandscapeEstimator):
 
 
 class DeltaPEstimator(LandscapeEstimator):
-    def __init__(self, P):
+    def __init__(self, P, a=None, num_a=20, nfolds=5,
+                 a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
+                 opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
+                 gtol=1e-3):
         self.P = P
-    
+        self.a = a
+        self.a_is_fixed = a is not None
+        self.nfolds = nfolds
+        
+        msg = '"a" can only be None or >= 0'
+        check_error(a is None or a >= 0, msg=msg)
+        
+        # Attributes to generate a values
+        self.num_a = num_a
+        
+        # Default bounds for a in absence of a more clever method
+        self.min_log_a = -4
+        self.max_log_a = 10
+        
+        # Parameters to generate a grid in SeqDEFT, but should be generalizable
+        # by just defining a distance metric for phi
+        self.a_resolution = a_resolution
+        self.max_a_max = max_a_max
+        self.scale_by = scale_by
+        self.fac_max = fac_max
+        self.fac_min = fac_min
+        
+        # Optimization attributes
+        self.opt_method = opt_method
+        optimization_opts['gtol'] = gtol
+        optimization_opts['ftol'] = 0
+        self.optimization_opts = optimization_opts
+        
     def calc_n_p_faces(self, length, P, n_alleles):
         return(comb(length, P) * comb(n_alleles, 2) ** P * n_alleles ** (length - P))
         
@@ -644,14 +699,15 @@ class DeltaPEstimator(LandscapeEstimator):
         self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
         self.n_genotypes = self.space.n_states
         self.L = self.space.laplacian
-        
-        self.calc_L_powers_unique_entries_matrix()
     
     @property
     def D_kernel_basis_orth_sparse(self):
         if not hasattr(self, '_D_kernel_basis_orth_sparse'):
             self._D_kernel_basis_orth_sparse = self.construct_D_kernel_basis()
         return(self._D_kernel_basis_orth_sparse)
+    
+    def get_a_values(self):
+        return(np.exp(np.linspace(self.min_log_a, self.max_log_a, self.num_a)))
     
     def check_P(self):
         if self.P == (self.seq_length + 1):
@@ -670,48 +726,61 @@ class DeltaPEstimator(LandscapeEstimator):
             Dphi = self.L_opt(Dphi, p)
         return Dphi / factorial(self.P)
     
-    def calc_log_prior_prob(self, phi, a):
-        S1 = a/(2*self.n_p_faces) * np.sum(phi * self.D_opt(phi))
+    def calc_regularization(self, phi):
         regularizer = 0
-        
         if np.isfinite(PHI_UB):
             flags = (phi > PHI_UB)
             if flags.any() > 0:
                 regularizer += np.sum((phi[flags] - PHI_UB)**2)
-                
         if np.isfinite(PHI_LB):
             flags = (phi < PHI_LB)
             if flags.any() > 0:
                 regularizer += np.sum((phi[flags] - PHI_LB)**2)
-                
-        return(S1 + regularizer)
+        return(regularizer)
     
-    def calc_log_prior_prob_grad(self, phi, a):
-        grad_S1 = a/self.n_p_faces * self.D_opt(phi)
+    def calc_regularization_grad(self, phi):
         regularizer = np.zeros(self.n_genotypes)
-        
         if np.isfinite(PHI_UB):
             flags = (phi > PHI_UB)
             if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi - PHI_UB)[flags]
-                
+                regularizer[flags] += 2 * (phi[flags] - PHI_UB)
         if np.isfinite(PHI_LB):
             flags = (phi < PHI_LB)
             if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi - PHI_LB)[flags]
-                
-        result = grad_S1 + regularizer
-        return(result)
+                regularizer[flags] += 2 * (phi[flags] - PHI_LB)
+        return(regularizer)
+    
+    def calc_neg_log_prior_prob(self, phi, a):
+        S1 = a / (2*self.n_p_faces) * np.sum(phi * self.D_opt(phi))
+        regularizer = self.calc_regularization(phi)
+        return(S1 + regularizer)
+    
+    def calc_neg_log_prior_prob_grad(self, phi, a):
+        grad_S1 = a / self.n_p_faces * self.D_opt(phi)
+        regularizer = self.calc_regularization_grad(phi)
+        return(grad_S1 + regularizer)
     
     def S(self, phi, a):
-        S1 = self.calc_log_prior_prob(phi, a)
-        S2 = self.calc_neg_log_likelihood() 
+        S1 = self.calc_neg_log_prior_prob(phi, a)
+        S2 = self.calc_neg_log_likelihood(phi) 
         return(S1 + S2)
     
     def S_grad(self, phi, a):
-        S1_grad = self.calc_log_prior_prob_grad(phi, a)
-        S2_grad = self.calc_neg_log_likelihood_grad() 
+        S1_grad = self.calc_neg_log_prior_prob_grad(phi, a)
+        S2_grad = self.calc_neg_log_likelihood_grad(phi) 
         return(S1_grad + S2_grad)
+    
+    def S_inf(self, b):
+        phi = self.D_kernel_basis_orth_sparse.dot(b)
+        S2 = self.calc_neg_log_likelihood(phi)
+        regularizer = self.calc_regularization(phi)
+        return(S2 + regularizer)
+    
+    def S_grad_inf(self, b):
+        phi = self.D_kernel_basis_orth_sparse.dot(b)
+        S2_grad = self.calc_neg_log_likelihood_grad(phi)
+        regularizer = self.calc_regularization_grad(phi)
+        return(self.D_kernel_basis_orth_sparse.T.dot(S2_grad + regularizer))
     
     def construct_D_kernel_basis2(self, max_value_to_zero=1e-12):
         # TODO: think on a way to optimize this for large landscapes
@@ -796,87 +865,69 @@ class DeltaPEstimator(LandscapeEstimator):
             D_eig_vals[k], D_multis[k] = Lambda_k/factorial(self.P), m_k
     
         self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
-    
-
-class SeqDEFT(DeltaPEstimator):
-    def get_phi_0(self, options, scale_by):
-        if not hasattr(self, 'phi_0') or self.phi_0 is None:
-            self.phi_0 = self._fit(0, options=options, scale_by=scale_by)
-        return(self.phi_0)
-    
-    def get_phi_inf(self, options, scale_by, gtol=1e-3):
-        if not hasattr(self, 'phi_inf')  or self.phi_inf is None:
-            self.phi_inf = self._fit(np.inf, options=options,
-                                     scale_by=scale_by, gtol=gtol)
-        return(self.phi_inf)
-    
-    def calc_a_max(self, max_a_max=1e12, resolution=0.1, fac_max=1,
-                   options=None, scale_by=1, gtol=1e-3):
-        a_max = self.n_p_faces * fac_max
-        phi_inf = self.get_phi_inf(options, scale_by)
-        phi_max = self._fit(a_max, phi_initial=phi_inf, options=options,
-                            scale_by=scale_by, gtol=gtol)
-        distance = D_geo(phi_max, phi_inf)
         
-        while distance > resolution and a_max < max_a_max:
-            a_max *= 10
-            phi_max = self._fit(a_max, phi_initial=phi_inf, options=options,
-                                scale_by=scale_by, gtol=gtol)
-            distance = D_geo(phi_max, phi_inf)
+    def get_cv_iter(self, a_values):
+        for train, validation in self.split_cv():        
+            for a in a_values:
+                yield(a, train, validation)   
+    
+    def fit_a_cv(self):
+        cv_log_L = []
+        a_values = self.get_a_values()
+        cv_data = self.get_cv_iter(a_values)
+        
+        for a, train, test in tqdm(cv_data, total=self.nfolds * self.num_a):
+            X_train, y_train = train
+            X_test, y_test = test
+
+            self.set_data(X=X_train, y=y_train)
+            phi = self._fit(a)
             
-        return(a_max)
-    
-    def calc_a_min(self, resolution=0.1, fac_min=1e-6, options=None, scale_by=1,
-                   gtol=1e-3):
-        a_min = self.n_p_faces * fac_min
-        phi_0 = self.get_phi_0(options, scale_by)
-        phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
-        phi_min = self._fit(a_min, phi_initial=self.phi_inf, options=options,
-                            scale_by=scale_by, gtol=gtol)
-        distance = D_geo(phi_min, phi_0)
+            self.set_data(X=X_test, y=y_test)
+            test_logL = -self.calc_neg_log_likelihood(phi) 
+            
+            cv_log_L.append({'a': a, 'logL': test_logL})
         
-        while distance > resolution:
-            a_min /= 10
-            phi_min = self._fit(a_min, phi_initial=phi_inf, options=options,
-                                scale_by=scale_by, gtol=gtol)
-            distance = D_geo(phi_min, phi_0)
-        return(a_min)
-
-    def find_a_bounds(self, max_a_max=1e12, resolution=0.1, fac_max=0.1,
-                      fac_min=1e-6, options=None, scale_by=1, gtol=1e-3):
-        a_max = self.calc_a_max(max_a_max, resolution, fac_max, options, scale_by, gtol=gtol)
-        a_min = self.calc_a_min(resolution, fac_min, options, scale_by, gtol=gtol)
-        return(a_min, a_max)
+        cv_log_L = pd.DataFrame(cv_log_L)
+        cv_log_L = cv_log_L.groupby('a', as_index=False).agg({'logL': ('mean', 'std')})
+        cv_log_L.columns = ['a', 'log_likelihood_mean', 'log_likelihood_sd']
+        self.cv_log_L = cv_log_L
+        self.a = cv_log_L['a'][np.argmax(cv_log_L['log_likelihood_mean'])]
     
-    def get_a_values(self, resolution=0.1, max_a_max=1e12, num_a=20,
-                     options=None, scale_by=1,
-                     fac_max=0.1, fac_min=1e-6, gtol=1e-3):
-        a_min, a_max = self.find_a_bounds(max_a_max, resolution, fac_max, fac_min,
-                                          options, scale_by, gtol=gtol)
-        a_values = np.geomspace(a_min, a_max, num_a)
-        return(a_values)
-
-    def set_data(self, X, counts):
-        data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
-        data.loc[X] = counts
-        data = data.astype(int)
+    def _fit(self, a, phi_initial=None):
+        check_error(a >= 0, msg='"a" must be larger or equal than 0')
         
-        self.counts = data
-        self.N = data.sum()
-        self.R = (data / self.N)
-        self.data_dict = {'N': self.N, 'R': self.R}
+        if phi_initial is None and a > 0:
+            phi_initial = np.zeros(self.n_genotypes)
+        
+        if a == 0 and hasattr(self, '_fit_a_0'):
+            phi = self._fit_a_0()
+            
+        elif a == np.inf:
+            b_initial = self.D_kernel_basis_orth_sparse.T.dot(phi_initial)
+            res = minimize(fun=self.S_inf, jac=self.S_grad_inf,
+                           x0=b_initial, method=self.opt_method,
+                           options=self.optimization_opts)
+            if not res.success:
+                self.report(res.message)
+            b_a = res.x
+            phi = self.D_kernel_basis_orth_sparse.dot(b_a)
+            
+        else:
+            res = minimize(fun=self.S, jac=self.S_grad, args=(a,),
+                           x0=phi_initial, method=self.opt_method,
+                           options=self.optimization_opts)
+            if not res.success:
+                print(res.message)
+            phi = res.x
 
-    def counts_to_data_dict(self, counts):
-        n = counts.sum()
-        return({'N': n, 'R': counts / n})
+        # a, N = a * scale_by, N *scale_by    
+        return(phi)
     
-    def fit(self, X, counts, a_value=None, nfolds=5,
-            resolution=0.1, max_a_max=1e12, 
-            num_a=20, options=None, scale_by=1,
-            fac_max=0.1, fac_min=1e-6, gtol=1e-3):
-        
+    def fit(self, X, y, force_fit_a=True):
         """
-        Infers Sequence density from the provided count data
+        Infers the sequence-function relationship under the specified
+        \Delta^{(P)} prior 
         
         Parameters
         ----------
@@ -884,194 +935,131 @@ class SeqDEFT(DeltaPEstimator):
             Vector containing the genotypes for which have observations provided
             by `counts`. Missing sequences are assumed to have observed 0 times
             
-        counts : array-like of shape (n_obs,)
-            Vector containing the number of times each sequence in `X` was
-            observed
-        
-        a_value: float (None)
-            Hyperparameter value to use to interpolate between empirical
-            frequencies and maximum entropy model. It is estimated
-            using Cross-validation unless provided in this argument
-                        
-        nfolds : int (5)
-            Number of folds to use for cross-validation for hyperparameter `a`
-            optimization
-        
-        num_a: int(20)
-            Number of geometrically spaced hyperparameter `a` values to 
-            trace the MAP curve for optimization
-        
-        TODO: fill other parameters 
+        y : array-like of shape (n_obs,) or (n_obs, n_cols)
+            Vector or matrix containing the expected type of data for each model
             
+        force_fit_a : bool 
+            Whether to re-fit ``a`` using cross-validation even if it is already
+            defined a priori
             
         Returns
         -------
         
-        seq_densities: pd.DataFrame (n_genotypes, 2)
-            DataFrame containing the observed frequency and the estimated
-            density for each possible sequence
+        landscape : pd.DataFrame (n_genotypes, 2)
+            DataFrame containing the estimated function for each possible
+            sequence in the space
         
         """
         self.init(genotypes=X)
-        self.set_data(X, counts)
+        self.set_data(X, y)
         
-        # Reset these values in case there is a previous fit in the object
-        self.phi_0, self.phi_inf = None, None
+        if not self.a_is_fixed and force_fit_a:
+            self.fit_a_cv()
+            self.set_data(X, y)
         
-        phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
-
-        if a_value is None:
-            a_values = self.get_a_values(resolution=resolution, max_a_max=max_a_max,
-                                         num_a=num_a, options=options, scale_by=scale_by,
-                                         fac_max=fac_max, fac_min=fac_min, gtol=gtol)
-            ll = self.compute_log_Ls(a_values, nfolds, options, scale_by, gtol=gtol)
-            a_value = ll.iloc[np.argmax(ll['log_likelihood_mean']), :]['a']
-            
         # Fit model with a_star
-        phi = self._fit(a_value, phi_initial=phi_inf, options=options,
-                        scale_by=scale_by, gtol=gtol)
+        phi = self._fit(self.a)
+        output = self.phi_to_output(phi)
+        return(output)
+    
+
+class SeqDEFT(DeltaPEstimator):
+    # Required methods
+    def set_data(self, X, y):
+        self.X = X
+        self.y = y
+        
+        data = self.fill_zeros_counts(X, y)
+        self.N = data.sum()
+        self.R = (data / self.N)
+    
+    def calc_neg_log_likelihood(self, phi):
+        S2 = self.N * np.sum(self.R * phi)
+        S3 = self.N * np.sum(safe_exp(-phi))
+        return(S2 + S3)
+    
+    def calc_neg_log_likelihood_grad(self, phi):
+        grad_S2 = self.N * self.R
+        grad_S3 = self.N * safe_exp(-phi)
+        return(grad_S2 - grad_S3)
+    
+    def split_cv(self):
+        seqs = self.counts_to_seqs()
+        np.random.shuffle(seqs)
+        n_test = np.round(self.N / self.nfolds).astype(int)
+        
+        for i in np.arange(0, seqs.shape[0], n_test):
+            test = np.unique(seqs[i:i+n_test], return_counts=True)
+            train = np.unique(np.append(seqs[:i], seqs[i+n_test:]),
+                              return_counts=True)
+            yield(train, test)
+            
+    def phi_to_output(self, phi):
         Q_star = self.phi_to_Q(phi)
         seq_densities = pd.DataFrame({'frequency': self.R, 'Q_star': Q_star},
                                      index=self.genotypes)
         return(seq_densities)
     
-    def get_phi_initial(self, phi_initial=None):
-        if phi_initial is None:
-            Q_initial = np.ones(self.n_genotypes) / self.n_genotypes
-            phi_initial = -np.log(Q_initial)
-        return(phi_initial)
+    # Optional methods
+    def calc_a_max(self, phi_inf):
+        a_max = self.n_p_faces * self.fac_max
+        
+        phi_max = self._fit(a_max, phi_initial=phi_inf)
+        distance = D_geo(phi_max, phi_inf)
+        
+        while distance > self.a_resolution and a_max < self.max_a_max:
+            a_max *= 10
+            phi_max = self._fit(a_max, phi_initial=phi_inf)
+            distance = D_geo(phi_max, phi_inf)
+            
+        return(a_max)
+    
+    def calc_a_min(self, phi_inf):
+        a_min = self.n_p_faces * self.fac_min
+        
+        phi_0 = self._fit(0)
+        phi_min = self._fit(a_min, phi_initial=phi_inf)
+        
+        distance = D_geo(phi_min, phi_0)
+        
+        while distance > self.a_resolution:
+            a_min /= 10
+            phi_min = self._fit(a_min, phi_initial=phi_inf)
+            distance = D_geo(phi_min, phi_0)
+        return(a_min)
 
-    def get_data(self, data_dict=None):
-        # Get N and R
-        if data_dict is None:
-            N, R = self.N, self.R
-        else: 
-            N, R = data_dict['N'], data_dict['R']
-        return(N, R)
+    def get_a_values(self):
+        phi_inf = self._fit(np.inf)
+        a_min = self.calc_a_min(phi_inf) 
+        a_max = self.calc_a_max(phi_inf)
+        a_values = np.geomspace(a_min, a_max, self.num_a)
+        return(a_values)
+
+    def fill_zeros_counts(self, X, y):
+        data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
+        data.loc[X] = y
+        data = data.astype(int)
+        return(data)
+
+    def phi_to_logQ(self, phi):
+        return(-phi - logsumexp(-phi))
     
-    def _fit_a_inf(self, N, R, phi_initial, method, options):
-        b_initial = self.D_kernel_basis_orth_sparse.T.dot(phi_initial)
-        res = minimize(fun=self.S_inf, jac=self.grad_S_inf, args=(N, R),
-                       x0=b_initial, method=method, options=options)
-        if not res.success:
-            self.report(res.message)
-        b_a = res.x
-        phi = self.D_kernel_basis_orth_sparse.dot(b_a)
+    def phi_to_Q(self, phi):
+        return(np.exp(self.phi_to_logQ(phi)))
+    
+    def _fit_a_0(self):
+        with np.errstate(divide='ignore'):
+            phi = -np.log(self.R)
         return(phi)
     
-    def _fit_a(self, N, R, a, phi_initial, method, options):
-        res = minimize(fun=self.S, jac=self.grad_S, args=(a,N,R),
-                       x0=phi_initial, method=method, options=options)
-        if not res.success:
-            print(res.message)
-        return(res.x)
+    def counts_to_seqs(self):
+        seqs = []
+        for seq, counts in zip(self.X, self.y):
+            seqs.extend([seq] * counts)
+        seqs = np.array(seqs)
+        return(seqs)
     
-    def _fit(self, a, phi_initial=None, data_dict=None,
-             method='L-BFGS-B', options=None, scale_by=1, gtol=1e-3):
-        N, R = self.get_data(data_dict=data_dict)
-        
-        # Solution is the same if we scale these values: may be useful if 
-        # running into numerical problems
-        a, N = a / scale_by, N / scale_by
-        phi_initial = self.get_phi_initial(phi_initial=phi_initial)
-        
-        if options is None:
-            options = {}
-        options['gtol'] = gtol
-        options['ftol'] = 0
-        
-        if a == 0:
-            with np.errstate(divide='ignore'):
-                phi = -np.log(R)
-        elif 0 < a < np.inf:
-            phi = self._fit_a(N, R, a, phi_initial, method, options)
-        elif a == np.inf:
-            phi = self._fit_a_inf(N, R, phi_initial, method, options)
-        else:
-            raise(ValueError('"a" not in the right range.'))
-    
-        # a, N = a * scale_by, N *scale_by
-        return(phi)
-    
-    def calc_neg_log_likelihood(self, phi, R, N):
-        S2 = N * np.sum(R * phi)
-        S3 = N * np.sum(safe_exp(-phi))
-        return(S2 + S3)
-    
-    def calc_neg_log_likelihood_grad(self, phi, R, N):
-        grad_S2 = N * R
-        grad_S3 = N * safe_exp(-phi)
-        return(grad_S2 + grad_S3)
-        
-    def S(self, phi, a, N, R):
-        S1 = a/(2*self.n_p_faces) * np.sum(phi * self.D_opt(phi))
-        S2 = N * np.sum(R * phi)
-        S3 = N * np.sum(safe_exp(-phi))
-        regularizer = 0
-        
-        if np.isfinite(PHI_UB):
-            flags = (phi > PHI_UB)
-            if flags.any() > 0:
-                regularizer += np.sum((phi[flags] - PHI_UB)**2)
-                
-        if np.isfinite(PHI_LB):
-            flags = (phi < PHI_LB)
-            if flags.any() > 0:
-                regularizer += np.sum((phi[flags] - PHI_LB)**2)
-                
-        result = S1 + S2 + S3 + regularizer
-        return(result)
-    
-    def grad_S(self, phi, a, N, R):
-        grad_S1 = a/self.n_p_faces * self.D_opt(phi)
-        grad_S2 = N * R
-        grad_S3 = N * safe_exp(-phi)
-        regularizer = np.zeros(self.n_genotypes)
-        if np.isfinite(PHI_UB):
-            flags = (phi > PHI_UB)
-            if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi - PHI_UB)[flags]
-        if np.isfinite(PHI_LB):
-            flags = (phi < PHI_LB)
-            if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi - PHI_LB)[flags]
-        result = grad_S1 + grad_S2 - grad_S3 + regularizer
-        return(result)
-    
-    def S_inf(self, b, N, R):
-        phi = self.D_kernel_basis_orth_sparse.dot(b)
-        S_inf1 = N * np.sum(R * phi)
-        S_inf2 = N * np.sum(safe_exp(-phi))
-        regularizer = 0
-        
-        if np.isfinite(PHI_UB):
-            flags = (phi > PHI_UB)
-            if np.any(flags):
-                regularizer += np.sum((phi[flags] - PHI_UB)**2)
-                
-        if np.isfinite(PHI_LB):
-            flags = (phi < PHI_LB)
-            if np.any(flags):
-                regularizer += np.sum((phi[flags] - PHI_LB)**2)
-        
-        result = S_inf1 + S_inf2 + regularizer
-        return(result)
-    
-    def grad_S_inf(self, b, N, R):
-        phi = self.D_kernel_basis_orth_sparse.dot(b)
-        grad_S_inf1 = N * R
-        grad_S_inf2 = N * safe_exp(-phi)
-        regularizer = np.zeros(self.n_genotypes)
-        if np.isfinite(PHI_UB):
-            flags = (phi > PHI_UB)
-            if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi - PHI_UB)[flags]
-        if np.isfinite(PHI_LB):
-            flags = (phi < PHI_LB)
-            if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi - PHI_LB)[flags]
-        return self.D_kernel_basis_orth_sparse.T.dot(grad_S_inf1 - grad_S_inf2 + regularizer)
-    
+    # TODO: fix and refactor simulation code
     def simulate(self, N, a_true, random_seed=None):
         # Set random seed
         np.random.seed(random_seed)
@@ -1133,81 +1121,6 @@ class SeqDEFT(DeltaPEstimator):
             power += 1
         Wkv = Lsv.sum(axis=1)
         return Wkv
-    
-    def calc_log_likelihood(self, a, counts=None, Q=None):
-        if counts is None:
-            counts = self.counts
-        if Q is None:
-            Q = self.Q_star
-        
-        if a == 0:
-            N_logQ = np.zeros(self.n_genotypes)
-            N_flags, Q_flags = (counts == 0), (Q == 0)
-            flags = ~N_flags * Q_flags
-            N_logQ[flags] = -np.inf
-            flags = ~N_flags * ~Q_flags
-            N_logQ[flags] = counts[flags] * np.log(Q[flags])
-            if any(N_logQ == -np.inf):
-                log_L = -np.inf
-            else:
-                log_L = np.sum(N_logQ)
-        else:
-            log_L = np.sum(counts * np.log(Q))
-        return(log_L)
-    
-    def phi_to_logQ(self, phi):
-        return(-phi - logsumexp(-phi))
-    
-    def phi_to_Q(self, phi):
-        return(np.exp(-phi - logsumexp(-phi)))
-    
-    def get_cv_iter(self, cv_fold, a_values):
-        for k, (train, validation) in enumerate(self.split_cv(cv_fold)):        
-            for i, a in enumerate(a_values):
-                yield(k, i, a, train, validation)   
-    
-    def compute_log_Ls(self, a_values, nfolds=5,
-                       options=None, scale_by=1, gtol=1e-3):
-        phi_inf = self.get_phi_inf(options, scale_by, gtol=gtol)
-    
-        log_Lss = np.zeros([nfolds, a_values.shape[0]])
-        cv_data = self.get_cv_iter(nfolds, a_values)
-        n_iters = nfolds * a_values.shape[0]
-        
-        for k, i, a, train, validation in tqdm(cv_data, total=n_iters):
-            data_dict = self.counts_to_data_dict(train)
-            phi = self._fit(a, phi_initial=phi_inf, data_dict=data_dict,
-                            options=options, scale_by=scale_by, gtol=gtol)
-            Q = self.phi_to_Q(phi)
-            log_Lss[k,i] = self.calc_log_likelihood(a, validation, Q)
-        
-        log_Ls = pd.DataFrame({'a': a_values,
-                               'log_likelihood_mean': log_Lss.mean(axis=0),
-                               'log_likelihood_sd': log_Lss.std(axis=0)})
-        self.log_Ls = log_Ls
-        return(log_Ls)
-    
-    def expand_counts(self):
-        obs = []
-        for i, c in enumerate(self.counts):
-            obs.extend([i] * c)
-        obs = np.array(obs)
-        np.random.shuffle(obs)
-        return(obs)
-    
-    def count_obs(self, obs):
-        v, c = np.unique(obs, return_counts=True)
-        counts = pd.DataFrame(c, index=v).reindex(np.arange(self.n_genotypes)).fillna(0).astype(int).values[:, 0]
-        return(counts)
-    
-    def split_cv(self, cv_fold):
-        obs = self.expand_counts()
-        n_valid = np.round(self.N / cv_fold).astype(int)
-        for _ in range(cv_fold):
-            np.random.shuffle(obs)
-            train = self.count_obs(obs[n_valid:])
-            validation = self.count_obs(obs[:n_valid])
-            yield(train, validation) 
 
 
 def D_geo(phi1, phi2):
