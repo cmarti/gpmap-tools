@@ -471,7 +471,7 @@ class VCregression(LandscapeEstimator):
         return(variance_components)
     
     def predict(self, Xpred=None, X=None, y=None, variance=None, lambdas=None,
-                estimate_variance=False):
+                ps=None, estimate_variance=False):
         """
         Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
         the provided or all genotypes
@@ -515,7 +515,7 @@ class VCregression(LandscapeEstimator):
         
         if np.all([X is not None, y is not None,
                    variance is not None, lambdas is not None]):
-            self.init(genotypes=X)
+            self.init(genotypes=X, ps=ps)
             self.set_data(X=X, y=y, variance=variance)
             self.lambdas = lambdas
             
