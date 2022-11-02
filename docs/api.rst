@@ -39,6 +39,7 @@ Sequence utils
 .. autofunction:: gpmap.src.seq.get_custom_codon_table
 .. autofunction:: gpmap.src.seq.get_one_hot_from_alleles
 .. autofunction:: gpmap.src.seq.get_alphabet
+.. autofunction:: gpmap.src.seq.generate_freq_reduced_alphabet
 
 Genotypes handling
 ------------------

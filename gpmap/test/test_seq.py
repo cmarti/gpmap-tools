@@ -9,7 +9,8 @@ import pandas as pd
 from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
                            guess_space_configuration, get_custom_codon_table,
-    get_seqs_from_alleles, get_one_hot_from_alleles)
+                           get_seqs_from_alleles, get_one_hot_from_alleles,
+                           generate_freq_reduced_code, transcribe_seqs)
 
 
 class SeqTests(unittest.TestCase):
@@ -117,6 +118,44 @@ class SeqTests(unittest.TestCase):
                                [0, 0, 1, 1, 0],
                                [0, 0, 1, 0, 1]])
         assert(np.allclose(onehot.todense(), exp_onehot))
+    
+    def test_get_freq_reduced_dict(self):
+        seqs = np.array(['AG', 'AA', 'CG', 'CA', 'TG', 'GC'])
+        
+        code = generate_freq_reduced_code(seqs, 2)
+        assert(code[0]['A'] == 'A')
+        assert(code[0]['C'] == 'C')
+        assert(code[0]['G'] == 'X')
+        assert(code[1]['A'] == 'A')
+        assert(code[1]['G'] == 'G')
+        assert(code[1]['C'] == 'X')
+        
+        # Changing allele names by new alphabet across all sites
+        code = generate_freq_reduced_code(seqs, 2, keep_allele_names=False)
+        assert(code[0]['A'] == 'A')
+        assert(code[0]['C'] == 'B')
+        assert(code[0]['G'] == 'X')
+        assert(code[1]['A'] == 'B')
+        assert(code[1]['G'] == 'A')
+        assert(code[1]['C'] == 'X')
+        
+        # Using counts
+        counts = np.array([1, 1, 1, 1, 5, 5])
+        code = generate_freq_reduced_code(seqs, 2, counts=counts)
+        assert(code[0]['A'] == 'X')
+        assert(code[0]['C'] == 'X')
+        assert(code[0]['G'] == 'G')
+        assert(code[0]['T'] == 'T')
+        assert(code[1]['A'] == 'X')
+        assert(code[1]['G'] == 'G')
+        assert(code[1]['C'] == 'C')
+    
+    def test_transcribe_seqs(self):
+        seqs = np.array(['AG', 'AA', 'CG', 'CA', 'TG', 'GC'])
+        code = generate_freq_reduced_code(seqs, 2)
+        
+        new_seqs = transcribe_seqs(seqs, code)
+        assert(np.all(new_seqs == ['AG', 'AA', 'CG', 'CA', 'XG', 'XX']))
     
         
 if __name__ == '__main__':

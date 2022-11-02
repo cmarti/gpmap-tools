@@ -27,7 +27,7 @@ def main():
     options_group.add_argument('-k', '--num_a', default=20, type=int,
                                help='Number of a values to test (20)')
     help_msg = 'P for the Delta(P) operator to build prior (2)'
-    options_group.add_argument('-P', '--delta_P', default=2, help=help_msg,
+    options_group.add_argument('-P', '--P_delta', default=2, help=help_msg,
                                type=int)
 
     output_group = parser.add_argument_group('Output')
@@ -38,7 +38,7 @@ def main():
     parsed_args = parser.parse_args()
     counts_fpath = parsed_args.counts
 
-    P = parsed_args.delta_P
+    P = parsed_args.P_delta
     a_value = parsed_args.a_value
     num_a = parsed_args.num_a
     
@@ -50,12 +50,11 @@ def main():
     data = pd.read_csv(counts_fpath, index_col=0)
 
     # Load annotation data
-    seqdeft = SeqDEFT(P)
-    result = seqdeft.fit(X=data.index.values, counts=data['counts'].values,
-                         a_value=a_value, num_a=num_a)
+    seqdeft = SeqDEFT(P, a=a_value, num_a=num_a)
+    result = seqdeft.fit(X=data.index.values, y=data['counts'].values)
     result.to_csv(out_fpath)
     
-    fig = plot_SeqDEFT_summary(seqdeft.log_Ls, result)
+    fig = plot_SeqDEFT_summary(seqdeft.cv_log_L, result)
     savefig(fig, out_fpath)
     
     log.finish()
