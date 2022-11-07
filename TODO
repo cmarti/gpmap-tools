@@ -9,4 +9,4 @@ similar to GLM for regression like approaches: have likelihood function classes 
 even if we select top genotypes
 - Reorder the documentation to have the theory with the simple grid examples
 - Create new classes of Discrete spaces for the extra models to  generate visualizations from: smily face and  tree-like
-
+- Make datashader optional, maybe by moving datashader plotting to another plotting module
