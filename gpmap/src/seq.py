@@ -221,6 +221,15 @@ def get_custom_codon_table(aa_mapping):
     return(codon_table)
 
 
+def get_product_states(state_labels):
+    if not state_labels:
+        yield([])
+    else:
+        for state in state_labels[0]:
+            for seq in get_product_states(state_labels[1:]):
+                yield([state] + seq)
+
+
 def get_seqs_from_alleles(alphabet):
     if not alphabet:
         yield('')

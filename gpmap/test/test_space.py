@@ -4,7 +4,8 @@ import unittest
 import pandas as pd
 import numpy as np
 
-from gpmap.src.space import SequenceSpace, DiscreteSpace, CodonSpace
+from gpmap.src.space import SequenceSpace, DiscreteSpace, CodonSpace,\
+    ProductSpace, GridSpace
 from scipy.sparse.csr import csr_matrix
 from gpmap.src.settings import TEST_DATA_DIR
 from os.path import join
@@ -64,6 +65,27 @@ class SpaceTests(unittest.TestCase):
                 self.fail('DiscreteSpace did not capture erroneous function')
             except ValueError:
                 pass
+    
+    def test_product_space(self):
+        m = csr_matrix(np.array([[0, 1, 0],  [1, 0, 1], [0, 1, 0]]))
+        ms = [m, m]
+        space = ProductSpace(ms)
+        assert(space.n_states == 9)
+        assert(space.n_edges == 24)
+    
+    def test_grid_space(self):
+        space = GridSpace(length=3)
+        assert(space.n_states == 9)
+        assert(space.n_edges == 24)
+        
+        peaks = np.array([[1, 1], [0, 0]])
+        space.set_peaks(peaks)
+        
+        y = np.array([1.13533528, 0.73575888, 0.27067057,
+                      0.73575888, 1.13533528, 0.41766651,
+                      0.27067057, 0.41766651, 0.15365092])
+        assert(np.allclose(space.y, y))
+        assert(np.all(space.nodes_df.columns == ['1', '2', 'function']))
     
     def test_seq_space_str(self):
         space = SequenceSpace(seq_length=1, alphabet_type='protein')
