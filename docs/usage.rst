@@ -8,6 +8,7 @@ In this section the user can find several use cases in which we applied GPMAP-to
 .. toctree::
     :maxdepth: 1
 
+    usage/0_discrete_spaces.ipynb
     usage/1_Ser.ipynb
     usage/2_GB1.ipynb
     usage/3_ParD.ipynb
