@@ -22,7 +22,7 @@ from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_matrix_polynomial_dot, Frob, grad_Frob,
                              reciprocal, calc_Kn_matrix, calc_cartesian_product,
-    calc_cartesian_prod_freqs)
+                             calc_cartesian_prod_freqs)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
 
@@ -56,8 +56,6 @@ class LandscapeEstimator(object):
             else:
                 alphabet = configuration['alphabet']
                 
-            self.space = SequenceSpace(seq_length=seq_length, alphabet=alphabet,
-                                       alphabet_type='custom')
             n_alleles = len(alphabet[0])
         
         elif n_alleles is None or seq_length is None:
@@ -68,11 +66,13 @@ class LandscapeEstimator(object):
         if alphabet is None:
             alphabet = get_alphabet(n_alleles=n_alleles,
                                     alphabet_type=alphabet_type)
+            alphabet = [alphabet] * seq_length
         
         self.seq_length = seq_length
         self.n_alleles = n_alleles
         self.n_genotypes = n_alleles ** seq_length
-        self.genotypes = np.array(list(get_seqs_from_alleles([alphabet] * seq_length)))
+        
+        self.genotypes = np.array(list(get_seqs_from_alleles(alphabet)))
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
                                        index=self.genotypes)
     

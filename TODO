@@ -9,3 +9,5 @@ similar to GLM for regression like approaches: have likelihood function classes 
 even if we select top genotypes
 - Create new classes of Discrete spaces for the extra models to  generate visualizations from: smily face and  tree-like
 - Make datashader optional, maybe by moving datashader plotting to another plotting module
+- review bounds for plots in datashader allele grid: padding option may not have been activated. Maybe buiild some default function to use across all datashader plots
+

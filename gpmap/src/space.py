@@ -11,12 +11,14 @@ from scipy.sparse._matrix_io import save_npz
 from scipy.sparse.extract import triu
 
 from gpmap.src.seq import (translate_seqs, guess_space_configuration,
-                           guess_alphabet_type, get_seqs_from_alleles)
+                           guess_alphabet_type, get_seqs_from_alleles,
+    get_product_states)
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_cartesian_product)
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
+from scipy.special._logsumexp import logsumexp
 
 
 class DiscreteSpace(object):
@@ -83,8 +85,12 @@ class DiscreteSpace(object):
             s += '\tStates function values: {}\n'.format(self.format_list_ends(self.y))
         else:
             s += '\tStates function values: undefined\n'
-        s += '\tNumber of edges: {}'.format(self.adjacency_matrix.sum().sum())
+        s += '\tNumber of edges: {}'.format(self.n_edges)
         return(s)
+
+    @property
+    def n_edges(self):
+        return(self.adjacency_matrix.sum().sum())
     
     @property
     def is_regular(self):
@@ -213,9 +219,78 @@ class DiscreteSpace(object):
         df = pd.DataFrame({'y': self.y}, 
                           index=self.state_labels)
         df.to_csv(fpath)
+        
     
+class ProductSpace(DiscreteSpace):
+    def __init__(self, elementary_graphs, y=None, state_labels=None):
+        self.set_dim_sizes(elementary_graphs)
+        adjacency_matrix = self.calc_adjacency_matrix(elementary_graphs)
+        
+        self.states = self.calc_states(state_labels=state_labels)
+        state_labels = np.array(['-'.join([str(x) for x in seq])
+                                 for seq in self.states])
+         
+        self.init_space(adjacency_matrix, y=y, state_labels=state_labels)
     
-class SequenceSpace(DiscreteSpace):
+    def set_dim_sizes(self, elementary_graphs):
+        self.graph_sizes = [adj_m.shape[0] for adj_m in elementary_graphs]
+
+    def calc_states(self, state_labels=None):
+        if state_labels is None:
+            state_labels = [list(range(s)) for s in self.graph_sizes]
+            
+        state_labels = np.array([x for x in get_product_states(state_labels)])
+        return(state_labels)
+    
+    def calc_adjacency_matrix(self, elementary_graphs):
+        adjacency_matrix = calc_cartesian_product(elementary_graphs)
+        return(adjacency_matrix)
+
+
+class GridSpace(ProductSpace):
+    """
+    Class for creating an N-dimensional grid discrete space
+    
+    Parameters
+    ----------
+    length: int
+        Number of states across each dimension of the grid
+    
+    ndim: int
+        Number of dimensions in the grid
+    
+    """
+    def __init__(self, length, ndim=2):
+        self.length = length
+        self.ndim = ndim
+        
+        elementary_graphs = [self.calc_elementary_graph(length)] * ndim
+        super().__init__(elementary_graphs)
+    
+    def calc_elementary_graph(self, length):
+        states = np.arange(length)
+        i = np.append(states[:-1], states[1:])
+        j = np.append(states[1:], states[:-1])
+        data = np.ones(i.shape[0])
+        m = csr_matrix((data, (i, j)))
+        return(m)
+    
+    def set_peaks(self, positions, sigma=1):
+        distances = np.array([np.abs(self.states - pos).sum(1) for pos in positions]).T
+        y = np.exp(logsumexp(-distances / sigma, axis=1))
+        self.set_y(y)
+    
+    @property
+    def nodes_df(self):
+        nodes_df = pd.DataFrame(self.states,
+                                columns=[str(i+1) for i in range(self.ndim)],
+                                index=self.state_labels)
+        if hasattr(self, 'y'):
+            nodes_df['function'] = self.y
+        return(nodes_df)
+        
+
+class SequenceSpace(ProductSpace):
     """
     Class for creating a Sequence space characterized by having sequences as
     states. States are connected in the discrete space if they differ by a 

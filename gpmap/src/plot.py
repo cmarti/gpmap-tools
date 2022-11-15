@@ -869,7 +869,10 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
                             aggregator=ds.max(color))
     else:
         hv.extension('matplotlib')
-        scatter = hv.Scatter(nodes_df[[x, y, color]])
+        colnames = [x, y]
+        if color not in colnames: # avoid adding color in case is already a selected field
+            colnames.append(color)
+        scatter = hv.Scatter(nodes_df[colnames])
         dsg = scatter.opts(color=color, cmap=cmap, clim=(vmin, vmax),
                            s=size, linewidth=linewidth, 
                            edgecolor=edgecolor)

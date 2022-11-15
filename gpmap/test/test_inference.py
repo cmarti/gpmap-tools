@@ -123,7 +123,7 @@ class VCTests(unittest.TestCase):
         
         # Ensure MSE is within a small range
         vc = VCregression()
-        vc.fit(data.index, data['y'], variance=data['var'],
+        vc.fit(data.index.values, data['y'], variance=data['var'],
                cross_validation=False)
         sd1 = np.log2((vc.lambdas[1:]+1e-6) / (lambdas[1:]+1e-6)).std()
         assert(sd1 < 2)
@@ -148,7 +148,7 @@ class VCTests(unittest.TestCase):
         
         # Estimating also the variance components
         vc = VCregression()
-        vc.fit(data.index, data['y'], variance=data['var'])
+        vc.fit(X=data.index, y=data['y'], variance=data['var'])
         pred = vc.predict()
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
