@@ -4,11 +4,23 @@ import unittest
 import numpy as np
 from scipy.stats.mstats_basic import pearsonr
 
-from gpmap.src.inference import VCregression
+from gpmap.src.inference import VCregression, Laplacian
 from scipy.special._basic import comb
+from timeit import timeit
 
 
 class VCTests(unittest.TestCase):
+    def test_laplacian(self):
+        L = Laplacian(4, 3)
+        
+        v = np.array([1, 1, 1, 1])
+        v = np.random.normal(size=L.shape[0])
+        
+        
+        print(timeit(lambda : L.dot2(v), number=10))
+        print(timeit(lambda: L.dot(v), number=10))
+        
+        
     def test_get_gt_to_data_matrix(self):
         vc = VCregression()
         vc.init(3, 2)
@@ -228,5 +240,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests']
+    import sys;sys.argv = ['', 'VCTests.test_laplacian']
     unittest.main()

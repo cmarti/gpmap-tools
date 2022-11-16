@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import random
-from itertools import product, combinations, chain
+from itertools import product, combinations
 from tqdm import tqdm
 from _functools import partial
 
@@ -9,6 +9,7 @@ import pandas as pd
 
 from numpy.linalg.linalg import matrix_power
 from scipy.sparse.csr import csr_matrix
+from scipy.sparse import triu
 from scipy.sparse.linalg.interface import LinearOperator
 from scipy.sparse.linalg.isolve import minres
 from scipy.optimize._minimize import minimize
@@ -24,7 +25,40 @@ from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              reciprocal, calc_Kn_matrix, calc_cartesian_product,
                              calc_cartesian_prod_freqs)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
-                           get_seqs_from_alleles)
+                           get_seqs_from_alleles, get_product_states)
+
+
+class Laplacian(object):
+    def __init__(self, n_alleles, seq_length):
+        self.alpha = n_alleles
+        self.l = seq_length
+        self.n = self.alpha ** self.l
+    
+        self.calc_Kn()    
+        self.calc_A_triu()
+        
+        self.neighbors = np.vstack((self.triu_A + self.triu_A.T).asformat('lil').rows) 
+    
+    @property
+    def shape(self):
+        return(self.triu_A.shape)
+    
+    def calc_Kn(self):
+        # TODO: figure out how to avoid ones
+        Kn = np.ones((self.alpha, self.alpha))
+        np.fill_diagonal(Kn, np.zeros(self.alpha))
+        self.Kn = csr_matrix(Kn)
+        self.Kn_triu = csr_matrix(triu(Kn))
+    
+    def calc_A_triu(self):
+        self.triu_A = calc_cartesian_product([self.Kn_triu] * self.l)
+    
+    def dot(self, v):
+        # TODO: figure out if this is saving us memory or not
+        return(self.alpha * v - self.triu_A.dot(v) - self.triu_A.T.dot(v))
+    
+    def dot2(self, v):
+        return(self.alpha * v - v[self.neighbors].sum(1))
 
 
 class LandscapeEstimator(object):
@@ -698,7 +732,7 @@ class DeltaPEstimator(LandscapeEstimator):
         self.space.calc_laplacian()
         self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
         self.n_genotypes = self.space.n_states
-        self.L = self.space.laplacian
+        self.L = Laplacian(self.n_alleles, self.seq_length)
     
     @property
     def D_kernel_basis_orth_sparse(self):

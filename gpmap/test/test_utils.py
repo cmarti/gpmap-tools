@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import unittest
 
-import pandas as pd
 import numpy as np
+
 from gpmap.src.utils import calc_cartesian_product
 
 
