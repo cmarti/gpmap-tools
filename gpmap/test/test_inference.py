@@ -2,11 +2,14 @@
 import unittest
 
 import numpy as np
+import pandas as pd
 from scipy.stats.mstats_basic import pearsonr
 
 from gpmap.src.inference import VCregression, Laplacian
 from scipy.special._basic import comb
 from timeit import timeit
+from gpmap.src.settings import TEST_DATA_DIR
+from os.path import join
 
 
 class VCTests(unittest.TestCase):
@@ -126,12 +129,9 @@ class VCTests(unittest.TestCase):
         assert(rho[4] < 0)
     
     def test_vc_fit(self):
-        np.random.seed(0)
-        sigma, lambdas = 0., np.array([0, 200, 20, 2, 0.2, 0.02])
-        
-        vc = VCregression()
-        vc.init(5, 4)
-        data = vc.simulate(lambdas, sigma=sigma, p_missing=0.05).dropna()
+        lambdas = 0.2, np.array([0, 200, 20, 2, 0.2, 0.02])
+        fpath = join(TEST_DATA_DIR, 'vc.data.csv')
+        data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         # Ensure MSE is within a small range
         vc = VCregression()
@@ -151,12 +151,9 @@ class VCTests(unittest.TestCase):
         assert(sd1 > sd2)
     
     def test_vc_predict(self):
-        np.random.seed(0)
-        sigma, lambdas = 0.2, np.array([0, 200, 20, 2, 0.2, 0.02])
-        
-        vc = VCregression()
-        vc.init(5, 4)
-        data = vc.simulate(lambdas, sigma)
+        lambdas = 0.2, np.array([0, 200, 20, 2, 0.2, 0.02])
+        fpath = join(TEST_DATA_DIR, 'vc.data.csv')
+        data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         # Estimating also the variance components
         vc = VCregression()
@@ -240,5 +237,9 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
+<<<<<<< HEAD
     import sys;sys.argv = ['', 'VCTests.test_laplacian']
+=======
+    import sys;sys.argv = ['', 'VCTests.test_vc_predict']
+>>>>>>> branch 'master' of git@bitbucket.org:cmartiga/gpmap_tools.git
     unittest.main()
