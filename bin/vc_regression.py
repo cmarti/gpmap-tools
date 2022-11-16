@@ -29,7 +29,7 @@ def main():
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True, help='Output file')
     output_group.add_argument('-p', '--pred',
-                              help='File containing sequencse for predicting genotype')
+                              help='File containing sequences for predicting genotype')
     output_group.add_argument('--var', action='store_true',
                               help='Report also posterior variance for the predicted values')
 
