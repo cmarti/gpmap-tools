@@ -8,8 +8,9 @@ from scipy.stats.mstats_basic import pearsonr
 from gpmap.src.inference import VCregression, Laplacian
 from scipy.special._basic import comb
 from timeit import timeit
-from gpmap.src.settings import TEST_DATA_DIR
+from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from os.path import join
+from subprocess import check_call
 
 
 class VCTests(unittest.TestCase):
@@ -129,7 +130,7 @@ class VCTests(unittest.TestCase):
         assert(rho[4] < 0)
     
     def test_vc_fit(self):
-        lambdas = 0.2, np.array([0, 200, 20, 2, 0.2, 0.02])
+        lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
@@ -150,8 +151,33 @@ class VCTests(unittest.TestCase):
         # Ensure regularization improves results
         assert(sd1 > sd2)
     
+    def test_vc_fit_bin(self):
+        data_fpath = join(TEST_DATA_DIR, 'vc.data.csv')
+        lambdas_fpath = join(TEST_DATA_DIR, 'vc.lambdas.csv')
+        xpred_fpath = join(TEST_DATA_DIR, 'vc.xpred.txt')
+        out_fpath = join(TEST_DATA_DIR, 'seqdeft.output.csv')
+        bin_fpath = join(BIN_DIR, 'vc_regression.py')
+        
+        # Direct kernel alignment
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath]
+        check_call(cmd)
+        
+        # Perform regularization
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r']
+        check_call(cmd)
+        
+        # With known lambdas
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
+               '--lambdas', lambdas_fpath]
+        check_call(cmd)
+        
+        # Predict few sequences and their variances
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
+               '--var', '-p', xpred_fpath]
+        check_call(cmd)
+    
     def test_vc_predict(self):
-        lambdas = 0.2, np.array([0, 200, 20, 2, 0.2, 0.02])
+        lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
@@ -237,9 +263,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-<<<<<<< HEAD
-    import sys;sys.argv = ['', 'VCTests.test_laplacian']
-=======
-    import sys;sys.argv = ['', 'VCTests.test_vc_predict']
->>>>>>> branch 'master' of git@bitbucket.org:cmartiga/gpmap_tools.git
+    import sys;sys.argv = ['', 'VCTests']
     unittest.main()
