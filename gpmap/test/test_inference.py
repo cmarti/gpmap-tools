@@ -15,14 +15,20 @@ from subprocess import check_call
 
 class VCTests(unittest.TestCase):
     def test_laplacian(self):
-        L = Laplacian(4, 3)
+        L = Laplacian(2, 2)
+        L = Laplacian(4, 7)
         
-        v = np.array([1, 1, 1, 1])
+        v = np.array([1, 1, 1, 1.])
+        v = np.array([1, 2, 3, 0.])
         v = np.random.normal(size=L.shape[0])
         
+        # print(L.dot(v))
+        # print(L.dot2(v))
+        # print(L.dot3(v))
         
-        print(timeit(lambda : L.dot2(v), number=10))
         print(timeit(lambda: L.dot(v), number=10))
+        print(timeit(lambda : L.dot2(v), number=10))
+        print(timeit(lambda : L.dot3(v), number=10))
         
         
     def test_get_gt_to_data_matrix(self):
@@ -263,5 +269,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests']
+    import sys;sys.argv = ['', 'VCTests.test_laplacian']
     unittest.main()

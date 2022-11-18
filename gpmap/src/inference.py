@@ -37,7 +37,8 @@ class Laplacian(object):
         self.calc_Kn()    
         self.calc_A_triu()
         
-        self.neighbors = np.vstack((self.triu_A + self.triu_A.T).asformat('lil').rows) 
+        self.neighbors = np.vstack((self.triu_A + self.triu_A.T).asformat('lil').rows)
+        self.F = np.ones((self.alpha, self.alpha)) - 2 * np.eye(self.alpha)
     
     @property
     def shape(self):
@@ -59,7 +60,20 @@ class Laplacian(object):
     
     def dot2(self, v):
         return(self.alpha * v - v[self.neighbors].sum(1))
-
+    
+    def _dot3(self, v):
+        size = v.shape[0]
+        if size == self.alpha:
+            return(v)
+        else:
+            s = size // self.alpha
+            vs = np.vstack([self._dot3(v[i*s:(i+1)*s]) for i in range(self.alpha)])
+            return(np.hstack(vs.sum(1).reshape((self.alpha, 1)) + self.F.dot(vs)))
+    
+    def dot3(self, v):
+        d = (self.alpha - 1) * self.l
+        return(d * v - self._dot3(v))
+                
 
 class LandscapeEstimator(object):
     def __init__(self, expand_alphabet=True):
