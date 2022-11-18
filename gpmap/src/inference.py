@@ -33,6 +33,7 @@ class Laplacian(object):
         self.alpha = n_alleles
         self.l = seq_length
         self.n = self.alpha ** self.l
+        self.d = (self.alpha - 1) * self.l
     
         self.calc_Kn()    
         self.calc_A_triu()
@@ -56,10 +57,10 @@ class Laplacian(object):
     
     def dot(self, v):
         # TODO: figure out if this is saving us memory or not
-        return(self.alpha * v - self.triu_A.dot(v) - self.triu_A.T.dot(v))
+        return(self.d * v - self.triu_A.dot(v) - self.triu_A.transpose(copy=False).dot(v))
     
     def dot2(self, v):
-        return(self.alpha * v - v[self.neighbors].sum(1))
+        return(self.d * v - v[self.neighbors].sum(1))
     
     def _dot3(self, v):
         size = v.shape[0]
@@ -71,8 +72,7 @@ class Laplacian(object):
             return(np.hstack(vs.sum(1).reshape((self.alpha, 1)) + self.F.dot(vs)))
     
     def dot3(self, v):
-        d = (self.alpha - 1) * self.l
-        return(d * v - self._dot3(v))
+        return(self.d * v - self._dot3(v))
                 
 
 class LandscapeEstimator(object):

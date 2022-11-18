@@ -15,16 +15,16 @@ from subprocess import check_call
 
 class VCTests(unittest.TestCase):
     def test_laplacian(self):
-        L = Laplacian(2, 2)
-        L = Laplacian(4, 7)
-        
-        v = np.array([1, 1, 1, 1.])
-        v = np.array([1, 2, 3, 0.])
-        v = np.random.normal(size=L.shape[0])
-        
-        # print(L.dot(v))
+        # L = Laplacian(2, 2)
+        # v = np.array([1, 1, 1, 1.])
+        # v = np.array([1, 2, 3, 0.])
+        #
         # print(L.dot2(v))
+        # print(L.dot(v))
         # print(L.dot3(v))
+        
+        L = Laplacian(4, 7)
+        v = np.random.normal(size=L.shape[0])
         
         print(timeit(lambda: L.dot(v), number=10))
         print(timeit(lambda : L.dot2(v), number=10))
