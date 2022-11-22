@@ -133,10 +133,10 @@ def get_genotypes_from_region(nodes_df, max_values={}, min_values={}):
     sel = np.full(nodes_df.shape[0], True)
     
     for col, max_value in max_values.items():
-        sel = sel & nodes_df[col] < max_value
+        sel = sel & (nodes_df[col] < max_value)
     
     for col, min_value in min_values.items():
-        sel = sel & nodes_df[col] > min_value
+        sel = sel & (nodes_df[col] > min_value)
     
     return(nodes_df.index[sel])
 

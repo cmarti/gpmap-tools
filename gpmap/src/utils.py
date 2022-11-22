@@ -152,3 +152,45 @@ def calc_cartesian_prod_freqs(site_freqs):
     site2 = calc_cartesian_prod_freqs(site_freqs[1:])
     freqs = np.hstack([f * site2 for f in site1])
     return(freqs)
+
+
+def counts_to_seqs(X, y):
+    seqs = []
+    for seq, counts in zip(X, y):
+        seqs.extend([seq] * counts)
+    seqs = np.array(seqs)
+    return(seqs)
+
+
+def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False):
+    msg = 'X and y must have the same size'
+    check_error(X.shape[0] == y.shape[0], msg=msg)
+    
+    if count_data:
+        check_error(y_var is None,
+                    msg='variance in estimation not allowed for count data')
+        seqs = counts_to_seqs(X, y)
+        np.random.shuffle(seqs)
+        n_test = np.round(seqs.shape[0] / nfolds).astype(int)
+        
+        for i in np.arange(0, seqs.shape[0], n_test):
+            test = np.unique(seqs[i:i+n_test], return_counts=True)
+            train = np.unique(np.append(seqs[:i], seqs[i+n_test:]),
+                              return_counts=True)
+            yield(train, test)
+    else:
+        n_obs = X.shape[0]
+        order = np.arange(n_obs)
+        np.random.shuffle(order)
+        n_test = np.round(n_obs / nfolds).astype(int)
+        
+        for i in np.arange(0, n_obs, n_test):
+            test = order[i:i+n_test]
+            train = np.append(order[:i], order[i+n_test:])
+            if y_var is None:
+                result = ((X[train], y[train]),
+                          (X[test], y[test]))
+            else:
+                result = ((X[train], y[train], y_var[train]),
+                          (X[test], y[test], y_var[test]))
+            yield(result)

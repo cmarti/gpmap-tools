@@ -23,9 +23,9 @@ from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_matrix_polynomial_dot, Frob, grad_Frob,
                              reciprocal, calc_Kn_matrix, calc_cartesian_product,
-                             calc_cartesian_prod_freqs)
+                             calc_cartesian_prod_freqs, get_CV_splits)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
-                           get_seqs_from_alleles, get_product_states)
+                           get_seqs_from_alleles)
 
 
 class Laplacian(object):
@@ -915,7 +915,9 @@ class DeltaPEstimator(LandscapeEstimator):
         self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
         
     def get_cv_iter(self, a_values):
-        for train, validation in self.split_cv():        
+        for train, validation in get_CV_splits(X=self.X, y=self.y,
+                                               nfolds=self.nfolds,
+                                               count_data=True):        
             for a in a_values:
                 yield(a, train, validation)   
     
@@ -925,8 +927,7 @@ class DeltaPEstimator(LandscapeEstimator):
         cv_data = self.get_cv_iter(a_values)
         
         for a, train, test in tqdm(cv_data, total=self.nfolds * self.num_a):
-            X_train, y_train = train
-            X_test, y_test = test
+            (X_train, y_train), (X_test, y_test) = train, test
 
             self.set_data(X=X_train, y=y_train)
             phi = self._fit(a)
@@ -1031,17 +1032,6 @@ class SeqDEFT(DeltaPEstimator):
         grad_S3 = self.N * safe_exp(-phi)
         return(grad_S2 - grad_S3)
     
-    def split_cv(self):
-        seqs = self.counts_to_seqs()
-        np.random.shuffle(seqs)
-        n_test = np.round(self.N / self.nfolds).astype(int)
-        
-        for i in np.arange(0, seqs.shape[0], n_test):
-            test = np.unique(seqs[i:i+n_test], return_counts=True)
-            train = np.unique(np.append(seqs[:i], seqs[i+n_test:]),
-                              return_counts=True)
-            yield(train, test)
-            
     def phi_to_output(self, phi):
         Q_star = self.phi_to_Q(phi)
         seq_densities = pd.DataFrame({'frequency': self.R, 'Q_star': Q_star},
@@ -1099,13 +1089,6 @@ class SeqDEFT(DeltaPEstimator):
         with np.errstate(divide='ignore'):
             phi = -np.log(self.R)
         return(phi)
-    
-    def counts_to_seqs(self):
-        seqs = []
-        for seq, counts in zip(self.X, self.y):
-            seqs.extend([seq] * counts)
-        seqs = np.array(seqs)
-        return(seqs)
     
     # TODO: fix and refactor simulation code
     def simulate(self, N, a_true, random_seed=None):
