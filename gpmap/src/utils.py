@@ -182,15 +182,15 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False):
         n_obs = X.shape[0]
         order = np.arange(n_obs)
         np.random.shuffle(order)
-        folds = np.array_split(order, nfolds)
+        n_test = np.round(n_obs / nfolds).astype(int)
         
-        for i in range(nfolds):
-            training_idx = np.hstack((folds[:i], folds[i+1:]))
-            validation_idx = folds[i]
+        for i in np.arange(0, n_obs, n_test):
+            test = order[i:i+n_test]
+            train = np.append(order[:i], order[i+n_test:])
             if y_var is None:
-                result = ((X[training_idx], y[training_idx]),
-                          (X[validation_idx], y[validation_idx]))
+                result = ((X[train], y[train]),
+                          (X[test], y[test]))
             else:
-                result = ((X[training_idx], y[training_idx], y_var[training_idx]),
-                          (X[validation_idx], y[validation_idx], y_var[training_idx]))
+                result = ((X[train], y[train], y_var[train]),
+                          (X[test], y[test], y_var[test]))
             yield(result)

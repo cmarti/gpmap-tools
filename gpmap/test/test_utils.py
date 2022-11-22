@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 import unittest
 
-import pandas as pd
 import numpy as np
-from gpmap.src.utils import calc_cartesian_product
+
+from gpmap.src.utils import calc_cartesian_product, get_CV_splits
 
 
 class UtilsTests(unittest.TestCase):
@@ -56,7 +56,23 @@ class UtilsTests(unittest.TestCase):
                              [0, 0.4, 0.3, 0]])
         result = calc_cartesian_product([matrix1, matrix2])
         assert(np.all(result == expected))
+    
+    def test_get_CV_splits(self):
+        np.random.seed(0)
+        X = np.array(['A', 'B', 'C'])
+        y = np.array([1, 2, 2])
         
+        splits = get_CV_splits(X, y, nfolds=3)
+        for (x_train, y_train), (x_test, y_test) in splits:
+            assert(x_train.shape[0] == 2)
+            assert(y_train.shape[0] == 2)
+            assert(x_test.shape[0] == 1)
+            assert(y_test.shape[0] == 1)
+            
+        splits = get_CV_splits(X, y, nfolds=3, count_data=True)
+        for (x_train, y_train), (x_test, y_test) in splits:
+            assert(y_train.sum() + y_test.sum() == 5)
+            
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'UtilsTests']
