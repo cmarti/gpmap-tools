@@ -82,8 +82,9 @@ class Laplacian(object):
                 
 
 class LandscapeEstimator(object):
-    def __init__(self, expand_alphabet=True):
+    def __init__(self, expand_alphabet=True, save_memory=False):
         self.expand_alphabet = expand_alphabet
+        self.save_memory = save_memory
     
     def define_space(self, seq_length=None, n_alleles=None, genotypes=None,
                      alphabet_type='custom'):
@@ -709,8 +710,8 @@ class DeltaPEstimator(LandscapeEstimator):
     def __init__(self, P, a=None, num_a=20, nfolds=5,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
-                 gtol=1e-3):
-        super().__init__()
+                 gtol=1e-3, save_memory=False):
+        super().__init__(save_memory=save_memory)
         self.P = P
         self.a = a
         self.a_is_fixed = a is not None
@@ -750,7 +751,7 @@ class DeltaPEstimator(LandscapeEstimator):
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.check_P()
         self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
-        self.L = Laplacian(self.n_alleles, self.seq_length)
+        self.L = Laplacian(self.n_alleles, self.seq_length, save_memory=self.save_memory)
     
     @property
     def D_kernel_basis_orth_sparse(self):

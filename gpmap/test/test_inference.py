@@ -227,8 +227,24 @@ class VCTests(unittest.TestCase):
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         filtered = data.loc[np.random.choice(data.index, size=950), :]
-        vc = VCregression()
-        vc.fit(filtered.index, filtered['y'], variance=filtered['var'])
+        vc = VCregression(save_memory=False)
+        vc.fit(filtered.index, filtered['y'], variance=filtered['var'], 
+               cross_validation=True)
+        pred = vc.predict().sort_index()
+        mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
+        rho = pearsonr(pred['ypred'], data['y_true'])[0]
+        assert(rho > 0.95)
+        assert(mse < 0.3)
+    
+    def test_vc_predict_save_memory(self):
+        np.random.seed(0)
+        fpath = join(TEST_DATA_DIR, 'vc.data.csv')
+        data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
+        
+        filtered = data.loc[np.random.choice(data.index, size=950), :]
+        vc = VCregression(save_memory=True)
+        vc.fit(filtered.index, filtered['y'], variance=filtered['var'], 
+               cross_validation=True)
         pred = vc.predict().sort_index()
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
