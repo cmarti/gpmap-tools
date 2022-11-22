@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import random
-from itertools import product, combinations, chain
+from itertools import product, combinations
 from tqdm import tqdm
 from _functools import partial
 
@@ -22,7 +22,7 @@ from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_matrix_polynomial_dot, Frob, grad_Frob,
                              reciprocal, calc_Kn_matrix, calc_cartesian_product,
-    calc_cartesian_prod_freqs)
+                             calc_cartesian_prod_freqs)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
 
