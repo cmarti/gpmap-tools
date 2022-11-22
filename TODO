@@ -7,7 +7,6 @@ as long as n_alleles is the same across sites. Use the guessed alphabet to do so
 similar to GLM for regression like approaches: have likelihood function classes with log-likelihood and gradient methods
 - Try to implement nodes_vmin option for plotly interactive plotting to keep color scale constant
 even if we select top genotypes
-- Reorder the documentation to have the theory with the simple grid examples
 - Create new classes of Discrete spaces for the extra models to  generate visualizations from: smily face and  tree-like
 - Make datashader optional, maybe by moving datashader plotting to another plotting module
 - review bounds for plots in datashader allele grid: padding option may not have been activated. Maybe buiild some default function to use across all datashader plots

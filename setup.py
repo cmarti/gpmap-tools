@@ -19,6 +19,7 @@ def main():
         entry_points={
             'console_scripts': [
                 'fit_SeqDEFT = bin.fit_seqdeft:main',
+                'vc_regression = bin.vc_regression:main',
                 'calc_visualization = bin.calc_visualization:main',
                 'calc_tpt = bin.calc_tpt:main',
                 'plot_visualization = bin.plot_visualization:main',

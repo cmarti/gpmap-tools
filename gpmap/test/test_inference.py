@@ -5,14 +5,26 @@ import numpy as np
 import pandas as pd
 from scipy.stats.mstats_basic import pearsonr
 
-from gpmap.src.inference import VCregression
+from gpmap.src.inference import VCregression, Laplacian
 from scipy.special._basic import comb
-from gpmap.src.settings import TEST_DATA_DIR
+from timeit import timeit
+from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from os.path import join
-from _csv import QUOTE_NONNUMERIC
+from subprocess import check_call
 
 
 class VCTests(unittest.TestCase):
+    def test_laplacian(self):
+        L = Laplacian(4, 3)
+        
+        v = np.array([1, 1, 1, 1])
+        v = np.random.normal(size=L.shape[0])
+        
+        
+        print(timeit(lambda : L.dot2(v), number=10))
+        print(timeit(lambda: L.dot(v), number=10))
+        
+        
     def test_get_gt_to_data_matrix(self):
         vc = VCregression()
         vc.init(3, 2)
@@ -118,13 +130,13 @@ class VCTests(unittest.TestCase):
         assert(rho[4] < 0)
     
     def test_vc_fit(self):
-        lambdas = 0.2, np.array([0, 200, 20, 2, 0.2, 0.02])
+        lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         # Ensure MSE is within a small range
         vc = VCregression()
-        vc.fit(data.index, data['y'], variance=data['var'],
+        vc.fit(data.index.values, data['y'], variance=data['var'],
                cross_validation=False)
         sd1 = np.log2((vc.lambdas[1:]+1e-6) / (lambdas[1:]+1e-6)).std()
         assert(sd1 < 2)
@@ -139,14 +151,39 @@ class VCTests(unittest.TestCase):
         # Ensure regularization improves results
         assert(sd1 > sd2)
     
+    def test_vc_fit_bin(self):
+        data_fpath = join(TEST_DATA_DIR, 'vc.data.csv')
+        lambdas_fpath = join(TEST_DATA_DIR, 'vc.lambdas.csv')
+        xpred_fpath = join(TEST_DATA_DIR, 'vc.xpred.txt')
+        out_fpath = join(TEST_DATA_DIR, 'seqdeft.output.csv')
+        bin_fpath = join(BIN_DIR, 'vc_regression.py')
+        
+        # Direct kernel alignment
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath]
+        check_call(cmd)
+        
+        # Perform regularization
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r']
+        check_call(cmd)
+        
+        # With known lambdas
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
+               '--lambdas', lambdas_fpath]
+        check_call(cmd)
+        
+        # Predict few sequences and their variances
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
+               '--var', '-p', xpred_fpath]
+        check_call(cmd)
+    
     def test_vc_predict(self):
-        lambdas = 0.2, np.array([0, 200, 20, 2, 0.2, 0.02])
+        lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         # Estimating also the variance components
         vc = VCregression()
-        vc.fit(data.index, data['y'], variance=data['var'])
+        vc.fit(X=data.index, y=data['y'], variance=data['var'])
         pred = vc.predict()
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
@@ -226,5 +263,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_vc_predict']
+    import sys;sys.argv = ['', 'VCTests']
     unittest.main()
