@@ -20,13 +20,13 @@ class VCTests(unittest.TestCase):
         # v = np.array([1, 2, 3, 0.])
         #
         # print(L.dot2(v))
-        # print(L.dot(v))
+        # print(L.dot1(v))
         # print(L.dot3(v))
         
         L = Laplacian(4, 7)
         v = np.random.normal(size=L.shape[0])
         
-        print(timeit(lambda: L.dot(v), number=10))
+        print(timeit(lambda: L.dot1(v), number=10))
         print(timeit(lambda : L.dot2(v), number=10))
         print(timeit(lambda : L.dot3(v), number=10))
         
@@ -220,12 +220,16 @@ class VCTests(unittest.TestCase):
             self.fail()
         except ValueError:
             pass
+    
+    def test_vc_predict_from_incomplete_data(self):
+        np.random.seed(0)
+        fpath = join(TEST_DATA_DIR, 'vc.data.csv')
+        data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
-        # With incomplete genotype sampling data: larger MSE
         filtered = data.loc[np.random.choice(data.index, size=950), :]
         vc = VCregression()
         vc.fit(filtered.index, filtered['y'], variance=filtered['var'])
-        pred = vc.predict()
+        pred = vc.predict().sort_index()
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
         assert(rho > 0.95)
@@ -269,5 +273,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_laplacian']
+    import sys;sys.argv = ['', 'VCTests']
     unittest.main()

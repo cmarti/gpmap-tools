@@ -29,17 +29,21 @@ from gpmap.src.seq import (guess_space_configuration, get_alphabet,
 
 
 class Laplacian(object):
-    def __init__(self, n_alleles, seq_length):
+    def __init__(self, n_alleles, seq_length, save_memory=False):
         self.alpha = n_alleles
         self.l = seq_length
         self.n = self.alpha ** self.l
         self.d = (self.alpha - 1) * self.l
+        self.save_memory = save_memory
     
         self.calc_Kn()    
         self.calc_A_triu()
         
-        self.neighbors = np.vstack((self.triu_A + self.triu_A.T).asformat('lil').rows)
-        self.F = np.ones((self.alpha, self.alpha)) - 2 * np.eye(self.alpha)
+        if save_memory:
+            self.F = np.ones((self.alpha, self.alpha)) - 2 * np.eye(self.alpha)
+            self.dot = self.dot3
+        else:
+            self.dot = self.dot1
     
     @property
     def shape(self):
@@ -55,11 +59,13 @@ class Laplacian(object):
     def calc_A_triu(self):
         self.triu_A = calc_cartesian_product([self.Kn_triu] * self.l)
     
-    def dot(self, v):
+    def dot1(self, v):
         # TODO: figure out if this is saving us memory or not
         return(self.d * v - self.triu_A.dot(v) - self.triu_A.transpose(copy=False).dot(v))
     
     def dot2(self, v):
+        if not hasattr(self, 'neighbors'):
+            self.neighbors = np.vstack((self.triu_A + self.triu_A.T).asformat('lil').rows)
         return(self.d * v - v[self.neighbors].sum(1))
     
     def _dot3(self, v):
@@ -704,6 +710,7 @@ class DeltaPEstimator(LandscapeEstimator):
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
                  gtol=1e-3):
+        super().__init__()
         self.P = P
         self.a = a
         self.a_is_fixed = a is not None
@@ -742,10 +749,7 @@ class DeltaPEstimator(LandscapeEstimator):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.check_P()
-        
-        self.space.calc_laplacian()
         self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
-        self.n_genotypes = self.space.n_states
         self.L = Laplacian(self.n_alleles, self.seq_length)
     
     @property
