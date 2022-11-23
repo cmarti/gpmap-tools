@@ -10,4 +10,6 @@ even if we select top genotypes
 - Create new classes of Discrete spaces for the extra models to  generate visualizations from: smily face and  tree-like
 - Make datashader optional, maybe by moving datashader plotting to another plotting module
 - review bounds for plots in datashader allele grid: padding option may not have been activated. Maybe buiild some default function to use across all datashader plots
-
+- Write a method to plot a phylogenetic tree on a landscape: test on the codon landscape
+- Write a method to simulate evolution in the landscape: use the jump matrix and exponential waiting times. 
+- Write a method to simulate sequence evolution on a phylogenetic tree using the previous function.
