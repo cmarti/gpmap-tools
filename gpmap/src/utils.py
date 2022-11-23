@@ -188,12 +188,14 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False):
         for i in np.arange(0, n_obs, n_test):
             test = order[i:i+n_test]
             train = np.append(order[:i], order[i+n_test:])
+            
             if y_var is None:
-                result = ((X[train], y[train]),
-                          (X[test], y[test]))
+                y_var_train, y_var_test = None, None
             else:
-                result = ((X[train], y[train], y_var[train]),
-                          (X[test], y[test], y_var[test]))
+                y_var_train, y_var_test = y_var[train], y_var[test]
+                
+            result = ((X[train], y[train], y_var_train),
+                      (X[test], y[test], y_var_test))
             yield(result)
 
 
@@ -213,14 +215,14 @@ def get_training_p_data(X, y, p, y_var=None, count_data=False):
         check_error(y_var is None,
                     msg='variance in estimation not allowed for count data')
         seqs = counts_to_seqs(X, y)
-        u = np.random.uniform(seqs.shape[0]) < p
+        u = np.random.uniform(size=seqs.shape[0]) < p
         test = np.unique(seqs[~u], return_counts=True)
         train = np.unique(seqs[u], return_counts=True)
         return(train, test)
     
     else:
-        u = np.random.uniform(X.shape[0]) < p
+        u = np.random.uniform(size=X.shape[0]) < p
         if y_var is None:
-            return((X[u], y[u]), (X[~u], y[~u]))
+            return((X[u], y[u], None), (X[~u], y[~u], None))
         else:
             return((X[u], y[u], y_var[u]), (X[~u], y[~u], y_var[~u]))
