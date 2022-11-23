@@ -4,6 +4,7 @@ import time
 from time import ctime
 
 import numpy as np
+import pandas as pd
 
 import scipy.sparse as sp
 
@@ -194,3 +195,32 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False):
                 result = ((X[train], y[train], y_var[train]),
                           (X[test], y[test], y_var[test]))
             yield(result)
+
+
+def generate_p_training_config(n_ps=10, nreps=3):
+    ps = np.hstack([np.linspace(0.05, 0.95, n_ps)] * nreps)
+    i = np.arange(ps.shape[0])
+    rep = np.hstack([j * np.ones(n_ps) for j in range(nreps)])
+    data = pd.DataFrame({'id': i, 'p': ps, 'rep': rep})
+    return(data)
+
+
+def get_training_p_data(X, y, p, y_var=None, count_data=False):
+    msg = 'X and y must have the same size'
+    check_error(X.shape[0] == y.shape[0], msg=msg)
+    
+    if count_data:
+        check_error(y_var is None,
+                    msg='variance in estimation not allowed for count data')
+        seqs = counts_to_seqs(X, y)
+        u = np.random.uniform(seqs.shape[0]) < p
+        test = np.unique(seqs[~u], return_counts=True)
+        train = np.unique(seqs[u], return_counts=True)
+        return(train, test)
+    
+    else:
+        u = np.random.uniform(X.shape[0]) < p
+        if y_var is None:
+            return((X[u], y[u]), (X[~u], y[~u]))
+        else:
+            return((X[u], y[u], y_var[u]), (X[~u], y[~u], y_var[~u]))
