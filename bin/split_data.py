@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
+import numpy as np
 import pandas as pd
 
 from gpmap.src.utils import (LogTrack, get_CV_splits,
@@ -28,6 +29,8 @@ def main():
     input_group.add_argument('data', help='CSV table with genotype-phenotype data')
     input_group.add_argument('--counts', default=False, action='store_true',
                              help='Data consists on counts')
+    input_group.add_argument('--seed', default=None, type=int,
+                             help='Random seed')
 
     cv_group = parser.add_argument_group('Cross-validation options')
     cv_group.add_argument('--cv', default=False, action='store_true',
@@ -40,6 +43,8 @@ def main():
                               help='Number of replicates for each proportion (3)')
     trainp_group.add_argument('-n', '--n_ps', default=10, type=int,
                               help='Number of different training proportions (10)')
+    trainp_group.add_argument('-m', '--max_pred', default=None, type=int,
+                              help='Max number of test sequences to generate')
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True, help='Output file')
@@ -50,12 +55,14 @@ def main():
     parsed_args = parser.parse_args()
     data_fpath = parsed_args.data
     count_data = parsed_args.counts
+    seed = parsed_args.seed
     
     run_cv = parsed_args.cv
     nfolds = parsed_args.k_folds
     
     nreps = parsed_args.nreps
     n_ps = parsed_args.n_ps
+    max_pred = parsed_args.max_pred
 
     out_fpath = parsed_args.output
     out_prefix = parsed_args.prefix
@@ -66,7 +73,10 @@ def main():
     data = pd.read_csv(data_fpath, dtype=str)
     data = data.set_index(data.columns[0])
     
-    # Get processed data
+    if seed is not None:
+        np.random.seed(seed)
+
+    # Get processed data        
     X = data.index.values
     y = data.values[:, 0]
     y_var = data.values[:, 1] if data.shape[1] > 1 else None 
@@ -106,6 +116,9 @@ def main():
             train_data = pd.DataFrame(train_data, index=train_x)
             fpath = '{}.{}.train.csv'.format(out_prefix, i)
             train_data.to_csv(fpath)
+            
+            if max_pred is not None and test_x.shape[0] > max_pred:
+                test_x = np.random.choice(test_x, size=max_pred)
             
             fpath = '{}.{}.test.txt'.format(out_prefix, i)
             write_seqs(test_x, fpath)
