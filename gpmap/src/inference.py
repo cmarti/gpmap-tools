@@ -920,9 +920,9 @@ class DeltaPEstimator(LandscapeEstimator):
         self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
         
     def get_cv_iter(self, a_values):
-        for train, validation in get_CV_splits(X=self.X, y=self.y,
-                                               nfolds=self.nfolds,
-                                               count_data=True):        
+        for _, train, validation in get_CV_splits(X=self.X, y=self.y,
+                                                  nfolds=self.nfolds,
+                                                  count_data=True):        
             for a in a_values:
                 yield(a, train, validation)   
     

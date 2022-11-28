@@ -63,14 +63,14 @@ class UtilsTests(unittest.TestCase):
         y = np.array([1, 2, 2])
         
         splits = get_CV_splits(X, y, nfolds=3)
-        for (x_train, y_train), (x_test, y_test) in splits:
-            assert(x_train.shape[0] == 2)
-            assert(y_train.shape[0] == 2)
-            assert(x_test.shape[0] == 1)
-            assert(y_test.shape[0] == 1)
+        for _, (x_train, y_train, _), (x_test, y_test, _) in splits:
+            assert(x_train.shape[0] == 1)
+            assert(y_train.shape[0] == 1)
+            assert(x_test.shape[0] == 2)
+            assert(y_test.shape[0] == 2)
             
         splits = get_CV_splits(X, y, nfolds=3, count_data=True)
-        for (x_train, y_train), (x_test, y_test) in splits:
+        for _, (x_train, y_train), (x_test, y_test) in splits:
             assert(y_train.sum() + y_test.sum() == 5)
             
         

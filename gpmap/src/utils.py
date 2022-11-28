@@ -9,8 +9,6 @@ import pandas as pd
 import scipy.sparse as sp
 
 from scipy.sparse.csr import csr_matrix
-from scipy.sparse._matrix_io import save_npz
-from scipy.sparse.extract import triu
 from scipy.sparse.dia import dia_matrix
 
 
@@ -163,7 +161,20 @@ def counts_to_seqs(X, y):
     return(seqs)
 
 
-def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False):
+def get_data_subset(data, idx):
+    subset = tuple([x[idx] if x is not None else None for x in data])
+    return(subset)
+
+
+def subsample_data(data, max_pred=None):
+    n_test = data[0].shape[0]
+    if max_pred is not None and n_test > max_pred:
+        test_idx = np.random.choice(np.arange(n_test), size=max_pred)
+        data = get_data_subset(data, test_idx)
+    return(data)
+
+
+def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
     msg = 'X and y must have the same size'
     check_error(X.shape[0] == y.shape[0], msg=msg)
     
@@ -174,29 +185,34 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False):
         np.random.shuffle(seqs)
         n_test = np.round(seqs.shape[0] / nfolds).astype(int)
         
-        for i in np.arange(0, seqs.shape[0], n_test):
+        for j, i in enumerate(np.arange(0, seqs.shape[0], n_test)):
             test = np.unique(seqs[i:i+n_test], return_counts=True)
             train = np.unique(np.append(seqs[:i], seqs[i+n_test:]),
                               return_counts=True)
-            yield(train, test)
+            yield(j, train, test)
     else:
+        data = (X, y, y_var)
         n_obs = X.shape[0]
         order = np.arange(n_obs)
         np.random.shuffle(order)
         n_test = np.round(n_obs / nfolds).astype(int)
         
-        for i in np.arange(0, n_obs, n_test):
-            test = order[i:i+n_test]
-            train = np.append(order[:i], order[i+n_test:])
-            
-            if y_var is None:
-                y_var_train, y_var_test = None, None
-            else:
-                y_var_train, y_var_test = y_var[train], y_var[test]
-                
-            result = ((X[train], y[train], y_var_train),
-                      (X[test], y[test], y_var_test))
-            yield(result)
+        for j, i in enumerate(np.arange(0, n_obs, n_test)):
+            train_data = get_data_subset(data, order[i:i+n_test])
+            test_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
+            test_data = subsample_data(test_data, max_pred=max_pred)
+            yield(j, train_data, test_data)
+
+
+def data_to_df(data):
+    x, y = data[:2]
+
+    df = {'y': y}
+    if len(data) > 2 and data[2] is not None:
+        df['y_var'] = data[2]
+    
+    df = pd.DataFrame(df, index=x)
+    return(df)
 
 
 def generate_p_training_config(n_ps=10, nreps=3):
@@ -207,7 +223,7 @@ def generate_p_training_config(n_ps=10, nreps=3):
     return(data)
 
 
-def get_training_p_data(X, y, p, y_var=None, count_data=False):
+def sample_training_p_data(X, y, p, y_var=None, count_data=False, max_pred=None):
     msg = 'X and y must have the same size'
     check_error(X.shape[0] == y.shape[0], msg=msg)
     
@@ -221,8 +237,33 @@ def get_training_p_data(X, y, p, y_var=None, count_data=False):
         return(train, test)
     
     else:
+        data = (X, y, y_var)
         u = np.random.uniform(size=X.shape[0]) < p
-        if y_var is None:
-            return((X[u], y[u], None), (X[~u], y[~u], None))
-        else:
-            return((X[u], y[u], y_var[u]), (X[~u], y[~u], y_var[~u]))
+        train_data = get_data_subset(data, u)
+        test_data = get_data_subset(data, ~u)
+        test_data = subsample_data(test_data, max_pred=max_pred)
+        return(train_data, test_data)
+
+
+def get_training_p_splits(config, X, y, y_var=None, count_data=False,
+                          max_pred=None):
+    for i, p in zip(config['id'], config['p']):
+        train, test = sample_training_p_data(X, y, p, y_var=y_var,
+                                             count_data=count_data,
+                                             max_pred=max_pred)
+        yield(i, train, test)
+
+
+def write_seqs(seqs, fpath):
+    with open(fpath, 'w') as fhand:
+        for seq in seqs:
+            fhand.write('{}\n'.format(seq))
+        
+
+def write_split_data(out_prefix, splits):
+    for i, train, test in splits:
+        train_df = data_to_df(train)
+        train_df.to_csv('{}.{}.train.csv'.format(out_prefix, i))
+
+        test_x = test[0]        
+        write_seqs(test_x, fpath='{}.{}.test.txt'.format(out_prefix, i))

@@ -6,16 +6,9 @@ import pandas as pd
 
 from gpmap.src.utils import (LogTrack, get_CV_splits,
                              generate_p_training_config,
-                             get_training_p_data)
-from tqdm import tqdm
+                             get_training_p_splits, write_split_data)
 
 
-def write_seqs(seqs, fpath):
-    with open(fpath, 'w') as fhand:
-        for seq in seqs:
-            fhand.write('{}\n'.format(seq))
-
-        
 def main():
     description = 'Splits data into smaller datasets for model evaluation. '
     description += 'Two modes are available: generating regular Cross-validation'
@@ -83,45 +76,17 @@ def main():
     
     if run_cv:
         log.write('Generating {}-fold Cross-valiation sets'.format(nfolds))
-        splits = get_CV_splits(X, y, y_var=y_var, 
-                               nfolds=nfolds, count_data=count_data)
-        for i, (train, test) in tqdm(enumerate(splits), total=nfolds):
-            train_x, train_y = train[:2]
-            test_x = test[0]
-
-            train_data = {'y': train_y}
-            if len(train) > 2 and train[2] is not None:
-                train_data['y_var'] = train[2]            
-            train_data = pd.DataFrame(train_data, index=train_x)
-            fpath = '{}.{}.train.csv'.format(out_prefix, i)
-            train_data.to_csv(fpath)
-            
-            fpath = '{}.{}.test.txt'.format(out_prefix, i)
-            write_seqs(test_x, fpath)
-    
+        splits = get_CV_splits(X, y, y_var=y_var, nfolds=nfolds,
+                               count_data=count_data, max_pred=max_pred)
     else:
         log.write('Generating training and test sets with variable proportions')
         config = generate_p_training_config(n_ps=n_ps, nreps=nreps)
         config.to_csv(out_fpath)
         
-        for i, p in tqdm(zip(config['id'], config['p']), total=config.shape[0]):
-            train, test = get_training_p_data(X, y, p, y_var=y_var,
-                                              count_data=count_data)
-            train_x, train_y = train[:2]
-            test_x = test[0]
-
-            train_data = {'y': train_y}
-            if len(train) > 2 and train[2] is not None:
-                train_data['y_var'] = train[2]
-            train_data = pd.DataFrame(train_data, index=train_x)
-            fpath = '{}.{}.train.csv'.format(out_prefix, i)
-            train_data.to_csv(fpath)
-            
-            if max_pred is not None and test_x.shape[0] > max_pred:
-                test_x = np.random.choice(test_x, size=max_pred)
-            
-            fpath = '{}.{}.test.txt'.format(out_prefix, i)
-            write_seqs(test_x, fpath)
+        splits = get_training_p_splits(config, X, y, y_var=y_var, 
+                                       count_data=count_data, max_pred=max_pred)
+        
+    write_split_data(out_prefix, splits)
     
     log.finish()
 
