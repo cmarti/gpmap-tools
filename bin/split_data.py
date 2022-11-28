@@ -33,13 +33,13 @@ def main():
     cv_group.add_argument('--cv', default=False, action='store_true',
                           help='Generate cross-validation datasets')
     cv_group.add_argument('-k', '--k_folds', default=10, type=int,
-                          help='Number of folds for cross-validation')
+                          help='Number of folds for cross-validation (10)')
     
     trainp_group = parser.add_argument_group('Training proportions options')
-    trainp_group.add_argument('-r', '--nreps', default=3,
-                              help='Number of replicates for each proportion')
-    trainp_group.add_argument('-n', '--n_ps', default=10,
-                              help='Number of different training proportions')
+    trainp_group.add_argument('-r', '--nreps', default=3, type=int,
+                              help='Number of replicates for each proportion (3)')
+    trainp_group.add_argument('-n', '--n_ps', default=10, type=int,
+                              help='Number of different training proportions (10)')
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True, help='Output file')
