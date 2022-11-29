@@ -8,8 +8,11 @@ import pandas as pd
 
 import scipy.sparse as sp
 
+from os import listdir
+from os.path import join, dirname, abspath
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.dia import dia_matrix
+from scipy.stats.stats import pearsonr
 
 
 def check_error(condition, msg, error_type=ValueError):
@@ -267,3 +270,25 @@ def write_split_data(out_prefix, splits):
 
         test_x = test[0]        
         write_seqs(test_x, fpath='{}.{}.test.txt'.format(out_prefix, i))
+        
+
+def read_split_data(prefix, suffix=None):
+    fdir = abspath(dirname(prefix))
+    prefix = prefix.split('/')[-1]
+    suffix = 'test_pred.csv' if suffix is None else '{}.test_pred.csv'.format(suffix) 
+    for fname in listdir(fdir):
+        fpath = join(fdir, fname)
+        if fname.startswith(prefix) and fname.endswith(suffix):
+            label = '.'.join(fname.split('.')[1:-2])
+            test_pred = pd.read_csv(fpath, index_col=0)
+            yield(label, test_pred)
+        
+
+def calc_r2_values(test_pred_sets, data):
+    r2 = []
+    for label, test_pred in test_pred_sets:
+        ypred = test_pred.iloc[:, 0].values
+        seqs = test_pred.index.values
+        yobs = data.loc[seqs, :].iloc[:, 0].values
+        r2.append({'id': label, 'r2': pearsonr(ypred, yobs)[0] ** 2})
+    return(pd.DataFrame(r2))
