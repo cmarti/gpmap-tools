@@ -287,8 +287,8 @@ def read_split_data(prefix, suffix=None):
 def calc_r2_values(test_pred_sets, data):
     r2 = []
     for label, test_pred in test_pred_sets:
-        ypred = test_pred.iloc[:, 0].values
-        seqs = test_pred.index.values
+        seqs = np.intersect1d(test_pred.index.values, data.index.values)
+        ypred = test_pred.loc[seqs, :].iloc[:, 0].values
         yobs = data.loc[seqs, :].iloc[:, 0].values
         r2.append({'id': label, 'r2': pearsonr(ypred, yobs)[0] ** 2})
     return(pd.DataFrame(r2))
