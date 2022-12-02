@@ -172,7 +172,8 @@ def get_data_subset(data, idx):
 def subsample_data(data, max_pred=None):
     n_test = data[0].shape[0]
     if max_pred is not None and n_test > max_pred:
-        test_idx = np.random.choice(np.arange(n_test), size=max_pred)
+        test_idx = np.random.choice(np.arange(n_test), size=max_pred,
+                                    replace=False)
         data = get_data_subset(data, test_idx)
     return(data)
 
@@ -287,8 +288,12 @@ def read_split_data(prefix, suffix=None):
 def calc_r2_values(test_pred_sets, data):
     r2 = []
     for label, test_pred in test_pred_sets:
-        seqs = np.intersect1d(test_pred.index.values, data.index.values)
-        ypred = test_pred.loc[seqs, :].iloc[:, 0].values
-        yobs = data.loc[seqs, :].iloc[:, 0].values
-        r2.append({'id': label, 'r2': pearsonr(ypred, yobs)[0] ** 2})
+        try:
+            seqs = np.intersect1d(test_pred.index.values, data.index.values)
+            ypred = test_pred.loc[seqs, :].iloc[:, 0].values
+            yobs = data.loc[seqs, :].iloc[:, 0].values
+            r2.append({'id': label, 'r2': pearsonr(ypred, yobs)[0] ** 2})
+        except:
+            print('problem found in {}. Skipping it'.format(label))
+            continue
     return(pd.DataFrame(r2))
