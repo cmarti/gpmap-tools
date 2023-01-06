@@ -2,8 +2,12 @@
 import unittest
 
 import numpy as np
+import pandas as pd
+
+from os.path import join
 
 from gpmap.src.utils import calc_cartesian_product, get_CV_splits
+from gpmap.src.settings import TEST_DATA_DIR
 
 
 class UtilsTests(unittest.TestCase):
@@ -71,7 +75,54 @@ class UtilsTests(unittest.TestCase):
             
         splits = get_CV_splits(X, y, nfolds=3, count_data=True)
         for _, (x_train, y_train), (x_test, y_test) in splits:
+            # Test total numbers are preserved
             assert(y_train.sum() + y_test.sum() == 5)
+            
+            # Test exact counts match total data
+            counts = {seq: c for seq, c in zip(x_train, y_train)}
+            for seq, c in zip(x_test, y_test):
+                try:
+                    counts[seq] += c
+                except KeyError:
+                    counts[seq] = c
+            
+            for seq, c in zip(X, y):
+                assert(c == counts[seq])
+    
+    def test_get_CV_splits_big_dataset(self):    
+        data = pd.read_csv(join(TEST_DATA_DIR, 'seqdeft_counts.csv'),
+                           index_col=0)
+        X, y = data.index.values, data.iloc[:, 0].values
+        splits = get_CV_splits(X, y, nfolds=5, count_data=True)
+        test_counts = {}
+        for _, (x_train, y_train), (x_test, y_test) in splits:
+            assert(y_train.sum() + y_test.sum() == y.sum())
+            
+            counts = {seq: c for seq, c in zip(x_train, y_train)}
+            for seq, c in zip(x_test, y_test):
+                try:
+                    counts[seq] += c
+                except KeyError:
+                    counts[seq] = c
+                    
+                try:
+                    test_counts[seq] += c
+                except KeyError:
+                    test_counts[seq] = c
+            
+            # Test that each split has all the data
+            for seq, c in zip(X, y):
+                if seq in counts:
+                    assert(c == counts[seq])
+                else:
+                    assert(c == 0)
+        
+        # Test whether test counts amount to the total counts
+        for seq, c in zip(X, y):
+            if seq in test_counts:
+                assert(c == test_counts[seq])
+            else:
+                assert(c == 0)
             
         
 if __name__ == '__main__':

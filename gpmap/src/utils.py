@@ -177,6 +177,11 @@ def subsample_data(data, max_pred=None):
     return(data)
 
 
+def shuffle(x, n=1):
+    for _ in range(n):
+        np.random.shuffle(x)
+
+
 def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
     msg = 'X and y must have the same size'
     check_error(X.shape[0] == y.shape[0], msg=msg)
@@ -185,19 +190,20 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
         check_error(y_var is None,
                     msg='variance in estimation not allowed for count data')
         seqs = counts_to_seqs(X, y)
-        np.random.shuffle(seqs)
+        shuffle(seqs, n=3)
         n_test = np.round(seqs.shape[0] / nfolds).astype(int)
         
         for j, i in enumerate(np.arange(0, seqs.shape[0], n_test)):
-            test = np.unique(seqs[i:i+n_test], return_counts=True)
-            train = np.unique(np.append(seqs[:i], seqs[i+n_test:]),
-                              return_counts=True)
+            test_seqs = seqs[i:i+n_test]
+            train_seqs = np.append(seqs[:i], seqs[i+n_test:])
+            test = np.unique(test_seqs, return_counts=True)
+            train = np.unique(train_seqs, return_counts=True)
             yield(j, train, test)
     else:
         data = (X, y, y_var)
         n_obs = X.shape[0]
         order = np.arange(n_obs)
-        np.random.shuffle(order)
+        shuffle(order, n=3)
         n_test = np.round(n_obs / nfolds).astype(int)
         
         for j, i in enumerate(np.arange(0, n_obs, n_test)):
