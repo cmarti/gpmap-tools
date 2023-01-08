@@ -190,6 +190,10 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
         check_error(y_var is None,
                     msg='variance in estimation not allowed for count data')
         seqs = counts_to_seqs(X, y)
+        
+        msg = 'Number of observations must be >= nfolds'
+        check_error(seqs.shape[0] >= nfolds, msg=msg)
+        
         shuffle(seqs, n=3)
         n_test = np.round(seqs.shape[0] / nfolds).astype(int)
         
@@ -200,6 +204,9 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
             train = np.unique(train_seqs, return_counts=True)
             yield(j, train, test)
     else:
+        msg = 'Number of observations must be >= nfolds'
+        check_error(X.shape[0] >= nfolds, msg=msg)
+        
         data = (X, y, y_var)
         n_obs = X.shape[0]
         order = np.arange(n_obs)

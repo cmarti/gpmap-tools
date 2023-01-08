@@ -88,6 +88,12 @@ class UtilsTests(unittest.TestCase):
             
             for seq, c in zip(X, y):
                 assert(c == counts[seq])
+                
+        try:
+            splits = list(get_CV_splits(X, y, nfolds=10, count_data=True))
+            self.fail()
+        except ValueError:
+            pass
     
     def test_get_CV_splits_big_dataset(self):    
         data = pd.read_csv(join(TEST_DATA_DIR, 'seqdeft_counts.csv'),
