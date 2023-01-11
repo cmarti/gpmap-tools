@@ -10,7 +10,8 @@ import pandas as pd
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.inference import SeqDEFT
 from gpmap.src.utils import get_sparse_diag_matrix
-from gpmap.src.plot import plot_SeqDEFT_summary, savefig
+from gpmap.src.plot import (plot_SeqDEFT_summary, savefig, init_fig,
+                            plot_a_optimization)
 from scipy.stats.stats import pearsonr
 
 
@@ -70,14 +71,14 @@ class SeqDEFTTests(unittest.TestCase):
             self.fail()
         except ValueError:
             pass
-        
+         
         # Infer with the provided a value
         seqdeft = SeqDEFT(P=2, a=500)
         seq_densities = seqdeft.fit(X=data.index.values,
                                     y=data['counts'].values)
         Q = seq_densities['Q_star']
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
-        
+         
         # Inference with disordered and missing sequences for the 0
         data = pd.read_csv(fpath, index_col=0)
         data = data.loc[data['counts'] > 0, :]
@@ -95,14 +96,24 @@ class SeqDEFTTests(unittest.TestCase):
         seqdeft = SeqDEFT(P=2)
         seq_densities = seqdeft.fit(X=data.index.values,
                                     y=data['counts'].values)
-        
+        fpath = join(TEST_DATA_DIR, 'logL.csv')
+        seqdeft.logL_df.to_csv(fpath)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+    
+    def test_plot_a_optimization(self):
+        fpath = join(TEST_DATA_DIR, 'logL.csv')
+        log_Ls = pd.read_csv(fpath, index_col=0)
+        
+        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
+        plot_a_optimization(log_Ls, axes, err_bars='stderr', x='log_sd')
+        fpath = join(TEST_DATA_DIR, 'seqdeft_a')
+        savefig(fig, fpath)
     
     def test_seq_deft_cv_plot(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_output.csv')
         seq_densities = pd.read_csv(fpath, index_col=0)
         
-        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.csv')
+        fpath = join(TEST_DATA_DIR, 'logL.csv')
         log_Ls = pd.read_csv(fpath, index_col=0)
         
         fig = plot_SeqDEFT_summary(log_Ls, seq_densities)
@@ -115,6 +126,10 @@ class SeqDEFTTests(unittest.TestCase):
         bin_fpath = join(BIN_DIR, 'fit_seqdeft.py')
         
         cmd = [sys.executable, bin_fpath, counts_fpath, '-o', out_fpath]
+        check_call(cmd)
+        
+        cmd = [sys.executable, bin_fpath, counts_fpath, '-o', out_fpath,
+               '--get_a_values']
         check_call(cmd)
         
     def test_missing_alleles(self):
@@ -176,7 +191,20 @@ class SeqDEFTTests(unittest.TestCase):
                                     y=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
+    def test_tk_gloop(self):
+        data = pd.read_csv(join(TEST_DATA_DIR, 'tk_gloop3.counts.csv'))
+        print(data)
+        X, y = data['seq'].values, data['counts'].values
+        
+        seqdeft = SeqDEFT(P=2)
+        result = seqdeft.fit(X, y)
+        print(seqdeft.cv_log_L)
+        
+        fig = plot_SeqDEFT_summary(seqdeft.cv_log_L, result)
+        out_fpath = join(TEST_DATA_DIR, 'tk.fit2')
+        savefig(fig, out_fpath)
+
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests']
+    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_inference']
     unittest.main()

@@ -63,6 +63,7 @@ class UtilsTests(unittest.TestCase):
     
     def test_get_CV_splits(self):
         np.random.seed(0)
+        nfolds = 3 
         X = np.array(['A', 'B', 'C'])
         y = np.array([1, 2, 2])
         
@@ -73,10 +74,11 @@ class UtilsTests(unittest.TestCase):
             assert(x_test.shape[0] == 2)
             assert(y_test.shape[0] == 2)
             
-        splits = get_CV_splits(X, y, nfolds=3, count_data=True)
+        splits = list(get_CV_splits(X, y, nfolds=nfolds, count_data=True))
+        assert(len(splits) == nfolds)
         for _, (x_train, y_train), (x_test, y_test) in splits:
             # Test total numbers are preserved
-            assert(y_train.sum() + y_test.sum() == 5)
+            assert(y_train.sum() + y_test.sum() == y.sum())
             
             # Test exact counts match total data
             counts = {seq: c for seq, c in zip(x_train, y_train)}
@@ -95,13 +97,16 @@ class UtilsTests(unittest.TestCase):
         except ValueError:
             pass
     
-    def test_get_CV_splits_big_dataset(self):    
+    def test_get_CV_splits_big_dataset(self):
+        nfolds = 7
         data = pd.read_csv(join(TEST_DATA_DIR, 'seqdeft_counts.csv'),
                            index_col=0)
         X, y = data.index.values, data.iloc[:, 0].values
-        splits = get_CV_splits(X, y, nfolds=5, count_data=True)
+        print(y.sum())
+        splits = get_CV_splits(X, y, nfolds=nfolds, count_data=True)
         test_counts = {}
-        for _, (x_train, y_train), (x_test, y_test) in splits:
+        for i, (x_train, y_train), (x_test, y_test) in splits:
+            print(y_train.sum())
             assert(y_train.sum() + y_test.sum() == y.sum())
             
             counts = {seq: c for seq, c in zip(x_train, y_train)}
@@ -122,6 +127,8 @@ class UtilsTests(unittest.TestCase):
                     assert(c == counts[seq])
                 else:
                     assert(c == 0)
+        
+        assert(i == nfolds - 1)
         
         # Test whether test counts amount to the total counts
         for seq, c in zip(X, y):

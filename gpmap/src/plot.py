@@ -981,30 +981,43 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
     savefig(fig, fpath, tight=False, fmt=fmt)
 
 
-def plot_a_optimization(log_Ls_df, axes, show_err_bars=True):
-    aa = log_Ls_df['a'].values
-    logaa = np.log10(aa)
-    log_Ls = log_Ls_df['log_likelihood_mean'].values
-    log_Ls_sd = log_Ls_df['log_likelihood_sd']
+def plot_a_optimization(logL, axes, err_bars='stderr', x='log_a',
+                        show_folds=True):
+    if x == 'log_a':
+        logL['x'] = np.log10(logL['a'].values)
+        xlabel = r'$\log_{10}(a)$'
+        label = 'a'
+    elif x == 'log_sd':
+        logL['x'] = np.log10(logL['sd'].values)
+        xlabel = r'$\log_{10}(\sigma_P)$'
+        label = '$\sigma_P$'
+    else:
+        raise ValueError('x has to be log_a')
     
-    a_star = aa[log_Ls.argmax()]
-    log_a_star = np.log10(a_star)
-    max_log_L = log_Ls.max()
+    df = logL.groupby('x', as_index=False).agg({'logL': ('mean', 'std', 'count')})
+    df.columns = ['x', 'mean', 'sd', 'count']
+    df['stderr'] = df['sd'] / np.sqrt(df['count'])
     
-    axes.scatter(logaa, log_Ls, color='blue', s=15, zorder=1)
-    axes.scatter(log_a_star, max_log_L, color='red', s=15, zorder=2)
+    idx = df['mean'].argmax()
+    x_star = df['x'][idx]
+    max_log_L = df['mean'][idx]
     
-    if show_err_bars:
-        for a, m, s in zip(logaa, log_Ls, log_Ls_sd):
-            color = 'red' if a == log_a_star else 'blue'
-            axes.plot((a, a), (m-s, m+s), lw=1, color=color)
+    if show_folds:
+        sns.lineplot(x='x', y='logL', hue='fold', ax=axes, legend=False,
+                     data=logL.sort_values('x'), alpha=0.4, linewidth=0.5)
+    axes.plot(df['x'], df['mean'], color='black', lw=1, zorder=2)
+    axes.scatter(df['x'], df['mean'], color='black', s=15)
+    axes.scatter(x_star, max_log_L, color='red', s=25, zorder=1)
+    
+    for a, m, s in zip(df['x'], df['mean'], df[err_bars]):
+        color = 'red' if a == x_star else 'black'
+        axes.plot((a, a), (m-s, m+s), lw=1, color=color)
     
     xlims, ylims = axes.get_xlim(), axes.get_ylim()
     x = xlims[0] + 0.05 * (xlims[1]- xlims[0])
     y = ylims[0] + 0.9 * (ylims[1]- ylims[0])
-    axes.annotate('a* = {:.1f}'.format(a_star), xy=(x, y))
-    axes.set_xlabel(r'$log_{10}$ (a)')
-    axes.set_ylabel('Out of sample log(L)')
+    axes.annotate('{}* = {:.1f}'.format(label, 10**x_star), xy=(x, y))
+    axes.set(xlabel=xlabel, ylabel='Out of sample log(L)')
 
 
 def plot_density_vs_frequency(seq_density, axes):
@@ -1022,7 +1035,8 @@ def plot_density_vs_frequency(seq_density, axes):
              xlim=lims, ylim=lims)
 
 
-def plot_SeqDEFT_summary(log_Ls, seq_density=None, show_err_bars=True):
+def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
+                         show_folds=True):
     '''
     Generates a 2 panel figure showing how the cross-validated likelihood
     changes with ``a`` hyperparameter and the best selected value for model
@@ -1031,8 +1045,8 @@ def plot_SeqDEFT_summary(log_Ls, seq_density=None, show_err_bars=True):
     Parameters
     ----------
         log_Ls : pd.DataFrame of shape (num_a, 3)
-            DataFrame containing the column names ``a``, ``log_likelihood_mean``
-            and ``log_likelihood_sd``
+            DataFrame containing the column names ``a``, ``logL`` and
+            ``fold```
         
         seq_density : pd.DataFrame of shape (n_genotypes, >= 2)
             DataFrame with column names ``frequency``, ``Q_star`` with the 
@@ -1040,9 +1054,13 @@ def plot_SeqDEFT_summary(log_Ls, seq_density=None, show_err_bars=True):
             respectively. If not provided only a 1 panel figure with the
             cross-validated likelihood curve will be provided
             
-        show_err_bars : bool
-            Boolean value corresponding to whether to show error bars for the
-            cross-validated log-likelihood in the plot
+        err_bars : str
+            What to show in the error bars: sd standard deviation across the 
+            different folds or stderr for standard error of the mean
+            
+        show_folds: bool
+            Whether to show the out of sample log likelihoods for the different
+            folds in the cross-validation procedure separately
             
     Returns
     -------
@@ -1052,10 +1070,12 @@ def plot_SeqDEFT_summary(log_Ls, seq_density=None, show_err_bars=True):
     '''
     if seq_density is None:
         fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
-        plot_a_optimization(log_Ls, axes, show_err_bars=show_err_bars)
+        plot_a_optimization(log_Ls, axes, err_bars=err_bars,
+                            show_folds=show_folds)
     else:
         fig, subplots = init_fig(1, 2, colsize=4, rowsize=3.5)
-        plot_a_optimization(log_Ls, subplots[0], show_err_bars=show_err_bars)
+        plot_a_optimization(log_Ls, subplots[0], err_bars=err_bars,
+                            show_folds=show_folds)
         plot_density_vs_frequency(seq_density, subplots[1])
         fig.tight_layout()
     return(fig)

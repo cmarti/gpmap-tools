@@ -164,6 +164,10 @@ def counts_to_seqs(X, y):
     return(seqs)
 
 
+def seqs_to_counts(seqs):
+    return(np.unique(seqs, return_counts=True))
+
+
 def get_data_subset(data, idx):
     subset = tuple([x[idx] if x is not None else None for x in data])
     return(subset)
@@ -195,13 +199,12 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
         check_error(seqs.shape[0] >= nfolds, msg=msg)
         
         shuffle(seqs, n=3)
-        n_test = np.round(seqs.shape[0] / nfolds).astype(int)
+        n_test = seqs.shape[0] // nfolds
         
-        for j, i in enumerate(np.arange(0, seqs.shape[0], n_test)):
-            test_seqs = seqs[i:i+n_test]
-            train_seqs = np.append(seqs[:i], seqs[i+n_test:])
-            test = np.unique(test_seqs, return_counts=True)
-            train = np.unique(train_seqs, return_counts=True)
+        for j in range(nfolds):
+            i = j * n_test
+            test = seqs_to_counts(seqs[i:i+n_test])
+            train = seqs_to_counts(np.append(seqs[:i], seqs[i+n_test:]))
             yield(j, train, test)
     else:
         msg = 'Number of observations must be >= nfolds'
@@ -213,7 +216,8 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
         shuffle(order, n=3)
         n_test = np.round(n_obs / nfolds).astype(int)
         
-        for j, i in enumerate(np.arange(0, n_obs, n_test)):
+        for j in range(nfolds):
+            i = j * n_test
             train_data = get_data_subset(data, order[i:i+n_test])
             test_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
             test_data = subsample_data(test_data, max_pred=max_pred)

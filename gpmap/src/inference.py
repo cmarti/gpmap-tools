@@ -37,13 +37,13 @@ class Laplacian(object):
         self.save_memory = save_memory
     
         self.calc_Kn()    
-        self.calc_A_triu()
-        
         if save_memory:
             self.F = np.ones((self.alpha, self.alpha)) - 2 * np.eye(self.alpha)
             self.dot = self.dot3
         else:
-            self.dot = self.dot1
+            self.calc_L()
+            # self.calc_A_triu()()
+            self.dot = self.dot0
     
     @property
     def shape(self):
@@ -58,6 +58,13 @@ class Laplacian(object):
     
     def calc_A_triu(self):
         self.triu_A = calc_cartesian_product([self.Kn_triu] * self.l)
+    
+    def calc_L(self):
+        self.L = calc_cartesian_product([self.Kn] * self.l)
+        self.L.setdiag(self.d)
+    
+    def dot0(self, v):
+        return(self.L.dot(v))
     
     def dot1(self, v):
         # TODO: figure out if this is saving us memory or not
@@ -779,61 +786,42 @@ class DeltaPEstimator(LandscapeEstimator):
             Dphi = self.L_opt(Dphi, p)
         return Dphi / factorial(self.P)
     
-    def calc_regularization(self, phi):
-        regularizer = 0
-        if np.isfinite(PHI_UB):
-            flags = (phi > PHI_UB)
-            if flags.any() > 0:
-                regularizer += np.sum((phi[flags] - PHI_UB)**2)
-        if np.isfinite(PHI_LB):
-            flags = (phi < PHI_LB)
-            if flags.any() > 0:
-                regularizer += np.sum((phi[flags] - PHI_LB)**2)
-        return(regularizer)
-    
-    def calc_regularization_grad(self, phi):
-        regularizer = np.zeros(self.n_genotypes)
-        if np.isfinite(PHI_UB):
-            flags = (phi > PHI_UB)
-            if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi[flags] - PHI_UB)
-        if np.isfinite(PHI_LB):
-            flags = (phi < PHI_LB)
-            if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi[flags] - PHI_LB)
-        return(regularizer)
-    
     def calc_neg_log_prior_prob(self, phi, a):
         S1 = a / (2*self.n_p_faces) * np.sum(phi * self.D_opt(phi))
-        regularizer = self.calc_regularization(phi)
-        return(S1 + regularizer)
+        return(S1)
     
     def calc_neg_log_prior_prob_grad(self, phi, a):
         grad_S1 = a / self.n_p_faces * self.D_opt(phi)
-        regularizer = self.calc_regularization_grad(phi)
-        return(grad_S1 + regularizer)
+        return(grad_S1)
     
     def S(self, phi, a):
-        S1 = self.calc_neg_log_prior_prob(phi, a)
-        S2 = self.calc_neg_log_likelihood(phi) 
-        return(S1 + S2)
+        S = self.calc_neg_log_prior_prob(phi, a)
+        S += self.calc_neg_log_likelihood(phi)
+        if hasattr(self, 'calc_regularization'):
+            S += self.calc_regularization(phi)
+        return(S)
     
     def S_grad(self, phi, a):
-        S1_grad = self.calc_neg_log_prior_prob_grad(phi, a)
-        S2_grad = self.calc_neg_log_likelihood_grad(phi) 
-        return(S1_grad + S2_grad)
+        S_grad = self.calc_neg_log_prior_prob_grad(phi, a)
+        S_grad += self.calc_neg_log_likelihood_grad(phi)
+        if hasattr(self, 'calc_regularization'):
+            S_grad += self.calc_regularization_grad(phi) 
+        return(S_grad)
     
     def S_inf(self, b):
-        phi = self.D_kernel_basis_orth_sparse.dot(b)
-        S2 = self.calc_neg_log_likelihood(phi)
-        regularizer = self.calc_regularization(phi)
-        return(S2 + regularizer)
+        phi = self._b_to_phi(b)
+        S = self.calc_neg_log_likelihood(phi)
+        if hasattr(self, 'calc_regularization'):
+            S += self.calc_regularization(phi)
+        return(S)
     
     def S_grad_inf(self, b):
-        phi = self.D_kernel_basis_orth_sparse.dot(b)
-        S2_grad = self.calc_neg_log_likelihood_grad(phi)
-        regularizer = self.calc_regularization_grad(phi)
-        return(self.D_kernel_basis_orth_sparse.T.dot(S2_grad + regularizer))
+        phi = self._b_to_phi(b)
+        S_grad = self.calc_neg_log_likelihood_grad(phi)
+        if hasattr(self, 'calc_regularization'):
+            S_grad += self.calc_regularization_grad(phi)
+        S_grad = self._phi_to_b(S_grad)
+        return(S_grad)
     
     def construct_D_kernel_basis2(self, max_value_to_zero=1e-12):
         # TODO: think on a way to optimize this for large landscapes
@@ -920,52 +908,68 @@ class DeltaPEstimator(LandscapeEstimator):
         self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
         
     def get_cv_iter(self, a_values):
-        for _, train, validation in get_CV_splits(X=self.X, y=self.y,
-                                                  nfolds=self.nfolds,
-                                                  count_data=True):        
+        for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
+                                                     nfolds=self.nfolds,
+                                                     count_data=True):        
             for a in a_values:
-                yield(a, train, validation)   
+                yield(a, fold, train, validation)   
     
-    def fit_a_cv(self):
-        cv_log_L = []
-        a_values = self.get_a_values()
-        cv_data = self.get_cv_iter(a_values)
-        
-        for a, train, test in tqdm(cv_data, total=self.nfolds * self.num_a):
+    def calc_cv_logL(self, cv_data, phi_initial=None):
+        for a, fold, train, test in tqdm(cv_data, total=self.nfolds * self.num_a):
             (X_train, y_train), (X_test, y_test) = train, test
 
             self.set_data(X=X_train, y=y_train)
-            phi = self._fit(a)
+            phi = self._fit(a, phi_initial=phi_initial)
             
             self.set_data(X=X_test, y=y_test)
-            test_logL = -self.calc_neg_log_likelihood(phi) 
-            
-            cv_log_L.append({'a': a, 'logL': test_logL})
-        
+            test_logL = -self.calc_neg_log_likelihood(phi)
+            yield(a, fold, test_logL)
+
+    def get_cv_logL_df(self, cv_logL):
+        cv_log_L = [{'a': a, 'fold': f, 'logL': logL} for a, f, logL in cv_logL]
         cv_log_L = pd.DataFrame(cv_log_L)
-        cv_log_L = cv_log_L.groupby('a', as_index=False).agg({'logL': ('mean', 'std')})
-        cv_log_L.columns = ['a', 'log_likelihood_mean', 'log_likelihood_sd']
-        self.cv_log_L = cv_log_L
-        self.a = cv_log_L['a'][np.argmax(cv_log_L['log_likelihood_mean'])]
+        cv_log_L['sd'] = np.sqrt(self.n_p_faces / cv_log_L['a'])
+        return(cv_log_L)
+    
+    def get_ml_a(self, cv_logL_df):
+        df = cv_logL_df.groupby('a')['logL'].mean()
+        return(df.index[np.argmax(df)])
+    
+    def fit_a_cv(self, phi_inf=None):
+        if phi_inf is None:
+            phi_inf = self._fit(np.inf)
+        a_values = self.get_a_values(phi_inf=phi_inf)
+        cv_data = self.get_cv_iter(a_values)
+        cv_logL = self.calc_cv_logL(cv_data, phi_initial=phi_inf) 
+        
+        self.logL_df = self.get_cv_logL_df(cv_logL)    
+        self.a = self.get_ml_a(self.logL_df)
+    
+    def _phi_to_b(self, phi):
+        return(self.D_kernel_basis_orth_sparse.T.dot(phi))
+    
+    def _b_to_phi(self, b):
+        return(self.D_kernel_basis_orth_sparse.dot(b))
     
     def _fit(self, a, phi_initial=None):
         check_error(a >= 0, msg='"a" must be larger or equal than 0')
         
         if phi_initial is None and a > 0:
-            phi_initial = np.zeros(self.n_genotypes)
+            # Initialize with equal log density for every sequence
+            phi_initial = np.log(self.n_genotypes) * np.ones(self.n_genotypes)
         
         if a == 0 and hasattr(self, '_fit_a_0'):
             phi = self._fit_a_0()
             
         elif a == np.inf:
-            b_initial = self.D_kernel_basis_orth_sparse.T.dot(phi_initial)
+            b_initial = self._phi_to_b(phi_initial)
             res = minimize(fun=self.S_inf, jac=self.S_grad_inf,
                            x0=b_initial, method=self.opt_method,
                            options=self.optimization_opts)
             if not res.success:
                 self.report(res.message)
             b_a = res.x
-            phi = self.D_kernel_basis_orth_sparse.dot(b_a)
+            phi = self._b_to_phi(b_a)
             
         else:
             res = minimize(fun=self.S, jac=self.S_grad, args=(a,),
@@ -1006,13 +1010,14 @@ class DeltaPEstimator(LandscapeEstimator):
         """
         self.init(genotypes=X)
         self.set_data(X, y)
+        phi_inf = self._fit(np.inf)
         
         if not self.a_is_fixed and force_fit_a:
-            self.fit_a_cv()
+            self.fit_a_cv(phi_inf=phi_inf)
             self.set_data(X, y)
         
-        # Fit model with a_star
-        phi = self._fit(self.a)
+        # Fit model with a_star or provided a
+        phi = self._fit(self.a, phi_initial=phi_inf)
         output = self.phi_to_output(phi)
         return(output)
     
@@ -1026,6 +1031,30 @@ class SeqDEFT(DeltaPEstimator):
         data = self.fill_zeros_counts(X, y)
         self.N = data.sum()
         self.R = (data / self.N)
+    
+    def calc_regularization(self, phi):
+        regularizer = 0
+        if np.isfinite(PHI_UB):
+            flags = (phi > PHI_UB)
+            if flags.any() > 0:
+                regularizer += np.sum((phi[flags] - PHI_UB)**2)
+        if np.isfinite(PHI_LB):
+            flags = (phi < PHI_LB)
+            if flags.any() > 0:
+                regularizer += np.sum((phi[flags] - PHI_LB)**2)
+        return(regularizer)
+    
+    def calc_regularization_grad(self, phi):
+        regularizer = np.zeros(self.n_genotypes)
+        if np.isfinite(PHI_UB):
+            flags = (phi > PHI_UB)
+            if flags.sum() > 0:
+                regularizer[flags] += 2 * (phi[flags] - PHI_UB)
+        if np.isfinite(PHI_LB):
+            flags = (phi < PHI_LB)
+            if flags.sum() > 0:
+                regularizer[flags] += 2 * (phi[flags] - PHI_LB)
+        return(regularizer)
     
     def calc_neg_log_likelihood(self, phi):
         S2 = self.N * np.sum(self.R * phi)
@@ -1071,8 +1100,9 @@ class SeqDEFT(DeltaPEstimator):
             distance = D_geo(phi_min, phi_0)
         return(a_min)
 
-    def get_a_values(self):
-        phi_inf = self._fit(np.inf)
+    def get_a_values(self, phi_inf=None):
+        if phi_inf is None:
+            phi_inf = self._fit(np.inf)
         a_min = self.calc_a_min(phi_inf) 
         a_max = self.calc_a_max(phi_inf)
         a_values = np.geomspace(a_min, a_max, self.num_a)
