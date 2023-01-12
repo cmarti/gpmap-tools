@@ -34,20 +34,20 @@ class Laplacian(object):
         self.l = seq_length
         self.n = self.alpha ** self.l
         self.d = (self.alpha - 1) * self.l
+        self.shape = (self.n, self.n)
         self.save_memory = save_memory
     
         self.calc_Kn()    
         if save_memory:
-            self.F = np.ones((self.alpha, self.alpha)) - 2 * np.eye(self.alpha)
+            self.calc_F()
             self.dot = self.dot3
         else:
             self.calc_L()
-            # self.calc_A_triu()()
+#             self.calc_A_triu()
             self.dot = self.dot0
     
-    @property
-    def shape(self):
-        return(self.triu_A.shape)
+    def calc_F(self):
+        self.F = np.ones((self.alpha, self.alpha)) - 2 * np.eye(self.alpha)
     
     def calc_Kn(self):
         # TODO: figure out how to avoid ones
@@ -60,7 +60,7 @@ class Laplacian(object):
         self.triu_A = calc_cartesian_product([self.Kn_triu] * self.l)
     
     def calc_L(self):
-        self.L = calc_cartesian_product([self.Kn] * self.l)
+        self.L = -calc_cartesian_product([self.Kn] * self.l)
         self.L.setdiag(self.d)
     
     def dot0(self, v):
@@ -87,6 +87,38 @@ class Laplacian(object):
     def dot3(self, v):
         return(self.d * v - self._dot3(v))
                 
+
+class DeltaP(object):
+    def __init__(self, n_alleles, seq_length, P, save_memory=False):
+        self.P = P
+        self.alpha = n_alleles
+        self.l = seq_length
+        self.shape = self.L.shape
+        
+        self.check_P()
+        self.Pfactorial = factorial(self.P)
+        self.L = Laplacian(n_alleles, seq_length, save_memory=save_memory)
+        
+    def check_P(self):
+        if self.P == (self.seq_length + 1):
+            msg = '"P" = l+1, the optimal density is equal to the empirical frequency.'
+            raise ValueError(msg)
+        elif not 1 <= self.P <= self.seq_length:
+            msg = '"P" not in the right range.'
+            raise ValueError(msg)
+    
+    def L_opt(self, v, p=0):
+        return(self.L.dot(v) - p * self.n_alleles * v)
+    
+    def dot(self, v):
+        dotv = v.copy()
+        for p in range(self.P):
+            dotv = self.L_opt(dotv, p)
+        return(dotv / self.Pfactorial)
+    
+    def quad(self, v):
+        return(np.sum(v * self.dot(v)))
+
 
 class LandscapeEstimator(object):
     def __init__(self, expand_alphabet=True, save_memory=False):
@@ -753,12 +785,10 @@ class DeltaPEstimator(LandscapeEstimator):
         
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom'):
-        
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
-        self.check_P()
         self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
-        self.L = Laplacian(self.n_alleles, self.seq_length, save_memory=self.save_memory)
+        self.DP = DeltaP(self.n_alleles, self.seq_length, self.P, save_memory=self.save_memory)
     
     @property
     def D_kernel_basis_orth_sparse(self):
@@ -769,29 +799,12 @@ class DeltaPEstimator(LandscapeEstimator):
     def get_a_values(self):
         return(np.exp(np.linspace(self.min_log_a, self.max_log_a, self.num_a)))
     
-    def check_P(self):
-        if self.P == (self.seq_length + 1):
-            msg = '"P" = l+1, the optimal density is equal to the empirical frequency.'
-            raise ValueError(msg)
-        elif not 1 <= self.P <= self.seq_length:
-            msg = '"P" not in the right range.'
-            raise ValueError(msg)
-    
-    def L_opt(self, phi, p=0):
-        return(self.L.dot(phi) - p * self.n_alleles * phi)
-    
-    def D_opt(self, phi):
-        Dphi = phi.copy()
-        for p in range(self.P):
-            Dphi = self.L_opt(Dphi, p)
-        return Dphi / factorial(self.P)
-    
     def calc_neg_log_prior_prob(self, phi, a):
-        S1 = a / (2*self.n_p_faces) * np.sum(phi * self.D_opt(phi))
+        S1 = a / (2*self.n_p_faces) * self.DP.quad(phi)
         return(S1)
     
     def calc_neg_log_prior_prob_grad(self, phi, a):
-        grad_S1 = a / self.n_p_faces * self.D_opt(phi)
+        grad_S1 = a / self.n_p_faces * self.DP.dot(phi)
         return(grad_S1)
     
     def S(self, phi, a):
@@ -928,7 +941,7 @@ class DeltaPEstimator(LandscapeEstimator):
     def get_cv_logL_df(self, cv_logL):
         cv_log_L = [{'a': a, 'fold': f, 'logL': logL} for a, f, logL in cv_logL]
         cv_log_L = pd.DataFrame(cv_log_L)
-        cv_log_L['sd'] = np.sqrt(self.n_p_faces / cv_log_L['a'])
+        cv_log_L['sd'] = self._a_to_sd(cv_log_L['a'])
         return(cv_log_L)
     
     def get_ml_a(self, cv_logL_df):
@@ -950,6 +963,12 @@ class DeltaPEstimator(LandscapeEstimator):
     
     def _b_to_phi(self, b):
         return(self.D_kernel_basis_orth_sparse.dot(b))
+
+    def _a_to_sd(self, a):
+        return(np.sqrt(self.n_p_faces / a))
+    
+    def _sd_to_a(self, sd):
+        return(self.n_p_faces / sd ** 2)
     
     def _fit(self, a, phi_initial=None):
         check_error(a >= 0, msg='"a" must be larger or equal than 0')

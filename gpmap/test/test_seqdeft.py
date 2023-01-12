@@ -90,7 +90,7 @@ class SeqDEFTTests(unittest.TestCase):
                                     y=data['counts'].values)
         seq_densities.sort_index(inplace=True)
         r = pearsonr(np.log(seq_densities['Q_star']), np.log(Q))[0]
-        assert(r > 0.98)
+        assert(r > 0.98)#             self.calc_A_triu()
         
         # Infer hyperparameter using CV
         seqdeft = SeqDEFT(P=2)
@@ -193,14 +193,14 @@ class SeqDEFTTests(unittest.TestCase):
         
     def test_tk_gloop(self):
         data = pd.read_csv(join(TEST_DATA_DIR, 'tk_gloop3.counts.csv'))
-        print(data)
+        print(data, data['counts'].sum())
         X, y = data['seq'].values, data['counts'].values
         
-        seqdeft = SeqDEFT(P=2)
+        seqdeft = SeqDEFT(P=2, num_a=10, nfolds=10)
         result = seqdeft.fit(X, y)
-        print(seqdeft.cv_log_L)
+        print(seqdeft.logL_df)
         
-        fig = plot_SeqDEFT_summary(seqdeft.cv_log_L, result)
+        fig = plot_SeqDEFT_summary(seqdeft.logL_df, result)
         out_fpath = join(TEST_DATA_DIR, 'tk.fit2')
         savefig(fig, out_fpath)
 

@@ -15,20 +15,31 @@ from subprocess import check_call
 
 class VCTests(unittest.TestCase):
     def test_laplacian(self):
-        # L = Laplacian(2, 2)
-        # v = np.array([1, 1, 1, 1.])
-        # v = np.array([1, 2, 3, 0.])
-        #
-        # print(L.dot2(v))
-        # print(L.dot1(v))
-        # print(L.dot3(v))
+        L = Laplacian(2, 2)
+        L.calc_F()
+        L.calc_A_triu()
+        L.calc_L()
+        v = np.array([1, 1, 1, 1.])
+        v = np.array([1, 2, 3, 0.])
+        
+        print(L.dot2(v))
+        print(L.dot1(v))
+        print(L.dot3(v))
         
         L = Laplacian(4, 7)
+        L.calc_F()
+        L.calc_A_triu()
+        L.calc_L()
         v = np.random.normal(size=L.shape[0])
         
+        print(timeit(lambda: L.dot0(v), number=10))
         print(timeit(lambda: L.dot1(v), number=10))
         print(timeit(lambda : L.dot2(v), number=10))
         print(timeit(lambda : L.dot3(v), number=10))
+        
+        assert(np.allclose(L.dot0(v), L.dot1(v)))
+        assert(np.allclose(L.dot0(v), L.dot2(v)))
+        assert(np.allclose(L.dot0(v), L.dot3(v)))
         
         
     def test_get_gt_to_data_matrix(self):
@@ -289,5 +300,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests']
+    import sys;sys.argv = ['', 'VCTests.test_laplacian']
     unittest.main()
