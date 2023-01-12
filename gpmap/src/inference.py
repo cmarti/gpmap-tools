@@ -100,15 +100,15 @@ class DeltaP(object):
         self.shape = self.L.shape
         
     def check_P(self):
-        if self.P == (self.seq_length + 1):
+        if self.P == (self.l + 1):
             msg = '"P" = l+1, the optimal density is equal to the empirical frequency.'
             raise ValueError(msg)
-        elif not 1 <= self.P <= self.seq_length:
+        elif not 1 <= self.P <= self.l:
             msg = '"P" not in the right range.'
             raise ValueError(msg)
     
     def L_opt(self, v, p=0):
-        return(self.L.dot(v) - p * self.n_alleles * v)
+        return(self.L.dot(v) - p * self.alpha * v)
     
     def dot(self, v):
         dotv = v.copy()
