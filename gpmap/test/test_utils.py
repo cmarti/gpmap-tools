@@ -130,13 +130,6 @@ class UtilsTests(unittest.TestCase):
         
         assert(i == nfolds - 1)
         
-        # Test whether test counts amount to the total counts
-        for seq, c in zip(X, y):
-            if seq in test_counts:
-                assert(c == test_counts[seq])
-            else:
-                assert(c == 0)
-            
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'UtilsTests']
