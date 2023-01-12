@@ -13,3 +13,4 @@ even if we select top genotypes
 - Write a method to plot a phylogenetic tree on a landscape: test on the codon landscape
 - Write a method to simulate evolution in the landscape: use the jump matrix and exponential waiting times. 
 - Write a method to simulate sequence evolution on a phylogenetic tree using the previous function.
+- Review yiyun's emails about the data spliting problems: the P first components are maximum entropy so they may hve problems. It still only appears in the new version. Review what happens in teh very low data regime. What is the associated likelihood to the alleles that only appear in the test data and therefore are impossible under the model. 
