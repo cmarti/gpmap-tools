@@ -29,6 +29,8 @@ def main():
     help_msg = 'P for the Delta(P) operator to build prior (2)'
     options_group.add_argument('-P', '--P_delta', default=2, help=help_msg,
                                type=int)
+    options_group.add_argument('--get_a_values', default=False, action='store_true',
+                               help='Only calculate the series of a values for CV')
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True,
@@ -41,6 +43,7 @@ def main():
     P = parsed_args.P_delta
     a_value = parsed_args.a_value
     num_a = parsed_args.num_a
+    get_a_values = parsed_args.get_a_values
     
     out_fpath = parsed_args.output
     
@@ -51,11 +54,19 @@ def main():
 
     # Load annotation data
     seqdeft = SeqDEFT(P, a=a_value, num_a=num_a)
-    result = seqdeft.fit(X=data.index.values, y=data['counts'].values)
-    result.to_csv(out_fpath)
-    
-    fig = plot_SeqDEFT_summary(seqdeft.cv_log_L, result)
-    savefig(fig, out_fpath)
+    if get_a_values:
+        seqdeft.init(X=data.index.values)
+        seqdeft.set_data(X=data.index.values, y=data['counts'].values)
+        log.write('Calculating only a values')
+        with open(out_fpath, 'w') as fhand:
+            for a_value in seqdeft.get_a_values():
+                fhand.write('{}\n'.format(a_value))
+    else:
+        result = seqdeft.fit(X=data.index.values, y=data['counts'].values)
+        result.to_csv(out_fpath)
+        
+        fig = plot_SeqDEFT_summary(seqdeft.cv_log_L, result)
+        savefig(fig, out_fpath)
     
     log.finish()
 
