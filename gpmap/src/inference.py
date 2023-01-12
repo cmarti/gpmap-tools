@@ -735,7 +735,7 @@ class VCregression(LandscapeEstimator):
         variance = np.full(self.n_genotypes, sigma**2)
         
         if p_missing > 0:
-            n = int((1 - p_missing) * self.n_genotypes)
+            n = int(p_missing * self.n_genotypes)
             sel_idxs = np.random.choice(np.arange(self.n_genotypes), n)
             y[sel_idxs] = np.nan
             variance[sel_idxs] = np.nan
