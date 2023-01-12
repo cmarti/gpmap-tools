@@ -12,16 +12,43 @@ from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix,
                              check_error, write_log, check_eigendecomposition,
-                             calc_cartesian_product)
+                             calc_cartesian_product, calc_tensor_product)
 from scipy.special._basic import comb
 from itertools import combinations
 from gpmap.src.settings import DNA_ALPHABET
-from scipy.optimize.zeros import VALUEERR
 
 
 class RandomWalk(object):
     def __init__(self):
         return()
+    
+    def calc_jump_matrix(self):
+        self.leaving_rates = -self.rate_matrix.diagonal()
+        jump_matrix = get_sparse_diag_matrix(1/self.leaving_rates).dot(self.rate_matrix)
+        jump_matrix.setdiag(0)
+        self.jump_matrix = jump_matrix
+    
+    def run_forward(self, time, state_idx=None):
+        if state_idx is None:
+            p = self.stationary_freqs
+            path = [np.random.choice(self.space.state_idxs, p=p)]
+        else:
+            path = [state_idx]
+            
+        times = [0]
+        remaining_time = time
+        while True:
+            t = np.random.exponential(1/self.leaving_rates[path[-1]])
+            if t > remaining_time:
+                times[-1] += remaining_time
+                break
+            else:
+                p = self.jump_matrix[path[-1], :].todense().A1.flatten()
+                new_state_idx = np.random.choice(self.space.state_idxs, p=p)
+                path.append(new_state_idx)
+                times.append(t)
+                remaining_time = remaining_time - t
+        return(times, path)
     
     def report(self, msg):
         write_log(self.log, msg)
@@ -314,7 +341,8 @@ class WMWSWalk(TimeReversibleRandomWalk):
             site-level stationary frequencies at neutrality
         
         '''
-        freqs = calc_cartesian_product(sites_stat_freqs)
+        sites_stat_freqs = [np.array([freqs]).T for freqs in sites_stat_freqs]
+        freqs = calc_tensor_product(sites_stat_freqs).flatten()
         return(freqs)
         
     def calc_neutral_rate_matrix(self, sites_stat_freqs=None,
@@ -325,7 +353,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
         site-dependent biased mutation rates under the assumption of neutral
         General Time-Reversible (GTR) dynamics.
         
-        The neutral GTR model is parameterized through:
+        The neutral GTR model is parameterized through:calc_neutral_stat_freqs
         
             - Stationary frequencies
             - Exchange rates

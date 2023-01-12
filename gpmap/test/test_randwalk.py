@@ -66,6 +66,32 @@ class RandomWalkTests(unittest.TestCase):
         mc.set_Ns(mean_function_perc=80)
         assert(np.isclose(mc.Ns, 0.59174))
     
+    def test_calc_jump_matrix(self):
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
+        mc.calc_rate_matrix(Ns=1)
+        mc.calc_jump_matrix()
+        assert(np.allclose(mc.jump_matrix.sum(1), 1))
+    
+    def test_run_forward(self):
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
+        mc.calc_rate_matrix(Ns=1)
+        mc.calc_jump_matrix()
+        times, path = mc.run_forward(time=1)
+        assert(np.sum(times) == 1)
+        assert(len(path) == len(times))
+        
+    def test_run_forward_tree(self):
+        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
+        mc.calc_rate_matrix(Ns=1)
+        mc.calc_jump_matrix()
+        times, path = mc.run_forward(time=1)
+        assert(np.sum(times) == 1)
+        assert(len(path) == len(times))
+        
+    
     def calc_neutral_stat_freqs(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
         

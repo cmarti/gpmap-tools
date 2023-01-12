@@ -107,10 +107,26 @@ def calc_cartesian_product(matrices):
     i = sp.identity(m2.shape[0])
     
     rows = []
-    for j in range(m1.shape[0]):
-        row = [m2 if k == j else m1[j, k] * i for k in range(m1.shape[0])]
+    for j in range(m1.shape[0]): 
+        row = [m2 if k == j else m1[j, k] * i for k in range(m1.shape[1])]
         rows.append(sp.hstack(row)) 
     m = sp.vstack(rows)
+    return(m)
+
+
+def calc_tensor_product(matrices):
+    if len(matrices) == 1:
+        return(matrices[0])
+    
+    m1, m2 = matrices[0], calc_tensor_product(matrices[1:])
+    rows = []
+    for j in range(m1.shape[0]):
+        row = [m2 * m1[j, k] for k in range(m1.shape[1])]
+        if len(row) > 1:
+            rows.append(np.hstack(row))
+        else: 
+            rows.append(row[0])
+    m = np.vstack(rows)
     return(m)
 
 

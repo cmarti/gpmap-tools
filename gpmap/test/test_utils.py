@@ -6,7 +6,8 @@ import pandas as pd
 
 from os.path import join
 
-from gpmap.src.utils import calc_cartesian_product, get_CV_splits
+from gpmap.src.utils import calc_cartesian_product, get_CV_splits,\
+    calc_tensor_product
 from gpmap.src.settings import TEST_DATA_DIR
 
 
@@ -60,6 +61,18 @@ class UtilsTests(unittest.TestCase):
                              [0, 0.4, 0.3, 0]])
         result = calc_cartesian_product([matrix1, matrix2])
         assert(np.all(result == expected))
+        
+    def test_tensor_product(self):
+        matrix1 = np.array([[0.6],
+                            [0.4]])
+        matrix2 = np.array([[0.7],
+                            [0.3]])
+        expected = np.array([[0.42],
+                             [0.18],
+                             [0.28],
+                             [0.12]])
+        result = calc_tensor_product([matrix1, matrix2])
+        assert(np.allclose(result, expected))
     
     def test_get_CV_splits(self):
         np.random.seed(0)
