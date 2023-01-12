@@ -93,11 +93,11 @@ class DeltaP(object):
         self.P = P
         self.alpha = n_alleles
         self.l = seq_length
-        self.shape = self.L.shape
         
         self.check_P()
         self.Pfactorial = factorial(self.P)
         self.L = Laplacian(n_alleles, seq_length, save_memory=save_memory)
+        self.shape = self.L.shape
         
     def check_P(self):
         if self.P == (self.seq_length + 1):
