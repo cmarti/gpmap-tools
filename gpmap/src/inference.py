@@ -9,7 +9,6 @@ import pandas as pd
 
 from numpy.linalg.linalg import matrix_power
 from scipy.sparse.csr import csr_matrix
-from scipy.sparse import triu
 from scipy.sparse.linalg.interface import LinearOperator
 from scipy.sparse.linalg.isolve import minres
 from scipy.optimize._minimize import minimize
@@ -26,98 +25,7 @@ from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_cartesian_prod_freqs, get_CV_splits)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
-
-
-class Laplacian(object):
-    def __init__(self, n_alleles, seq_length, save_memory=False):
-        self.alpha = n_alleles
-        self.l = seq_length
-        self.n = self.alpha ** self.l
-        self.d = (self.alpha - 1) * self.l
-        self.shape = (self.n, self.n)
-        self.save_memory = save_memory
-    
-        self.calc_Kn()    
-        if save_memory:
-            self.calc_F()
-            self.dot = self.dot3
-        else:
-            self.calc_L()
-#             self.calc_A_triu()
-            self.dot = self.dot0
-    
-    def calc_F(self):
-        self.F = np.ones((self.alpha, self.alpha)) - 2 * np.eye(self.alpha)
-    
-    def calc_Kn(self):
-        # TODO: figure out how to avoid ones
-        Kn = np.ones((self.alpha, self.alpha))
-        np.fill_diagonal(Kn, np.zeros(self.alpha))
-        self.Kn = csr_matrix(Kn)
-        self.Kn_triu = csr_matrix(triu(Kn))
-    
-    def calc_A_triu(self):
-        self.triu_A = calc_cartesian_product([self.Kn_triu] * self.l)
-    
-    def calc_L(self):
-        self.L = -calc_cartesian_product([self.Kn] * self.l)
-        self.L.setdiag(self.d)
-    
-    def dot0(self, v):
-        return(self.L.dot(v))
-    
-    def dot1(self, v):
-        # TODO: figure out if this is saving us memory or not
-        return(self.d * v - self.triu_A.dot(v) - self.triu_A.transpose(copy=False).dot(v))
-    
-    def dot2(self, v):
-        if not hasattr(self, 'neighbors'):
-            self.neighbors = np.vstack((self.triu_A + self.triu_A.T).asformat('lil').rows)
-        return(self.d * v - v[self.neighbors].sum(1))
-    
-    def _dot3(self, v):
-        size = v.shape[0]
-        if size == self.alpha:
-            return(v)
-        else:
-            s = size // self.alpha
-            vs = np.vstack([self._dot3(v[i*s:(i+1)*s]) for i in range(self.alpha)])
-            return(np.hstack(vs.sum(1).reshape((self.alpha, 1)) + self.F.dot(vs)))
-    
-    def dot3(self, v):
-        return(self.d * v - self._dot3(v))
-                
-
-class DeltaP(object):
-    def __init__(self, n_alleles, seq_length, P, save_memory=False):
-        self.P = P
-        self.alpha = n_alleles
-        self.l = seq_length
-        
-        self.check_P()
-        self.Pfactorial = factorial(self.P)
-        self.L = Laplacian(n_alleles, seq_length, save_memory=save_memory)
-        self.shape = self.L.shape
-        
-    def check_P(self):
-        if self.P == (self.l + 1):
-            msg = '"P" = l+1, the optimal density is equal to the empirical frequency.'
-            raise ValueError(msg)
-        elif not 1 <= self.P <= self.l:
-            msg = '"P" not in the right range.'
-            raise ValueError(msg)
-    
-    def L_opt(self, v, p=0):
-        return(self.L.dot(v) - p * self.alpha * v)
-    
-    def dot(self, v):
-        dotv = v.copy()
-        for p in range(self.P):
-            dotv = self.L_opt(dotv, p)
-        return(dotv / self.Pfactorial)
-    
-    def quad(self, v):
-        return(np.sum(v * self.dot(v)))
+from gpmap.src.linop import DeltaPOperator
 
 
 class LandscapeEstimator(object):
@@ -788,13 +696,8 @@ class DeltaPEstimator(LandscapeEstimator):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
-        self.DP = DeltaP(self.n_alleles, self.seq_length, self.P, save_memory=self.save_memory)
-    
-    @property
-    def D_kernel_basis_orth_sparse(self):
-        if not hasattr(self, '_D_kernel_basis_orth_sparse'):
-            self._D_kernel_basis_orth_sparse = self.construct_D_kernel_basis()
-        return(self._D_kernel_basis_orth_sparse)
+        self.DP = DeltaPOperator(self.P, self.n_alleles, self.seq_length, save_memory=self.save_memory)
+        self.DP.calc_kernel_basis()
     
     def get_a_values(self):
         return(np.exp(np.linspace(self.min_log_a, self.max_log_a, self.num_a)))
@@ -836,90 +739,6 @@ class DeltaPEstimator(LandscapeEstimator):
         S_grad = self._phi_to_b(S_grad)
         return(S_grad)
     
-    def construct_D_kernel_basis2(self, max_value_to_zero=1e-12):
-        # TODO: think on a way to optimize this for large landscapes
-        
-        # Generate bases and sequences
-        bases = np.array(list(range(self.n_alleles)))
-        seqs = np.array(list(product(bases, repeat=self.seq_length)))
-    
-        # Construct D kernel basis
-        
-        # Basis of kernel W(0)
-        D_kernel_basis = np.ones([self.n_genotypes, 1])
-        
-        for p in range(1, self.P):
-            # Basis of kernel W(1)
-            if p == 1:
-                W1_dim = self.seq_length*(self.n_alleles-1)
-                W1_basis = np.zeros([self.n_genotypes,W1_dim])
-                for site in range(self.seq_length):
-                    W1_basis[:,site*(self.n_alleles-1):(site+1)*(self.n_alleles-1)] = pd.get_dummies(seqs[:,site], drop_first=True).values
-                D_kernel_basis = np.hstack((D_kernel_basis, W1_basis))
-    
-            # Basis of kernel W(>=2)
-            if p >= 2:
-                W2_dim = int(comb(self.seq_length,p) * (self.n_alleles-1)**p)
-                W2_basis = np.ones([self.n_genotypes,W2_dim])
-                site_groups = list(combinations(range(self.seq_length), p))
-                base_groups = list(product(range(1,self.n_alleles), repeat=p))  # because we have dropped first base
-                col = 0
-                for site_group in site_groups:
-                    for base_group in base_groups:
-                        for i in range(p):
-                            site, base_idx = site_group[i], base_group[i]-1  # change 'base' to its 'idx'
-                            W2_basis[:,col] *= W1_basis[:,site*(self.n_alleles-1)+base_idx]
-                        col += 1
-                D_kernel_basis = np.hstack((D_kernel_basis, W2_basis))
-    
-        D_kernel_basis = orth(D_kernel_basis)    
-        D_kernel_basis[np.abs(D_kernel_basis) < max_value_to_zero] = 0
-        D_kernel_basis_orth_sparse = csr_matrix(D_kernel_basis)
-        return(D_kernel_basis_orth_sparse)
-
-    def get_Vj(self, j):
-        if not hasattr(self, 'vj'):
-            site_L = self.n_alleles * np.eye(self.n_alleles) - np.ones((self.n_alleles, self.n_alleles))
-            v0 = np.full((self.n_alleles, 1), 1 / np.sqrt(self.n_alleles)) 
-            v1 = orth(site_L)
-            
-            msg = 'Basis for subspaces V0 and V1 are not orthonormal'
-            check_error(np.allclose(v1.T.dot(v0), 0), msg)
-            
-            self.vj = {0: v0, 1: v1,
-                       (0,): v0, (1,): v1}
-
-        if j not in self.vj:
-            # self.vj[j] = np.tensordot(self.vj[j[0]], self.get_Vj(j[1:]), axes=0)
-            self.vj[j] = np.vstack([np.hstack([x * self.get_Vj(j[1:]) for x in row])
-                                    for row in self.vj[j[0]]])
-        return(self.vj[j])
-
-    def construct_D_kernel_basis(self, max_value_to_zero=1e-12):
-        basis = [np.full((self.n_genotypes, 1), 1 / np.sqrt(self.n_genotypes))]
-        for p in range(1, self.P):
-            for idxs in combinations(range(self.seq_length), p):
-                idxs = np.array(idxs)
-                j = np.zeros(self.seq_length, dtype=int)
-                j[idxs] = 1
-                basis.append(self.get_Vj(tuple(j)))
-        basis = np.hstack(basis)
-        basis[np.abs(basis) < max_value_to_zero] = 0
-        basis = csr_matrix(basis)
-        return(basis)
-    
-    def construct_D_spectrum(self):
-        D_eig_vals, D_multis = np.zeros(self.seq_length+1), np.zeros(self.seq_length+1)
-        for k in range(self.seq_length+1):
-            lambda_k = k * self.n_alleles
-            Lambda_k = 1
-            for p in range(self.P):
-                Lambda_k *= lambda_k - p * self.n_alleles
-            m_k = comb(self.seq_length,k) * (self.n_alleles-1)**k
-            D_eig_vals[k], D_multis[k] = Lambda_k/factorial(self.P), m_k
-    
-        self.D_eig_vals, self.D_multis = D_eig_vals, D_multis
-        
     def get_cv_iter(self, a_values):
         for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
                                                      nfolds=self.nfolds,
@@ -959,10 +778,10 @@ class DeltaPEstimator(LandscapeEstimator):
         self.a = self.get_ml_a(self.logL_df)
     
     def _phi_to_b(self, phi):
-        return(self.D_kernel_basis_orth_sparse.T.dot(phi))
+        return(self.DP.kernel_basis.T.dot(phi))
     
     def _b_to_phi(self, b):
-        return(self.D_kernel_basis_orth_sparse.dot(b))
+        return(self.DP.kernel_basis.dot(b))
 
     def _a_to_sd(self, a):
         return(np.sqrt(self.n_p_faces / a))
