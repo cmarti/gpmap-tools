@@ -192,7 +192,7 @@ class SeqDEFTTests(unittest.TestCase):
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
     def test_tk_gloop(self):
-        data = pd.read_csv(join(TEST_DATA_DIR, 'tk_gloop3.counts.csv'))
+        data = pd.read_csv(join(TEST_DATA_DIR, 'tk_gloop5.3.counts.csv'))
         print(data, data['counts'].sum())
         X, y = data['seq'].values, data['counts'].values
         
@@ -206,5 +206,5 @@ class SeqDEFTTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_inference']
+    import sys;sys.argv = ['', 'SeqDEFTTests.test_tk_gloop']
     unittest.main()

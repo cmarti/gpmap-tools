@@ -1,19 +1,18 @@
 #!/usr/bin/env python
 import random
-from itertools import product, combinations
-from tqdm import tqdm
+from itertools import combinations
 from _functools import partial
 
 import numpy as np
 import pandas as pd
 
 from numpy.linalg.linalg import matrix_power
+from tqdm import tqdm
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.linalg.interface import LinearOperator
 from scipy.sparse.linalg.isolve import minres
 from scipy.optimize._minimize import minimize
-from scipy.special._basic import comb, factorial
-from scipy.linalg.decomp_svd import orth
+from scipy.special._basic import comb
 from scipy.linalg.basic import solve
 from scipy.sparse.linalg import cg
 from scipy.special._logsumexp import logsumexp
@@ -21,11 +20,11 @@ from scipy.special._logsumexp import logsumexp
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_matrix_polynomial_dot, Frob, grad_Frob,
-                             reciprocal, calc_Kn_matrix, calc_cartesian_product,
-                             calc_cartesian_prod_freqs, get_CV_splits)
+                             reciprocal, get_CV_splits)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
-from gpmap.src.linop import DeltaPOperator
+from gpmap.src.linop import DeltaPOperator, ProjectionOperator,\
+    LaplacianOperator
 
 
 class LandscapeEstimator(object):
@@ -238,62 +237,38 @@ class VCregression(LandscapeEstimator):
              alphabet_type='custom', ps=None):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
-        self.calc_sparse_matrix_for_polynomial(ps=ps)
-        self.calc_polynomial_coeffs()
+        self.W = ProjectionOperator(L=LaplacianOperator(self.n_alleles, self.seq_length, ps=ps))
         
-        # For estimating lambdas
-        self.calc_L_powers_unique_entries_matrix()
-        self.calc_W_kd_matrix()
-    
-    def calc_eigenvalues(self):
-        lambdas = np.arange(self.seq_length + 1)
-        if not self.skewed:
-            lambdas *= self.n_alleles
-        return(lambdas)
-    
-    def calc_sparse_matrix_for_polynomial(self, ps=None):
-        '''calc L or Q'''
-        
-        self.skewed = ps is not None
-        self.ps = ps
-
-        if self.skewed:
-            sites_matrices = [calc_Kn_matrix(p=p) for p in ps]
-            self.D_pi = get_sparse_diag_matrix(calc_cartesian_prod_freqs(ps))
-        else:
-            sites_matrices = [calc_Kn_matrix(self.n_alleles)] * self.seq_length
-        
-        M = calc_cartesian_product(sites_matrices)
-        M = get_sparse_diag_matrix(M.sum(1).A1.flatten()) - M
-        self.M = M
-        
-    def calc_w(self, k, d):
-        """return value of the Krawtchouk polynomial for k, d"""
-        l, a = self.seq_length, self.n_alleles
-        s = 0
-        for q in range(l + 1):
-            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
-        return(1 / a**l * s)
-    
-    def calc_W_kd_matrix(self):
-        """return full matrix l+1 by l+1 Krawtchouk matrix"""
-        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
-        for k in range(self.seq_length + 1):
-            for d in range(self.seq_length + 1):
-                self.W_kd[k, d] = self.calc_w(k, d)
-    
     def get_obs_idx(self, seqs):
         obs_idx = self.genotype_idxs[seqs]
         return(obs_idx)
+    
+    def get_gt_to_data_matrix(self, idx=None, subset_idx=None):
+        if idx is None:
+            idx = self.genotype_idxs.values
+        
+        if subset_idx is None:
+            obs_idx = idx.copy()
+        else:
+            obs_idx = idx[subset_idx]
+            
+        n_obs = obs_idx.shape[0]
+        gt2data = csr_matrix((np.ones(n_obs), (obs_idx, np.arange(n_obs))),
+                             shape=(self.n_genotypes, n_obs))
+        return(gt2data)
 
     def set_data(self, X, y, variance=None):
+        self.init(genotypes=X)
         self.obs_idx = self.get_obs_idx(X)
         self.y = y
         self.n_obs = y.shape[0]
 
         if variance is None:
-            variance = np.zeros(y.shape[0])        
+            variance = np.zeros(y.shape[0])    
+                
         self.variance = variance
+        self.E_sparse = get_sparse_diag_matrix(variance)
+        self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
     
     def fit(self, X, y, variance=None,
             cross_validation=False, nfolds=10):
@@ -332,9 +307,6 @@ class VCregression(LandscapeEstimator):
             Variances for each order of interaction k inferred from the data
         
         """
-        if not hasattr(self, 'space'):
-            self.init(genotypes=X)
-        
         self.set_data(X, y, variance=variance)
         
         if cross_validation:
@@ -344,6 +316,21 @@ class VCregression(LandscapeEstimator):
         else:
             self.lambdas = self.estimate_lambdas(self.obs_idx, y)
         return(self.lambdas)
+    
+    def calc_w(self, k, d):
+        """return value of the Krawtchouk polynomial for k, d"""
+        l, a = self.seq_length, self.n_alleles
+        s = 0
+        for q in range(l + 1):
+            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
+        return(1 / a**l * s)
+    
+    def calc_W_kd_matrix(self):
+        """return full matrix l+1 by l+1 Krawtchouk matrix"""
+        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
+        for k in range(self.seq_length + 1):
+            for d in range(self.seq_length + 1):
+                self.W_kd[k, d] = self.calc_w(k, d)
     
     def estimate_lambdas(self, obs_idx, y, betas=None,
                          second_order_diff_matrix=None):
@@ -420,23 +407,6 @@ class VCregression(LandscapeEstimator):
         self.beta_mse = dict(zip(betas, mses))
         return(lambdas)
 
-    def get_noise_diag_matrix(self):
-        self.E_sparse = get_sparse_diag_matrix(self.variance)
-    
-    def get_gt_to_data_matrix(self, idx=None, subset_idx=None):
-        if idx is None:
-            idx = self.genotype_idxs.values
-        
-        if subset_idx is None:
-            obs_idx = idx.copy()
-        else:
-            obs_idx = idx[subset_idx]
-            
-        n_obs = obs_idx.shape[0]
-        gt2data = csr_matrix((np.ones(n_obs), (obs_idx, np.arange(n_obs))),
-                             shape=(self.n_genotypes, n_obs))
-        return(gt2data)
-    
     def compute_empirical_rho(self, obs_idx, y):
         n_obs = y.shape[0]
         gt2data = self.get_gt_to_data_matrix(obs_idx)
@@ -497,8 +467,10 @@ class VCregression(LandscapeEstimator):
         variance_components = variance_components / variance_components.sum()
         return(variance_components)
     
-    def predict(self, Xpred=None, X=None, y=None, variance=None, lambdas=None,
-                ps=None, estimate_variance=False):
+    def set_lambdas(self, lambdas):
+        self.W.set_lambdas(lambdas=lambdas)
+    
+    def predict(self, Xpred=None, estimate_variance=False):
         """
         Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
         the provided or all genotypes
@@ -510,23 +482,6 @@ class VCregression(LandscapeEstimator):
             phenotype. If `n_genotypes == None` then predictions are provided
             for the whole sequence space
         
-        X : array-like of shape (n_obs,)
-            Vector containing the genotypes for which have observations provided
-            by `y`
-            
-        y : array-like of shape (n_obs,)
-            Vector containing the observed phenotypes corresponding to `X`
-            sequences
-        
-        variance : array-like of shape (n_obs,)
-            Vector containing the empirical or experimental known variance for
-            the measurements in `y`
-            
-        lambdas : array-like of shape (seq_length + 1,)
-            Vector containing variance components `lambdas` to use to make 
-            predictions given the observed `X`, `y` sequence function
-            relationship 
-            
         estimate_variance : bool (False)
             Option to also return the posterior variances for each individual
             genotype
@@ -540,27 +495,10 @@ class VCregression(LandscapeEstimator):
                    column with the posterior variances for each genotype
         """
         
-        if np.all([X is not None, y is not None,
-                   variance is not None, lambdas is not None]):
-            self.init(genotypes=X, ps=ps)
-            self.set_data(X=X, y=y, variance=variance)
-            self.lambdas = lambdas
-            
-        elif np.any([X is not None, y is not None, lambdas is not None]):
-            msg = 'X, y and lambdas must all be provided for prediction or'
-            msg = ' the model should have been previously fitted'
-            raise ValueError(msg)
-        
-        self.get_noise_diag_matrix()
-        self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
-    
         # Minimize error given lambdas
-        coeffs = self.get_polynomial_coeffs(lambdas=self.lambdas)
-        Kop = LinearOperator((self.n_obs, self.n_obs),
-                             matvec=partial(self.K_BB_E_dot, coeffs=coeffs))
+        Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.K_BB_E_dot)
         a_star = minres(Kop, self.y, tol=1e-9)[0]
-        
-        ypred = calc_matrix_polynomial_dot(coeffs, self.M, self.gt2data.dot(a_star))
+        ypred = self.W.dot(self.gt2data.dot(a_star))
         pred = pd.DataFrame({'ypred': ypred}, index=self.genotypes)
 
         if Xpred is not None:
@@ -571,9 +509,9 @@ class VCregression(LandscapeEstimator):
         
         return(pred)
     
-    def K_BB_E_dot(self, v, coeffs):
+    def K_BB_E_dot(self, v):
         """ multiply by the m by m matrix K_BB + E"""
-        yhat = calc_matrix_polynomial_dot(coeffs, self.M, self.gt2data.dot(v))
+        yhat = self.W.dot(self.gt2data.dot(v))
         ynoise = yhat + self.gt2data.dot(self.E_sparse.dot(v))
         return(self.gt2data.T.dot(ynoise))
     
@@ -585,20 +523,15 @@ class VCregression(LandscapeEstimator):
             Xpred = self.space.state_labels
         n_pred, pred_idx = Xpred.shape[0], self.get_obs_idx(Xpred)
     
-        # Build linear operator
-        self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
-        coeffs = self.get_polynomial_coeffs(lambdas=self.lambdas)
-        Kop = LinearOperator((self.n_obs, self.n_obs),
-                             matvec=partial(self.K_BB_E_dot, coeffs=coeffs))
+        Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.K_BB_E_dot)
+        K_ii = self.W.calc_covariance_distance()[0]
         
         # Compute posterior variance for each target sequence
-        covariance_distance = self.W_kd.T.dot(self.lambdas)
-        K_ii = covariance_distance[0]
         post_vars = []
         for i in tqdm(pred_idx, total=n_pred):
             vec = np.zeros(self.n_genotypes)
             vec[i] = 1
-            K_Bi = calc_matrix_polynomial_dot(coeffs, self.M, vec)[self.obs_idx]
+            K_Bi = self.W.dot(vec)[self.obs_idx]
             # Posibility to optimize with a good preconditioner
             alph = cg(Kop, K_Bi)[0]
             post_vars.append(K_ii - np.sum(K_Bi * alph))
@@ -634,19 +567,18 @@ class VCregression(LandscapeEstimator):
         '''
         
         a = np.random.normal(size=self.n_genotypes)
+        
         if hasattr(self, 'D_pi'):
             a = self.D_pi.dot(a)
         
-        # TODO: find out why this needs to be sqrt
-        yhat = self.project(a, lambdas=np.sqrt(lambdas))
+        self.set_lambdas(np.sqrt(lambdas))
+        yhat = self.W.dot(a)
         y = np.random.normal(yhat, sigma) if sigma > 0 else yhat
         variance = np.full(self.n_genotypes, sigma**2)
         
         if p_missing > 0:
-            n = int(p_missing * self.n_genotypes)
-            sel_idxs = np.random.choice(np.arange(self.n_genotypes), n)
-            y[sel_idxs] = np.nan
-            variance[sel_idxs] = np.nan
+            sel_idxs = np.random.uniform(self.n_genotypes) < p_missing
+            y[sel_idxs], variance[sel_idxs] = np.nan, np.nan
         
         data = pd.DataFrame({'y_true': yhat, 'y': y, 'var': variance},
                             index=self.genotypes)

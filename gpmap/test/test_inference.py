@@ -5,40 +5,33 @@ import numpy as np
 import pandas as pd
 from scipy.stats.mstats_basic import pearsonr
 
-from gpmap.src.inference import VCregression, Laplacian
+from gpmap.src.inference import VCregression
 from scipy.special._basic import comb
 from timeit import timeit
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from os.path import join
 from subprocess import check_call
+from gpmap.src.linop import LaplacianOperator
 
 
 class VCTests(unittest.TestCase):
     def test_laplacian(self):
-        L = Laplacian(2, 2)
+        L = LaplacianOperator(2, 2)
         L.calc_F()
-        L.calc_A_triu()
         L.calc_L()
-        v = np.array([1, 1, 1, 1.])
         v = np.array([1, 2, 3, 0.])
         
-        print(L.dot2(v))
-        print(L.dot1(v))
+        print(L.dot0(v))
         print(L.dot3(v))
         
-        L = Laplacian(4, 7)
+        L = LaplacianOperator(4, 7)
         L.calc_F()
-        L.calc_A_triu()
         L.calc_L()
         v = np.random.normal(size=L.shape[0])
         
         print(timeit(lambda: L.dot0(v), number=10))
-        print(timeit(lambda: L.dot1(v), number=10))
-        print(timeit(lambda : L.dot2(v), number=10))
         print(timeit(lambda : L.dot3(v), number=10))
         
-        assert(np.allclose(L.dot0(v), L.dot1(v)))
-        assert(np.allclose(L.dot0(v), L.dot2(v)))
         assert(np.allclose(L.dot0(v), L.dot3(v)))
         
         
@@ -198,36 +191,27 @@ class VCTests(unittest.TestCase):
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
-        # Estimating also the variance components
-        vc = VCregression()
-        vc.fit(X=data.index, y=data['y'], variance=data['var'])
-        pred = vc.predict()
-        mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
-        rho = pearsonr(pred['ypred'], data['y_true'])[0]
-        assert(rho > 0.95)
-        assert(mse < 0.05)
-        
         # Using the a priori known variance components
         vc = VCregression()
-        pred = vc.predict(X=data.index, y=data['y'],
-                          variance=data['var'], lambdas=lambdas)
+        vc.set_data(X=data.index, y=data['y'], variance=data['var'])
+        vc.set_lambdas(lambdas)
+        pred = vc.predict()
+        
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
         assert(rho > 0.95)
         assert(mse < 0.05)
         
         # Estimate posterior variances
-        vc = VCregression()
-        pred = vc.predict(X=data.index, y=data['y'],
-                          variance=data['var'], lambdas=lambdas, 
-                          estimate_variance=True)
+        pred = vc.predict(estimate_variance=True)
         assert('var' in pred.columns)
         assert(np.all(pred['var'] > 0))
         
         # Capture error with incomplete input
+        vc = VCregression()
+        vc.set_data(X=data.index, y=data['y'], variance=data['var'])
         try:
-            pred = vc.predict(X=data.index, y=data['y'],
-                              variance=data['var'])
+            pred = vc.predict()
             self.fail()
         except ValueError:
             pass
@@ -300,5 +284,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_laplacian']
+    import sys;sys.argv = ['', 'VCTests.test_vc_predict']
     unittest.main()

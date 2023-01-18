@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 import numpy as np
 
-from math import factorial, comb
+from math import factorial
 from itertools import combinations
 
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse import triu
 from scipy.linalg.decomp_svd import orth
+from scipy.special._basic import comb
 
 from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product)
@@ -26,37 +27,48 @@ class SeqLinOperator(object):
 
 
 class LaplacianOperator(SeqLinOperator):
-    def __init__(self, n_alleles, seq_length, save_memory=False):
+    def __init__(self, n_alleles, seq_length, save_memory=False, ps=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.save_memory = save_memory
     
-        self.calc_Kn()    
+        self.ps = ps
+        self.calc_Kns(ps=ps)    
         if save_memory:
+            raise ValueError('Not implemented yet')
             self.calc_F()
             self.dot = self.dot3
         else:
             self.calc_L()
-#             self.calc_A_triu()
             self.dot = self.dot0
             
-        self.lambdas = np.arange(seq_length + 1)
+        self.calc_lambdas()
+        self.calc_lambdas_multiplicity()
+        self.calc_W_kd_matrix()
+    
+    def calc_lambdas(self):
+        self.lambdas = np.arange(self.l + 1)
+        if self.ps is None:
+            self.lambdas *= self.alpha
     
     def calc_F(self):
         self.F = np.ones((self.alpha, self.alpha)) - 2 * np.eye(self.alpha)
     
-    def calc_Kn(self):
-        # TODO: figure out how to avoid ones
-        Kn = np.ones((self.alpha, self.alpha))
-        np.fill_diagonal(Kn, np.zeros(self.alpha))
-        self.Kn = csr_matrix(Kn)
-        self.Kn_triu = csr_matrix(triu(Kn))
+    def calc_Kn(self, p=None):
+        if p is None:
+            p = np.ones(self.alpha)
+        Kn = np.vstack([p] * p.shape[0])
+        np.fill_diagonal(Kn, np.zeros(Kn.shape[0]))
+        return(csr_matrix(Kn))
     
-    def calc_A_triu(self):
-        self.triu_A = calc_cartesian_product([self.Kn_triu] * self.l)
+    def calc_Kns(self, ps=None):
+        if ps is None:
+            ps = [None] * self.l
+        self.Kns = [self.calc_Kn(p) for p in ps]
     
     def calc_L(self):
-        self.L = -calc_cartesian_product([self.Kn] * self.l)
-        self.L.setdiag(self.d)
+        L = -calc_cartesian_product(self.Kns)
+        L.setdiag(-L.sum(1).A1)
+        self.L = L
     
     def dot0(self, v):
         return(self.L.dot(v))
@@ -110,6 +122,28 @@ class LaplacianOperator(SeqLinOperator):
             basis.append(self.get_Vj_basis(tuple(j)))
         basis = np.hstack(basis)
         return(basis)
+    
+    def calc_lambdas_multiplicity(self):
+        self.lambdas_multiplicity = [comb(self.l, k) * (self.alpha-1) ** k
+                                     for k in range(self.lp1)]
+    
+    def calc_w(self, k, d):
+        if self.ps is not None:
+            raise ValueError('w method not implemented for unequal ps')
+        
+        """return value of the Krawtchouk polynomial for k, d"""
+        l, a = self.l, self.alpha
+        s = 0
+        for q in range(l + 1):
+            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
+        return(1 / a**l * s)
+    
+    def calc_W_kd_matrix(self):
+        """return full matrix l+1 by l+1 Krawtchouk matrix"""
+        self.W_kd = np.zeros([self.lp1, self.lp1])
+        for k in range(self.lp1):
+            for d in range(self.lp1):
+                self.W_kd[k, d] = self.calc_w(k, d)
                 
 
 class LapDepOperator(SeqLinOperator):
@@ -173,10 +207,6 @@ class DeltaPOperator(LapDepOperator):
             lambdas.append(lambda_k / self.Pfactorial)
         self.lambdas = np.array(lambdas)
     
-    def calc_lambdas_multiplicity(self):
-        self.lambdas_multiplicity = [comb(self.l, k) * (self.alpha-1) ** k
-                                     for k in range(self.lp1)]
-    
     
 class ProjectionOperator(LapDepOperator):
     def __init__(self, n_alleles=None, seq_length=None, L=None, save_memory=False):
@@ -236,6 +266,83 @@ class ProjectionOperator(LapDepOperator):
         self.lambdas = lambdas
         self.coeffs = self.lambdas_to_coeffs(lambdas)
     
+    def calc_covariance_distance(self):
+        return(self.L.W_kd.T.dot(self.lambdas))
+    
     def dot(self, v):
+        check_error(hasattr(self, 'coeffs'),
+                    msg='"lambdas" must be define for projection')
         projection = calc_matrix_polynomial_dot(self.coeffs, self.L, v)
         return(projection)
+
+
+class KernelAligner(object):
+    def __init__(self, correlations, distances_n, seq_length, n_alleles, beta=0):
+        self.seq_length = seq_length
+        self.n_alleles = n_alleles
+        self.set_beta(beta)
+        self.calc_W_kd_matrix()
+        
+        self.correlations = correlations
+        self.distances_n = distances_n
+        self.construct_a(correlations, distances_n)
+        self.construct_M(distances_n)
+        self.M_inv = np.linalg.inv(self.M)
+    
+    def set_beta(self, beta):
+        self.beta = beta
+    
+    def calc_second_order_diff_matrix(self):
+        """Construct second order difference matrix for regularization"""
+        Diff2 = np.zeros((self.seq_length - 2, self.seq_length))
+        for i in range(Diff2.shape[0]):
+            Diff2[i, i:i + 3] = [-1, 2, -1]
+        self.second_order_diff_matrix = Diff2.T.dot(Diff2)
+    
+    def frobenius_norm(self, log_lambdas):
+        """cost function for regularized least square method for inferring 
+        lambdas"""
+        lambdas = np.exp(log_lambdas)
+        Frob1 = lambdas.dot(self.M).dot(lambdas)
+        Frob2 = 2 * lambdas.dot(self.a)
+        return(Frob1 - Frob2 + self.beta * log_lambdas[1:].dot(self.second_order_diff_matrix).dot(log_lambdas[1:]))
+    
+    def frobenius_norm_grad(self, log_lambdas):
+        msg = 'gradient calculation only implemented for beta=0'
+        check_error(self.beta > 0, msg=msg)
+        lambdas = np.exp(log_lambdas)
+        grad_Frob1 = 2 * self.M.dot(lambdas)
+        grad_Frob2 = 2 * self.a
+        return(grad_Frob1 - grad_Frob2)
+    
+    def construct_M(self, N_d):
+        size = self.seq_length + 1
+        M = np.zeros([size, size])
+        for i in range(size):
+            for j in range(size):
+                for d in range(size):
+                    M[i, j] += N_d[d] * self.W_kd[i, d] * self.W_kd[j, d]
+        self.M = M
+    
+    def construct_a(self, rho_d, N_d):
+        size = self.seq_length + 1
+        a = np.zeros(size)
+        for i in range(size):
+            for d in range(size):
+                a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
+        self.a = a
+    
+    def calc_w(self, k, d):
+        """return value of the Krawtchouk polynomial for k, d"""
+        l, a = self.seq_length, self.n_alleles
+        s = 0
+        for q in range(l + 1):
+            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
+        return(1 / a**l * s)
+    
+    def calc_W_kd_matrix(self):
+        """return full matrix l+1 by l+1 Krawtchouk matrix"""
+        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
+        for k in range(self.seq_length + 1):
+            for d in range(self.seq_length + 1):
+                self.W_kd[k, d] = self.calc_w(k, d)

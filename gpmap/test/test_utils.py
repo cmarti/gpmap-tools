@@ -145,5 +145,5 @@ class UtilsTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'UtilsTests']
+    import sys;sys.argv = ['', 'UtilsTests.test_cartesian_product']
     unittest.main()
