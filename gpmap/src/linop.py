@@ -10,7 +10,8 @@ from scipy.linalg.decomp_svd import orth
 from scipy.special._basic import comb
 
 from gpmap.src.utils import (calc_cartesian_product, check_error,
-                             calc_matrix_polynomial_dot, calc_tensor_product)
+                             calc_matrix_polynomial_dot, calc_tensor_product,
+    calc_cartesian_product_dot)
 
 
 class SeqLinOperator(object):
@@ -32,11 +33,10 @@ class LaplacianOperator(SeqLinOperator):
         self.save_memory = save_memory
     
         self.ps = ps
-        self.calc_Kns(ps=ps)    
+        self.calc_Kns(ps=ps)
+            
         if save_memory:
-            raise ValueError('Not implemented yet')
-            self.calc_F()
-            self.dot = self.dot3
+            self.dot = self.dot1
         else:
             self.calc_L()
             self.dot = self.dot0
@@ -49,9 +49,6 @@ class LaplacianOperator(SeqLinOperator):
         self.lambdas = np.arange(self.l + 1)
         if self.ps is None:
             self.lambdas *= self.alpha
-    
-    def calc_F(self):
-        self.F = np.ones((self.alpha, self.alpha)) - 2 * np.eye(self.alpha)
     
     def calc_Kn(self, p=None):
         if p is None:
@@ -74,25 +71,7 @@ class LaplacianOperator(SeqLinOperator):
         return(self.L.dot(v))
     
     def dot1(self, v):
-        # TODO: figure out if this is saving us memory or not
-        return(self.d * v - self.triu_A.dot(v) - self.triu_A.transpose(copy=False).dot(v))
-    
-    def dot2(self, v):
-        if not hasattr(self, 'neighbors'):
-            self.neighbors = np.vstack((self.triu_A + self.triu_A.T).asformat('lil').rows)
-        return(self.d * v - v[self.neighbors].sum(1))
-    
-    def _dot3(self, v):
-        size = v.shape[0]
-        if size == self.alpha:
-            return(v)
-        else:
-            s = size // self.alpha
-            vs = np.vstack([self._dot3(v[i*s:(i+1)*s]) for i in range(self.alpha)])
-            return(np.hstack(vs.sum(1).reshape((self.alpha, 1)) + self.F.dot(vs)))
-    
-    def dot3(self, v):
-        return(self.d * v - self._dot3(v))
+        return(self.d * v - calc_cartesian_product_dot(self.Kns, v))
     
     def get_Vj_basis(self, j):
         if not hasattr(self, 'vj'):
