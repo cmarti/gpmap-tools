@@ -7,7 +7,7 @@ import pandas as pd
 from os.path import join
 
 from gpmap.src.utils import calc_cartesian_product, get_CV_splits,\
-    calc_tensor_product
+    calc_tensor_product, calc_cartesian_product_dot
 from gpmap.src.settings import TEST_DATA_DIR
 
 
@@ -61,6 +61,23 @@ class UtilsTests(unittest.TestCase):
                              [0, 0.4, 0.3, 0]])
         result = calc_cartesian_product([matrix1, matrix2])
         assert(np.all(result == expected))
+    
+    def test_cartesian_product_dot(self):
+        m1 = np.array([[0, 1],
+                      [1, 0]])
+        ms = [m1, m1]
+        m2 = calc_cartesian_product(ms)
+        v = np.random.normal(size=m2.shape[0])
+        u1 = m2.dot(v)
+        u2 = calc_cartesian_product_dot([m1, m1], v)
+        assert(np.allclose(u1, u2))
+        
+        ms = [m1, m1, m1, m1, m1, m1, m1]
+        m2 = calc_cartesian_product(ms)
+        v = np.random.normal(size=m2.shape[0])
+        u1 = m2.dot(v)
+        u2 = calc_cartesian_product_dot(ms, v)
+        assert(np.allclose(u1, u2))
         
     def test_tensor_product(self):
         matrix1 = np.array([[0.6],
@@ -145,5 +162,5 @@ class UtilsTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'UtilsTests.test_cartesian_product']
+    import sys;sys.argv = ['', 'UtilsTests']
     unittest.main()
