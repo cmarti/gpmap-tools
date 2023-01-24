@@ -1,7 +1,4 @@
 #!/usr/bin/env python
-import random
-from itertools import combinations
-
 import numpy as np
 import pandas as pd
 
@@ -18,9 +15,8 @@ from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
-                             calc_matrix_polynomial_dot, Frob, grad_Frob,
                              reciprocal, get_CV_splits,
-    calc_matrix_polynomial_quad)
+                             calc_matrix_polynomial_quad)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
 from gpmap.src.linop import DeltaPOperator, ProjectionOperator,\
@@ -45,37 +41,17 @@ class LandscapeEstimator(object):
     
     def define_space(self, seq_length=None, n_alleles=None, genotypes=None,
                      alphabet_type='custom'):
-        alphabet = None
-        
         if genotypes is not None:
             configuration = guess_space_configuration(genotypes,
-                                                      ensure_full_space=False)
+                                                      ensure_full_space=False,
+                                                      force_regular=True)
             seq_length = configuration['length']
-            alphabet_type = configuration['alphabet_type']
-            n_alleles = configuration['n_alleles']
-            
-            if np.unique(n_alleles).shape[0] > 1:
-                if self.expand_alphabet:
-                    alphabet = set()
-                    for alleles in configuration['alphabet']:
-                        alphabet = alphabet.union(alleles)
-                    alphabet = [sorted(alphabet)] * seq_length
-                else:
-                    msg = 'All sites must have the same number of alleles'
-                    msg += 'per site or set "expand_alphabet=True" for filling'
-                    msg += 'in the missing alleles observed at other sites'
-                    raise ValueError(msg)
-            else:
-                alphabet = configuration['alphabet']
-                
+            alphabet = configuration['alphabet']
+            n_alleles = configuration['n_alleles'][0]
             n_alleles = len(alphabet[0])
-        
-        elif n_alleles is None or seq_length is None:
-            msg = 'Either genotypes or both seq_length and n_alleles must '
-            msg += 'be provided'
-            raise ValueError(msg)
-        
-        if alphabet is None:
+        else:
+            msg = 'Either seq_length and alleles or genotypes must be provided'
+            check_error(seq_length is not None and n_alleles is not None, msg=msg)
             alphabet = get_alphabet(n_alleles=n_alleles,
                                     alphabet_type=alphabet_type)
             alphabet = [alphabet] * seq_length
@@ -90,111 +66,11 @@ class LandscapeEstimator(object):
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
                                        index=self.genotypes)
     
-    def calc_eigenvalues(self):
-        lambdas = np.arange(self.seq_length + 1) * self.n_alleles
-        return(lambdas)
-    
-    def calc_eigenvalue_multiplicity(self):
-        self.lambdas_multiplicity = np.array([comb(self.seq_length, k) * (self.n_alleles - 1) ** k
-                                              for k in range(self.seq_length + 1)], dtype=int)
-    
-    def calc_eig_vandermonde_matrix(self, lambdas=None):
-        if lambdas is None:
-            lambdas = np.arange(self.seq_length + 1) * self.n_alleles
-        V = np.vstack([lambdas ** i for i in range(self.seq_length + 1)]).T
-        return(V)
-    
-    def calc_polynomial_coeffs(self, numeric=False):
-        '''
-        Calculates the coefficients of the polynomial in L that represent 
-        projection matrices into each of the kth eigenspaces.
-        
-        Returns
-        -------
-        B : array-like of shape (seq_length + 1, seq_length + 1)
-            Matrix containing the b_i,k coefficients for power i on rows
-            and order k on columns. One can obtain the coefficients for any
-            combination of $\lambda_k$ values by scaling the coefficients 
-            for each eigenspace by its eigenvalue and adding them up across
-            different powers
-        '''
-        if numeric:
-            self.B = np.linalg.inv(self.calc_eig_vandermonde_matrix())
-
-        else:        
-            l = self.seq_length
-            lambdas = self.calc_eigenvalues()
-            s = l + 1
-            B = np.zeros((s, s))
-            
-            idx = np.arange(s)
-            
-            for k in idx:
-                k_idx = idx != k
-                k_lambdas = lambdas[k_idx]
-                norm_factor = 1 / np.prod(k_lambdas - lambdas[k])
-    
-                for power in idx:
-                    p = np.sum([np.product(v) for v in combinations(k_lambdas, l - power)])
-                    B[power, k] = norm_factor * (-1) ** (power) * p
-            
-            self.B = B
-            
-        return(self.B)
-    
-    def get_polynomial_coeffs(self, k=None, lambdas=None):
-        msg = 'Only one "k" or "lambdas" can and must be provided'
-        check_error((lambdas is None) ^ (k is None), msg=msg)
-        
-        if lambdas is not None:
-            if not hasattr(self, 'B') or self.B.shape[0] != self.seq_length + 1:
-                self.calc_polynomial_coeffs()
-            coeffs = self.B.dot(lambdas)
-        else:
-            coeffs = self.B[:, k].ravel() 
-        
-        return(coeffs)
-
-    def project(self, y, k=None, lambdas=None):
-        '''
-        Projects the function ``y`` into the ``k``th eigenspace of the 
-        graph Laplacian
-        
-        Parameters
-        ----------
-        y : array-like of shape (n_genotypes,)
-            Vector with the function values associated to each of the genotypes
-            ordered as in ``genotypes`` attribute
-        
-        k : int
-            Order of the eigenspace in which to project the function ``y``
-        
-        lambdas : array-like of shape (seq_length + 1,)
-            Vector containing the variance components by which to scale 
-            the projection of ``y`` into each of the ``k``th eigenspaces
-            
-        Returns
-        -------
-        yk : array-like of shape (n_genotypes,)
-            Vector containing the pure ``k``th order component of the function
-            ``y`` or the sum of the projections into each component scaled by
-            ``lambda[k]`` if ``lambdas`` is provided 
-        '''
-        msg = 'k and lambdas cannot be provided simultaneously'
-        check_error(lambdas is None or k is None, msg=msg)
-        
-        coeffs = self.get_polynomial_coeffs(k=k, lambdas=lambdas)
-        projection = calc_matrix_polynomial_dot(coeffs, self.M, y)
-        return(projection)
-    
     def calc_L_powers_unique_entries_matrix(self):
         """Construct entries of powers of L. 
         Column: powers of L. 
         Row: Hamming distance"""
         
-        # TODO: replace this with the analytical solution from the Lagrange
-        # polynomials
-
         l, a, s = self.seq_length, self.n_alleles, self.seq_length + 1
     
         # Construct C
@@ -393,8 +269,7 @@ class VCregression(LandscapeEstimator):
         return(cov, distance_class_ns)
     
     def lambdas_to_variance(self, lambdas):
-        self.calc_eigenvalue_multiplicity()
-        variance_components = (lambdas * self.lambdas_multiplicity)[1:]
+        variance_components = (lambdas * self.W.L.m_k)[1:]
         variance_components = variance_components / variance_components.sum()
         return(variance_components)
     

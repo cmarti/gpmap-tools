@@ -79,7 +79,8 @@ def guess_alphabet_type(alphabet):
     return(alphabet_type)
     
 
-def guess_space_configuration(seqs, ensure_full_space=True):
+def guess_space_configuration(seqs, ensure_full_space=True,
+                              force_regular=False):
     """
     Guess the sequence space configuration from a collection of sequences
     This allows to have different number of alleles per site and maintain 
@@ -98,7 +99,11 @@ def guess_space_configuration(seqs, ensure_full_space=True):
         whether there are missing genotypes before defining the space and
         random walk to visualize the full landscape.
     
-       
+    force_regular: bool
+        Option to ensure that there are the same alleles number of alleles per
+        site. If not, the alphabet will be expanded to include all observed
+        alleles for every site
+           
     Returns
     -------
     config: dict with keys {'length', 'n_alleles', 'alphabet'}
@@ -111,17 +116,28 @@ def guess_space_configuration(seqs, ensure_full_space=True):
     for seq in seqs:
         for i, a in enumerate(seq):
             alleles[i][a] = 1 
-    length = len(alleles)
-    config = {'length': length,
-              'n_alleles': [len(alleles[i]) for i in range(length)],
-              'alphabet': [[a for a in alleles[i].keys()] for i in range(length)]}
-    config['alphabet_type'] = guess_alphabet_type(config['alphabet'])
+    seq_length = len(alleles)
+    n_alleles = [len(alleles[i]) for i in range(seq_length)]
+    alphabet = [[a for a in alleles[i].keys()] for i in range(seq_length)]
     
     if ensure_full_space:
         msg = 'Number of genotypes does not match the expected from guessed configuration.'
         msg += ' Ensure that genotypes span the whole sequence space or use'
         msg += '`ensure_full_space` option to avoid this error'
-        check_error(np.prod(config['n_alleles']) == seqs.shape[0], msg)
+        check_error(np.prod(n_alleles) == seqs.shape[0], msg)
+    
+    if force_regular:
+        if np.unique(n_alleles).shape[0] > 1:
+            alphabet = set()
+            for alleles in alphabet:
+                alphabet = alphabet.union(alleles)
+            n_alleles = [len(alphabet)] * seq_length
+            alphabet = [sorted(alphabet)] * seq_length
+            
+    config = {'length': seq_length, 'n_alleles': n_alleles,
+              'alphabet': alphabet}
+    config['alphabet_type'] = guess_alphabet_type(alphabet)
+    
     return(config)
 
 
