@@ -58,20 +58,20 @@ def main():
              for line in open(pred_fpath)] if pred_fpath is not None else None
     
     # Create VC model, fit and predict
-    vc = VCregression()
+    vc = VCregression(cross_validation=regularize)
     
     if lambdas_fpath is None:
         log.write('Estimate variance components through kernel alignment')
-        vc.fit(X=X, y=y, variance=y_var, cross_validation=regularize)
+        vc.fit(X=X, y=y, y_var=y_var)
         lambdas = vc.lambdas
     else:
         log.write('Load variance components from {}'.format(lambdas_fpath))
         lambdas = np.array([float(x.strip()) for x in open(lambdas_fpath)])
         
     log.write('Obtain phenotypic predictions')
-    result = vc.predict(X=X, y=y, variance=y_var,
-                        Xpred=Xpred, estimate_variance=estimate_variance,
-                        lambdas=lambdas)
+    vc.set_data(X=X, y=y, y_var=y_var)
+    vc.set_lambdas(lambdas)
+    result = vc.predict(Xpred=Xpred, estimate_variance=estimate_variance)
     result.to_csv(out_fpath)
     
     log.finish()
