@@ -5,13 +5,13 @@ from math import factorial
 from itertools import combinations
 
 from scipy.sparse.csr import csr_matrix
-from scipy.sparse import triu
 from scipy.linalg.decomp_svd import orth
 from scipy.special._basic import comb
+from scipy.optimize._minimize import minimize
 
 from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
-    calc_cartesian_product_dot)
+                             calc_cartesian_product_dot)
 
 
 class SeqLinOperator(object):
@@ -256,12 +256,14 @@ class ProjectionOperator(LapDepOperator):
 
 
 class KernelAligner(object):
-    def __init__(self, correlations, distances_n, seq_length, n_alleles, beta=0):
+    def __init__(self, seq_length, n_alleles, beta=0):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
         self.set_beta(beta)
         self.calc_W_kd_matrix()
-        
+        self.calc_second_order_diff_matrix()
+    
+    def set_data(self, correlations, distances_n):
         self.correlations = correlations
         self.distances_n = distances_n
         self.construct_a(correlations, distances_n)
@@ -269,6 +271,7 @@ class KernelAligner(object):
         self.M_inv = np.linalg.inv(self.M)
     
     def set_beta(self, beta):
+        check_error(beta >=0, msg='beta must be >= 0')
         self.beta = beta
     
     def calc_second_order_diff_matrix(self):
@@ -284,15 +287,17 @@ class KernelAligner(object):
         lambdas = np.exp(log_lambdas)
         Frob1 = lambdas.dot(self.M).dot(lambdas)
         Frob2 = 2 * lambdas.dot(self.a)
-        return(Frob1 - Frob2 + self.beta * log_lambdas[1:].dot(self.second_order_diff_matrix).dot(log_lambdas[1:]))
+        Frob = Frob1 - Frob2
+        if self.beta > 0:
+            Frob += self.beta * log_lambdas[1:].dot(self.second_order_diff_matrix).dot(log_lambdas[1:])
+        return(Frob)
     
     def frobenius_norm_grad(self, log_lambdas):
         msg = 'gradient calculation only implemented for beta=0'
-        check_error(self.beta > 0, msg=msg)
+        check_error(self.beta == 0, msg=msg)
         lambdas = np.exp(log_lambdas)
-        grad_Frob1 = 2 * self.M.dot(lambdas)
-        grad_Frob2 = 2 * self.a
-        return(grad_Frob1 - grad_Frob2)
+        grad_Frob = (2 * self.M.dot(lambdas) - 2 * self.a)
+        return(grad_Frob * lambdas)
     
     def construct_M(self, N_d):
         size = self.seq_length + 1
@@ -325,3 +330,25 @@ class KernelAligner(object):
         for k in range(self.seq_length + 1):
             for d in range(self.seq_length + 1):
                 self.W_kd[k, d] = self.calc_w(k, d)
+    
+    def fit(self):
+        log_lambda0 = np.log(np.dot(self.M_inv, self.a)).ravel()
+        if self.beta == 0:
+            res = minimize(fun=self.frobenius_norm,
+                           jac=self.frobenius_norm_grad,
+                           x0=log_lambda0, method='L-BFGS-B')
+        elif self.beta > 0:
+            res = minimize(fun=self.frobenius_norm,
+                           x0=log_lambda0, method='Powell',
+                           options={'xtol': 1e-8, 'ftol': 1e-8})
+        lambdas = np.exp(res.x)
+        return(lambdas)
+    
+    def predict(self, lambdas):
+        return(self.W_kd.T.dot(lambdas))
+    
+    def calc_mse(self, lambdas):
+        ss = (self.predict(lambdas) - self.correlations) ** 2
+        return(np.sum(ss * (1 / np.sum(self.distances_n)) * self.distances_n))
+            
+            

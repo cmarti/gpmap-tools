@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import random
 from itertools import combinations
-from _functools import partial
 
 import numpy as np
 import pandas as pd
@@ -31,6 +30,17 @@ class LandscapeEstimator(object):
     def __init__(self, expand_alphabet=True, save_memory=False):
         self.expand_alphabet = expand_alphabet
         self.save_memory = save_memory
+    
+    def get_regularization_constants(self):
+        return(10**(np.linspace(self.min_log_reg, self.max_log_reg, self.num_reg)))
+    
+    def get_cv_iter(self, hyperparam_values):
+        for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
+                                                     y_var=self.y_var,
+                                                     nfolds=self.nfolds,
+                                                     count_data=self.count_data):        
+            for param in hyperparam_values:
+                yield(param, fold, train, validation)
     
     def define_space(self, seq_length=None, n_alleles=None, genotypes=None,
                      alphabet_type='custom'):
@@ -69,10 +79,12 @@ class LandscapeEstimator(object):
                                     alphabet_type=alphabet_type)
             alphabet = [alphabet] * seq_length
         
+        self.set_config(seq_length, n_alleles, alphabet)
+    
+    def set_config(self, seq_length, n_alleles, alphabet):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
         self.n_genotypes = n_alleles ** seq_length
-        
         self.genotypes = np.array(list(get_seqs_from_alleles(alphabet)))
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
                                        index=self.genotypes)
@@ -233,11 +245,25 @@ class VCregression(LandscapeEstimator):
             If not provided, regular VC regression will be applied
             
     '''
+    def __init__(self, beta=0, cross_validation=False, 
+                 num_beta=20, nfolds=5, min_log_beta=-2,
+                 max_log_beta=6, save_memory=False):
+        super().__init__(save_memory=save_memory)
+        self.beta = beta
+        self.nfolds = nfolds
+        
+        self.num_reg = num_beta
+        self.min_beta = min_log_beta
+        self.max_beta = max_log_beta
+        self.count_data = False
+        self.run_cv = cross_validation
+        
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom', ps=None):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.W = ProjectionOperator(L=LaplacianOperator(self.n_alleles, self.seq_length, ps=ps))
+        self.calc_L_powers_unique_entries_matrix()
         
     def get_obs_idx(self, seqs):
         obs_idx = self.genotype_idxs[seqs]
@@ -257,21 +283,40 @@ class VCregression(LandscapeEstimator):
                              shape=(self.n_genotypes, n_obs))
         return(gt2data)
 
-    def set_data(self, X, y, variance=None):
+    def set_data(self, X, y, y_var=None):
         self.init(genotypes=X)
         self.obs_idx = self.get_obs_idx(X)
         self.y = y
         self.n_obs = y.shape[0]
 
-        if variance is None:
-            variance = np.zeros(y.shape[0])    
+        if y_var is None:
+            y_var = np.zeros(y.shape[0])    
                 
-        self.variance = variance
-        self.E_sparse = get_sparse_diag_matrix(variance)
+        self.y_var = y_var
+        self.E_sparse = get_sparse_diag_matrix(y_var)
         self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
     
-    def fit(self, X, y, variance=None,
-            cross_validation=False, nfolds=10):
+    def calc_cv_loss(self, cv_data):
+        for a, fold, train, test in tqdm(cv_data, total=self.nfolds * self.num_a):
+            X_train, y_train, y_var_train = train 
+            X_test, y_test, y_var_test = test
+
+            self.set_data(X=X_train, y=y_train, y_var=y_var_train)
+            phi = self._fit(a)
+            
+            self.set_data(X=X_test, y=y_test, y_var=y_var_test)
+            test_logL = -self.calc_neg_log_likelihood(phi)
+            yield(a, fold, test_logL)
+    
+    def fit_beta_cv(self):
+        beta_values = self.get_regularization_constants()
+        cv_data = self.get_cv_iter(beta_values)
+        cv_logL = self.calc_cv_logL(cv_data, phi_initial=phi_inf) 
+        
+        self.logL_df = self.get_cv_logL_df(cv_logL)    
+        self.a = self.get_ml_a(self.logL_df)
+    
+    def fit(self, X, y, y_var=None):
         """
         Infers the variance components from the provided data, this is, 
         the relative contribution of the different orders of interaction
@@ -290,16 +335,9 @@ class VCregression(LandscapeEstimator):
             Vector containing the observed phenotypes corresponding to `X`
             sequences
         
-        variance : array-like of shape (n_obs,)
+        y_var : array-like of shape (n_obs,)
             Vector containing the empirical or experimental known variance for
             the measurements in `y`
-            
-        cross_validation : bool (False)
-            Whether to use cross-validation and regularize the variance
-            components so that their contribution tends to decay exponentially
-            
-        nfolds : int (10)
-            Number of folds to use for cross-validation
         
         Returns
         -------
@@ -307,15 +345,29 @@ class VCregression(LandscapeEstimator):
             Variances for each order of interaction k inferred from the data
         
         """
-        self.set_data(X, y, variance=variance)
+        self.set_data(X, y, y_var=y_var)
         
-        if cross_validation:
-            self.second_order_diff_matrix = self.calc_second_order_diff_matrix()
-            self.lambdas = self.estimate_lambdas_cv(self.obs_idx, y, variance,
-                                                    nfolds=nfolds)
-        else:
-            self.lambdas = self.estimate_lambdas(self.obs_idx, y)
-        return(self.lambdas)
+#         if cross_validation:
+#             self.second_order_diff_matrix = self.calc_second_order_diff_matrix()
+#             self.lambdas = self.estimate_lambdas_cv(self.obs_idx, y, variance,
+#                                                     nfolds=nfolds)
+#         else:
+#             self.lambdas = self.estimate_lambdas(self.obs_idx, y)
+#         return(self.lambdas)
+    
+        self.init(genotypes=X)
+        self.set_data(X, y)
+        phi_inf = self._fit(np.inf)
+        
+        if self.run_cv:
+            self.fit_a_cv(phi_inf=phi_inf)
+            self.set_data(X, y)
+        
+        # Fit model with a_star or provided a
+        phi = self._fit(self.a, phi_initial=phi_inf)
+        output = self.phi_to_output(phi)
+        return(output)
+    
     
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
@@ -420,10 +472,10 @@ class VCregression(LandscapeEstimator):
         for d in range(size):
             c_k = self.L_powers_unique_entries_inv[:, d]
             
-            polynomial = calc_matrix_polynomial_dot(c_k, self.M, observed_seqs)
+            polynomial = calc_matrix_polynomial_dot(c_k, self.W.L, observed_seqs)
             distance_class_n = np.sum(observed_seqs * polynomial)
             
-            polynomial = calc_matrix_polynomial_dot(c_k, self.M, seq_values)
+            polynomial = calc_matrix_polynomial_dot(c_k, self.W.L, seq_values)
             correlation[d] = reciprocal(np.sum(seq_values * polynomial), distance_class_n)
             
             distance_class_ns[d] = distance_class_n
@@ -586,7 +638,7 @@ class VCregression(LandscapeEstimator):
 
 
 class DeltaPEstimator(LandscapeEstimator):
-    def __init__(self, P, a=None, num_a=20, nfolds=5,
+    def __init__(self, P, a=None, num_reg=20, nfolds=5,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
                  gtol=1e-3, save_memory=False):
@@ -600,11 +652,11 @@ class DeltaPEstimator(LandscapeEstimator):
         check_error(a is None or a >= 0, msg=msg)
         
         # Attributes to generate a values
-        self.num_a = num_a
+        self.num_reg = num_reg
         
         # Default bounds for a in absence of a more clever method
-        self.min_log_a = -4
-        self.max_log_a = 10
+        self.min_log_reg = -4
+        self.max_log_reg = 10
         
         # Parameters to generate a grid in SeqDEFT, but should be generalizable
         # by just defining a distance metric for phi
@@ -632,7 +684,7 @@ class DeltaPEstimator(LandscapeEstimator):
         self.DP.calc_kernel_basis()
     
     def get_a_values(self):
-        return(np.exp(np.linspace(self.min_log_a, self.max_log_a, self.num_a)))
+        return(self.get_regularization_constants())
     
     def calc_neg_log_prior_prob(self, phi, a):
         S1 = a / (2*self.n_p_faces) * self.DP.quad(phi)
@@ -670,13 +722,6 @@ class DeltaPEstimator(LandscapeEstimator):
             S_grad += self.calc_regularization_grad(phi)
         S_grad = self._phi_to_b(S_grad)
         return(S_grad)
-    
-    def get_cv_iter(self, a_values):
-        for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
-                                                     nfolds=self.nfolds,
-                                                     count_data=True):        
-            for a in a_values:
-                yield(a, fold, train, validation)   
     
     def calc_cv_logL(self, cv_data, phi_initial=None):
         for a, fold, train, test in tqdm(cv_data, total=self.nfolds * self.num_a):
@@ -797,10 +842,15 @@ class SeqDEFT(DeltaPEstimator):
     def set_data(self, X, y):
         self.X = X
         self.y = y
+        self.y_var = None
         
         data = self.fill_zeros_counts(X, y)
         self.N = data.sum()
         self.R = (data / self.N)
+    
+    @property
+    def count_data(self):
+        return(True)
     
     def calc_regularization(self, phi):
         regularizer = 0

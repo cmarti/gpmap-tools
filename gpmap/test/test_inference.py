@@ -11,29 +11,26 @@ from timeit import timeit
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from os.path import join
 from subprocess import check_call
-from gpmap.src.linop import LaplacianOperator
+from gpmap.src.linop import LaplacianOperator, KernelAligner
 
 
 class VCTests(unittest.TestCase):
     def test_laplacian(self):
         L = LaplacianOperator(2, 2)
-        L.calc_F()
         L.calc_L()
         v = np.array([1, 2, 3, 0.])
         
         print(L.dot0(v))
-        print(L.dot3(v))
+        print(L.dot1(v))
         
         L = LaplacianOperator(4, 7)
-        L.calc_F()
         L.calc_L()
         v = np.random.normal(size=L.shape[0])
         
         print(timeit(lambda: L.dot0(v), number=10))
-        print(timeit(lambda : L.dot3(v), number=10))
+        print(timeit(lambda : L.dot1(v), number=10))
         
-        assert(np.allclose(L.dot0(v), L.dot3(v)))
-        
+        assert(np.allclose(L.dot0(v), L.dot1(v)))
         
     def test_get_gt_to_data_matrix(self):
         vc = VCregression()
@@ -138,6 +135,24 @@ class VCTests(unittest.TestCase):
         # Ensure anticorrelated distances
         assert(rho[3] < 0)
         assert(rho[4] < 0)
+    
+    def test_kernel_alignment(self):
+        np.random.seed(1)
+        seq_length, n_alleles = 5, 4
+        lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
+        
+        vc = VCregression()
+        vc.init(seq_length, n_alleles)
+        data = vc.simulate(lambdas)
+        vc.set_data(X=data.index.values, y=data.y.values)
+        rho, n = vc.compute_empirical_rho(vc.obs_idx, vc.y)
+        
+        aligner = KernelAligner(seq_length, n_alleles)
+        aligner.set_data(rho, n)
+        lambdas_star = aligner.fit()
+        pred = aligner.predict(lambdas_star)
+        assert(np.allclose(rho, pred))
+        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
     
     def test_vc_fit(self):
         lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
@@ -284,5 +299,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_vc_predict']
+    import sys;sys.argv = ['', 'VCTests.test_kernel_alignment']
     unittest.main()
