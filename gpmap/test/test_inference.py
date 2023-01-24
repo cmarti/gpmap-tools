@@ -112,7 +112,7 @@ class VCTests(unittest.TestCase):
         data = vc.simulate(lambdas, sigma, p_missing=0.1)
         assert(data.dropna().shape[0] < 256)
     
-    def test_compute_empirical_rho(self):
+    def test_calc_emp_dist_cov(self):
         np.random.seed(1)
         sigma, lambdas = 0.1, np.array([0, 200, 20, 2, 0.2])
         
@@ -121,9 +121,8 @@ class VCTests(unittest.TestCase):
         vc = VCregression()
         vc.init(seq_length, n_alleles)
         data = vc.simulate(lambdas, sigma)
-        
-        obs_idx = vc.get_obs_idx(data.index)
-        rho, n = vc.compute_empirical_rho(obs_idx, data['y'])
+        vc.set_data(X=data.index.values, y=data.y.values)
+        rho, n = vc.calc_emp_dist_cov()
         
         # Ensure we get the expected number of pairs per distance category
         for d in range(seq_length + 1):
@@ -143,15 +142,24 @@ class VCTests(unittest.TestCase):
         
         vc = VCregression()
         vc.init(seq_length, n_alleles)
+        aligner = KernelAligner(seq_length, n_alleles)
+        
         data = vc.simulate(lambdas)
         vc.set_data(X=data.index.values, y=data.y.values)
-        rho, n = vc.compute_empirical_rho(vc.obs_idx, vc.y)
+        cov, n = vc.calc_emp_dist_cov()
+        aligner.set_data(cov, n)
         
-        aligner = KernelAligner(seq_length, n_alleles)
-        aligner.set_data(rho, n)
+        # Align with beta = 0
         lambdas_star = aligner.fit()
         pred = aligner.predict(lambdas_star)
-        assert(np.allclose(rho, pred))
+        assert(np.allclose(cov, pred))
+        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
+        
+        # Align with beta > 0
+        aligner.set_beta(0.01)
+        lambdas_star = aligner.fit()
+        pred = aligner.predict(lambdas_star)
+        assert(np.allclose(cov, pred))
         assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
     
     def test_vc_fit(self):
@@ -161,17 +169,16 @@ class VCTests(unittest.TestCase):
         
         # Ensure MSE is within a small range
         vc = VCregression()
-        vc.fit(data.index.values, data['y'], variance=data['var'],
-               cross_validation=False)
+        vc.fit(data.index.values, data['y'], y_var=data['var'])
         sd1 = np.log2((vc.lambdas[1:]+1e-6) / (lambdas[1:]+1e-6)).std()
         assert(sd1 < 2)
         
         # Try with regularization and CV and 
-        vc = VCregression()
-        vc.fit(data.index, data['y'], variance=data['var'],
-               cross_validation=True)
+        vc = VCregression(cross_validation=True)
+        vc.fit(data.index, data['y'], y_var=data['var'])
         sd2 = np.log2((vc.lambdas[1:]+1e-6) / (lambdas[1:]+1e-6)).std()
         assert(sd2 < 1)
+        assert(vc.beta > 0)
         
         # Ensure regularization improves results
         assert(sd1 > sd2)
@@ -208,7 +215,7 @@ class VCTests(unittest.TestCase):
         
         # Using the a priori known variance components
         vc = VCregression()
-        vc.set_data(X=data.index, y=data['y'], variance=data['var'])
+        vc.set_data(X=data.index, y=data['y'], y_var=data['var'])
         vc.set_lambdas(lambdas)
         pred = vc.predict()
         
@@ -224,7 +231,7 @@ class VCTests(unittest.TestCase):
         
         # Capture error with incomplete input
         vc = VCregression()
-        vc.set_data(X=data.index, y=data['y'], variance=data['var'])
+        vc.set_data(X=data.index, y=data['y'], y_var=data['var'])
         try:
             pred = vc.predict()
             self.fail()
@@ -238,7 +245,7 @@ class VCTests(unittest.TestCase):
         
         filtered = data.loc[np.random.choice(data.index, size=950), :]
         vc = VCregression(save_memory=False)
-        vc.fit(filtered.index, filtered['y'], variance=filtered['var'], 
+        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'], 
                cross_validation=True)
         pred = vc.predict().sort_index()
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
@@ -253,7 +260,7 @@ class VCTests(unittest.TestCase):
         
         filtered = data.loc[np.random.choice(data.index, size=950), :]
         vc = VCregression(save_memory=True)
-        vc.fit(filtered.index, filtered['y'], variance=filtered['var'], 
+        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'], 
                cross_validation=True)
         pred = vc.predict().sort_index()
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
@@ -299,5 +306,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_kernel_alignment']
+    import sys;sys.argv = ['', 'VCTests.test_vc_fit']
     unittest.main()

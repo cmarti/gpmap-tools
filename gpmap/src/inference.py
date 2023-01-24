@@ -19,11 +19,12 @@ from scipy.special._logsumexp import logsumexp
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_matrix_polynomial_dot, Frob, grad_Frob,
-                             reciprocal, get_CV_splits)
+                             reciprocal, get_CV_splits,
+    calc_matrix_polynomial_quad)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
 from gpmap.src.linop import DeltaPOperator, ProjectionOperator,\
-    LaplacianOperator
+    LaplacianOperator, KernelAligner
 
 
 class LandscapeEstimator(object):
@@ -247,14 +248,15 @@ class VCregression(LandscapeEstimator):
     '''
     def __init__(self, beta=0, cross_validation=False, 
                  num_beta=20, nfolds=5, min_log_beta=-2,
-                 max_log_beta=6, save_memory=False):
+                 max_log_beta=7, save_memory=False):
         super().__init__(save_memory=save_memory)
         self.beta = beta
         self.nfolds = nfolds
-        
         self.num_reg = num_beta
-        self.min_beta = min_log_beta
-        self.max_beta = max_log_beta
+        self.total_folds = self.nfolds * self.num_reg
+        
+        self.min_log_reg = min_log_beta
+        self.max_log_reg = max_log_beta
         self.count_data = False
         self.run_cv = cross_validation
         
@@ -262,6 +264,7 @@ class VCregression(LandscapeEstimator):
              alphabet_type='custom', ps=None):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
+        self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
         self.W = ProjectionOperator(L=LaplacianOperator(self.n_alleles, self.seq_length, ps=ps))
         self.calc_L_powers_unique_entries_matrix()
         
@@ -286,6 +289,7 @@ class VCregression(LandscapeEstimator):
     def set_data(self, X, y, y_var=None):
         self.init(genotypes=X)
         self.obs_idx = self.get_obs_idx(X)
+        self.X = X
         self.y = y
         self.n_obs = y.shape[0]
 
@@ -297,24 +301,38 @@ class VCregression(LandscapeEstimator):
         self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
     
     def calc_cv_loss(self, cv_data):
-        for a, fold, train, test in tqdm(cv_data, total=self.nfolds * self.num_a):
+        for beta, fold, train, test in tqdm(cv_data, total=self.total_folds):
             X_train, y_train, y_var_train = train 
             X_test, y_test, y_var_test = test
 
+            # Fit on training data
             self.set_data(X=X_train, y=y_train, y_var=y_var_train)
-            phi = self._fit(a)
+            lambdas = self._fit(beta)
             
+            # Calculate loss in test data
             self.set_data(X=X_test, y=y_test, y_var=y_var_test)
-            test_logL = -self.calc_neg_log_likelihood(phi)
-            yield(a, fold, test_logL)
-    
+            cov, ns = self.calc_emp_dist_cov()
+            self.kernel_aligner.set_data(cov, ns)
+            mse = self.kernel_aligner.calc_mse(lambdas)
+            yield({'beta': beta, 'fold': fold, 'mse': mse})
+            
     def fit_beta_cv(self):
         beta_values = self.get_regularization_constants()
         cv_data = self.get_cv_iter(beta_values)
-        cv_logL = self.calc_cv_logL(cv_data, phi_initial=phi_inf) 
-        
-        self.logL_df = self.get_cv_logL_df(cv_logL)    
-        self.a = self.get_ml_a(self.logL_df)
+        cv_loss = self.calc_cv_loss(cv_data) 
+        self.cv_loss_df = pd.DataFrame(cv_loss)
+        loss = self.cv_loss_df.groupby('beta')['mse'].mean()
+        self.beta = loss.index[np.argmin(loss)]
+    
+    def _fit(self, beta=None):
+        if beta is None:
+            beta = self.beta
+            
+        cov, ns = self.calc_emp_dist_cov()
+        self.kernel_aligner.set_data(cov, ns)
+        self.kernel_aligner.set_beta(beta)
+        lambdas = self.kernel_aligner.fit()
+        return(lambdas)
     
     def fit(self, X, y, y_var=None):
         """
@@ -345,173 +363,34 @@ class VCregression(LandscapeEstimator):
             Variances for each order of interaction k inferred from the data
         
         """
+        self.init(genotypes=X)
         self.set_data(X, y, y_var=y_var)
         
-#         if cross_validation:
-#             self.second_order_diff_matrix = self.calc_second_order_diff_matrix()
-#             self.lambdas = self.estimate_lambdas_cv(self.obs_idx, y, variance,
-#                                                     nfolds=nfolds)
-#         else:
-#             self.lambdas = self.estimate_lambdas(self.obs_idx, y)
-#         return(self.lambdas)
-    
-        self.init(genotypes=X)
-        self.set_data(X, y)
-        phi_inf = self._fit(np.inf)
-        
         if self.run_cv:
-            self.fit_a_cv(phi_inf=phi_inf)
-            self.set_data(X, y)
+            self.fit_beta_cv()
+            self.set_data(X, y, y_var=y_var)
         
-        # Fit model with a_star or provided a
-        phi = self._fit(self.a, phi_initial=phi_inf)
-        output = self.phi_to_output(phi)
-        return(output)
-    
-    
-    def calc_w(self, k, d):
-        """return value of the Krawtchouk polynomial for k, d"""
-        l, a = self.seq_length, self.n_alleles
-        s = 0
-        for q in range(l + 1):
-            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
-        return(1 / a**l * s)
-    
-    def calc_W_kd_matrix(self):
-        """return full matrix l+1 by l+1 Krawtchouk matrix"""
-        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
-        for k in range(self.seq_length + 1):
-            for d in range(self.seq_length + 1):
-                self.W_kd[k, d] = self.calc_w(k, d)
-    
-    def estimate_lambdas(self, obs_idx, y, betas=None,
-                         second_order_diff_matrix=None):
-        """solve for lambdas using least squares with the given rho_d 
-        and N_d"""
-        rho_d, N_d = self.compute_empirical_rho(obs_idx, y)
-        
-        # Calculate matrices for calculating Frobenius norm given lambdas
-        M = self.construct_M(N_d)
-        a = self.construct_a(rho_d, N_d) 
-
-        if betas is None:        
-            # Minimize the objective function Frob with lambda > 0
-            M_inv = np.linalg.inv(M)
-            lambda0 = np.array(np.dot(M_inv, a)).ravel()
-            res = minimize(fun=Frob, jac=grad_Frob, args=(M, a),
-                           x0=lambda0, method='L-BFGS-B',
-                           bounds=[(0, None)] * (self.seq_length + 1))
-            lambdas = res.x
-            
-        else:
-            lambdas = []
-            for beta in betas:
-                res = minimize(fun=self.Frob_reg, args=(M, a, beta, second_order_diff_matrix),
-                               x0=np.zeros(self.seq_length + 1), method='Powell',
-                               options={'xtol': 1e-8, 'ftol': 1e-8})
-                lambdas.append(np.exp(res.x))
-                
+        lambdas = self._fit()
+        self.set_lambdas(lambdas) 
         return(lambdas)
     
-    def get_cv_indexes(self, n_obs, nfolds=10):
-        order = np.arange(n_obs)
-        random.shuffle(order)
-        folds = np.array_split(order, nfolds)
-        
-        for i in range(nfolds):
-            training_idx = np.hstack(folds[:i] + folds[i+1:])
-            validation_idx = folds[i]
-            yield(training_idx, validation_idx)
-    
-    def estimate_lambdas_cv(self, obs_idx, y, variance, nfolds=10, betas=None):
-        """
-        Estimate lambdas using regularized least squares with 
-        regularization parameter chosen using cross-validation
-    
-        """
-        if betas is None:
-            betas = 10 ** np.arange(-2, 6, .5)
-            
-        mses = []
-        for training_idx, validation_idx in tqdm(self.get_cv_indexes(y.shape[0], nfolds),
-                                                 total=nfolds):
-            y_train, y_validation = y[training_idx], y[validation_idx]
-
-            # Estimate lambdas from training data
-            lambdas = self.estimate_lambdas(obs_idx=training_idx,
-                                            y=y_train, betas=betas)
-            
-            # Compute covariance on validation and substract the empirical variance
-            rho, n = self.compute_empirical_rho(validation_idx, y_validation)
-            rho[0] -= np.mean(variance[validation_idx])
-            
-            # Compute MSE between the expected and observed covariance matrix
-            mses.append([np.sum((self.W_kd.T.dot(lambdas[i]) - rho) ** 2 * (1 / np.sum(n)) * n)
-                         for i in range(betas.shape[0])])
-        
-        # Select the beta with best MSE across folds    
-        mses = np.array(mses)
-        mses = np.mean(mses, axis=0)
-        betaopt = betas[np.argmin(mses)]
-        
-        # Re-estimate data
-        lambdas = self.estimate_lambdas(obs_idx, y, betas=[betaopt])[0]
-        self.beta_mse = dict(zip(betas, mses))
-        return(lambdas)
-
-    def compute_empirical_rho(self, obs_idx, y):
-        n_obs = y.shape[0]
-        gt2data = self.get_gt_to_data_matrix(obs_idx)
-        
-        seq_values = gt2data.dot(y)
-        observed_seqs = gt2data.dot(np.ones(n_obs))
+    def calc_emp_dist_cov(self):
+        seq_values = self.gt2data.dot(self.y)
+        observed_seqs = self.gt2data.dot(np.ones(self.n_obs))
 
         # Compute rho_d and N_d
         size = self.seq_length + 1
-        correlation, distance_class_ns = np.zeros(size), np.zeros(size)
+        cov, distance_class_ns = np.zeros(size), np.zeros(size)
         for d in range(size):
             c_k = self.L_powers_unique_entries_inv[:, d]
             
-            polynomial = calc_matrix_polynomial_dot(c_k, self.W.L, observed_seqs)
-            distance_class_n = np.sum(observed_seqs * polynomial)
+            distance_class_ns[d] = calc_matrix_polynomial_quad(c_k, self.W.L,
+                                                               observed_seqs)
             
-            polynomial = calc_matrix_polynomial_dot(c_k, self.W.L, seq_values)
-            correlation[d] = reciprocal(np.sum(seq_values * polynomial), distance_class_n)
+            quad = calc_matrix_polynomial_quad(c_k, self.W.L, seq_values)
+            cov[d] = reciprocal(quad, distance_class_ns[d])
             
-            distance_class_ns[d] = distance_class_n
-            
-        return(correlation, distance_class_ns)
-
-    def calc_second_order_diff_matrix(self):
-        """Construct second order difference matrix for regularization"""
-        Diff2 = np.zeros((self.seq_length - 2, self.seq_length))
-        for i in range(Diff2.shape[0]):
-            Diff2[i, i:i + 3] = [-1, 2, -1]
-        return(Diff2.T.dot(Diff2))
-    
-    def Frob_reg(self, theta, M, a, beta, second_order_diff_matrix):
-        """cost function for regularized least square method for inferring 
-        lambdas"""
-        Frob1 = np.exp(theta).dot(M).dot(np.exp(theta))
-        Frob2 = 2 * np.exp(theta).dot(a)
-        return(Frob1 - Frob2 + beta * theta[1:].dot(self.second_order_diff_matrix).dot(theta[1:]))
-    
-    def construct_M(self, N_d):
-        size = self.seq_length + 1
-        M = np.zeros([size, size])
-        for i in range(size):
-            for j in range(size):
-                for d in range(size):
-                    M[i, j] += N_d[d] * self.W_kd[i, d] * self.W_kd[j, d]
-        return(M)
-    
-    def construct_a(self, rho_d, N_d):
-        size = self.seq_length + 1
-        a = np.zeros(size)
-        for i in range(size):
-            for d in range(size):
-                a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
-        return(a)
+        return(cov, distance_class_ns)
     
     def lambdas_to_variance(self, lambdas):
         self.calc_eigenvalue_multiplicity()
@@ -520,6 +399,7 @@ class VCregression(LandscapeEstimator):
         return(variance_components)
     
     def set_lambdas(self, lambdas):
+        self.lambdas = lambdas
         self.W.set_lambdas(lambdas=lambdas)
     
     def predict(self, Xpred=None, estimate_variance=False):
@@ -732,11 +612,10 @@ class DeltaPEstimator(LandscapeEstimator):
             
             self.set_data(X=X_test, y=y_test)
             test_logL = -self.calc_neg_log_likelihood(phi)
-            yield(a, fold, test_logL)
+            yield({'a': a, 'fold': fold, 'logL': test_logL})
 
     def get_cv_logL_df(self, cv_logL):
-        cv_log_L = [{'a': a, 'fold': f, 'logL': logL} for a, f, logL in cv_logL]
-        cv_log_L = pd.DataFrame(cv_log_L)
+        cv_log_L = pd.DataFrame(cv_logL)
         cv_log_L['sd'] = self._a_to_sd(cv_log_L['a'])
         return(cv_log_L)
     

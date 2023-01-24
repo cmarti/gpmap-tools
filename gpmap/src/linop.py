@@ -263,10 +263,10 @@ class KernelAligner(object):
         self.calc_W_kd_matrix()
         self.calc_second_order_diff_matrix()
     
-    def set_data(self, correlations, distances_n):
-        self.correlations = correlations
+    def set_data(self, covs, distances_n):
+        self.covs = covs
         self.distances_n = distances_n
-        self.construct_a(correlations, distances_n)
+        self.construct_a(covs, distances_n)
         self.construct_M(distances_n)
         self.M_inv = np.linalg.inv(self.M)
     
@@ -348,7 +348,7 @@ class KernelAligner(object):
         return(self.W_kd.T.dot(lambdas))
     
     def calc_mse(self, lambdas):
-        ss = (self.predict(lambdas) - self.correlations) ** 2
+        ss = (self.predict(lambdas) - self.covs) ** 2
         return(np.sum(ss * (1 / np.sum(self.distances_n)) * self.distances_n))
             
             
