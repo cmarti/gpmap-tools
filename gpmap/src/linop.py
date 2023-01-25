@@ -253,6 +253,14 @@ class ProjectionOperator(LapDepOperator):
                     msg='"lambdas" must be define for projection')
         projection = calc_matrix_polynomial_dot(self.coeffs, self.L, v)
         return(projection)
+    
+    def inv_dot(self, v):
+        lambdas = self.lambdas.copy()
+        check_error(np.all(lambdas > 0), msg='All lambdas must be > 0')
+        self.set_lambdas(1 / lambdas)
+        u = self.dot(v)
+        self.set_lambdas(lambdas)
+        return(u)
 
 
 class KernelAligner(object):

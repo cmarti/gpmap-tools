@@ -11,7 +11,7 @@ from timeit import timeit
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from os.path import join
 from subprocess import check_call
-from gpmap.src.linop import LaplacianOperator, KernelAligner
+from gpmap.src.linop import LaplacianOperator, KernelAligner, ProjectionOperator
 
 
 class VCTests(unittest.TestCase):
@@ -29,6 +29,7 @@ class VCTests(unittest.TestCase):
         print(timeit(lambda : L.dot1(v), number=10))
         
         assert(np.allclose(L.dot0(v), L.dot1(v)))
+        
         
     def test_get_gt_to_data_matrix(self):
         vc = VCregression()
@@ -64,7 +65,7 @@ class VCTests(unittest.TestCase):
             b1 = vc.calc_polynomial_coeffs()
             p1 = vc.project(y, k=l-1)
             b2 = vc.calc_polynomial_coeffs(numeric=True)
-            p2 = vc.project(y, k=l-1)
+            p2 = W.dot(y, k=l-1)
             
             # Test coefficients of the polynomials
             assert(np.allclose(b1, b2))
@@ -72,29 +73,43 @@ class VCTests(unittest.TestCase):
             # Test that projections are also equal
             assert(np.allclose(p1, p2))
     
-    def test_projection(self):
-        vc = VCregression()
-        vc.init(2, 2)
+    def test_projection_operator(self):
+        W = ProjectionOperator(2, 2)
         
         # Purely additive function
         y = np.array([-1.5, -0.5, 0.5, 1.5])
-        assert(np.allclose(vc.project(y, k=2), 0))
-        assert(np.allclose(vc.project(y, k=1), y))
-        assert(np.allclose(vc.project(y, k=0), 0))
+        
+        W.set_lambdas(k=2)
+        assert(np.allclose(W.dot(y), 0))
+        
+        W.set_lambdas(k=1)
+        assert(np.allclose(W.dot(y), y))
+        
+        W.set_lambdas(k=0)
+        assert(np.allclose(W.dot(y), 0))
         
         # Non-zero orthogonal projections
         y = np.array([-1.5, -0.5, 0.5, 4])
-        y0 = vc.project(y, k=0)
-        y1 = vc.project(y, k=1)
-        y2 = vc.project(y, k=2) 
+        
+        W.set_lambdas(k=0)
+        y0 = W.dot(y)
+        W.set_lambdas(k=1)
+        y1 = W.dot(y)
+        W.set_lambdas(k=2)
+        y2 = W.dot(y) 
         
         assert(not np.allclose(y0, 0))
         assert(not np.allclose(y1, y))
         assert(not np.allclose(y2, 0))
         
+        # Ensure they are orthogonal to each other
         assert(np.allclose(y0.T.dot(y1), 0))
         assert(np.allclose(y0.T.dot(y2), 0))
         assert(np.allclose(y1.T.dot(y2), 0))
+        
+        # Test inverse
+        W.set_lambdas(np.array([1, 10, 1.]))
+        assert(np.allclose(W.inv_dot(W.dot(y)), y))
     
     def test_simulate_vc(self):
         np.random.seed(1)
@@ -306,5 +321,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_laplacian']
+    import sys;sys.argv = ['', 'VCTests']
     unittest.main()
