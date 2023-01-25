@@ -195,8 +195,10 @@ class VCregression(LandscapeEstimator):
     def fit_beta_cv(self):
         beta_values = self.get_regularization_constants()
         cv_data = self.get_cv_iter(beta_values)
-        cv_loss = self.calc_cv_loss(cv_data) 
+        cv_loss = self.calc_cv_loss(cv_data)
+         
         self.cv_loss_df = pd.DataFrame(cv_loss)
+        self.cv_loss_df['log_beta'] = np.log10(self.cv_loss_df['beta'])
         loss = self.cv_loss_df.groupby('beta')['mse'].mean()
         self.beta = loss.index[np.argmin(loss)]
     
@@ -408,6 +410,7 @@ class DeltaPEstimator(LandscapeEstimator):
         
         # Attributes to generate a values
         self.num_reg = num_reg
+        self.total_folds = self.nfolds * self.num_reg
         
         # Default bounds for a in absence of a more clever method
         self.min_log_reg = -4
@@ -479,7 +482,7 @@ class DeltaPEstimator(LandscapeEstimator):
         return(S_grad)
     
     def calc_cv_logL(self, cv_data, phi_initial=None):
-        for a, fold, train, test in tqdm(cv_data, total=self.nfolds * self.num_a):
+        for a, fold, train, test in tqdm(cv_data, total=self.total_folds):
             (X_train, y_train), (X_test, y_test) = train, test
 
             self.set_data(X=X_train, y=y_train)
@@ -491,7 +494,9 @@ class DeltaPEstimator(LandscapeEstimator):
 
     def get_cv_logL_df(self, cv_logL):
         cv_log_L = pd.DataFrame(cv_logL)
+        cv_log_L['log_a'] = np.log10(cv_log_L['a'])
         cv_log_L['sd'] = self._a_to_sd(cv_log_L['a'])
+        cv_log_L['log_sd'] = np.log10(cv_log_L['sd'])
         return(cv_log_L)
     
     def get_ml_a(self, cv_logL_df):
@@ -679,7 +684,7 @@ class SeqDEFT(DeltaPEstimator):
             phi_inf = self._fit(np.inf)
         a_min = self.calc_a_min(phi_inf) 
         a_max = self.calc_a_max(phi_inf)
-        a_values = np.geomspace(a_min, a_max, self.num_a)
+        a_values = np.geomspace(a_min, a_max, self.num_reg)
         return(a_values)
 
     def fill_zeros_counts(self, X, y):

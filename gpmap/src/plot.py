@@ -981,43 +981,38 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
     savefig(fig, fpath, tight=False, fmt=fmt)
 
 
-def plot_a_optimization(logL, axes, err_bars='stderr', x='log_a',
-                        show_folds=True):
-    if x == 'log_a':
-        logL['x'] = np.log10(logL['a'].values)
-        xlabel = r'$\log_{10}(a)$'
-        label = 'a'
-    elif x == 'log_sd':
-        logL['x'] = np.log10(logL['sd'].values)
-        xlabel = r'$\log_{10}(\sigma_P)$'
-        label = '$\sigma_P$'
-    else:
-        raise ValueError('x has to be log_a')
+def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
+                       xlabel=r'$\log_{10}(a)$',
+                       ylabel='log(L)', 
+                       show_folds=True):
     
-    df = logL.groupby('x', as_index=False).agg({'logL': ('mean', 'std', 'count')})
-    df.columns = ['x', 'mean', 'sd', 'count']
-    df['stderr'] = df['sd'] / np.sqrt(df['count'])
+    sdf = df.groupby(x, as_index=False).agg({y: ('mean', 'std', 'count')})
+    sdf.columns = ['x', 'mean', 'sd', 'count']
+    sdf['stderr'] = sdf['sd'] / np.sqrt(sdf['count'])
     
-    idx = df['mean'].argmax()
-    x_star = df['x'][idx]
-    max_log_L = df['mean'][idx]
+    idx = sdf['mean'].argmax()
+    x_star = sdf['x'][idx]
+    y_star = sdf['mean'][idx]
     
     if show_folds:
-        sns.lineplot(x='x', y='logL', hue='fold', ax=axes, legend=False,
-                     data=logL.sort_values('x'), alpha=0.4, linewidth=0.5)
-    axes.plot(df['x'], df['mean'], color='black', lw=1, zorder=2)
-    axes.scatter(df['x'], df['mean'], color='black', s=15)
-    axes.scatter(x_star, max_log_L, color='red', s=25, zorder=1)
+        sns.lineplot(x=x, y=y, hue='fold', ax=axes, legend=False,
+                     data=df.sort_values(x), alpha=0.4, linewidth=0.5,
+                     zorder=1)
+        
+    axes.plot(sdf['x'], sdf['mean'], color='black', lw=1, zorder=1)
+    axes.scatter(sdf['x'], sdf['mean'], color='black', s=15)
+    axes.scatter(x_star, y_star, color='red', s=25, zorder=10, alpha=1)
     
-    for a, m, s in zip(df['x'], df['mean'], df[err_bars]):
+    for a, m, s in zip(sdf['x'], sdf['mean'], sdf[err_bars]):
         color = 'red' if a == x_star else 'black'
         axes.plot((a, a), (m-s, m+s), lw=1, color=color)
     
     xlims, ylims = axes.get_xlim(), axes.get_ylim()
-    x = xlims[0] + 0.05 * (xlims[1]- xlims[0])
-    y = ylims[0] + 0.9 * (ylims[1]- ylims[0])
-    axes.annotate('{}* = {:.1f}'.format(label, 10**x_star), xy=(x, y))
-    axes.set(xlabel=xlabel, ylabel='Out of sample log(L)')
+    ylims = (ylims[0], ylims[1] + (ylims[1] - ylims[0]) * 0.1)
+    x = xlims[0] + 0.05 * (xlims[1] - xlims[0])
+    y = ylims[0] + 0.93 * (ylims[1] - ylims[0])
+    axes.annotate('{}* = {:.1f}'.format(xlabel, x_star), xy=(x, y))
+    axes.set(xlabel=xlabel, ylabel='Out of sample {}'.format(ylabel), ylim=ylims)
 
 
 def plot_density_vs_frequency(seq_density, axes):
@@ -1070,12 +1065,14 @@ def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
     '''
     if seq_density is None:
         fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
-        plot_a_optimization(log_Ls, axes, err_bars=err_bars,
-                            show_folds=show_folds)
     else:
         fig, subplots = init_fig(1, 2, colsize=4, rowsize=3.5)
-        plot_a_optimization(log_Ls, subplots[0], err_bars=err_bars,
-                            show_folds=show_folds)
         plot_density_vs_frequency(seq_density, subplots[1])
+        axes = subplots[0]
+        
+    plot_hyperparam_cv(log_Ls, axes, err_bars=err_bars,
+                       show_folds=show_folds)
+    
+    if seq_density is not None:
         fig.tight_layout()
     return(fig)

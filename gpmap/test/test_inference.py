@@ -17,14 +17,12 @@ from gpmap.src.linop import LaplacianOperator, KernelAligner
 class VCTests(unittest.TestCase):
     def test_laplacian(self):
         L = LaplacianOperator(2, 2)
-        L.calc_L()
         v = np.array([1, 2, 3, 0.])
         
         print(L.dot0(v))
         print(L.dot1(v))
         
         L = LaplacianOperator(4, 7)
-        L.calc_L()
         v = np.random.normal(size=L.shape[0])
         
         print(timeit(lambda: L.dot0(v), number=10))
@@ -180,6 +178,8 @@ class VCTests(unittest.TestCase):
         assert(sd2 < 1)
         assert(vc.beta > 0)
         
+        vc.cv_loss_df.to_csv(join(TEST_DATA_DIR, 'vc.cv_loss.csv'))
+        
         # Ensure regularization improves results
         assert(sd1 > sd2)
     
@@ -306,5 +306,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_vc_fit']
+    import sys;sys.argv = ['', 'VCTests.test_laplacian']
     unittest.main()

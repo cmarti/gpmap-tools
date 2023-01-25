@@ -10,8 +10,7 @@ import pandas as pd
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.inference import SeqDEFT
 from gpmap.src.utils import get_sparse_diag_matrix
-from gpmap.src.plot import (plot_SeqDEFT_summary, savefig, init_fig,
-                            plot_a_optimization)
+from gpmap.src.plot import plot_SeqDEFT_summary, savefig
 from scipy.stats.stats import pearsonr
 
 
@@ -99,15 +98,6 @@ class SeqDEFTTests(unittest.TestCase):
         fpath = join(TEST_DATA_DIR, 'logL.csv')
         seqdeft.logL_df.to_csv(fpath)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
-    
-    def test_plot_a_optimization(self):
-        fpath = join(TEST_DATA_DIR, 'logL.csv')
-        log_Ls = pd.read_csv(fpath, index_col=0)
-        
-        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
-        plot_a_optimization(log_Ls, axes, err_bars='stderr', x='log_sd')
-        fpath = join(TEST_DATA_DIR, 'seqdeft_a')
-        savefig(fig, fpath)
     
     def test_seq_deft_cv_plot(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_output.csv')
@@ -206,5 +196,5 @@ class SeqDEFTTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests.test_tk_gloop']
+    import sys;sys.argv = ['', 'SeqDEFTTests']
     unittest.main()

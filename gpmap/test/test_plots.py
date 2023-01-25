@@ -14,7 +14,8 @@ from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             plot_edges, savefig, init_fig, figure_visualization,
                             figure_allele_grid, save_holoviews,
                             plot_relaxation_times, plot_interactive,
-                            figure_Ns_grid, plot_SeqDEFT_summary)
+                            figure_Ns_grid, plot_SeqDEFT_summary,
+                            plot_hyperparam_cv)
 from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWSWalk
 from gpmap.src.space import CodonSpace
@@ -275,9 +276,29 @@ class PlottingTests(unittest.TestCase):
         plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
                          nodes_color='function', nodes_size=10,
                          edges_width=1, z='3')
+
+    def test_plot_a_optimization(self):
+        # Show SeqDEFT cross-validation
+        fpath = join(TEST_DATA_DIR, 'logL.csv')
+        log_Ls = pd.read_csv(fpath, index_col=0)
+        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
+        plot_hyperparam_cv(log_Ls, axes, err_bars='stderr',
+                           x='log_sd', xlabel=r'$\log_{10}(\sigma_P)$')
+        fpath = join(TEST_DATA_DIR, 'seqdeft_a')
+        savefig(fig, fpath)
+        
+        # Show VCregression cross-validation
+        fpath = join(TEST_DATA_DIR, 'vc.cv_loss.csv')
+        mses = pd.read_csv(fpath, index_col=0)
+        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
+        plot_hyperparam_cv(mses, axes, err_bars='stderr',
+                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
+                           y='mse', ylabel='MSE')
+        fpath = join(TEST_DATA_DIR, 'vc_beta')
+        savefig(fig, fpath)
     
     def test_plot_SeqDEFT_summary(self):
-        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.csv')
+        fpath = join(TEST_DATA_DIR, 'logL.csv')
         logl = pd.read_csv(fpath)
         
         fig = plot_SeqDEFT_summary(logl)
