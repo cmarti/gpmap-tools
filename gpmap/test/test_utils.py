@@ -102,7 +102,14 @@ class UtilsTests(unittest.TestCase):
         v = np.ones(4)
         u1 = m.dot(v)
         u2 = calc_tensor_product_dot(ms, v)
+        assert(np.allclose(u1, u2))
         
+        # Test in larger scenario
+        ms = [m1, m2, m2, m1, m2, m1, m1]
+        m = calc_tensor_product(ms)
+        v = np.random.normal(size=m.shape[0])
+        u1 = m.dot(v)
+        u2 = calc_tensor_product_dot(ms, v)
         assert(np.allclose(u1, u2))
     
     def test_get_CV_splits(self):
