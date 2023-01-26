@@ -146,6 +146,23 @@ def calc_tensor_product(matrices):
     return(m)
 
 
+def calc_tensor_product_dot(matrices, v):
+    if len(matrices) == 1:
+        return(matrices[0].dot(v))
+    
+    a, l = matrices[0].shape[0], len(matrices)
+    s = a**l // a
+    m = matrices[0]
+    vs = [v[s*j:s*(j+1)] for j in range(a)]
+    us = [calc_tensor_product_dot(matrices[1:], v_i) for v_i in vs]
+    
+    u = np.zeros(v.shape[0])
+    for col in range(a):
+        u_i = np.hstack([m[k, col] * us[col] for k in range(a)]) 
+        u += u_i
+    return(u)
+
+
 def reciprocal(x, y):
     """calculate reciprocal of variable, if variable=0, return 0"""
     if y == 0:
