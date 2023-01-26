@@ -11,7 +11,9 @@ from timeit import timeit
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from os.path import join
 from subprocess import check_call
-from gpmap.src.linop import LaplacianOperator, KernelAligner, ProjectionOperator
+from gpmap.src.linop import LaplacianOperator, KernelAligner, ProjectionOperator,\
+    VjProjectionOperator
+from itertools import combinations
 
 
 class VCTests(unittest.TestCase):
@@ -110,6 +112,44 @@ class VCTests(unittest.TestCase):
         # Test inverse
         W.set_lambdas(np.array([1, 10, 1.]))
         assert(np.allclose(W.inv_dot(W.dot(y)), y))
+    
+    def test_vj_projection_operator(self):
+        vjp = VjProjectionOperator(2, 2)
+        
+        # Purely additive function
+        y = np.array([-1.5, -0.5, 0.5, 1.5])
+        y01 = np.array([-1, -1, 1, 1])
+        y10 = np.array([-0.5, 0.5, -0.5, 0.5])
+        
+        vjp.set_j([0])
+        f01 = vjp.dot(y)
+        assert(np.allclose(f01, y01))
+        
+        vjp.set_j([1])
+        f10 = vjp.dot(y)
+        assert(np.allclose(f10, y10))
+        
+        vjp.set_j([])
+        assert(np.allclose(vjp.dot(y), 0))
+        
+        vjp.set_j([0, 1])
+        assert(np.allclose(vjp.dot(y), 0))
+        
+        # Tests that projections add up to the whole subspace in larger case
+        W = ProjectionOperator(4, 5)
+        vjp = VjProjectionOperator(4, 5)
+        v = np.random.normal(size=W.L.n)
+
+        for k in range(1, 6):
+            W.set_lambdas(k=k)
+            u1 = W.dot(v)
+            
+            u2 = np.zeros(v.shape[0])
+            for j in combinations(np.arange(W.l), k):
+                vjp.set_j(j)
+                u2 += vjp.dot(v)
+            
+            assert(np.allclose(u1, u2))
     
     def test_simulate_vc(self):
         np.random.seed(1)

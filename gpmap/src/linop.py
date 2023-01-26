@@ -11,7 +11,8 @@ from scipy.optimize._minimize import minimize
 
 from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
-                             calc_cartesian_product_dot)
+                             calc_cartesian_product_dot,
+    calc_tensor_product_dot)
 
 
 class SeqLinOperator(object):
@@ -138,7 +139,7 @@ class LapDepOperator(SeqLinOperator):
             
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.L = L
-
+    
 
 class DeltaPOperator(LapDepOperator):
     def __init__(self, P, n_alleles=None, seq_length=None, L=None, save_memory=False):
@@ -185,7 +186,31 @@ class DeltaPOperator(LapDepOperator):
                 lambda_k *= L_lambda_k - p * self.alpha
             lambdas.append(lambda_k / self.Pfactorial)
         self.lambdas = np.array(lambdas)
+
+
+class VjProjectionOperator(LapDepOperator):
+    def __init__(self, n_alleles=None, seq_length=None, L=None):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
+                         save_memory=True)
+        self.calc_elementary_W()
     
+    def calc_elementary_W(self):
+        if self.L.ps is None:
+            self.b = [np.ones(self.alpha)] * self.l
+        else:
+            self.b = self.L.ps
+        self.D_pi = [np.diag(b) for b in self.b]
+        self.W0 = [np.outer(b, b).dot(D) / np.sum(b * D.dot(b))
+                   for b, D in zip(self.b, self.D_pi)]
+        self.W1 = [np.eye(self.alpha) - w0 for w0 in self.W0]
+    
+    def set_j(self, positions):
+        self.matrices = [self.W1[i] if i in positions else self.W0[i]
+                         for i in range(self.l)]
+    
+    def dot(self, v):
+        return(calc_tensor_product_dot(self.matrices, v))
+
     
 class ProjectionOperator(LapDepOperator):
     def __init__(self, n_alleles=None, seq_length=None, L=None, save_memory=False):
