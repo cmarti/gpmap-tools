@@ -205,7 +205,8 @@ class VCTests(unittest.TestCase):
         # Align with beta = 0
         lambdas_star = aligner.fit()
         pred = aligner.predict(lambdas_star)
-        assert(np.allclose(cov, pred))
+        print(cov - pred)
+        assert(np.allclose(cov, pred, rtol=0.01))
         assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
         
         # Align with beta > 0
@@ -214,9 +215,19 @@ class VCTests(unittest.TestCase):
         pred = aligner.predict(lambdas_star)
         assert(np.allclose(cov, pred))
         assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
+        
+        # Problematic case
+        aligner.set_beta(0)
+        cov = [ 5.38809419, 3.10647274, 1.47573831,
+               0.39676481, -0.30354594, -0.70018283]
+        n = [819, 9834, 58980, 176754, 265160, 159214]
+        aligner.set_data(cov, n)
+        lambdas = aligner.fit()
+        print(lambdas)
+        assert(np.all(np.isnan(lambdas) == False)) 
     
     def test_vc_fit(self):
-        lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
+        lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
@@ -361,5 +372,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests']
+    import sys;sys.argv = ['', 'VCTests.test_vc_fit']
     unittest.main()

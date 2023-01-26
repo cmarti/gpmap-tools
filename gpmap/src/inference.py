@@ -21,6 +21,8 @@ from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
 from gpmap.src.linop import DeltaPOperator, ProjectionOperator,\
     LaplacianOperator, KernelAligner
+from scipy.stats.stats import pearsonr
+from scipy.stats._continuous_distns import norm
 
 
 class LandscapeEstimator(object):
@@ -184,13 +186,20 @@ class VCregression(LandscapeEstimator):
             # Fit on training data
             self.set_data(X=X_train, y=y_train, y_var=y_var_train)
             lambdas = self._fit(beta)
+
+            # Calculate cv logL and r2 on test data
+            self.set_lambdas(lambdas)
+            ypred = self.predict(X_test)['ypred'].values
+            r2 = pearsonr(ypred, y_test)[0] ** 2
+            logL = norm.logpdf(y_test, loc=ypred, scale=np.sqrt(y_var_test)).sum()
             
             # Calculate loss in test data
             self.set_data(X=X_test, y=y_test, y_var=y_var_test)
             cov, ns = self.calc_emp_dist_cov()
             self.kernel_aligner.set_data(cov, ns)
             mse = self.kernel_aligner.calc_mse(lambdas)
-            yield({'beta': beta, 'fold': fold, 'mse': mse})
+            yield({'beta': beta, 'fold': fold, 'mse': mse, 'r2': r2,
+                   'logL': logL})
             
     def fit_beta_cv(self):
         beta_values = self.get_regularization_constants()
@@ -199,8 +208,8 @@ class VCregression(LandscapeEstimator):
          
         self.cv_loss_df = pd.DataFrame(cv_loss)
         self.cv_loss_df['log_beta'] = np.log10(self.cv_loss_df['beta'])
-        loss = self.cv_loss_df.groupby('beta')['mse'].mean()
-        self.beta = loss.index[np.argmin(loss)]
+        logL = self.cv_loss_df.groupby('beta')['logL'].mean()
+        self.beta = logL.index[np.argmax(logL)]
     
     def _fit(self, beta=None):
         if beta is None:

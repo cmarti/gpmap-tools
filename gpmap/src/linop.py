@@ -365,7 +365,9 @@ class KernelAligner(object):
                 self.W_kd[k, d] = self.calc_w(k, d)
     
     def fit(self):
-        log_lambda0 = np.log(np.dot(self.M_inv, self.a)).ravel()
+        lambdas0 = np.dot(self.M_inv, self.a).flatten()
+        lambdas0[lambdas0<0] = 1e-5
+        log_lambda0 = np.log(lambdas0)
         if self.beta == 0:
             res = minimize(fun=self.frobenius_norm,
                            jac=self.frobenius_norm_grad,

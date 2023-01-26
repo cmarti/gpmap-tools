@@ -278,7 +278,6 @@ class PlottingTests(unittest.TestCase):
                          edges_width=1, z='3')
 
     def test_plot_a_optimization(self):
-        # Show SeqDEFT cross-validation
         fpath = join(TEST_DATA_DIR, 'logL.csv')
         log_Ls = pd.read_csv(fpath, index_col=0)
         fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
@@ -286,14 +285,23 @@ class PlottingTests(unittest.TestCase):
                            x='log_sd', xlabel=r'$\log_{10}(\sigma_P)$')
         fpath = join(TEST_DATA_DIR, 'seqdeft_a')
         savefig(fig, fpath)
-        
-        # Show VCregression cross-validation
+    
+    def test_plot_beta_optimization(self):    
         fpath = join(TEST_DATA_DIR, 'vc.cv_loss.csv')
         mses = pd.read_csv(fpath, index_col=0)
-        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
-        plot_hyperparam_cv(mses, axes, err_bars='stderr',
+        print(mses)
+        
+        fig, subplots = init_fig(1, 3, colsize=4, rowsize=3.5)
+        plot_hyperparam_cv(mses, subplots[0], err_bars='stderr',
                            x='log_beta', xlabel=r'$\log_{10}(\beta)$',
-                           y='mse', ylabel='MSE')
+                           y='mse', ylabel='MSE', highlight='min')
+        plot_hyperparam_cv(mses, subplots[1], err_bars='stderr',
+                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
+                           y='logL', ylabel='log(L)')
+        plot_hyperparam_cv(mses, subplots[2], err_bars='stderr',
+                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
+                           y='r2', ylabel=r'$R^2$')
+               
         fpath = join(TEST_DATA_DIR, 'vc_beta')
         savefig(fig, fpath)
     
@@ -408,6 +416,6 @@ class PlottingTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'PlottingTests']
+    import sys;sys.argv = ['', 'PlottingTests.test_plot_beta_optimization']
     unittest.main()
 
