@@ -273,8 +273,8 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
         
         for j in range(nfolds):
             i = j * n_test
-            train_data = get_data_subset(data, order[i:i+n_test])
-            test_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
+            test_data = get_data_subset(data, order[i:i+n_test])
+            train_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
             test_data = subsample_data(test_data, max_pred=max_pred)
             yield(j, train_data, test_data)
 
