@@ -39,6 +39,12 @@ def get_length(x):
     return(length)
 
 
+def quad(matrix, v1, v2=None):
+    if v2 is None:
+        v2 = v1
+    return(np.sum(matrix.dot(v1) * v2))
+
+
 class LogTrack(object):
     '''Logger class'''
 
@@ -160,6 +166,26 @@ def calc_tensor_product_dot(matrices, v):
     for col in range(a):
         u_i = np.hstack([m[k, col] * us[col] for k in range(a)]) 
         u += u_i
+    return(u)
+
+
+def calc_tensor_product_quad(matrices, v1, v2=None):
+    if v2 is None:
+        v2 = v1.copy()
+    
+    if len(matrices) == 1:
+        return(quad(matrices[0], v1, v2))
+    
+    a, l = matrices[0].shape[0], len(matrices)
+    s = a**l // a
+    m = matrices[0]
+    v1s = [v1[s*j:s*(j+1)] for j in range(a)]
+    v2s = [v2[s*j:s*(j+1)] for j in range(a)]
+
+    u = 0    
+    for row in range(a):
+        for col in range(a):
+            u += m[row, col] * calc_tensor_product_quad(matrices[1:], v1s[row], v2s[col])
     return(u)
 
 
