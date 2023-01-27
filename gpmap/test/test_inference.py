@@ -21,17 +21,23 @@ class VCTests(unittest.TestCase):
         L = LaplacianOperator(2, 2)
         v = np.array([1, 2, 3, 0.])
         
+        print([L.L])
+        
         print(L.dot0(v))
         print(L.dot1(v))
         
-        L = LaplacianOperator(4, 7)
-        v = np.random.normal(size=L.shape[0])
+        L1 = LaplacianOperator(4, 7)
+        L2 = LaplacianOperator(4, 7, save_memory=True, max_size=4)
+        v = np.random.normal(size=L1.shape[0])
         
-        print(timeit(lambda: L.dot0(v), number=10))
-        print(timeit(lambda : L.dot1(v), number=10))
+        L2.dot(v)
         
-        assert(np.allclose(L.dot0(v), L.dot1(v)))
+        print(timeit(lambda: L1.dot0(v), number=10))
+        print(timeit(lambda : L1.dot1(v), number=10))
+        print(timeit(lambda : L2.dot1(v), number=10))
         
+        assert(np.allclose(L1.dot0(v), L1.dot1(v)))
+        assert(np.allclose(L1.dot0(v), L2.dot1(v)))
         
     def test_get_gt_to_data_matrix(self):
         vc = VCregression()
@@ -138,7 +144,7 @@ class VCTests(unittest.TestCase):
         # Tests that projections add up to the whole subspace in larger case
         W = ProjectionOperator(4, 5)
         vjp = VjProjectionOperator(4, 5)
-        v = np.random.normal(size=W.L.n)
+        v = np.random.normal(size=W.n)
 
         for k in range(1, 6):
             W.set_lambdas(k=k)
@@ -150,6 +156,24 @@ class VCTests(unittest.TestCase):
                 u2 += vjp.dot(v)
             
             assert(np.allclose(u1, u2))
+    
+    def test_vj_projection_operator_ss(self):
+        vjp = VjProjectionOperator(4, 5)
+        v = np.random.normal(size=vjp.n)
+        
+        vjp.set_j([0, 2, 3])
+        print(timeit(lambda: vjp.quad(v), number=10))
+        print(timeit(lambda : vjp.dot_square_norm(v), number=10))
+        
+        # for k in range(1, 6):
+        #     for j in combinations(np.arange(vjp.l), k):
+        #         vjp.set_j(j)
+        #         u = vjp.dot(v)
+        #         ss1 = np.sum(u * u)
+        #         ss2 = vjp.dot_square_norm(v)
+        #         ss3 = vjp.quad(v) # only applies in equally weighted case
+        #         assert(np.allclose(ss1, ss2))
+        #         assert(np.allclose(ss1, ss3))
     
     def test_simulate_vc(self):
         np.random.seed(1)
@@ -372,5 +396,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_vc_fit']
+    import sys;sys.argv = ['', 'VCTests.test_laplacian']
     unittest.main()

@@ -12,7 +12,7 @@ from scipy.optimize._minimize import minimize
 from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
                              calc_cartesian_product_dot,
-    calc_tensor_product_dot)
+    calc_tensor_product_dot, calc_tensor_product_quad)
 
 
 class SeqLinOperator(object):
@@ -29,9 +29,11 @@ class SeqLinOperator(object):
 
 
 class LaplacianOperator(SeqLinOperator):
-    def __init__(self, n_alleles, seq_length, save_memory=False, ps=None):
+    def __init__(self, n_alleles, seq_length, save_memory=False, ps=None,
+                 max_size=4):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.save_memory = save_memory
+        self.max_size = max_size
     
         self.ps = ps
         self.calc_Kns(ps=ps)
@@ -56,17 +58,23 @@ class LaplacianOperator(SeqLinOperator):
             p = np.ones(self.alpha)
         Kn = np.vstack([p] * p.shape[0])
         np.fill_diagonal(Kn, np.zeros(Kn.shape[0]))
-        return(csr_matrix(Kn))
+        return(Kn)
     
     def calc_Kns(self, ps=None):
         if ps is None:
             ps = [None] * self.l
-        self.Kns = [self.calc_Kn(p) for p in ps]
+
+        if self.save_memory:            
+            Kns = [self.calc_Kn(p) for p in ps[:-self.max_size]]
+            Kns.append(calc_cartesian_product([csr_matrix(self.calc_Kn(p)) for p in ps[-self.max_size:]]).tocsr())
+        else:
+            Kns = [csr_matrix(self.calc_Kn(p)) for p in ps]
+        self.Kns = Kns
     
     def calc_L(self):
         L = -calc_cartesian_product(self.Kns)
         L.setdiag(-L.sum(1).A1)
-        self.L = L
+        self.L = L.tocsr()
     
     def dot0(self, v):
         return(self.L.dot(v))
@@ -200,6 +208,7 @@ class VjProjectionOperator(LapDepOperator):
         else:
             self.b = self.L.ps
         self.D_pi = [np.diag(b) for b in self.b]
+        self.pi = calc_tensor_product([b.reshape((b.shape[0], 1)) for b in self.b]).flatten()
         self.W0 = [np.outer(b, b).dot(D) / np.sum(b * D.dot(b))
                    for b, D in zip(self.b, self.D_pi)]
         self.W1 = [np.eye(self.alpha) - w0 for w0 in self.W0]
@@ -210,6 +219,13 @@ class VjProjectionOperator(LapDepOperator):
     
     def dot(self, v):
         return(calc_tensor_product_dot(self.matrices, v))
+    
+    def dot_square_norm(self, v):
+        '''
+        Note: we are calculating the squared D_pi-norm of the projection to be 
+        able to do it directly through recursive product
+        '''
+        return(calc_tensor_product_quad(self.matrices, v1=self.pi * v, v2=v))
 
     
 class ProjectionOperator(LapDepOperator):

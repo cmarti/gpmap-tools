@@ -13,6 +13,7 @@ from os.path import join, dirname, abspath
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.dia import dia_matrix
 from scipy.stats.stats import pearsonr
+from itertools import product
 
 
 def check_error(condition, msg, error_type=ValueError):
@@ -123,8 +124,8 @@ def calc_cartesian_product(matrices):
 def calc_cartesian_product_dot(matrices, v):
     if len(matrices) == 1:
         return(matrices[0].dot(v))
-    a, l = matrices[0].shape[0], len(matrices)
-    s = a**l // a
+    a = matrices[0].shape[0]
+    s = np.prod([m.shape[0] for m in matrices]) // a
     vs = [v[s*j:s*(j+1)] for j in range(a)]
     
     u = np.zeros(v.shape[0])
@@ -182,11 +183,9 @@ def calc_tensor_product_quad(matrices, v1, v2=None):
     v1s = [v1[s*j:s*(j+1)] for j in range(a)]
     v2s = [v2[s*j:s*(j+1)] for j in range(a)]
 
-    u = 0    
-    for row in range(a):
-        for col in range(a):
-            u += m[row, col] * calc_tensor_product_quad(matrices[1:], v1s[row], v2s[col])
-    return(u)
+    ss = np.sum([m[row, col] * calc_tensor_product_quad(matrices[1:], v1s[row], v2s[col])
+                 for row, col in product(np.arange(a), repeat=2)])
+    return(ss)
 
 
 def reciprocal(x, y):
