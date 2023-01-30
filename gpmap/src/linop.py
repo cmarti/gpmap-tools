@@ -29,20 +29,18 @@ class SeqLinOperator(object):
 
 
 class LaplacianOperator(SeqLinOperator):
-    def __init__(self, n_alleles, seq_length, save_memory=False, ps=None,
-                 max_size=4):
+    def __init__(self, n_alleles, seq_length, ps=None, max_size=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
-        self.save_memory = save_memory
         self.max_size = max_size
     
         self.ps = ps
         self.calc_Kns(ps=ps)
             
-        if save_memory:
-            self.dot = self.dot1
-        else:
+        if max_size is None:
             self.calc_L()
             self.dot = self.dot0
+        else:
+            self.dot = self.dot1
             
         self.calc_lambdas()
         self.calc_lambdas_multiplicity()
@@ -60,16 +58,26 @@ class LaplacianOperator(SeqLinOperator):
         np.fill_diagonal(Kn, np.zeros(Kn.shape[0]))
         return(Kn)
     
+    def guess_n_products(self):
+        size = 1
+        for k in range(self.l):
+            size *= self.alpha
+            if size >= self.max_size:
+                break
+        return(k)
+    
     def calc_Kns(self, ps=None):
         if ps is None:
             ps = [None] * self.l
 
-        if self.save_memory:            
-            Kns = [self.calc_Kn(p) for p in ps[:-self.max_size]]
-            Kns.append(calc_cartesian_product([csr_matrix(self.calc_Kn(p)) for p in ps[-self.max_size:]]).tocsr())
-        else:
+        if self.max_size is None:            
             Kns = [csr_matrix(self.calc_Kn(p)) for p in ps]
+        else:
+            size = self.guess_n_products()
+            Kns = [self.calc_Kn(p) for p in ps[:-size]]
+            Kns.append(calc_cartesian_product([csr_matrix(self.calc_Kn(p)) for p in ps[-size:]]).tocsr())
         self.Kns = Kns
+        self.Kns_shape = [x.shape for x in Kns]
     
     def calc_L(self):
         L = -calc_cartesian_product(self.Kns)
@@ -135,11 +143,11 @@ class LaplacianOperator(SeqLinOperator):
                 
 
 class LapDepOperator(SeqLinOperator):
-    def __init__(self, n_alleles=None, seq_length=None, L=None, save_memory=False):
+    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=False):
         if L is None:
             msg = 'either L or both seq_length and n_alleles must be given'
             check_error(n_alleles is not None and seq_length is not None, msg=msg)
-            L = LaplacianOperator(n_alleles, seq_length, save_memory=save_memory)
+            L = LaplacianOperator(n_alleles, seq_length, max_L_size=max_L_size)
         else:
             msg = 'either L or both seq_length and n_alleles must be given'
             check_error(L is not None, msg=msg)
@@ -150,9 +158,9 @@ class LapDepOperator(SeqLinOperator):
     
 
 class DeltaPOperator(LapDepOperator):
-    def __init__(self, P, n_alleles=None, seq_length=None, L=None, save_memory=False):
+    def __init__(self, P, n_alleles=None, seq_length=None, L=None, max_L_size=False):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
-                         save_memory=save_memory)
+                         max_L_size=max_L_size)
         self.set_P(P)
         self.n_p_faces = self.calc_n_p_faces()
     
@@ -199,7 +207,7 @@ class DeltaPOperator(LapDepOperator):
 class VjProjectionOperator(LapDepOperator):
     def __init__(self, n_alleles=None, seq_length=None, L=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
-                         save_memory=True)
+                         max_L_size=True)
         self.calc_elementary_W()
     
     def calc_elementary_W(self):
@@ -229,9 +237,9 @@ class VjProjectionOperator(LapDepOperator):
 
     
 class ProjectionOperator(LapDepOperator):
-    def __init__(self, n_alleles=None, seq_length=None, L=None, save_memory=False):
+    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=False):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
-                         save_memory=save_memory)
+                         max_L_size=max_L_size)
         self.calc_polynomial_coeffs()
     
     def calc_eig_vandermonde_matrix(self):

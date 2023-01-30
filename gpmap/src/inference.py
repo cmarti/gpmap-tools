@@ -26,9 +26,9 @@ from scipy.stats._continuous_distns import norm
 
 
 class LandscapeEstimator(object):
-    def __init__(self, expand_alphabet=True, save_memory=False):
+    def __init__(self, expand_alphabet=True, max_L_size=None):
         self.expand_alphabet = expand_alphabet
-        self.save_memory = save_memory
+        self.max_L_size = max_L_size
     
     def get_regularization_constants(self):
         return(10**(np.linspace(self.min_log_reg, self.max_log_reg, self.num_reg)))
@@ -126,8 +126,8 @@ class VCregression(LandscapeEstimator):
     '''
     def __init__(self, beta=0, cross_validation=False, 
                  num_beta=20, nfolds=5, min_log_beta=-2,
-                 max_log_beta=7, save_memory=False):
-        super().__init__(save_memory=save_memory)
+                 max_log_beta=7, max_L_size=False):
+        super().__init__(max_L_size=max_L_size)
         self.beta = beta
         self.nfolds = nfolds
         self.num_reg = num_beta
@@ -143,7 +143,8 @@ class VCregression(LandscapeEstimator):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
-        self.W = ProjectionOperator(L=LaplacianOperator(self.n_alleles, self.seq_length, ps=ps))
+        self.W = ProjectionOperator(L=LaplacianOperator(self.n_alleles, self.seq_length, ps=ps,
+                                                        max_size=self.max_L_size))
         self.calc_L_powers_unique_entries_matrix()
         
     def get_obs_idx(self, seqs):
@@ -407,8 +408,8 @@ class DeltaPEstimator(LandscapeEstimator):
     def __init__(self, P, a=None, num_reg=20, nfolds=5,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
-                 gtol=1e-3, save_memory=False):
-        super().__init__(save_memory=save_memory)
+                 gtol=1e-3, max_L_size=False):
+        super().__init__(max_L_size=max_L_size)
         self.P = P
         self.a = a
         self.a_is_fixed = a is not None
@@ -447,7 +448,7 @@ class DeltaPEstimator(LandscapeEstimator):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
-        self.DP = DeltaPOperator(self.P, self.n_alleles, self.seq_length, save_memory=self.save_memory)
+        self.DP = DeltaPOperator(self.P, self.n_alleles, self.seq_length, max_L_size=self.max_L_size)
         self.DP.calc_kernel_basis()
     
     def get_a_values(self):

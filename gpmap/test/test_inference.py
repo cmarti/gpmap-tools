@@ -18,16 +18,12 @@ from itertools import combinations
 
 class VCTests(unittest.TestCase):
     def test_laplacian(self):
-        L = LaplacianOperator(2, 2)
-        v = np.array([1, 2, 3, 0.])
-        
-        print([L.L])
-        
-        print(L.dot0(v))
-        print(L.dot1(v))
-        
         L1 = LaplacianOperator(4, 7)
-        L2 = LaplacianOperator(4, 7, save_memory=True, max_size=4)
+        L2 = LaplacianOperator(4, 7, max_size=500)
+        
+        for d in L2.Kns_shape:
+            assert(d[0] < 500)
+        
         v = np.random.normal(size=L1.shape[0])
         
         L2.dot(v)
@@ -334,7 +330,7 @@ class VCTests(unittest.TestCase):
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         filtered = data.loc[np.random.choice(data.index, size=950), :]
-        vc = VCregression(save_memory=False)
+        vc = VCregression()
         vc.fit(filtered.index, filtered['y'], y_var=filtered['var'], 
                cross_validation=True)
         pred = vc.predict().sort_index()
@@ -343,15 +339,14 @@ class VCTests(unittest.TestCase):
         assert(rho > 0.95)
         assert(mse < 0.3)
     
-    def test_vc_predict_save_memory(self):
+    def test_vc_predict_max_L_size(self):
         np.random.seed(0)
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         filtered = data.loc[np.random.choice(data.index, size=950), :]
-        vc = VCregression(save_memory=True)
-        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'], 
-               cross_validation=True)
+        vc = VCregression(max_L_size=100, cross_validation=True)
+        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'])
         pred = vc.predict().sort_index()
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
@@ -396,5 +391,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_laplacian']
+    import sys;sys.argv = ['', 'VCTests.test_vc_predict_max_L_size']
     unittest.main()
