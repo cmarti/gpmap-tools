@@ -321,3 +321,21 @@ def get_alphabet(n_alleles=None, alphabet_type=None):
     else:
         raise ValueError('Unknwon alphabet type. Try any of: {}'.format(ALPHABETS.keys()))
     return(alphabet)
+
+
+def get_alleles(c, alleles=None):
+        if alleles is not None:
+            return(alleles)
+        else:
+            return(np.unique(c))
+
+        
+def seq_to_one_hot(X, alleles=None):
+    m = np.array([[a for a in x] for x in X])
+    onehot = []
+    for i in range(m.shape[1]):
+        c = m[:, i]
+        for allele in get_alleles(c, alleles=alleles):
+            onehot.append(c == allele)
+    onehot = np.stack(onehot, 1)
+    return(onehot)
