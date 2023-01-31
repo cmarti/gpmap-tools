@@ -13,6 +13,7 @@ from os.path import join, dirname, abspath
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.dia import dia_matrix
 from scipy.stats.stats import pearsonr
+from itertools import product
 
 
 def check_error(condition, msg, error_type=ValueError):
@@ -37,6 +38,12 @@ def get_length(x):
     except AttributeError:
         length = len(x)
     return(length)
+
+
+def quad(matrix, v1, v2=None):
+    if v2 is None:
+        v2 = v1
+    return(np.sum(matrix.dot(v1) * v2))
 
 
 class LogTrack(object):
@@ -117,8 +124,8 @@ def calc_cartesian_product(matrices):
 def calc_cartesian_product_dot(matrices, v):
     if len(matrices) == 1:
         return(matrices[0].dot(v))
-    a, l = matrices[0].shape[0], len(matrices)
-    s = a**l // a
+    a = matrices[0].shape[0]
+    s = np.prod([m.shape[0] for m in matrices]) // a
     vs = [v[s*j:s*(j+1)] for j in range(a)]
     
     u = np.zeros(v.shape[0])
@@ -144,6 +151,41 @@ def calc_tensor_product(matrices):
             rows.append(row[0])
     m = np.vstack(rows)
     return(m)
+
+
+def calc_tensor_product_dot(matrices, v):
+    if len(matrices) == 1:
+        return(matrices[0].dot(v))
+    
+    a, l = matrices[0].shape[0], len(matrices)
+    s = a**l // a
+    m = matrices[0]
+    vs = [v[s*j:s*(j+1)] for j in range(a)]
+    us = [calc_tensor_product_dot(matrices[1:], v_i) for v_i in vs]
+    
+    u = np.zeros(v.shape[0])
+    for col in range(a):
+        u_i = np.hstack([m[k, col] * us[col] for k in range(a)]) 
+        u += u_i
+    return(u)
+
+
+def calc_tensor_product_quad(matrices, v1, v2=None):
+    if v2 is None:
+        v2 = v1.copy()
+    
+    if len(matrices) == 1:
+        return(quad(matrices[0], v1, v2))
+    
+    a, l = matrices[0].shape[0], len(matrices)
+    s = a**l // a
+    m = matrices[0]
+    v1s = [v1[s*j:s*(j+1)] for j in range(a)]
+    v2s = [v2[s*j:s*(j+1)] for j in range(a)]
+
+    ss = np.sum([m[row, col] * calc_tensor_product_quad(matrices[1:], v1s[row], v2s[col])
+                 for row, col in product(np.arange(a), repeat=2)])
+    return(ss)
 
 
 def reciprocal(x, y):
@@ -256,8 +298,8 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
         
         for j in range(nfolds):
             i = j * n_test
-            train_data = get_data_subset(data, order[i:i+n_test])
-            test_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
+            test_data = get_data_subset(data, order[i:i+n_test])
+            train_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
             test_data = subsample_data(test_data, max_pred=max_pred)
             yield(j, train_data, test_data)
 

@@ -983,14 +983,13 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
 
 def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
                        xlabel=r'$\log_{10}(a)$',
-                       ylabel='log(L)', 
-                       show_folds=True):
+                       ylabel='log(L)',  show_folds=True, highlight='max'):
     
     sdf = df.groupby(x, as_index=False).agg({y: ('mean', 'std', 'count')})
     sdf.columns = ['x', 'mean', 'sd', 'count']
     sdf['stderr'] = sdf['sd'] / np.sqrt(sdf['count'])
     
-    idx = sdf['mean'].argmax()
+    idx = sdf['mean'].argmax() if highlight == 'max' else sdf['mean'].argmin()
     x_star = sdf['x'][idx]
     y_star = sdf['mean'][idx]
     

@@ -7,7 +7,8 @@ import pandas as pd
 from os.path import join
 
 from gpmap.src.utils import calc_cartesian_product, get_CV_splits,\
-    calc_tensor_product, calc_cartesian_product_dot
+    calc_tensor_product, calc_cartesian_product_dot, calc_tensor_product_dot,\
+    calc_tensor_product_quad, quad
 from gpmap.src.settings import TEST_DATA_DIR
 
 
@@ -90,6 +91,49 @@ class UtilsTests(unittest.TestCase):
                              [0.12]])
         result = calc_tensor_product([matrix1, matrix2])
         assert(np.allclose(result, expected))
+    
+    def test_tensor_product_dot(self):
+        m1 = 0.5 * np.array([[1, 1],
+                             [1, 1]])
+        m2 = 0.5 * np.array([[1, -1],
+                             [-1, 1]])
+        ms = [m1, m2]
+        m = calc_tensor_product(ms)
+        
+        v = np.ones(4)
+        u1 = m.dot(v)
+        u2 = calc_tensor_product_dot(ms, v)
+        assert(np.allclose(u1, u2))
+        
+        # Test in larger scenario
+        ms = [m1, m2, m2, m1, m2, m1, m1]
+        m = calc_tensor_product(ms)
+        v = np.random.normal(size=m.shape[0])
+        u1 = m.dot(v)
+        u2 = calc_tensor_product_dot(ms, v)
+        assert(np.allclose(u1, u2))
+    
+    def test_tensor_product_quad(self):
+        m1 = 0.5 * np.array([[1, 1],
+                             [1, 1]])
+        m2 = 0.5 * np.array([[1, -1],
+                             [-1, 1]])
+        
+        # Test small case
+        ms = [m1, m2]
+        m = calc_tensor_product(ms)
+        v = np.random.normal(size=m.shape[0])
+        u1 = quad(m, v)
+        u2 = calc_tensor_product_quad(ms, v, v)
+        assert(np.allclose(u1, u2))
+
+        # Test in larger scenario
+        ms = [m1, m2, m2]
+        m = calc_tensor_product(ms)
+        v = np.random.normal(size=m.shape[0])
+        u1 = quad(m, v)
+        u2 = calc_tensor_product_quad(ms, v)
+        assert(np.allclose(u1, u2))
     
     def test_get_CV_splits(self):
         np.random.seed(0)

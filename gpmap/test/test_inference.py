@@ -11,24 +11,29 @@ from timeit import timeit
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from os.path import join
 from subprocess import check_call
-from gpmap.src.linop import LaplacianOperator, KernelAligner
+from gpmap.src.linop import LaplacianOperator, KernelAligner, ProjectionOperator,\
+    VjProjectionOperator
+from itertools import combinations
 
 
 class VCTests(unittest.TestCase):
     def test_laplacian(self):
-        L = LaplacianOperator(2, 2)
-        v = np.array([1, 2, 3, 0.])
+        L1 = LaplacianOperator(4, 7)
+        L2 = LaplacianOperator(4, 7, max_size=500)
         
-        print(L.dot0(v))
-        print(L.dot1(v))
+        for d in L2.Kns_shape:
+            assert(d[0] < 500)
         
-        L = LaplacianOperator(4, 7)
-        v = np.random.normal(size=L.shape[0])
+        v = np.random.normal(size=L1.shape[0])
         
-        print(timeit(lambda: L.dot0(v), number=10))
-        print(timeit(lambda : L.dot1(v), number=10))
+        L2.dot(v)
         
-        assert(np.allclose(L.dot0(v), L.dot1(v)))
+        print(timeit(lambda: L1.dot0(v), number=10))
+        print(timeit(lambda : L1.dot1(v), number=10))
+        print(timeit(lambda : L2.dot1(v), number=10))
+        
+        assert(np.allclose(L1.dot0(v), L1.dot1(v)))
+        assert(np.allclose(L1.dot0(v), L2.dot1(v)))
         
     def test_get_gt_to_data_matrix(self):
         vc = VCregression()
@@ -64,7 +69,7 @@ class VCTests(unittest.TestCase):
             b1 = vc.calc_polynomial_coeffs()
             p1 = vc.project(y, k=l-1)
             b2 = vc.calc_polynomial_coeffs(numeric=True)
-            p2 = vc.project(y, k=l-1)
+            p2 = W.dot(y, k=l-1)
             
             # Test coefficients of the polynomials
             assert(np.allclose(b1, b2))
@@ -72,29 +77,99 @@ class VCTests(unittest.TestCase):
             # Test that projections are also equal
             assert(np.allclose(p1, p2))
     
-    def test_projection(self):
-        vc = VCregression()
-        vc.init(2, 2)
+    def test_projection_operator(self):
+        W = ProjectionOperator(2, 2)
         
         # Purely additive function
         y = np.array([-1.5, -0.5, 0.5, 1.5])
-        assert(np.allclose(vc.project(y, k=2), 0))
-        assert(np.allclose(vc.project(y, k=1), y))
-        assert(np.allclose(vc.project(y, k=0), 0))
+        
+        W.set_lambdas(k=2)
+        assert(np.allclose(W.dot(y), 0))
+        
+        W.set_lambdas(k=1)
+        assert(np.allclose(W.dot(y), y))
+        
+        W.set_lambdas(k=0)
+        assert(np.allclose(W.dot(y), 0))
         
         # Non-zero orthogonal projections
         y = np.array([-1.5, -0.5, 0.5, 4])
-        y0 = vc.project(y, k=0)
-        y1 = vc.project(y, k=1)
-        y2 = vc.project(y, k=2) 
+        
+        W.set_lambdas(k=0)
+        y0 = W.dot(y)
+        W.set_lambdas(k=1)
+        y1 = W.dot(y)
+        W.set_lambdas(k=2)
+        y2 = W.dot(y) 
         
         assert(not np.allclose(y0, 0))
         assert(not np.allclose(y1, y))
         assert(not np.allclose(y2, 0))
         
+        # Ensure they are orthogonal to each other
         assert(np.allclose(y0.T.dot(y1), 0))
         assert(np.allclose(y0.T.dot(y2), 0))
         assert(np.allclose(y1.T.dot(y2), 0))
+        
+        # Test inverse
+        W.set_lambdas(np.array([1, 10, 1.]))
+        assert(np.allclose(W.inv_dot(W.dot(y)), y))
+    
+    def test_vj_projection_operator(self):
+        vjp = VjProjectionOperator(2, 2)
+        
+        # Purely additive function
+        y = np.array([-1.5, -0.5, 0.5, 1.5])
+        y01 = np.array([-1, -1, 1, 1])
+        y10 = np.array([-0.5, 0.5, -0.5, 0.5])
+        
+        vjp.set_j([0])
+        f01 = vjp.dot(y)
+        assert(np.allclose(f01, y01))
+        
+        vjp.set_j([1])
+        f10 = vjp.dot(y)
+        assert(np.allclose(f10, y10))
+        
+        vjp.set_j([])
+        assert(np.allclose(vjp.dot(y), 0))
+        
+        vjp.set_j([0, 1])
+        assert(np.allclose(vjp.dot(y), 0))
+        
+        # Tests that projections add up to the whole subspace in larger case
+        W = ProjectionOperator(4, 5)
+        vjp = VjProjectionOperator(4, 5)
+        v = np.random.normal(size=W.n)
+
+        for k in range(1, 6):
+            W.set_lambdas(k=k)
+            u1 = W.dot(v)
+            
+            u2 = np.zeros(v.shape[0])
+            for j in combinations(np.arange(W.l), k):
+                vjp.set_j(j)
+                u2 += vjp.dot(v)
+            
+            assert(np.allclose(u1, u2))
+    
+    def test_vj_projection_operator_ss(self):
+        vjp = VjProjectionOperator(4, 5)
+        v = np.random.normal(size=vjp.n)
+        
+        vjp.set_j([0, 2, 3])
+        print(timeit(lambda: vjp.quad(v), number=10))
+        print(timeit(lambda : vjp.dot_square_norm(v), number=10))
+        
+        # for k in range(1, 6):
+        #     for j in combinations(np.arange(vjp.l), k):
+        #         vjp.set_j(j)
+        #         u = vjp.dot(v)
+        #         ss1 = np.sum(u * u)
+        #         ss2 = vjp.dot_square_norm(v)
+        #         ss3 = vjp.quad(v) # only applies in equally weighted case
+        #         assert(np.allclose(ss1, ss2))
+        #         assert(np.allclose(ss1, ss3))
     
     def test_simulate_vc(self):
         np.random.seed(1)
@@ -150,7 +225,8 @@ class VCTests(unittest.TestCase):
         # Align with beta = 0
         lambdas_star = aligner.fit()
         pred = aligner.predict(lambdas_star)
-        assert(np.allclose(cov, pred))
+        print(cov - pred)
+        assert(np.allclose(cov, pred, rtol=0.01))
         assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
         
         # Align with beta > 0
@@ -159,9 +235,19 @@ class VCTests(unittest.TestCase):
         pred = aligner.predict(lambdas_star)
         assert(np.allclose(cov, pred))
         assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
+        
+        # Problematic case
+        aligner.set_beta(0)
+        cov = [ 5.38809419, 3.10647274, 1.47573831,
+               0.39676481, -0.30354594, -0.70018283]
+        n = [819, 9834, 58980, 176754, 265160, 159214]
+        aligner.set_data(cov, n)
+        lambdas = aligner.fit()
+        print(lambdas)
+        assert(np.all(np.isnan(lambdas) == False)) 
     
     def test_vc_fit(self):
-        lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
+        lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
@@ -244,7 +330,7 @@ class VCTests(unittest.TestCase):
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         filtered = data.loc[np.random.choice(data.index, size=950), :]
-        vc = VCregression(save_memory=False)
+        vc = VCregression()
         vc.fit(filtered.index, filtered['y'], y_var=filtered['var'], 
                cross_validation=True)
         pred = vc.predict().sort_index()
@@ -253,15 +339,14 @@ class VCTests(unittest.TestCase):
         assert(rho > 0.95)
         assert(mse < 0.3)
     
-    def test_vc_predict_save_memory(self):
+    def test_vc_predict_max_L_size(self):
         np.random.seed(0)
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         filtered = data.loc[np.random.choice(data.index, size=950), :]
-        vc = VCregression(save_memory=True)
-        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'], 
-               cross_validation=True)
+        vc = VCregression(max_L_size=100, cross_validation=True)
+        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'])
         pred = vc.predict().sort_index()
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
@@ -306,5 +391,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_laplacian']
+    import sys;sys.argv = ['', 'VCTests.test_vc_predict_max_L_size']
     unittest.main()

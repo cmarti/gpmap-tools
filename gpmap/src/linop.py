@@ -11,7 +11,8 @@ from scipy.optimize._minimize import minimize
 
 from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
-                             calc_cartesian_product_dot)
+                             calc_cartesian_product_dot,
+    calc_tensor_product_dot, calc_tensor_product_quad)
 
 
 class SeqLinOperator(object):
@@ -28,18 +29,18 @@ class SeqLinOperator(object):
 
 
 class LaplacianOperator(SeqLinOperator):
-    def __init__(self, n_alleles, seq_length, save_memory=False, ps=None):
+    def __init__(self, n_alleles, seq_length, ps=None, max_size=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
-        self.save_memory = save_memory
+        self.max_size = max_size
     
         self.ps = ps
         self.calc_Kns(ps=ps)
             
-        if save_memory:
-            self.dot = self.dot1
-        else:
+        if max_size is None:
             self.calc_L()
             self.dot = self.dot0
+        else:
+            self.dot = self.dot1
             
         self.calc_lambdas()
         self.calc_lambdas_multiplicity()
@@ -55,17 +56,33 @@ class LaplacianOperator(SeqLinOperator):
             p = np.ones(self.alpha)
         Kn = np.vstack([p] * p.shape[0])
         np.fill_diagonal(Kn, np.zeros(Kn.shape[0]))
-        return(csr_matrix(Kn))
+        return(Kn)
+    
+    def guess_n_products(self):
+        size = 1
+        for k in range(self.l):
+            size *= self.alpha
+            if size >= self.max_size:
+                break
+        return(k)
     
     def calc_Kns(self, ps=None):
         if ps is None:
             ps = [None] * self.l
-        self.Kns = [self.calc_Kn(p) for p in ps]
+
+        if self.max_size is None:            
+            Kns = [csr_matrix(self.calc_Kn(p)) for p in ps]
+        else:
+            size = self.guess_n_products()
+            Kns = [self.calc_Kn(p) for p in ps[:-size]]
+            Kns.append(calc_cartesian_product([csr_matrix(self.calc_Kn(p)) for p in ps[-size:]]).tocsr())
+        self.Kns = Kns
+        self.Kns_shape = [x.shape for x in Kns]
     
     def calc_L(self):
         L = -calc_cartesian_product(self.Kns)
         L.setdiag(-L.sum(1).A1)
-        self.L = L
+        self.L = L.tocsr()
     
     def dot0(self, v):
         return(self.L.dot(v))
@@ -126,11 +143,11 @@ class LaplacianOperator(SeqLinOperator):
                 
 
 class LapDepOperator(SeqLinOperator):
-    def __init__(self, n_alleles=None, seq_length=None, L=None, save_memory=False):
+    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=False):
         if L is None:
             msg = 'either L or both seq_length and n_alleles must be given'
             check_error(n_alleles is not None and seq_length is not None, msg=msg)
-            L = LaplacianOperator(n_alleles, seq_length, save_memory=save_memory)
+            L = LaplacianOperator(n_alleles, seq_length, max_L_size=max_L_size)
         else:
             msg = 'either L or both seq_length and n_alleles must be given'
             check_error(L is not None, msg=msg)
@@ -138,12 +155,12 @@ class LapDepOperator(SeqLinOperator):
             
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.L = L
-
+    
 
 class DeltaPOperator(LapDepOperator):
-    def __init__(self, P, n_alleles=None, seq_length=None, L=None, save_memory=False):
+    def __init__(self, P, n_alleles=None, seq_length=None, L=None, max_L_size=False):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
-                         save_memory=save_memory)
+                         max_L_size=max_L_size)
         self.set_P(P)
         self.n_p_faces = self.calc_n_p_faces()
     
@@ -185,12 +202,44 @@ class DeltaPOperator(LapDepOperator):
                 lambda_k *= L_lambda_k - p * self.alpha
             lambdas.append(lambda_k / self.Pfactorial)
         self.lambdas = np.array(lambdas)
+
+
+class VjProjectionOperator(LapDepOperator):
+    def __init__(self, n_alleles=None, seq_length=None, L=None):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
+                         max_L_size=True)
+        self.calc_elementary_W()
     
+    def calc_elementary_W(self):
+        if self.L.ps is None:
+            self.b = [np.ones(self.alpha)] * self.l
+        else:
+            self.b = self.L.ps
+        self.D_pi = [np.diag(b) for b in self.b]
+        self.pi = calc_tensor_product([b.reshape((b.shape[0], 1)) for b in self.b]).flatten()
+        self.W0 = [np.outer(b, b).dot(D) / np.sum(b * D.dot(b))
+                   for b, D in zip(self.b, self.D_pi)]
+        self.W1 = [np.eye(self.alpha) - w0 for w0 in self.W0]
+    
+    def set_j(self, positions):
+        self.matrices = [self.W1[i] if i in positions else self.W0[i]
+                         for i in range(self.l)]
+    
+    def dot(self, v):
+        return(calc_tensor_product_dot(self.matrices, v))
+    
+    def dot_square_norm(self, v):
+        '''
+        Note: we are calculating the squared D_pi-norm of the projection to be 
+        able to do it directly through recursive product
+        '''
+        return(calc_tensor_product_quad(self.matrices, v1=self.pi * v, v2=v))
+
     
 class ProjectionOperator(LapDepOperator):
-    def __init__(self, n_alleles=None, seq_length=None, L=None, save_memory=False):
+    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=False):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
-                         save_memory=save_memory)
+                         max_L_size=max_L_size)
         self.calc_polynomial_coeffs()
     
     def calc_eig_vandermonde_matrix(self):
@@ -253,6 +302,14 @@ class ProjectionOperator(LapDepOperator):
                     msg='"lambdas" must be define for projection')
         projection = calc_matrix_polynomial_dot(self.coeffs, self.L, v)
         return(projection)
+    
+    def inv_dot(self, v):
+        lambdas = self.lambdas.copy()
+        check_error(np.all(lambdas > 0), msg='All lambdas must be > 0')
+        self.set_lambdas(1 / lambdas)
+        u = self.dot(v)
+        self.set_lambdas(lambdas)
+        return(u)
 
 
 class KernelAligner(object):
@@ -332,7 +389,9 @@ class KernelAligner(object):
                 self.W_kd[k, d] = self.calc_w(k, d)
     
     def fit(self):
-        log_lambda0 = np.log(np.dot(self.M_inv, self.a)).ravel()
+        lambdas0 = np.dot(self.M_inv, self.a).flatten()
+        lambdas0[lambdas0<0] = 1e-5
+        log_lambda0 = np.log(lambdas0)
         if self.beta == 0:
             res = minimize(fun=self.frobenius_norm,
                            jac=self.frobenius_norm_grad,
