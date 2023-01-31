@@ -7,7 +7,6 @@ from itertools import combinations
 from scipy.sparse.csr import csr_matrix
 from scipy.linalg.decomp_svd import orth
 from scipy.special._basic import comb
-from scipy.optimize._minimize import minimize
 
 from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
@@ -44,7 +43,8 @@ class LaplacianOperator(SeqLinOperator):
             
         self.calc_lambdas()
         self.calc_lambdas_multiplicity()
-        self.calc_W_kd_matrix()
+        if ps is None:
+            self.calc_W_kd_matrix()
     
     def calc_lambdas(self):
         self.lambdas = np.arange(self.l + 1)
@@ -310,104 +310,3 @@ class ProjectionOperator(LapDepOperator):
         u = self.dot(v)
         self.set_lambdas(lambdas)
         return(u)
-
-
-class KernelAligner(object):
-    def __init__(self, seq_length, n_alleles, beta=0):
-        self.seq_length = seq_length
-        self.n_alleles = n_alleles
-        self.set_beta(beta)
-        self.calc_W_kd_matrix()
-        self.calc_second_order_diff_matrix()
-    
-    def set_data(self, covs, distances_n):
-        self.covs = covs
-        self.distances_n = distances_n
-        self.construct_a(covs, distances_n)
-        self.construct_M(distances_n)
-        self.M_inv = np.linalg.inv(self.M)
-    
-    def set_beta(self, beta):
-        check_error(beta >=0, msg='beta must be >= 0')
-        self.beta = beta
-    
-    def calc_second_order_diff_matrix(self):
-        """Construct second order difference matrix for regularization"""
-        Diff2 = np.zeros((self.seq_length - 2, self.seq_length))
-        for i in range(Diff2.shape[0]):
-            Diff2[i, i:i + 3] = [-1, 2, -1]
-        self.second_order_diff_matrix = Diff2.T.dot(Diff2)
-    
-    def frobenius_norm(self, log_lambdas):
-        """cost function for regularized least square method for inferring 
-        lambdas"""
-        lambdas = np.exp(log_lambdas)
-        Frob1 = lambdas.dot(self.M).dot(lambdas)
-        Frob2 = 2 * lambdas.dot(self.a)
-        Frob = Frob1 - Frob2
-        if self.beta > 0:
-            Frob += self.beta * log_lambdas[1:].dot(self.second_order_diff_matrix).dot(log_lambdas[1:])
-        return(Frob)
-    
-    def frobenius_norm_grad(self, log_lambdas):
-        msg = 'gradient calculation only implemented for beta=0'
-        check_error(self.beta == 0, msg=msg)
-        lambdas = np.exp(log_lambdas)
-        grad_Frob = (2 * self.M.dot(lambdas) - 2 * self.a)
-        return(grad_Frob * lambdas)
-    
-    def construct_M(self, N_d):
-        size = self.seq_length + 1
-        M = np.zeros([size, size])
-        for i in range(size):
-            for j in range(size):
-                for d in range(size):
-                    M[i, j] += N_d[d] * self.W_kd[i, d] * self.W_kd[j, d]
-        self.M = M
-    
-    def construct_a(self, rho_d, N_d):
-        size = self.seq_length + 1
-        a = np.zeros(size)
-        for i in range(size):
-            for d in range(size):
-                a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
-        self.a = a
-    
-    def calc_w(self, k, d):
-        """return value of the Krawtchouk polynomial for k, d"""
-        l, a = self.seq_length, self.n_alleles
-        s = 0
-        for q in range(l + 1):
-            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
-        return(1 / a**l * s)
-    
-    def calc_W_kd_matrix(self):
-        """return full matrix l+1 by l+1 Krawtchouk matrix"""
-        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
-        for k in range(self.seq_length + 1):
-            for d in range(self.seq_length + 1):
-                self.W_kd[k, d] = self.calc_w(k, d)
-    
-    def fit(self):
-        lambdas0 = np.dot(self.M_inv, self.a).flatten()
-        lambdas0[lambdas0<0] = 1e-5
-        log_lambda0 = np.log(lambdas0)
-        if self.beta == 0:
-            res = minimize(fun=self.frobenius_norm,
-                           jac=self.frobenius_norm_grad,
-                           x0=log_lambda0, method='L-BFGS-B')
-        elif self.beta > 0:
-            res = minimize(fun=self.frobenius_norm,
-                           x0=log_lambda0, method='Powell',
-                           options={'xtol': 1e-8, 'ftol': 1e-8})
-        lambdas = np.exp(res.x)
-        return(lambdas)
-    
-    def predict(self, lambdas):
-        return(self.W_kd.T.dot(lambdas))
-    
-    def calc_mse(self, lambdas):
-        ss = (self.predict(lambdas) - self.covs) ** 2
-        return(np.sum(ss * (1 / np.sum(self.distances_n)) * self.distances_n))
-            
-            

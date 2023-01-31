@@ -2,17 +2,10 @@
 import unittest
 
 import numpy as np
-import pandas as pd
-from scipy.stats.mstats_basic import pearsonr
 
 from gpmap.src.inference import VCregression
-from scipy.special._basic import comb
-from timeit import timeit
-from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
-from os.path import join
-from subprocess import check_call
-from gpmap.src.linop import LaplacianOperator, KernelAligner
-from gpmap.src.kernel import VarianceComponentKernel, SequenceKernel
+from gpmap.src.kernel import (VarianceComponentKernel, SequenceKernel,
+                              KernelAligner)
 
 
 class KernelTest(unittest.TestCase):
@@ -72,12 +65,13 @@ class KernelTest(unittest.TestCase):
         
         # Test constant covariance
         lambdas = np.array([1, 0, 0])
-        cov = kernel(lambdas=lambdas)
+        log_p = np.log(0.5) * np.ones((2, 2))
+        cov = kernel(lambdas=lambdas, log_p=log_p)
         assert(np.allclose(cov, 1))
         
         # Test additive covariance
         lambdas = np.array([0, 1, 0])
-        cov = kernel(lambdas=lambdas)
+        cov = kernel(lambdas=lambdas, log_p=log_p)
         add = np.array([[ 2.,  0.,  0., -2.],
                         [ 0.,  2., -2.,  0.],
                         [ 0., -2.,  2.,  0.],
@@ -86,13 +80,50 @@ class KernelTest(unittest.TestCase):
         
         # Test 2nd order covariance
         lambdas = np.array([0, 0, 1])
-        cov = kernel(lambdas=lambdas)
+        cov = kernel(lambdas=lambdas, log_p=log_p)
         add = np.array([[ 1., -1., -1.,  1.],
                         [-1.,  1.,  1., -1.],
                         [-1.,  1.,  1., -1.],
                         [ 1., -1., -1.,  1.]])
         assert(np.allclose(cov, add))
+    
+    def test_kernel_alignment(self):
+        np.random.seed(1)
+        seq_length, n_alleles = 5, 4
+        lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
         
+        vc = VCregression()
+        vc.init(seq_length, n_alleles)
+        aligner = KernelAligner(seq_length, n_alleles)
+        
+        data = vc.simulate(lambdas)
+        vc.set_data(X=data.index.values, y=data.y.values)
+        cov, n = vc.calc_emp_dist_cov()
+        aligner.set_data(cov, n)
+        
+        # Align with beta = 0
+        lambdas_star = aligner.fit()
+        pred = aligner.predict(lambdas_star)
+        print(cov - pred)
+        assert(np.allclose(cov, pred, rtol=0.01))
+        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
+        
+        # Align with beta > 0
+        aligner.set_beta(0.01)
+        lambdas_star = aligner.fit()
+        pred = aligner.predict(lambdas_star)
+        assert(np.allclose(cov, pred))
+        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
+        
+        # Problematic case
+        aligner.set_beta(0)
+        cov = [ 5.38809419, 3.10647274, 1.47573831,
+               0.39676481, -0.30354594, -0.70018283]
+        n = [819, 9834, 58980, 176754, 265160, 159214]
+        aligner.set_data(cov, n)
+        lambdas = aligner.fit()
+        print(lambdas)
+        assert(np.all(np.isnan(lambdas) == False)) 
         
         
 if __name__ == '__main__':

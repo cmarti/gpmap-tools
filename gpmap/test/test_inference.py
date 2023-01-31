@@ -69,7 +69,7 @@ class VCTests(unittest.TestCase):
             b1 = vc.calc_polynomial_coeffs()
             p1 = vc.project(y, k=l-1)
             b2 = vc.calc_polynomial_coeffs(numeric=True)
-            p2 = W.dot(y, k=l-1)
+            p2 = vc.W.dot(y, k=l-1)
             
             # Test coefficients of the polynomials
             assert(np.allclose(b1, b2))
@@ -207,44 +207,6 @@ class VCTests(unittest.TestCase):
         # Ensure anticorrelated distances
         assert(rho[3] < 0)
         assert(rho[4] < 0)
-    
-    def test_kernel_alignment(self):
-        np.random.seed(1)
-        seq_length, n_alleles = 5, 4
-        lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
-        
-        vc = VCregression()
-        vc.init(seq_length, n_alleles)
-        aligner = KernelAligner(seq_length, n_alleles)
-        
-        data = vc.simulate(lambdas)
-        vc.set_data(X=data.index.values, y=data.y.values)
-        cov, n = vc.calc_emp_dist_cov()
-        aligner.set_data(cov, n)
-        
-        # Align with beta = 0
-        lambdas_star = aligner.fit()
-        pred = aligner.predict(lambdas_star)
-        print(cov - pred)
-        assert(np.allclose(cov, pred, rtol=0.01))
-        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
-        
-        # Align with beta > 0
-        aligner.set_beta(0.01)
-        lambdas_star = aligner.fit()
-        pred = aligner.predict(lambdas_star)
-        assert(np.allclose(cov, pred))
-        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
-        
-        # Problematic case
-        aligner.set_beta(0)
-        cov = [ 5.38809419, 3.10647274, 1.47573831,
-               0.39676481, -0.30354594, -0.70018283]
-        n = [819, 9834, 58980, 176754, 265160, 159214]
-        aligner.set_data(cov, n)
-        lambdas = aligner.fit()
-        print(lambdas)
-        assert(np.all(np.isnan(lambdas) == False)) 
     
     def test_vc_fit(self):
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])

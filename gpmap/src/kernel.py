@@ -1,19 +1,19 @@
 import numpy as np
 
+from itertools import combinations
 from scipy.special._basic import comb
 from scipy.special._logsumexp import logsumexp
+from scipy.optimize._minimize import minimize
 
 from gpmap.src.seq import seq_to_one_hot
-from gpmap.src.linop import ProjectionOperator, LaplacianOperator
 from gpmap.src.utils import check_error
 
 
 class SequenceKernel(object):
-    def __init__(self, n_alleles, seq_length, q=None):
+    def __init__(self, n_alleles, seq_length):
         self.alpha = n_alleles
         self.l = seq_length
         self.lp1 = self.l + 1
-        self.t = self.l * self.alpha
 
     def inner_product(self, x1, x2, metric=None):
         if metric is None:
@@ -42,17 +42,12 @@ class VarianceComponentKernel(SequenceKernel):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.use_p = use_p
         
-        if use_p:
-            ps = 1. /n_alleles * np.ones((seq_length, n_alleles))
-            L = LaplacianOperator(n_alleles=n_alleles, seq_length=seq_length,
-                                   max_size=1, ps=ps)
-            W = ProjectionOperator(L=L)
-            self.B = W.B
-            
+        if self.use_p:
             if q is None:
                 q = (self.l - 1) / self.l
             self.q = q
             self.logq = np.log(q)
+            self.B = self.calc_polynomial_coeffs()
             ks = np.arange(self.lp1)
             log_q_powers = self.logq * ks
             log_1mq_powers = np.append([-np.inf], np.log(1 - np.exp(log_q_powers[1:])))
@@ -60,6 +55,24 @@ class VarianceComponentKernel(SequenceKernel):
             self.log_odds = log_q_powers - log_1mq_powers
         else:
             self.calc_krawchouk_matrix()
+    
+    def calc_polynomial_coeffs(self):
+        k = np.arange(self.lp1)
+        lambdas = np.exp(k * self.logq) 
+        
+        B = np.zeros((self.lp1, self.lp1))
+        idx = np.arange(self.lp1)
+        for k in idx:
+            k_idx = idx != k
+            k_lambdas = lambdas[k_idx]
+            norm_factor = 1 / np.prod(k_lambdas - lambdas[k])
+        
+            for power in idx:
+                lambda_combs = list(combinations(k_lambdas, self.l - power))
+                p = np.sum([np.prod(v) for v in lambda_combs])
+                B[power, k] = (-1) ** (power) * p * norm_factor
+
+        return(B)
     
     def set_extra_data(self):
         self.same_seq = self.x1.dot(self.x2.T) == self.l
@@ -91,16 +104,114 @@ class VarianceComponentKernel(SequenceKernel):
             log_factors = logsumexp(log_factors, 1)
             M = np.diag(log_factors)
             m = self.inner_product(self.x1, self.x2, M)
-            cov += coeffs[power] * np.exp(self.log_scaling_factors[power] + m)
+            cov += coeffs[power] * np.exp(self.lsf[power] + m)
         return(cov)
     
-    def forward(self, lambdas, ps=None):
+    def forward(self, lambdas, log_p=None):
         if self.use_p:
-            check_error(ps is not None, msg='ps must be provided')
+            check_error(log_p is not None, msg='ps must be provided')
+            cov = self._forward_ps(lambdas, log_p)
+        else:
             hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
             cov = self.W_kd.dot(lambdas)[hamming_distance]
-        else:
-            self._forward_ps(lambdas, ps)
         return(cov)
+
+
+class KernelAligner(object):
+    def __init__(self, seq_length, n_alleles, beta=0):
+        self.seq_length = seq_length
+        self.n_alleles = n_alleles
+        self.set_beta(beta)
+        self.calc_W_kd_matrix()
+        self.calc_second_order_diff_matrix()
     
+    def set_data(self, covs, distances_n):
+        self.covs = covs
+        self.distances_n = distances_n
+        self.construct_a(covs, distances_n)
+        self.construct_M(distances_n)
+        self.M_inv = np.linalg.inv(self.M)
     
+    def set_beta(self, beta):
+        check_error(beta >=0, msg='beta must be >= 0')
+        self.beta = beta
+    
+    def calc_second_order_diff_matrix(self):
+        """Construct second order difference matrix for regularization"""
+        Diff2 = np.zeros((self.seq_length - 2, self.seq_length))
+        for i in range(Diff2.shape[0]):
+            Diff2[i, i:i + 3] = [-1, 2, -1]
+        self.second_order_diff_matrix = Diff2.T.dot(Diff2)
+    
+    def frobenius_norm(self, log_lambdas):
+        """cost function for regularized least square method for inferring 
+        lambdas"""
+        lambdas = np.exp(log_lambdas)
+        Frob1 = lambdas.dot(self.M).dot(lambdas)
+        Frob2 = 2 * lambdas.dot(self.a)
+        Frob = Frob1 - Frob2
+        if self.beta > 0:
+            Frob += self.beta * log_lambdas[1:].dot(self.second_order_diff_matrix).dot(log_lambdas[1:])
+        return(Frob)
+    
+    def frobenius_norm_grad(self, log_lambdas):
+        msg = 'gradient calculation only implemented for beta=0'
+        check_error(self.beta == 0, msg=msg)
+        lambdas = np.exp(log_lambdas)
+        grad_Frob = (2 * self.M.dot(lambdas) - 2 * self.a)
+        return(grad_Frob * lambdas)
+    
+    def construct_M(self, N_d):
+        size = self.seq_length + 1
+        M = np.zeros([size, size])
+        for i in range(size):
+            for j in range(size):
+                for d in range(size):
+                    M[i, j] += N_d[d] * self.W_kd[i, d] * self.W_kd[j, d]
+        self.M = M
+    
+    def construct_a(self, rho_d, N_d):
+        size = self.seq_length + 1
+        a = np.zeros(size)
+        for i in range(size):
+            for d in range(size):
+                a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
+        self.a = a
+    
+    def calc_w(self, k, d):
+        """return value of the Krawtchouk polynomial for k, d"""
+        l, a = self.seq_length, self.n_alleles
+        s = 0
+        for q in range(l + 1):
+            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
+        return(1 / a**l * s)
+    
+    def calc_W_kd_matrix(self):
+        """return full matrix l+1 by l+1 Krawtchouk matrix"""
+        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
+        for k in range(self.seq_length + 1):
+            for d in range(self.seq_length + 1):
+                self.W_kd[k, d] = self.calc_w(k, d)
+    
+    def fit(self):
+        lambdas0 = np.dot(self.M_inv, self.a).flatten()
+        lambdas0[lambdas0<0] = 1e-5
+        log_lambda0 = np.log(lambdas0)
+        if self.beta == 0:
+            res = minimize(fun=self.frobenius_norm,
+                           jac=self.frobenius_norm_grad,
+                           x0=log_lambda0, method='L-BFGS-B')
+        elif self.beta > 0:
+            res = minimize(fun=self.frobenius_norm,
+                           x0=log_lambda0, method='Powell',
+                           options={'xtol': 1e-8, 'ftol': 1e-8})
+        lambdas = np.exp(res.x)
+        return(lambdas)
+    
+    def predict(self, lambdas):
+        return(self.W_kd.T.dot(lambdas))
+    
+    def calc_mse(self, lambdas):
+        ss = (self.predict(lambdas) - self.covs) ** 2
+        return(np.sum(ss * (1 / np.sum(self.distances_n)) * self.distances_n))
+              
