@@ -12,6 +12,8 @@ from scipy.special._basic import comb
 from scipy.linalg.basic import solve
 from scipy.sparse.linalg import cg
 from scipy.special._logsumexp import logsumexp
+from scipy.stats.stats import pearsonr
+from scipy.stats._continuous_distns import norm
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
@@ -19,10 +21,9 @@ from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_matrix_polynomial_quad)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
-from gpmap.src.linop import DeltaPOperator, ProjectionOperator,\
-    LaplacianOperator, KernelAligner
-from scipy.stats.stats import pearsonr
-from scipy.stats._continuous_distns import norm
+from gpmap.src.linop import (DeltaPOperator, ProjectionOperator,
+                             LaplacianOperator)
+from gpmap.src.kernel import KernelAligner
 
 
 class LandscapeEstimator(object):
@@ -63,6 +64,7 @@ class LandscapeEstimator(object):
     def set_config(self, seq_length, n_alleles, alphabet):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
+        self.alphabet = alphabet
         self.n_genotypes = n_alleles ** seq_length
         self.genotypes = np.array(list(get_seqs_from_alleles(alphabet)))
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
