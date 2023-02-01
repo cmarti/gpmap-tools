@@ -46,14 +46,18 @@ class LaplacianOperator(SeqLinOperator):
         self.calc_lambdas_multiplicity()
         self.calc_W_kd_matrix()
     
+    def set_ps(self, ps):
+        if ps is None:
+            ps = [np.ones(self.alpha)] * self.l
+        check_error(len(ps) == self.l)
+        self.ps = ps
+    
     def calc_lambdas(self):
         self.lambdas = np.arange(self.l + 1)
         if self.ps is None:
             self.lambdas *= self.alpha
     
-    def calc_Kn(self, p=None):
-        if p is None:
-            p = np.ones(self.alpha)
+    def calc_Kn(self, p):
         Kn = np.vstack([p] * p.shape[0])
         np.fill_diagonal(Kn, np.zeros(Kn.shape[0]))
         return(Kn)
@@ -66,16 +70,13 @@ class LaplacianOperator(SeqLinOperator):
                 break
         return(k)
     
-    def calc_Kns(self, ps=None):
-        if ps is None:
-            ps = [None] * self.l
-
+    def calc_Kns(self):
         if self.max_size is None:            
-            Kns = [csr_matrix(self.calc_Kn(p)) for p in ps]
+            Kns = [csr_matrix(self.calc_Kn(p)) for p in self.ps]
         else:
             size = self.guess_n_products()
-            Kns = [self.calc_Kn(p) for p in ps[:-size]]
-            Kns.append(calc_cartesian_product([csr_matrix(self.calc_Kn(p)) for p in ps[-size:]]).tocsr())
+            Kns = [self.calc_Kn(p) for p in self.ps[:-size]]
+            Kns.append(calc_cartesian_product([csr_matrix(self.calc_Kn(p)) for p in self.ps[-size:]]).tocsr())
         self.Kns = Kns
         self.Kns_shape = [x.shape for x in Kns]
     
