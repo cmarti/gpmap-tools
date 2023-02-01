@@ -104,7 +104,6 @@ class KernelTest(unittest.TestCase):
         # Align with beta = 0
         lambdas_star = aligner.fit()
         pred = aligner.predict(lambdas_star)
-        print(cov - pred)
         assert(np.allclose(cov, pred, rtol=0.01))
         assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
         
@@ -122,31 +121,53 @@ class KernelTest(unittest.TestCase):
         n = [819, 9834, 58980, 176754, 265160, 159214]
         aligner.set_data(cov, n)
         lambdas = aligner.fit()
-        print(lambdas)
         assert(np.all(np.isnan(lambdas) == False))
     
-    def test_full_kernel_alignment(self):
-        np.random.seed(1)
-        seq_length, n_alleles = 4, 4
-        lambdas = np.array([1, 200, 20, 2, 0.2])
+    def test_full_kernel_alignment_small(self):
+        X = np.array(['AA', 'AB', 'BA', 'BB'])
+        alleles = ['A', 'B']
+        
+        kernel = VarianceComponentKernel(2, 2)
+        aligner = FullKernelAligner(kernel=kernel)
+        
+        # Constant model
+        y = np.array([1, 1, 1, 1])
+        aligner.set_data(X=X, y=y, alleles=alleles)
+        lambdas_star = aligner.fit()
+        assert(np.allclose(lambdas_star, [1, 0, 0]))
+        
+        # Additive model
+        y = np.array([-2, 0, 0, 2])
+        aligner.set_data(X=X, y=y, alleles=alleles)
+        lambdas_star = aligner.fit()
+        assert(np.allclose(lambdas_star, [0, 1, 0]))
+        
+        # Pairwise model
+        y = np.array([1, -1, -1, 1])
+        aligner.set_data(X=X, y=y, alleles=alleles)
+        lambdas_star = aligner.fit()
+        assert(np.allclose(lambdas_star, [0, 0, 1]))
+        
+    def test_full_kernel_alignment_medium(self):
+        l, a = 4, 4
+        lambdas = np.zeros(l+1)
+        lambdas[1] = 1
         
         vc = VCregression()
-        vc.init(seq_length, n_alleles)
+        vc.init(l, a)
         data = vc.simulate(lambdas)
+        X, y = data.index.values, data.y.values
         alleles = np.unique(vc.alphabet)
         
-        kernel = VarianceComponentKernel(seq_length, n_alleles, use_p=False)
+        kernel = VarianceComponentKernel(l, a)
         aligner = FullKernelAligner(kernel=kernel)
-        aligner.set_data(X=data.index.values, y=data.y.values, alleles=alleles)
         
-        # Align with beta = 0
-        lambdas_star = aligner.fit(np.log(lambdas+1e-6))
-        error1 = aligner.squared_frobenius_norm(lambdas_star)
-        error2 = aligner.squared_frobenius_norm(lambdas)
-        assert(error2 >= error1)
-        print(lambdas_star, lambdas)
+        aligner.set_data(X=X, y=y, alleles=alleles)
+        lambdas_star = aligner.fit()
+        assert(np.allclose(lambdas_star / lambdas_star[1], lambdas))
+        
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'KernelTest.test_full_kernel_alignment']
+    import sys;sys.argv = ['', 'KernelTest.test_full_kernel_alignment_medium']
     unittest.main()

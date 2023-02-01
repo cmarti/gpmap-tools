@@ -32,8 +32,8 @@ class LaplacianOperator(SeqLinOperator):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.max_size = max_size
     
-        self.ps = ps
-        self.calc_Kns(ps=ps)
+        self.set_ps(ps)
+        self.calc_Kns()
             
         if max_size is None:
             self.calc_L()
@@ -49,12 +49,12 @@ class LaplacianOperator(SeqLinOperator):
     def set_ps(self, ps):
         if ps is None:
             ps = [np.ones(self.alpha)] * self.l
-        check_error(len(ps) == self.l)
+        check_error(len(ps) == self.l, msg='Number of ps should be equal to length')
         self.ps = ps
     
     def calc_lambdas(self):
         self.lambdas = np.arange(self.l + 1)
-        if self.ps is None:
+        if self.ps is None or np.unique(self.ps).shape[0] == 1:
             self.lambdas *= self.alpha
     
     def calc_Kn(self, p):
@@ -125,7 +125,7 @@ class LaplacianOperator(SeqLinOperator):
                                      for k in range(self.lp1)]
     
     def calc_w(self, k, d):
-        if self.ps is not None:
+        if self.ps is not None and np.unique(self.ps).shape[0] > 1:
             raise ValueError('w method not implemented for unequal ps')
         
         """return value of the Krawtchouk polynomial for k, d"""
@@ -148,7 +148,7 @@ class LapDepOperator(SeqLinOperator):
         if L is None:
             msg = 'either L or both seq_length and n_alleles must be given'
             check_error(n_alleles is not None and seq_length is not None, msg=msg)
-            L = LaplacianOperator(n_alleles, seq_length, max_L_size=max_L_size)
+            L = LaplacianOperator(n_alleles, seq_length, max_size=max_L_size)
         else:
             msg = 'either L or both seq_length and n_alleles must be given'
             check_error(L is not None, msg=msg)
@@ -163,13 +163,17 @@ class DeltaPOperator(LapDepOperator):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
                          max_L_size=max_L_size)
         self.set_P(P)
-        self.n_p_faces = self.calc_n_p_faces()
+        self.calc_kernel_dimension()
+        self.calc_n_p_faces()
+
+    def calc_kernel_dimension(self):
+        self.kernel_dimension = np.sum(self.L.lambdas_multiplicity[:self.P])
     
     def calc_n_p_faces(self):
         n_p_sites = comb(self.l, self.P)
         n_p_faces_per_sites = comb(self.alpha, 2) ** self.P
         allelic_comb_remaining_sites = self.alpha ** (self.l - self.P)
-        return(n_p_sites * n_p_faces_per_sites * allelic_comb_remaining_sites)
+        self.n_p_faces = n_p_sites * n_p_faces_per_sites * allelic_comb_remaining_sites
         
     def set_P(self, P):
         self.P = P
@@ -238,13 +242,13 @@ class VjProjectionOperator(LapDepOperator):
 
     
 class ProjectionOperator(LapDepOperator):
-    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=False):
+    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
                          max_L_size=max_L_size)
         self.calc_polynomial_coeffs()
     
     def calc_eig_vandermonde_matrix(self):
-        V = np.vstack([self.L.lambdas ** i for i in range(self.seq_length + 1)]).T
+        V = np.vstack([self.L.lambdas ** i for i in range(self.lp1)]).T
         return(V)
     
     def calc_polynomial_coeffs(self, numeric=False):

@@ -145,8 +145,9 @@ class VCregression(LandscapeEstimator):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
-        self.W = ProjectionOperator(L=LaplacianOperator(self.n_alleles, self.seq_length, ps=ps,
-                                                        max_size=self.max_L_size))
+        L =  LaplacianOperator(self.n_alleles, self.seq_length, ps=ps, 
+                               max_size=self.max_L_size)
+        self.W = ProjectionOperator(L=L)
         self.calc_L_powers_unique_entries_matrix()
         
     def get_obs_idx(self, seqs):

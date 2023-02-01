@@ -10,7 +10,7 @@ from gpmap.src.utils import check_error
 
 
 class SequenceKernel(object):
-    def __init__(self, n_alleles, seq_length):
+    def __init__(self, seq_length, n_alleles):
         self.alpha = n_alleles
         self.l = seq_length
         self.lp1 = self.l + 1
@@ -34,12 +34,15 @@ class SequenceKernel(object):
             self.set_extra_data(**kwargs)
     
     def __call__(self, **kwargs):
-        return(self.forward( **kwargs))
+        return(self.forward(**kwargs))
+    
+    def grad(self, **kwargs):
+        return(self.backward(**kwargs))
 
 
 class VarianceComponentKernel(SequenceKernel):
-    def __init__(self, n_alleles, seq_length, q=None, use_p=False):
-        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+    def __init__(self, seq_length, n_alleles, q=None, use_p=False):
+        super().__init__(seq_length=seq_length, n_alleles=n_alleles)
         self.use_p = use_p
         
         if self.use_p:
@@ -55,6 +58,10 @@ class VarianceComponentKernel(SequenceKernel):
             self.log_odds = log_q_powers - log_1mq_powers
         else:
             self.calc_krawchouk_matrix()
+            
+        self.n_params = self.lp1
+        if use_p:
+            self.n_params += self.l * self.alpha
     
     def calc_polynomial_coeffs(self):
         k = np.arange(self.lp1)
@@ -116,13 +123,32 @@ class VarianceComponentKernel(SequenceKernel):
             cov = self.W_kd.dot(lambdas)[hamming_distance]
         return(cov)
     
+    def backward(self):
+        if self.use_p:
+            raise ValueError('Not implemented for variable p')
+        else:
+            hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
+            grad = [self.W_kd[k, :][hamming_distance] for k in range(self.lp1)]
+        return(grad)
+        
+
+    def get_params0(self):
+        params = np.append([-10], 2-np.arange(self.l))
+        if self.use_p:
+            params = np.append(params, np.zeros(self.l * self.alpha))
+        return(params)
+    
     def split_params(self, params):
         params_dict = {}
         if self.use_p:
-            params_dict['log_lambdas'] = params[:self.lp1]
-            params_dict['log_ps'] = params[self.lp1:].reshape(self.l, self.alpha)
+            params_dict['lambdas'] = np.exp(params[:self.lp1])
+            log_ps = params[self.lp1:].reshape(self.l, self.alpha)
+            norm_factors = logsumexp(log_ps, axis=1)
+            for i in range(log_ps.shape[1]):
+                log_ps[:, i] -= log_ps[:, i] - norm_factors
+            params_dict['ps'] = np.exp(log_ps)
         else:
-            params_dict['log_lambdas'] = params
+            params_dict['lambdas'] = np.exp(params)
         return(params_dict) 
 
 class FullKernelAligner(object):
@@ -142,12 +168,18 @@ class FullKernelAligner(object):
         self.n = y.shape[0]
         
         self.kernel.set_data(X, alleles=alleles)
-        y_res = (y - y.mean()).reshape((self.n, 1))
+        y_res = y.reshape((self.n, 1))
         self.target = y_res.dot(y_res.T)
     
-    def squared_frobenius_norm(self, lambdas):
-        cov = self.predict(lambdas=lambdas)
+    def squared_frobenius_norm(self, **kwargs):
+        cov = self.predict(**kwargs)
         return((np.power(cov - self.target,  2).mean()))
+    
+    def squared_frobenius_norm_grad(self, **kwargs):
+        cov = self.predict(**kwargs)
+        diff2 = 2*(cov - self.target)
+        grad = [np.sum(diff2 * grad_k for grad_k in self.kernel.grad())]
+        return(grad)
     
     def calc_reg_lambdas(self, log_lambdas):
         if self.beta == 0:
@@ -159,27 +191,27 @@ class FullKernelAligner(object):
     def calc_reg_ps(self, ps):
         return(0)
     
-    def split_params(self, params):
-        return(params, None)
-    
     def loss(self, params):
-        log_lambdas, ps = self.kernel.split_params(params)
-        frob = self.squared_frobenius_norm(np.exp(log_lambdas))
-        reg_lambdas = self.calc_reg_lambdas(log_lambdas)
-        reg_ps = self.calc_reg_ps(ps)
-        return(frob + reg_lambdas + reg_ps)
+        params_dict = self.kernel.split_params(params)
+        frob = self.squared_frobenius_norm(**params_dict)
+        
+        # reg_lambdas = self.calc_reg_lambdas(params_dict['log_lambdas'])
+        # reg_ps = self.calc_reg_ps(params_dict['log_ps'])
+        
+        
+        return(frob)
     
-    def fit(self, log_lambda0=None):
-        if log_lambda0 is None:
-            log_lambda0 = np.append([-10], 2-np.arange(self.seq_length))
+    def fit(self, params0=None):
+        if params0 is None:
+            params0 = self.kernel.get_params0()
         res = minimize(fun=self.loss,
-                       x0=log_lambda0, method='Powell',
+                       x0=params0, method='Powell',
                        options={'xtol': 1e-8, 'ftol': 1e-8, 'maxiter': 1e5})
         lambdas = np.exp(res.x)
         return(lambdas)
     
-    def predict(self, lambdas):
-        return(self.kernel(lambdas=lambdas))
+    def predict(self, **kwargs):
+        return(self.kernel(**kwargs))
 
 
 class KernelAligner(object):
