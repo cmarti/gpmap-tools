@@ -64,6 +64,7 @@ class LandscapeEstimator(object):
     def set_config(self, seq_length, n_alleles, alphabet):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
+        self.alphabet = alphabet
         self.n_genotypes = n_alleles ** seq_length
         self.genotypes = np.array(list(get_seqs_from_alleles(alphabet)))
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),

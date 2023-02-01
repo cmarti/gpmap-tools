@@ -115,6 +115,71 @@ class VarianceComponentKernel(SequenceKernel):
             hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
             cov = self.W_kd.dot(lambdas)[hamming_distance]
         return(cov)
+    
+    def split_params(self, params):
+        params_dict = {}
+        if self.use_p:
+            params_dict['log_lambdas'] = params[:self.lp1]
+            params_dict['log_ps'] = params[self.lp1:].reshape(self.l, self.alpha)
+        else:
+            params_dict['log_lambdas'] = params
+        return(params_dict) 
+
+class FullKernelAligner(object):
+    def __init__(self, kernel, beta=0):
+        self.kernel = kernel
+        self.seq_length = kernel.l
+        self.n_alleles = kernel.alpha
+        self.set_beta(beta)
+    
+    def set_beta(self, beta):
+        check_error(beta >=0, msg='beta must be >= 0')
+        self.beta = beta
+    
+    def set_data(self, X, y, alleles=None):
+        self.X = X
+        self.y = y
+        self.n = y.shape[0]
+        
+        self.kernel.set_data(X, alleles=alleles)
+        y_res = (y - y.mean()).reshape((self.n, 1))
+        self.target = y_res.dot(y_res.T)
+    
+    def squared_frobenius_norm(self, lambdas):
+        cov = self.predict(lambdas=lambdas)
+        return((np.power(cov - self.target,  2).mean()))
+    
+    def calc_reg_lambdas(self, log_lambdas):
+        if self.beta == 0:
+            reg = 0
+        else:
+            reg = 0
+        return(reg)
+    
+    def calc_reg_ps(self, ps):
+        return(0)
+    
+    def split_params(self, params):
+        return(params, None)
+    
+    def loss(self, params):
+        log_lambdas, ps = self.kernel.split_params(params)
+        frob = self.squared_frobenius_norm(np.exp(log_lambdas))
+        reg_lambdas = self.calc_reg_lambdas(log_lambdas)
+        reg_ps = self.calc_reg_ps(ps)
+        return(frob + reg_lambdas + reg_ps)
+    
+    def fit(self, log_lambda0=None):
+        if log_lambda0 is None:
+            log_lambda0 = np.append([-10], 2-np.arange(self.seq_length))
+        res = minimize(fun=self.loss,
+                       x0=log_lambda0, method='Powell',
+                       options={'xtol': 1e-8, 'ftol': 1e-8, 'maxiter': 1e5})
+        lambdas = np.exp(res.x)
+        return(lambdas)
+    
+    def predict(self, lambdas):
+        return(self.kernel(lambdas=lambdas))
 
 
 class KernelAligner(object):

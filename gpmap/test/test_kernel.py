@@ -5,7 +5,7 @@ import numpy as np
 
 from gpmap.src.inference import VCregression
 from gpmap.src.kernel import (VarianceComponentKernel, SequenceKernel,
-                              KernelAligner)
+                              KernelAligner, FullKernelAligner)
 
 
 class KernelTest(unittest.TestCase):
@@ -117,15 +117,36 @@ class KernelTest(unittest.TestCase):
         
         # Problematic case
         aligner.set_beta(0)
-        cov = [ 5.38809419, 3.10647274, 1.47573831,
+        cov = [5.38809419, 3.10647274, 1.47573831,
                0.39676481, -0.30354594, -0.70018283]
         n = [819, 9834, 58980, 176754, 265160, 159214]
         aligner.set_data(cov, n)
         lambdas = aligner.fit()
         print(lambdas)
-        assert(np.all(np.isnan(lambdas) == False)) 
+        assert(np.all(np.isnan(lambdas) == False))
+    
+    def test_full_kernel_alignment(self):
+        np.random.seed(1)
+        seq_length, n_alleles = 4, 4
+        lambdas = np.array([1, 200, 20, 2, 0.2])
+        
+        vc = VCregression()
+        vc.init(seq_length, n_alleles)
+        data = vc.simulate(lambdas)
+        alleles = np.unique(vc.alphabet)
+        
+        kernel = VarianceComponentKernel(seq_length, n_alleles, use_p=False)
+        aligner = FullKernelAligner(kernel=kernel)
+        aligner.set_data(X=data.index.values, y=data.y.values, alleles=alleles)
+        
+        # Align with beta = 0
+        lambdas_star = aligner.fit(np.log(lambdas+1e-6))
+        error1 = aligner.squared_frobenius_norm(lambdas_star)
+        error2 = aligner.squared_frobenius_norm(lambdas)
+        assert(error2 >= error1)
+        print(lambdas_star, lambdas)
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'KernelTest']
+    import sys;sys.argv = ['', 'KernelTest.test_full_kernel_alignment']
     unittest.main()
