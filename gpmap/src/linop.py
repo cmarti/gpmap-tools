@@ -13,8 +13,8 @@ from scipy.sparse.linalg.interface import LinearOperator
 from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
                              calc_cartesian_product_dot,
-    calc_tensor_product_dot, calc_tensor_product_quad, get_sparse_diag_matrix)
-from scipy.sparse.linalg.isolve.iterative import cg
+                             calc_tensor_product_dot, calc_tensor_product_quad, 
+                             get_sparse_diag_matrix)
 
 
 class SeqLinOperator(object):
@@ -324,7 +324,6 @@ class ProjectionOperator(LapDepOperator):
     
 
 class KernelOperator(SeqLinOperator):
-    # TODO: add rows and cols to dot method
     def __init__(self, W):
         self.W = W
         self.D_pi_inv = get_sparse_diag_matrix(1 / W.L.D_pi.data.flatten())
