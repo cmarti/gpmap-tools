@@ -233,6 +233,9 @@ class VjProjectionOperator(LapDepOperator):
         self.W1 = [np.eye(self.alpha) - w0 for w0 in self.W0]
     
     def set_j(self, positions):
+        # TODO: calculate some matrix product to accelerate calculations
+        # We can cache the matrices for every low order j and use them
+        # when necessary
         self.matrices = [self.W1[i] if i in positions else self.W0[i]
                          for i in range(self.l)]
     
