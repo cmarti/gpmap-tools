@@ -5,7 +5,6 @@ import numpy as np
 from itertools import combinations
 from timeit import timeit
 
-from gpmap.src.inference import VCregression
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator)
 
@@ -21,6 +20,14 @@ class LinOpsTests(unittest.TestCase):
         v = np.array([1, 2, 1, 0])
         u = np.array([-1, 3, 1, -3])
         assert(np.allclose(L.dot(v), u))
+    
+    def test_laplacian_D_pi(self):
+        L = LaplacianOperator(2, 2)
+        assert(np.allclose(L.D_pi.data, 1))
+        
+        L = LaplacianOperator(2, 2, ps=np.array([[0.4, 0.6], [0.5, 0.5]]))
+        pi = np.array([0.2, 0.2, 0.3, 0.3])
+        assert(np.allclose(L.D_pi.data, pi))
     
     def test_laplacian_eigenvalues(self):
         L = LaplacianOperator(2, 2)
@@ -175,5 +182,5 @@ class LinOpsTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests']
+    import sys;sys.argv = ['', 'LinOpsTests.test_laplacian_D_pi']
     unittest.main()

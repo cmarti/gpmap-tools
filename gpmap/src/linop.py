@@ -11,7 +11,7 @@ from scipy.special._basic import comb
 from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
                              calc_cartesian_product_dot,
-    calc_tensor_product_dot, calc_tensor_product_quad)
+    calc_tensor_product_dot, calc_tensor_product_quad, get_sparse_diag_matrix)
 
 
 class SeqLinOperator(object):
@@ -47,10 +47,13 @@ class LaplacianOperator(SeqLinOperator):
             self.calc_W_kd_matrix()
     
     def set_ps(self, ps):
+        self.variable_ps = ps is None
         if ps is None:
             ps = [np.ones(self.alpha)] * self.l
         check_error(len(ps) == self.l, msg='Number of ps should be equal to length')
         self.ps = ps
+        pi = calc_tensor_product([p.reshape((p.shape[0], 1)) for p in ps])
+        self.D_pi = get_sparse_diag_matrix(pi.flatten())
     
     def calc_lambdas(self):
         self.lambdas = np.arange(self.l + 1)
@@ -315,3 +318,18 @@ class ProjectionOperator(LapDepOperator):
         u = self.dot(v)
         self.set_lambdas(lambdas)
         return(u)
+    
+
+class KernelOperator(SeqLinOperator):
+    def __init__(self, W):
+        self.W = W
+        self.D_pi_inv = 1 / W.L.D_pi
+    
+    def set_lambdas(self, lambdas):
+        self.W.set_lambdas(lambdas)
+    
+    def dot(self, v):
+        if self.W.L.variable_ps:
+            return(self.W.dot(self.D_pi_inv.dot(v)))
+        else:
+            return(self.W.dot(v))
