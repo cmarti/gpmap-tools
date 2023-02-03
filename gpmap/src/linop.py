@@ -18,13 +18,25 @@ from gpmap.src.utils import (calc_cartesian_product, check_error,
 
 
 class SeqLinOperator(object):
-    def __init__(self, n_alleles, seq_length):
+    def __init__(self, n_alleles, seq_length, max_size=None):
         self.alpha = n_alleles
         self.l = seq_length
         self.lp1 = seq_length + 1
         self.n = self.alpha ** self.l
         self.d = (self.alpha - 1) * self.l
         self.shape = (self.n, self.n)
+        self.max_size = max_size
+    
+    def guess_n_products(self):
+        if self.max_size is None:
+            return(None)
+        
+        size = 1
+        for k in range(self.l):
+            size *= self.alpha
+            if size >= self.max_size:
+                break
+        return(k)
     
     def quad(self, v):
         return(np.sum(v * self.dot(v)))
@@ -32,9 +44,8 @@ class SeqLinOperator(object):
 
 class LaplacianOperator(SeqLinOperator):
     def __init__(self, n_alleles, seq_length, ps=None, max_size=None):
-        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
-        self.max_size = max_size
-    
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length,
+                         max_size=max_size)
         self.set_ps(ps)
         self.calc_Kns()
             
@@ -67,14 +78,6 @@ class LaplacianOperator(SeqLinOperator):
         Kn = np.vstack([p] * p.shape[0])
         np.fill_diagonal(Kn, np.zeros(Kn.shape[0]))
         return(Kn)
-    
-    def guess_n_products(self):
-        size = 1
-        for k in range(self.l):
-            size *= self.alpha
-            if size >= self.max_size:
-                break
-        return(k)
     
     def calc_Kns(self):
         if self.max_size is None:            
@@ -216,10 +219,12 @@ class DeltaPOperator(LapDepOperator):
 
 
 class VjProjectionOperator(LapDepOperator):
-    def __init__(self, n_alleles=None, seq_length=None, L=None):
-        super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
-                         max_L_size=True)
+    def __init__(self, n_alleles=None, seq_length=None, L=None, max_size=None):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L)
         self.calc_elementary_W()
+        self.max_size = max_size
+        self.size = self.guess_n_products()
+        self.cache = {}
     
     def calc_elementary_W(self):
         if self.L.ps is None:
@@ -231,13 +236,26 @@ class VjProjectionOperator(LapDepOperator):
         self.W0 = [np.outer(b, b).dot(D) / np.sum(b * D.dot(b))
                    for b, D in zip(self.b, self.D_pi)]
         self.W1 = [np.eye(self.alpha) - w0 for w0 in self.W0]
+        self.Ws = [[w0, w1] for w0, w1 in zip(self.W0, self.W1)]
+        
+    def get_Vj_matrix(self, js):
+        js_tuple = tuple(js)
+        if js_tuple not in self.cache:
+            m = self.l - self.size
+            ms = [self.Ws[m+p][j] for p, j in enumerate(js)]
+            self.cache[js_tuple] = calc_tensor_product(ms)
+        return(self.cache[js_tuple])
     
     def set_j(self, positions):
-        # TODO: calculate some matrix product to accelerate calculations
-        # We can cache the matrices for every low order j and use them
-        # when necessary
-        self.matrices = [self.W1[i] if i in positions else self.W0[i]
-                         for i in range(self.l)]
+        js = np.zeros(self.l, dtype=int)
+        js[positions] = 1
+
+        if self.max_size is None:
+            self.matrices = [self.Ws[p][j] for p, j in enumerate(js)]
+        else:
+            m = self.l - self.size
+            self.matrices = [self.Ws[p+m][j] for p, j in enumerate(js[:m])]
+            self.matrices.append(self.get_Vj_matrix(js[m:]))
     
     def dot(self, v):
         return(calc_tensor_product_dot(self.matrices, v))

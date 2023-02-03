@@ -157,10 +157,21 @@ class LinOpsTests(unittest.TestCase):
             
             u2 = np.zeros(v.shape[0])
             for j in combinations(np.arange(W.l), k):
-                vjp.set_j(j)
+                vjp.set_j(list(j))
                 u2 += vjp.dot(v)
             
             assert(np.allclose(u1, u2))
+    
+    def test_vj_projection_operator_mixed(self):
+        vjp = VjProjectionOperator(4, 5)
+        v = np.random.normal(size=vjp.n)
+        vjp.set_j([2, 3])
+        u1 = vjp.dot(v)
+        
+        vjp2 = VjProjectionOperator(4, 5, max_size=100)
+        vjp2.set_j([2, 3])
+        u2 = vjp2.dot(v)
+        assert(np.allclose(u1, u2))
     
     def test_kernel_operator(self):
         lambdas = np.array([0, 1, 0])
