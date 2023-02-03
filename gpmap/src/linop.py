@@ -310,7 +310,7 @@ class ProjectionOperator(LapDepOperator):
     
     def dot(self, v):
         check_error(hasattr(self, 'coeffs'),
-                    msg='"lambdas" must be define for projection')
+                    msg='"lambdas" must be defined for projection')
         projection = calc_matrix_polynomial_dot(self.coeffs, self.L, v)
         return(projection)
     
@@ -324,13 +324,17 @@ class ProjectionOperator(LapDepOperator):
     
 
 class KernelOperator(SeqLinOperator):
-    def __init__(self, W, y_var=None, obs_idx=None):
+    # TODO: add rows and cols to dot method
+    def __init__(self, W):
         self.W = W
         self.D_pi_inv = get_sparse_diag_matrix(1 / W.L.D_pi.data.flatten())
-        self.n_genotypes = W.n
+        self.n = W.n
+        self.shape = (self.n, self.n)
         
+    def set_y_var(self, y_var=None, obs_idx=None):
         if y_var is not None and obs_idx is not None:
-            msg = 'y_var and obs_idx should have same dimension'
+            msg = 'y_var and obs_idx should have same dimension: {} vs {}'
+            msg = msg.format(y_var.shape[0], obs_idx.shape[0])
             check_error(y_var.shape[0] == obs_idx.shape[0], msg=msg)
             self.known_var = True
             self.homoscedastic = np.unique(y_var).shape[0] == 1
@@ -338,15 +342,13 @@ class KernelOperator(SeqLinOperator):
             self.y_var_diag = get_sparse_diag_matrix(y_var)
             self.n_obs = obs_idx.shape[0]
             self.calc_gt_to_data_matrix(obs_idx)
+            self.shape = (self.n_obs, self.n_obs)
             
         else:
             msg = 'y_var and obs_idx must be provided with each other'
             check_error(y_var is None and obs_idx is None, msg=msg)
             self.known_var = False
         
-        self.Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.dot)
-        # self.preconditioner = LinearOperator((self.n_obs, self.n_obs), matvec=self.precond)
-    
     def set_lambdas(self, lambdas):
         self.W.set_lambdas(lambdas)
     
@@ -362,18 +364,32 @@ class KernelOperator(SeqLinOperator):
     def calc_gt_to_data_matrix(self, obs_idx):
         self.gt2data = csr_matrix((np.ones(self.n_obs),
                                    (obs_idx, np.arange(self.n_obs))),
-                                  shape=(self.n_genotypes, self.n_obs))   
+                                  shape=(self.n, self.n_obs))   
     
-    def dot(self, v):
-        if self.known_var:
-            yhat = self._dot(self.gt2data.dot(v))
-            ynoise = yhat + self.gt2data.dot(self.y_var_diag.dot(v))
-            u = self.gt2data.T.dot(ynoise)
-        else:
+    def dot(self, v, all_rows=False, add_y_var_diag=True, full_v=False):
+        if full_v:
             u = self._dot(v)
+        else:
+            u = self._dot(self.gt2data.dot(v))
+            if add_y_var_diag:
+                u += self.gt2data.dot(self.y_var_diag.dot(v))
+
+        if not all_rows:
+            u = self.gt2data.T.dot(u)
+            
         return(u)
+    
+    @property
+    def Kop(self):
+        if not hasattr(self, '_Kop'):
+            self._Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.dot)
+        return(self._Kop)
     
     def inv_dot(self, v, show=False):
         res = minres(self.Kop, v, tol=1e-6, show=show)
         self.res = res[1]
         return(res[0])
+    
+    def inv_quad(self, v, show=False):
+        u = self.inv_dot(v, show=show)
+        return(np.sum(u * v))

@@ -168,20 +168,18 @@ class LinOpsTests(unittest.TestCase):
         obs_idx = np.arange(4)
         W = ProjectionOperator(2, 2)
         W.set_lambdas(lambdas)
-        K = KernelOperator(W, y_var=y_var, obs_idx=obs_idx)
-        v = np.random.normal(size=K.n_obs)        
+        K = KernelOperator(W)
+        K.set_y_var(y_var=y_var, obs_idx=obs_idx)
+        v = np.random.normal(size=K.n_obs)
         u = K.inv_dot(K.dot(v))
         assert(np.allclose(u, v))
         
         # Large matrix
         l = 9
-        W = ProjectionOperator(4, l)
-        lambdas = np.append([0], 2-np.arange(l))
-        W.set_lambdas(lambdas)
-
-        y_var = 0.1 * np.ones(W.n)
-        obs_idx = np.arange(W.n)
-        K = KernelOperator(W, y_var=y_var, obs_idx=obs_idx)
+        K = KernelOperator(ProjectionOperator(4, l))
+        K.set_y_var(y_var=0.1 * np.ones(K.n), obs_idx=np.arange(K.n))
+        K.set_lambdas(lambdas=np.append([0], 2-np.arange(l)))
+        
         v = np.random.normal(size=K.n_obs)
         u = K.inv_dot(K.dot(v))
         assert(np.allclose(u, v))

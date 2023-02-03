@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 import unittest
-
 import numpy as np
 import pandas as pd
+
+from os.path import join
+from itertools import combinations
+from timeit import timeit
+from subprocess import check_call
+
 from scipy.stats.mstats_basic import pearsonr
+from scipy.special._basic import comb
 
 from gpmap.src.inference import VCregression
-from scipy.special._basic import comb
-from timeit import timeit
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
-from os.path import join
-from subprocess import check_call
-from gpmap.src.linop import LaplacianOperator, KernelAligner, ProjectionOperator,\
-    VjProjectionOperator
-from itertools import combinations
+from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
+                             VjProjectionOperator)
 
 
 class VCTests(unittest.TestCase):
@@ -273,7 +274,7 @@ class VCTests(unittest.TestCase):
         assert(mse < 0.05)
         
         # Estimate posterior variances
-        pred = vc.predict(estimate_variance=True)
+        pred = vc.predict(calc_variance=True)
         assert('var' in pred.columns)
         assert(np.all(pred['var'] > 0))
         
@@ -353,5 +354,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_vc_predict_max_L_size']
+    import sys;sys.argv = ['', 'VCTests']
     unittest.main()

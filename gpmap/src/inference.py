@@ -4,25 +4,21 @@ import pandas as pd
 
 from numpy.linalg.linalg import matrix_power
 from tqdm import tqdm
-from scipy.sparse.csr import csr_matrix
-from scipy.sparse.linalg.interface import LinearOperator
-from scipy.sparse.linalg.isolve import minres
 from scipy.optimize._minimize import minimize
 from scipy.special._basic import comb
 from scipy.linalg.basic import solve
-from scipy.sparse.linalg import cg
 from scipy.special._logsumexp import logsumexp
 from scipy.stats.stats import pearsonr
 from scipy.stats._continuous_distns import norm
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
-from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
+from gpmap.src.utils import (check_error,
                              reciprocal, get_CV_splits,
                              calc_matrix_polynomial_quad)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles)
 from gpmap.src.linop import (DeltaPOperator, ProjectionOperator,
-                             LaplacianOperator)
+                             LaplacianOperator, KernelOperator)
 from gpmap.src.kernel import KernelAligner
 
 
@@ -147,30 +143,15 @@ class VCregression(LandscapeEstimator):
         self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
         L =  LaplacianOperator(self.n_alleles, self.seq_length, ps=ps, 
                                max_size=self.max_L_size)
-        self.W = ProjectionOperator(L=L)
-        self.calc_L_powers_unique_entries_matrix()
+        self.K = KernelOperator(W=ProjectionOperator(L=L))
+        self.calc_L_powers_unique_entries_matrix() # For covariance d calculations
         
     def get_obs_idx(self, seqs):
         obs_idx = self.genotype_idxs[seqs]
         return(obs_idx)
     
-    def get_gt_to_data_matrix(self, idx=None, subset_idx=None):
-        if idx is None:
-            idx = self.genotype_idxs.values
-        
-        if subset_idx is None:
-            obs_idx = idx.copy()
-        else:
-            obs_idx = idx[subset_idx]
-            
-        n_obs = obs_idx.shape[0]
-        gt2data = csr_matrix((np.ones(n_obs), (obs_idx, np.arange(n_obs))),
-                             shape=(self.n_genotypes, n_obs))
-        return(gt2data)
-
     def set_data(self, X, y, y_var=None):
         self.init(genotypes=X)
-        self.obs_idx = self.get_obs_idx(X)
         self.X = X
         self.y = y
         self.n_obs = y.shape[0]
@@ -179,9 +160,8 @@ class VCregression(LandscapeEstimator):
             y_var = np.zeros(y.shape[0])    
                 
         self.y_var = y_var
-        self.E_sparse = get_sparse_diag_matrix(y_var)
-        self.gt2data = self.get_gt_to_data_matrix(self.obs_idx)
-    
+        self.K.set_y_var(y_var=y_var, obs_idx=self.get_obs_idx(X))
+        
     def calc_cv_loss(self, cv_data):
         for beta, fold, train, test in tqdm(cv_data, total=self.total_folds):
             X_train, y_train, y_var_train = train 
@@ -290,9 +270,9 @@ class VCregression(LandscapeEstimator):
     
     def set_lambdas(self, lambdas):
         self.lambdas = lambdas
-        self.W.set_lambdas(lambdas=lambdas)
+        self.K.set_lambdas(lambdas=lambdas)
     
-    def predict(self, Xpred=None, estimate_variance=False):
+    def predict(self, Xpred=None, calc_variance=False):
         """
         Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
         the provided or all genotypes
@@ -316,49 +296,38 @@ class VCregression(LandscapeEstimator):
                    If ``estimate_variance=True``, then it has an additional
                    column with the posterior variances for each genotype
         """
-        
-        # Minimize error given lambdas
-        Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.K_BB_E_dot)
-        a_star = minres(Kop, self.y, tol=1e-9)[0]
-        ypred = self.W.dot(self.gt2data.dot(a_star))
+        a_star = self.K.inv_dot(self.y)
+        ypred = self.K.dot(a_star, all_rows=True, add_y_var_diag=False)
         pred = pd.DataFrame({'ypred': ypred}, index=self.genotypes)
 
         if Xpred is not None:
             pred = pred.loc[Xpred, :]
 
-        if estimate_variance:
-            pred['var'] = self.estimate_posterior_variance(Xpred=pred.index)
+        if calc_variance:
+            pred['var'] = self.calc_posterior_variance(Xpred=pred.index)
         
         return(pred)
     
-    def K_BB_E_dot(self, v):
-        """ multiply by the m by m matrix K_BB + E"""
-        yhat = self.W.dot(self.gt2data.dot(v))
-        ynoise = yhat + self.gt2data.dot(self.E_sparse.dot(v))
-        return(self.gt2data.T.dot(ynoise))
+    def get_indicator_function(self, i):
+        vec = np.zeros(self.n_genotypes)
+        vec[i] = 1
+        return(vec)
     
-    def estimate_posterior_variance(self, Xpred=None):
+    def calc_posterior_variance(self, Xpred=None):
         """compute posterior variances for a list of sequences"""
-        # TODO: fix response: cannot give negative variance estimates in test
-        # TODO: replace rho by covariance matrix
         if Xpred is None:
-            Xpred = self.space.state_labels
-        n_pred, pred_idx = Xpred.shape[0], self.get_obs_idx(Xpred)
+            Xpred = self.genotypes
+        pred_idx = self.get_obs_idx(Xpred)
     
-        Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.K_BB_E_dot)
-        K_ii = self.W.calc_covariance_distance()[0]
-        
-        # Compute posterior variance for each target sequence
         post_vars = []
-        for i in tqdm(pred_idx, total=n_pred):
-            vec = np.zeros(self.n_genotypes)
-            vec[i] = 1
-            K_Bi = self.W.dot(vec)[self.obs_idx]
-            # Posibility to optimize with a good preconditioner
-            alph = cg(Kop, K_Bi)[0]
-            post_vars.append(K_ii - np.sum(K_Bi * alph))
-    
-        return(np.array(post_vars))
+        for i in tqdm(pred_idx, total=Xpred.shape[0]):
+            v = self.get_indicator_function(i)
+            K_i = self.K.dot(v, full_v=True, all_rows=True)
+            K_ii = K_i[i]
+            K_Bi = self.K.gt2data.T.dot(K_i)
+            post_vars.append(K_ii - self.K.inv_quad(K_Bi))
+        post_vars = np.array(post_vars)
+        return(post_vars)
     
     def simulate(self, lambdas, sigma=0, p_missing=0):
         '''
