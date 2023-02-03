@@ -333,3 +333,26 @@ class KernelOperator(SeqLinOperator):
             return(self.W.dot(self.D_pi_inv.dot(v)))
         else:
             return(self.W.dot(v))
+        
+
+class KernelOperatorObs(KernelOperator):
+    def __init__(self, W, y_var, obs_idx):
+        super().__init__(W)
+        self.y_var_diag = get_sparse_diag_matrix(y_var)
+        self.calc_gt_to_data_matrix(obs_idx)
+        self.n_obs = obs_idx.shape[0]
+        
+    def get_gt_to_data_matrix(self, obs_idx):
+        self.gt2data = csr_matrix((np.ones(self.n_obs),
+                                   (obs_idx, np.arange(self.n_obs))),
+                                  shape=(self.n_genotypes, self.n_obs))   
+    
+    def dot(self, v):
+        yhat = super().dot(self.gt2data.dot(v))
+        ynoise = yhat + self.gt2data.dot(self.y_var_diag.dot(v))
+        return(self.gt2data.T.dot(ynoise))
+    
+    def inv_dot(self, v):
+        a_star = minres(self.dot, v, tol=1e-9)[0]
+        
+        
