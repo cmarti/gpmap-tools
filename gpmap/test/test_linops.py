@@ -6,7 +6,7 @@ from itertools import combinations
 from timeit import timeit
 
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             VjProjectionOperator)
+                             VjProjectionOperator, KernelOperator)
 
 
 class LinOpsTests(unittest.TestCase):
@@ -162,6 +162,30 @@ class LinOpsTests(unittest.TestCase):
             
             assert(np.allclose(u1, u2))
     
+    def test_kernel_operator(self):
+        lambdas = np.array([0, 1, 0])
+        y_var = 0.1 * np.ones(4)
+        obs_idx = np.arange(4)
+        W = ProjectionOperator(2, 2)
+        W.set_lambdas(lambdas)
+        K = KernelOperator(W, y_var=y_var, obs_idx=obs_idx)
+        v = np.random.normal(size=K.n_obs)        
+        u = K.inv_dot(K.dot(v))
+        assert(np.allclose(u, v))
+        
+        # Large matrix
+        l = 9
+        W = ProjectionOperator(4, l)
+        lambdas = np.append([0], 2-np.arange(l))
+        W.set_lambdas(lambdas)
+
+        y_var = 0.1 * np.ones(W.n)
+        obs_idx = np.arange(W.n)
+        K = KernelOperator(W, y_var=y_var, obs_idx=obs_idx)
+        v = np.random.normal(size=K.n_obs)
+        u = K.inv_dot(K.dot(v))
+        assert(np.allclose(u, v))
+    
     def test_vj_projection_operator_ss(self):
         vjp = VjProjectionOperator(4, 5)
         v = np.random.normal(size=vjp.n)
@@ -182,5 +206,5 @@ class LinOpsTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests.test_laplacian_D_pi']
+    import sys;sys.argv = ['', 'LinOpsTests']
     unittest.main()

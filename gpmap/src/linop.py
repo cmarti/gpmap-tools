@@ -7,11 +7,14 @@ from itertools import combinations
 from scipy.sparse.csr import csr_matrix
 from scipy.linalg.decomp_svd import orth
 from scipy.special._basic import comb
+from scipy.sparse.linalg.isolve import minres
+from scipy.sparse.linalg.interface import LinearOperator
 
 from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
                              calc_cartesian_product_dot,
     calc_tensor_product_dot, calc_tensor_product_quad, get_sparse_diag_matrix)
+from scipy.sparse.linalg.isolve.iterative import cg
 
 
 class SeqLinOperator(object):
@@ -321,38 +324,56 @@ class ProjectionOperator(LapDepOperator):
     
 
 class KernelOperator(SeqLinOperator):
-    def __init__(self, W):
+    def __init__(self, W, y_var=None, obs_idx=None):
         self.W = W
-        self.D_pi_inv = 1 / W.L.D_pi
+        self.D_pi_inv = get_sparse_diag_matrix(1 / W.L.D_pi.data.flatten())
+        self.n_genotypes = W.n
+        
+        if y_var is not None and obs_idx is not None:
+            msg = 'y_var and obs_idx should have same dimension'
+            check_error(y_var.shape[0] == obs_idx.shape[0], msg=msg)
+            self.known_var = True
+            self.homoscedastic = np.unique(y_var).shape[0] == 1
+            self.mean_var = y_var.mean()
+            self.y_var_diag = get_sparse_diag_matrix(y_var)
+            self.n_obs = obs_idx.shape[0]
+            self.calc_gt_to_data_matrix(obs_idx)
+            
+        else:
+            msg = 'y_var and obs_idx must be provided with each other'
+            check_error(y_var is None and obs_idx is None, msg=msg)
+            self.known_var = False
+        
+        self.Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.dot)
+        # self.preconditioner = LinearOperator((self.n_obs, self.n_obs), matvec=self.precond)
     
     def set_lambdas(self, lambdas):
         self.W.set_lambdas(lambdas)
     
-    def dot(self, v):
+    def get_lambdas(self):
+        return(self.W.lambdas)
+    
+    def _dot(self, v):
         if self.W.L.variable_ps:
             return(self.W.dot(self.D_pi_inv.dot(v)))
         else:
             return(self.W.dot(v))
-        
 
-class KernelOperatorObs(KernelOperator):
-    def __init__(self, W, y_var, obs_idx):
-        super().__init__(W)
-        self.y_var_diag = get_sparse_diag_matrix(y_var)
-        self.calc_gt_to_data_matrix(obs_idx)
-        self.n_obs = obs_idx.shape[0]
-        
-    def get_gt_to_data_matrix(self, obs_idx):
+    def calc_gt_to_data_matrix(self, obs_idx):
         self.gt2data = csr_matrix((np.ones(self.n_obs),
                                    (obs_idx, np.arange(self.n_obs))),
                                   shape=(self.n_genotypes, self.n_obs))   
     
     def dot(self, v):
-        yhat = super().dot(self.gt2data.dot(v))
-        ynoise = yhat + self.gt2data.dot(self.y_var_diag.dot(v))
-        return(self.gt2data.T.dot(ynoise))
+        if self.known_var:
+            yhat = self._dot(self.gt2data.dot(v))
+            ynoise = yhat + self.gt2data.dot(self.y_var_diag.dot(v))
+            u = self.gt2data.T.dot(ynoise)
+        else:
+            u = self._dot(v)
+        return(u)
     
-    def inv_dot(self, v):
-        a_star = minres(self.dot, v, tol=1e-9)[0]
-        
-        
+    def inv_dot(self, v, show=False):
+        res = minres(self.Kop, v, tol=1e-6, show=show)
+        self.res = res[1]
+        return(res[0])
