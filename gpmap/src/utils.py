@@ -40,6 +40,13 @@ def get_length(x):
     return(length)
 
 
+def inner_product(x1, x2, metric=None):
+    if metric is None:
+        return(x1.dot(x2.T))
+    else:
+        return(x1.dot(metric.dot(x2.T)))
+
+
 def quad(matrix, v1, v2=None):
     if v2 is None:
         v2 = v1
@@ -154,11 +161,14 @@ def calc_tensor_product(matrices):
 
 
 def calc_tensor_product_dot(matrices, v):
+    d1 = np.prod([m.shape[0] for m in matrices])
+    check_error(d1 == v.shape[0], 'Dimension missmatch between matrix and vector')
+    
     if len(matrices) == 1:
         return(matrices[0].dot(v))
     
-    a, l = matrices[0].shape[0], len(matrices)
-    s = a**l // a
+    a = matrices[0].shape[0]
+    s = v.shape[0] // a
     m = matrices[0]
     vs = [v[s*j:s*(j+1)] for j in range(a)]
     us = [calc_tensor_product_dot(matrices[1:], v_i) for v_i in vs]
@@ -177,8 +187,8 @@ def calc_tensor_product_quad(matrices, v1, v2=None):
     if len(matrices) == 1:
         return(quad(matrices[0], v1, v2))
     
-    a, l = matrices[0].shape[0], len(matrices)
-    s = a**l // a
+    a = matrices[0].shape[0]
+    s = v1.shape[0] // a
     m = matrices[0]
     v1s = [v1[s*j:s*(j+1)] for j in range(a)]
     v2s = [v2[s*j:s*(j+1)] for j in range(a)]
@@ -393,3 +403,5 @@ def calc_r2_values(test_pred_sets, data):
             print('problem found in {}. Skipping it'.format(label))
             continue
     return(pd.DataFrame(r2))
+
+
