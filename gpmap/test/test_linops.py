@@ -7,6 +7,7 @@ from timeit import timeit
 
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator, KernelOperator)
+from gpmap.src.kernel import VarianceComponentKernel
 
 
 class LinOpsTests(unittest.TestCase):
@@ -194,6 +195,45 @@ class LinOpsTests(unittest.TestCase):
         v = np.random.normal(size=K.n_obs)
         u = K.inv_dot(K.dot(v))
         assert(np.allclose(u, v))
+    
+    def test_skewed_kernel_operator(self):
+        ps = np.array([[0.3, 0.7], [0.5, 0.5]])
+        log_p = np.log(ps)
+        l, a = ps.shape
+        
+        # Define Laplacian based kernel
+        L = LaplacianOperator(a, l, ps=ps)
+        W = ProjectionOperator(L=L)
+        K1 = KernelOperator(W)
+        m = np.eye(K1.shape[0])
+        
+        # Define full kernel function
+        kernel = VarianceComponentKernel(l, a, use_p=True)
+        x = np.array(['AA', 'AB', 'BA', 'BB'])
+        kernel.set_data(x1=x, alleles=['A', 'B'])
+        
+        # Constant component
+        lambdas = [1, 0, 0]
+        K1.set_lambdas(lambdas)
+        k1 = K1.dot(m)
+        assert(np.allclose(k1, 1))
+        
+        K2 = kernel(lambdas=lambdas, log_p=log_p)
+        assert(np.allclose(K2, 1))
+        
+        # Additive component
+        lambdas = [0, 1, 0]
+        K1.set_lambdas(lambdas)
+        k1 = K1.dot(m)
+        k2 = kernel(lambdas=lambdas, log_p=log_p)
+        assert(np.allclose(k1, k2))
+        
+        # Pairwise component
+        lambdas = [0, 0, 1]
+        K1.set_lambdas(lambdas)
+        k1 = K1.dot(m)
+        k2 = kernel(lambdas=lambdas, log_p=log_p)
+        assert(np.allclose(k1, k2))
     
     def test_vj_projection_operator_ss(self):
         vjp = VjProjectionOperator(4, 5)
