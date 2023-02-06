@@ -61,7 +61,7 @@ class LaplacianOperator(SeqLinOperator):
             self.calc_W_kd_matrix()
     
     def set_ps(self, ps):
-        self.variable_ps = ps is None
+        self.variable_ps = ps is not None
         if ps is None:
             ps = [np.ones(self.alpha)] * self.l
         check_error(len(ps) == self.l, msg='Number of ps should be equal to length')
@@ -350,8 +350,10 @@ class KernelOperator(SeqLinOperator):
         self.D_pi_inv = get_sparse_diag_matrix(1 / W.L.D_pi.data.flatten())
         self.n = W.n
         self.shape = (self.n, self.n)
+        self.known_var = False
         
     def set_y_var(self, y_var=None, obs_idx=None):
+        
         if y_var is not None and obs_idx is not None:
             msg = 'y_var and obs_idx should have same dimension: {} vs {}'
             msg = msg.format(y_var.shape[0], obs_idx.shape[0])
@@ -363,11 +365,11 @@ class KernelOperator(SeqLinOperator):
             self.n_obs = obs_idx.shape[0]
             self.calc_gt_to_data_matrix(obs_idx)
             self.shape = (self.n_obs, self.n_obs)
-            
+
         else:
             msg = 'y_var and obs_idx must be provided with each other'
             check_error(y_var is None and obs_idx is None, msg=msg)
-            self.known_var = False
+            
         
     def set_lambdas(self, lambdas):
         self.W.set_lambdas(lambdas)
@@ -387,14 +389,14 @@ class KernelOperator(SeqLinOperator):
                                   shape=(self.n, self.n_obs))   
     
     def dot(self, v, all_rows=False, add_y_var_diag=True, full_v=False):
-        if full_v:
+        if full_v or not self.known_var:
             u = self._dot(v)
         else:
             u = self._dot(self.gt2data.dot(v))
             if add_y_var_diag:
                 u += self.gt2data.dot(self.y_var_diag.dot(v))
 
-        if not all_rows:
+        if not all_rows and self.known_var:
             u = self.gt2data.T.dot(u)
             
         return(u)
