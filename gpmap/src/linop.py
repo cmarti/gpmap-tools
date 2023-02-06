@@ -14,7 +14,7 @@ from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
                              calc_cartesian_product_dot,
                              calc_tensor_product_dot, calc_tensor_product_quad, 
-                             get_sparse_diag_matrix)
+                             get_sparse_diag_matrix, inner_product)
 
 
 class SeqLinOperator(object):
@@ -40,6 +40,9 @@ class SeqLinOperator(object):
     
     def quad(self, v):
         return(np.sum(v * self.dot(v)))
+    
+    def rayleigh_quotient(self, v, metric=None):
+        return(self.quad(v) / inner_product(v, v, metric=metric))
 
 
 class LaplacianOperator(SeqLinOperator):
@@ -62,17 +65,17 @@ class LaplacianOperator(SeqLinOperator):
     
     def set_ps(self, ps):
         self.variable_ps = ps is not None
+        
         if ps is None:
             ps = [np.ones(self.alpha)] * self.l
         check_error(len(ps) == self.l, msg='Number of ps should be equal to length')
-        self.ps = ps
-        pi = calc_tensor_product([p.reshape((p.shape[0], 1)) for p in ps])
-        self.D_pi = get_sparse_diag_matrix(pi.flatten())
+
+        # Normalize ps to have the eigenvalues in the right scale
+        self.ps = np.vstack([p / p.sum() * self.alpha for p in ps])
+        self.pi = calc_tensor_product([p.reshape((p.shape[0], 1)) for p in ps]).flatten()
     
     def calc_lambdas(self):
-        self.lambdas = np.arange(self.l + 1)
-        if self.ps is None or np.unique(self.ps).shape[0] == 1:
-            self.lambdas *= self.alpha
+        self.lambdas = np.arange(self.l + 1) * self.alpha
     
     def calc_Kn(self, p):
         Kn = np.vstack([p] * p.shape[0])
@@ -80,12 +83,11 @@ class LaplacianOperator(SeqLinOperator):
         return(Kn)
     
     def calc_Kns(self):
-        if self.max_size is None:            
-            Kns = [csr_matrix(self.calc_Kn(p)) for p in self.ps]
-        else:
+        Kns = [self.calc_Kn(p) for p in self.ps]
+        if self.max_size is not None:            
             size = self.guess_n_products()
-            Kns = [self.calc_Kn(p) for p in self.ps[:-size]]
-            Kns.append(calc_cartesian_product([csr_matrix(self.calc_Kn(p)) for p in self.ps[-size:]]).tocsr())
+            i = self.l - size
+            Kns = Kns[:i] + [calc_cartesian_product([csr_matrix(m) for m in Kns[i:]]).tocsr()]
         self.Kns = Kns
         self.Kns_shape = [x.shape for x in Kns]
     
@@ -347,7 +349,8 @@ class ProjectionOperator(LapDepOperator):
 class KernelOperator(SeqLinOperator):
     def __init__(self, W):
         self.W = W
-        self.D_pi_inv = get_sparse_diag_matrix(1 / W.L.D_pi.data.flatten())
+        self.D_sqrt_pi_inv = get_sparse_diag_matrix(1 / np.sqrt(W.L.pi))
+        self.D_pi_inv = get_sparse_diag_matrix(1 / W.L.pi)
         self.n = W.n
         self.shape = (self.n, self.n)
         self.known_var = False

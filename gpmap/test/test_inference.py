@@ -15,27 +15,10 @@ from gpmap.src.inference import VCregression
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator)
+from gpmap.src.utils import get_sparse_diag_matrix
 
 
 class VCTests(unittest.TestCase):
-    def test_laplacian(self):
-        L1 = LaplacianOperator(4, 7)
-        L2 = LaplacianOperator(4, 7, max_size=500)
-        
-        for d in L2.Kns_shape:
-            assert(d[0] < 500)
-        
-        v = np.random.normal(size=L1.shape[0])
-        
-        L2.dot(v)
-        
-        print(timeit(lambda: L1.dot0(v), number=10))
-        print(timeit(lambda : L1.dot1(v), number=10))
-        print(timeit(lambda : L2.dot1(v), number=10))
-        
-        assert(np.allclose(L1.dot0(v), L1.dot1(v)))
-        assert(np.allclose(L1.dot0(v), L2.dot1(v)))
-        
     def test_get_gt_to_data_matrix(self):
         vc = VCregression()
         vc.init(3, 2)
@@ -48,143 +31,76 @@ class VCTests(unittest.TestCase):
         assert(np.all(m[4:, :] == 0))
         assert(m.shape == (8, 4))
     
-    def test_calc_polynomial_coeffs(self):
-        vc = VCregression()
-        vc.init(2, 2)
-        lambdas = np.ones(vc.seq_length + 1)
-        
-        # Ensure that if all eigenvalues are 1 then we would end up with I
-        vc.calc_polynomial_coeffs()
-        assert(np.allclose(vc.B.sum(1), [1, 0, 0]))
-
-        # The same using the method        
-        bs = vc.get_polynomial_coeffs(lambdas=lambdas)
-        assert(np.allclose(bs, [1, 0, 0]))
-        
-    def test_calc_polynomial_coeffs_analytical(self):
-        for l in range(3, 9):
-            vc = VCregression()
-            vc.init(l, 4)
-            y = np.random.normal(size=vc.n_genotypes)
-            
-            b1 = vc.calc_polynomial_coeffs()
-            p1 = vc.project(y, k=l-1)
-            b2 = vc.calc_polynomial_coeffs(numeric=True)
-            p2 = vc.W.dot(y, k=l-1)
-            
-            # Test coefficients of the polynomials
-            assert(np.allclose(b1, b2))
-            
-            # Test that projections are also equal
-            assert(np.allclose(p1, p2))
-    
-    def test_projection_operator(self):
-        W = ProjectionOperator(2, 2)
-        
-        # Purely additive function
-        y = np.array([-1.5, -0.5, 0.5, 1.5])
-        
-        W.set_lambdas(k=2)
-        assert(np.allclose(W.dot(y), 0))
-        
-        W.set_lambdas(k=1)
-        assert(np.allclose(W.dot(y), y))
-        
-        W.set_lambdas(k=0)
-        assert(np.allclose(W.dot(y), 0))
-        
-        # Non-zero orthogonal projections
-        y = np.array([-1.5, -0.5, 0.5, 4])
-        
-        W.set_lambdas(k=0)
-        y0 = W.dot(y)
-        W.set_lambdas(k=1)
-        y1 = W.dot(y)
-        W.set_lambdas(k=2)
-        y2 = W.dot(y) 
-        
-        assert(not np.allclose(y0, 0))
-        assert(not np.allclose(y1, y))
-        assert(not np.allclose(y2, 0))
-        
-        # Ensure they are orthogonal to each other
-        assert(np.allclose(y0.T.dot(y1), 0))
-        assert(np.allclose(y0.T.dot(y2), 0))
-        assert(np.allclose(y1.T.dot(y2), 0))
-        
-        # Test inverse
-        W.set_lambdas(np.array([1, 10, 1.]))
-        assert(np.allclose(W.inv_dot(W.dot(y)), y))
-    
-    def test_vj_projection_operator(self):
-        vjp = VjProjectionOperator(2, 2)
-        
-        # Purely additive function
-        y = np.array([-1.5, -0.5, 0.5, 1.5])
-        y01 = np.array([-1, -1, 1, 1])
-        y10 = np.array([-0.5, 0.5, -0.5, 0.5])
-        
-        vjp.set_j([0])
-        f01 = vjp.dot(y)
-        assert(np.allclose(f01, y01))
-        
-        vjp.set_j([1])
-        f10 = vjp.dot(y)
-        assert(np.allclose(f10, y10))
-        
-        vjp.set_j([])
-        assert(np.allclose(vjp.dot(y), 0))
-        
-        vjp.set_j([0, 1])
-        assert(np.allclose(vjp.dot(y), 0))
-        
-        # Tests that projections add up to the whole subspace in larger case
-        W = ProjectionOperator(4, 5)
-        vjp = VjProjectionOperator(4, 5)
-        v = np.random.normal(size=W.n)
-
-        for k in range(1, 6):
-            W.set_lambdas(k=k)
-            u1 = W.dot(v)
-            
-            u2 = np.zeros(v.shape[0])
-            for j in combinations(np.arange(W.l), k):
-                vjp.set_j(j)
-                u2 += vjp.dot(v)
-            
-            assert(np.allclose(u1, u2))
-    
-    def test_vj_projection_operator_ss(self):
-        vjp = VjProjectionOperator(4, 5)
-        v = np.random.normal(size=vjp.n)
-        
-        vjp.set_j([0, 2, 3])
-        print(timeit(lambda: vjp.quad(v), number=10))
-        print(timeit(lambda : vjp.dot_square_norm(v), number=10))
-        
-        # for k in range(1, 6):
-        #     for j in combinations(np.arange(vjp.l), k):
-        #         vjp.set_j(j)
-        #         u = vjp.dot(v)
-        #         ss1 = np.sum(u * u)
-        #         ss2 = vjp.dot_square_norm(v)
-        #         ss3 = vjp.quad(v) # only applies in equally weighted case
-        #         assert(np.allclose(ss1, ss2))
-        #         assert(np.allclose(ss1, ss3))
-    
     def test_simulate_vc(self):
         np.random.seed(1)
         sigma = 0.1
-        lambdas = np.array([0, 200, 20, 2, 0.2])
-        
+        l, a = 4, 4
         vc = VCregression()
-        vc.init(4, 4)
+        vc.init(l, a)
         
+        # Test functioning and size
+        lambdas = np.array([0, 200, 20, 2, 0.2])
         data = vc.simulate(lambdas, sigma)
+        f = data['y_true'].values
         assert(data.shape[0] == 256)
         
+        # Test missing genotypes
         data = vc.simulate(lambdas, sigma, p_missing=0.1)
         assert(data.dropna().shape[0] < 256)
+        
+        # Test pure components
+        W = ProjectionOperator(a, l)
+        for k1 in range(l + 1):
+            lambdas = np.zeros(l+1)
+            lambdas[k1] = 1
+            
+            data = vc.simulate(lambdas)
+            f = data['y_true'].values
+        
+            for k2 in range(l+1):
+                W.set_lambdas(k=k2)
+                f_k_rq = W.rayleigh_quotient(f)
+                assert(np.allclose(f_k_rq, k1 == k2))
+    
+    def test_simulate_skewed_vc(self):  
+        np.random.seed(1)
+        l, a = 2, 2 
+        vc = VCregression()
+        
+        # With p=1
+        ps = 1 * np.ones((l, a))
+        L = LaplacianOperator(a, l, ps=ps)
+        vc.init(l, a, ps=ps)
+        W = ProjectionOperator(L=L)
+        for k1 in range(l + 1):
+            lambdas = np.zeros(l+1)
+            lambdas[k1] = 1
+            
+            data = vc.simulate(lambdas)
+            f = data['y_true'].values
+        
+            for k2 in range(l+1):
+                W.set_lambdas(k=k2)
+                f_k_rq = W.rayleigh_quotient(f)
+                assert(np.allclose(f_k_rq, k1 == k2))
+        
+        # with variable ps
+        ps = np.random.dirichlet(np.ones(a), size=l) * a
+        L = LaplacianOperator(a, l, ps=ps)
+        vc.init(l, a, ps=ps)
+        W = ProjectionOperator(L=L)
+        
+        for k1 in range(l + 1):
+            lambdas = np.zeros(l+1)
+            lambdas[k1] = 1
+            
+            data = vc.simulate(lambdas)
+            f = data['y_true'].values
+        
+            for k2 in range(l+1):
+                W.set_lambdas(k=k2)
+                f_k_rq = W.rayleigh_quotient(f)
+                assert(np.allclose(f_k_rq, k1 == k2))
     
     def test_calc_emp_dist_cov(self):
         np.random.seed(1)
@@ -231,31 +147,6 @@ class VCTests(unittest.TestCase):
         
         # Ensure regularization improves results
         assert(sd1 > sd2)
-    
-    def test_vc_fit_bin(self):
-        data_fpath = join(TEST_DATA_DIR, 'vc.data.csv')
-        lambdas_fpath = join(TEST_DATA_DIR, 'vc.lambdas.csv')
-        xpred_fpath = join(TEST_DATA_DIR, 'vc.xpred.txt')
-        out_fpath = join(TEST_DATA_DIR, 'seqdeft.output.csv')
-        bin_fpath = join(BIN_DIR, 'vc_regression.py')
-        
-        # Direct kernel alignment
-        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath]
-        check_call(cmd)
-        
-        # Perform regularization
-        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r']
-        check_call(cmd)
-        
-        # With known lambdas
-        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
-               '--lambdas', lambdas_fpath]
-        check_call(cmd)
-        
-        # Predict few sequences and their variances
-        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
-               '--var', '-p', xpred_fpath]
-        check_call(cmd)
     
     def test_vc_predict(self):
         lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
@@ -319,11 +210,8 @@ class VCTests(unittest.TestCase):
     def test_skewed_VC(self):
         ps = np.array([[0.4, 0.6],
                        [0.3, 0.7]])
-        sk_vc = VCregression()
-        sk_vc.init(2, 2, ps=ps)
-        
         vc = VCregression()
-        vc.init(2, 2)
+        vc.init(2, 2, ps=ps)
         
         # Ensure that we maintain the right eigenvalues
         lambdas = np.linalg.eig(sk_vc.M.todense())[0]
@@ -351,8 +239,34 @@ class VCTests(unittest.TestCase):
         assert(np.allclose(sk_vc.project(f_1, k=2), 0))
         assert(np.allclose(sk_vc.project(f_2, k=0), 0))
         assert(np.allclose(sk_vc.project(f_2, k=1), 0))
+    
+    
+    def test_vc_fit_bin(self):
+        data_fpath = join(TEST_DATA_DIR, 'vc.data.csv')
+        lambdas_fpath = join(TEST_DATA_DIR, 'vc.lambdas.csv')
+        xpred_fpath = join(TEST_DATA_DIR, 'vc.xpred.txt')
+        out_fpath = join(TEST_DATA_DIR, 'seqdeft.output.csv')
+        bin_fpath = join(BIN_DIR, 'vc_regression.py')
+        
+        # Direct kernel alignment
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath]
+        check_call(cmd)
+        
+        # Perform regularization
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r']
+        check_call(cmd)
+        
+        # With known lambdas
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
+               '--lambdas', lambdas_fpath]
+        check_call(cmd)
+        
+        # Predict few sequences and their variances
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
+               '--var', '-p', xpred_fpath]
+        check_call(cmd)
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests']
+    import sys;sys.argv = ['', 'VCTests.test_simulate_skewed_vc']
     unittest.main()

@@ -8,6 +8,8 @@ from timeit import timeit
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator, KernelOperator)
 from gpmap.src.kernel import VarianceComponentKernel
+from gpmap.src.settings import ALPHABET
+from gpmap.src.seq import generate_possible_sequences
 
 
 class LinOpsTests(unittest.TestCase):
@@ -196,6 +198,32 @@ class LinOpsTests(unittest.TestCase):
         u = K.inv_dot(K.dot(v))
         assert(np.allclose(u, v))
     
+    def test_skewed_kernel_operator_big(self):
+        l, a = 4, 4
+        alleles = ALPHABET[:a]
+        ps = np.random.dirichlet(alpha=np.ones(a), size=l)
+        log_p = np.log(ps)
+        
+        # Define Laplacian based kernel
+        L = LaplacianOperator(a, l, ps=ps)
+        W = ProjectionOperator(L=L)
+        K1 = KernelOperator(W)
+        I = np.eye(K1.shape[0])
+        
+        # Define full kernel function
+        kernel = VarianceComponentKernel(l, a, use_p=True)
+        x = np.array([x for x in generate_possible_sequences(l, alleles)])
+        kernel.set_data(x1=x, alleles=alleles)
+        
+        # Test components
+        for k in range(l+1):
+            lambdas = np.zeros(l+1)
+            lambdas[k] = 1
+            K1.set_lambdas(lambdas)
+            k1 = K1.dot(I)
+            k2 = kernel(lambdas=lambdas, log_p=log_p)
+            assert(np.allclose(k1, k2))
+        
     def test_skewed_kernel_operator(self):
         ps = np.array([[0.3, 0.7], [0.5, 0.5]])
         log_p = np.log(ps)
@@ -205,7 +233,7 @@ class LinOpsTests(unittest.TestCase):
         L = LaplacianOperator(a, l, ps=ps)
         W = ProjectionOperator(L=L)
         K1 = KernelOperator(W)
-        m = np.eye(K1.shape[0])
+        I = np.eye(K1.shape[0])
         
         # Define full kernel function
         kernel = VarianceComponentKernel(l, a, use_p=True)
@@ -215,7 +243,7 @@ class LinOpsTests(unittest.TestCase):
         # Constant component
         lambdas = [1, 0, 0]
         K1.set_lambdas(lambdas)
-        k1 = K1.dot(m)
+        k1 = K1.dot(I)
         assert(np.allclose(k1, 1))
         
         K2 = kernel(lambdas=lambdas, log_p=log_p)
@@ -224,14 +252,14 @@ class LinOpsTests(unittest.TestCase):
         # Additive component
         lambdas = [0, 1, 0]
         K1.set_lambdas(lambdas)
-        k1 = K1.dot(m)
+        k1 = K1.dot(I)
         k2 = kernel(lambdas=lambdas, log_p=log_p)
         assert(np.allclose(k1, k2))
         
         # Pairwise component
         lambdas = [0, 0, 1]
         K1.set_lambdas(lambdas)
-        k1 = K1.dot(m)
+        k1 = K1.dot(I)
         k2 = kernel(lambdas=lambdas, log_p=log_p)
         assert(np.allclose(k1, k2))
     

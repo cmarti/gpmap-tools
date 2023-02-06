@@ -6,7 +6,7 @@ from scipy.special._logsumexp import logsumexp
 from scipy.optimize._minimize import minimize
 
 from gpmap.src.seq import seq_to_one_hot
-from gpmap.src.utils import check_error
+from gpmap.src.utils import check_error, inner_product
 
 
 class SequenceKernel(object):
@@ -15,14 +15,8 @@ class SequenceKernel(object):
         self.l = seq_length
         self.lp1 = self.l + 1
 
-    def inner_product(self, x1, x2, metric=None):
-        if metric is None:
-            return(x1.dot(x2.T))
-        else:
-            return(x1.dot(metric.dot(x2.T)))
-
     def calc_hamming_distance(self, x1, x2):
-        return(self.l - self.inner_product(x1, x2))
+        return(self.l - inner_product(x1, x2))
     
     def set_data(self, x1, x2=None, alleles=None, **kwargs):
         self.x1 = seq_to_one_hot(x1, alleles=alleles).astype(int)
@@ -102,7 +96,7 @@ class VarianceComponentKernel(SequenceKernel):
         log_p_flat = log_p.flatten()
         M = np.diag(log_p_flat)
         
-        cov = coeffs[0] * np.exp(-self.inner_product(self.x1, self.x2, M))
+        cov = coeffs[0] * np.exp(-inner_product(self.x1, self.x2, M))
         cov *= self.same_seq
         
         for power in range(1, self.lp1):
@@ -110,7 +104,7 @@ class VarianceComponentKernel(SequenceKernel):
                                     np.zeros(log_p_flat.shape)], 1)
             log_factors = logsumexp(log_factors, 1)
             M = np.diag(log_factors)
-            m = self.inner_product(self.x1, self.x2, M)
+            m = inner_product(self.x1, self.x2, M)
             cov += coeffs[power] * np.exp(self.lsf[power] + m)
         return(cov)
     
@@ -123,14 +117,13 @@ class VarianceComponentKernel(SequenceKernel):
             cov = self.W_kd.dot(lambdas)[hamming_distance]
         return(cov)
     
-    def backward(self):
+    def backward(self, lambdas):
         if self.use_p:
             raise ValueError('Not implemented for variable p')
         else:
             hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
-            grad = [self.W_kd[k, :][hamming_distance] for k in range(self.lp1)]
-        return(grad)
-        
+            for k, lambda_k in enumerate(lambdas):
+                yield(lambda_k * self.W_kd[k, :][hamming_distance])
 
     def get_params0(self):
         params = np.append([-10], 2-np.arange(self.l))
@@ -152,33 +145,36 @@ class VarianceComponentKernel(SequenceKernel):
         return(params_dict) 
 
 class FullKernelAligner(object):
-    def __init__(self, kernel, beta=0):
+    def __init__(self, kernel, beta=0, optimizer='powell'):
         self.kernel = kernel
         self.seq_length = kernel.l
         self.n_alleles = kernel.alpha
         self.set_beta(beta)
+        self.optimizer = optimizer
     
     def set_beta(self, beta):
         check_error(beta >=0, msg='beta must be >= 0')
         self.beta = beta
     
-    def set_data(self, X, y, alleles=None):
+    def set_data(self, X, y, y_var=None, alleles=None):
         self.X = X
         self.y = y
+        self.y_var = y_var if y_var is not None else np.zeros(y.shape)
         self.n = y.shape[0]
         
         self.kernel.set_data(X, alleles=alleles)
         y_res = y.reshape((self.n, 1))
-        self.target = y_res.dot(y_res.T)
+        self.target = y_res.dot(y_res.T) - np.diag(self.y_var)
     
-    def squared_frobenius_norm(self, **kwargs):
+    def mse(self, **kwargs):
         cov = self.predict(**kwargs)
-        return((np.power(cov - self.target,  2).mean()))
+        mse = (np.power(cov - self.target,  2).mean())
+        return(mse)
     
-    def squared_frobenius_norm_grad(self, **kwargs):
+    def mse_grad(self, **kwargs):
         cov = self.predict(**kwargs)
         diff2 = 2*(cov - self.target)
-        grad = [np.sum(diff2 * grad_k for grad_k in self.kernel.grad())]
+        grad = np.array([np.sum(diff2 * grad_k) for grad_k in self.kernel.grad(**kwargs)])
         return(grad)
     
     def calc_reg_lambdas(self, log_lambdas):
@@ -193,20 +189,25 @@ class FullKernelAligner(object):
     
     def loss(self, params):
         params_dict = self.kernel.split_params(params)
-        frob = self.squared_frobenius_norm(**params_dict)
+        frob = self.mse(**params_dict)
         
         # reg_lambdas = self.calc_reg_lambdas(params_dict['log_lambdas'])
         # reg_ps = self.calc_reg_ps(params_dict['log_ps'])
         
-        
         return(frob)
+    
+    def grad(self, params):
+        params_dict = self.kernel.split_params(params)
+        grad = self.mse_grad(**params_dict)
+        return(grad)
     
     def fit(self, params0=None):
         if params0 is None:
             params0 = self.kernel.get_params0()
-        res = minimize(fun=self.loss,
-                       x0=params0, method='Powell',
-                       options={'xtol': 1e-8, 'ftol': 1e-8, 'maxiter': 1e5})
+        res = minimize(fun=self.loss, jac=self.grad,
+                       x0=params0, method=self.optimizer,
+                       options={'ftol': 1e-4, 'maxiter': 1e5}) # 'xtol': 1e-8, 
+        self.res = res
         lambdas = np.exp(res.x)
         return(lambdas)
     

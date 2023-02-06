@@ -124,7 +124,7 @@ class VCregression(LandscapeEstimator):
     '''
     def __init__(self, beta=0, cross_validation=False, 
                  num_beta=20, nfolds=5, min_log_beta=-2,
-                 max_log_beta=7, max_L_size=False):
+                 max_log_beta=7, max_L_size=None):
         super().__init__(max_L_size=max_L_size)
         self.beta = beta
         self.nfolds = nfolds
@@ -358,20 +358,16 @@ class VCregression(LandscapeEstimator):
         '''
         
         a = np.random.normal(size=self.n_genotypes)
-        
-        if hasattr(self, 'D_pi'):
-            a = self.D_pi.dot(a)
-        
         self.set_lambdas(np.sqrt(lambdas))
-        yhat = self.W.dot(a)
+        yhat = self.K.W.dot(self.K.D_sqrt_pi_inv.dot(a))
         y = np.random.normal(yhat, sigma) if sigma > 0 else yhat
-        variance = np.full(self.n_genotypes, sigma**2)
+        y_var = np.full(self.n_genotypes, sigma**2)
         
         if p_missing > 0:
-            sel_idxs = np.random.uniform(self.n_genotypes) < p_missing
-            y[sel_idxs], variance[sel_idxs] = np.nan, np.nan
+            sel_idxs = np.random.uniform(size=y.shape[0]) < p_missing
+            y[sel_idxs], y_var[sel_idxs] = np.nan, np.nan
         
-        data = pd.DataFrame({'y_true': yhat, 'y': y, 'var': variance},
+        data = pd.DataFrame({'y_true': yhat, 'y': y, 'y_var': y_var},
                             index=self.genotypes)
         return(data)
 
