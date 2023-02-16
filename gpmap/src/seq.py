@@ -128,11 +128,11 @@ def guess_space_configuration(seqs, ensure_full_space=True,
     
     if force_regular:
         if np.unique(n_alleles).shape[0] > 1:
-            alphabet = set()
+            new_alphabet = set()
             for alleles in alphabet:
-                alphabet = alphabet.union(alleles)
-            n_alleles = [len(alphabet)] * seq_length
-            alphabet = [sorted(alphabet)] * seq_length
+                new_alphabet = new_alphabet.union(alleles)
+            n_alleles = [len(new_alphabet)] * seq_length
+            alphabet = [sorted(new_alphabet)] * seq_length
             
     config = {'length': seq_length, 'n_alleles': n_alleles,
               'alphabet': alphabet}
