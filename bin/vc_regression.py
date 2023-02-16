@@ -42,7 +42,7 @@ def main():
 
     pred_fpath = parsed_args.pred
     out_fpath = parsed_args.output
-    estimate_variance = parsed_args.var
+    calc_variance = parsed_args.var
     
     # Load counts data
     log = LogTrack()
@@ -71,7 +71,7 @@ def main():
     log.write('Obtain phenotypic predictions')
     vc.set_data(X=X, y=y, y_var=y_var)
     vc.set_lambdas(lambdas)
-    result = vc.predict(Xpred=Xpred, estimate_variance=estimate_variance)
+    result = vc.predict(Xpred=Xpred, calc_variance=calc_variance)
     result.to_csv(out_fpath)
     
     log.finish()

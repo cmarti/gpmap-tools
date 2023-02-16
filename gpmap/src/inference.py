@@ -246,8 +246,8 @@ class VCregression(LandscapeEstimator):
         return(lambdas)
     
     def calc_emp_dist_cov(self):
-        seq_values = self.gt2data.dot(self.y)
-        observed_seqs = self.gt2data.dot(np.ones(self.n_obs))
+        seq_values = self.K.gt2data.dot(self.y)
+        observed_seqs = self.K.gt2data.dot(np.ones(self.n_obs))
 
         # Compute rho_d and N_d
         size = self.seq_length + 1
@@ -255,10 +255,10 @@ class VCregression(LandscapeEstimator):
         for d in range(size):
             c_k = self.L_powers_unique_entries_inv[:, d]
             
-            distance_class_ns[d] = calc_matrix_polynomial_quad(c_k, self.W.L,
+            distance_class_ns[d] = calc_matrix_polynomial_quad(c_k, self.K.W.L,
                                                                observed_seqs)
             
-            quad = calc_matrix_polynomial_quad(c_k, self.W.L, seq_values)
+            quad = calc_matrix_polynomial_quad(c_k, self.K.W.L, seq_values)
             cov[d] = reciprocal(quad, distance_class_ns[d])
             
         return(cov, distance_class_ns)

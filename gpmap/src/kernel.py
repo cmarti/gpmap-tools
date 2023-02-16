@@ -282,7 +282,7 @@ class KernelAligner(object):
         s = 0
         for q in range(l + 1):
             s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
-        return(1 / a**l * s)
+        return(s / a**l)
     
     def calc_W_kd_matrix(self):
         """return full matrix l+1 by l+1 Krawtchouk matrix"""
