@@ -2,8 +2,9 @@
 import numpy as np
 import pandas as pd
 
-from numpy.linalg.linalg import matrix_power
+from time import time
 from tqdm import tqdm
+from numpy.linalg.linalg import matrix_power
 from scipy.optimize._minimize import minimize
 from scipy.special._basic import comb
 from scipy.linalg.basic import solve
@@ -234,6 +235,7 @@ class VCregression(LandscapeEstimator):
             Variances for each order of interaction k inferred from the data
         
         """
+        t0 = time()
         self.init(genotypes=X)
         self.set_data(X, y, y_var=y_var)
         
@@ -242,7 +244,8 @@ class VCregression(LandscapeEstimator):
             self.set_data(X, y, y_var=y_var)
         
         lambdas = self._fit()
-        self.set_lambdas(lambdas) 
+        self.set_lambdas(lambdas)
+        self.fit_time = time() - t0 
         return(lambdas)
     
     def calc_emp_dist_cov(self):
@@ -296,6 +299,7 @@ class VCregression(LandscapeEstimator):
                    If ``estimate_variance=True``, then it has an additional
                    column with the posterior variances for each genotype
         """
+        t0 = time()
         a_star = self.K.inv_dot(self.y)
         ypred = self.K.dot(a_star, all_rows=True, add_y_var_diag=False)
         pred = pd.DataFrame({'ypred': ypred}, index=self.genotypes)
@@ -305,7 +309,7 @@ class VCregression(LandscapeEstimator):
 
         if calc_variance:
             pred['var'] = self.calc_posterior_variance(Xpred=pred.index)
-        
+        self.pred_time = time() - t0
         return(pred)
     
     def get_indicator_function(self, i):

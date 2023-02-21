@@ -72,7 +72,21 @@ def main():
     vc.set_data(X=X, y=y, y_var=y_var)
     vc.set_lambdas(lambdas)
     result = vc.predict(Xpred=Xpred, calc_variance=calc_variance)
+    
+    # Save output
     result.to_csv(out_fpath)
+    
+    # Save lambdas
+    prefix = '.'.join(out_fpath.split('.')[:-1])
+    with open('{}.lambdas.txt'.format(prefix), 'w') as fhand:
+        for l in lambdas:
+            fhand.write('{}\n'.format(l))
+    
+    # Save running time
+    with open('{}.time.txt'.format(prefix), 'w') as fhand:
+        fhand.write('fit,{}\n'.format(vc.fit_time))
+        if hasattr(vc, 'pred_time'):
+            fhand.write('pred,{}\n'.format(vc.pred_time))
     
     log.finish()
 
