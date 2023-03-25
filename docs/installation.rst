@@ -14,6 +14,10 @@ this at the command line: ::
 
     $ git clone git@bitbucket.org:cmartiga/gpmap_tools.git
 
+or from `GitHub <https://github.com/cmarti/gpmap-tools.git>`_ :
+
+    $ git clone https://github.com/cmarti/gpmap-tools.git
+
 and install it in the current python environment: ::
     
     $ python setup.py install
