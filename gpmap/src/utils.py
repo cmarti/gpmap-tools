@@ -114,6 +114,9 @@ def stack_prod_matrices(m_diag, m_offdiag, a):
 
 
 def calc_cartesian_product(matrices):
+    if len(matrices) == 0:
+        return(None)
+    
     if len(matrices) == 1:
         return(matrices[0])
     

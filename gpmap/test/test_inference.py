@@ -148,6 +148,15 @@ class VCTests(unittest.TestCase):
         # Ensure regularization improves results
         assert(sd1 > sd2)
     
+    def test_vc_smn1(self):
+        data_fpath = join(TEST_DATA_DIR, 'smn1.0.train.csv')
+        out_fpath = join(TEST_DATA_DIR, 'smn1.0.out')
+        bin_fpath = join(BIN_DIR, 'vc_regression.py')
+        
+        # Perform regularization
+        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r']
+        check_call(cmd)
+        
     def test_vc_predict(self):
         lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
@@ -268,5 +277,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_simulate_skewed_vc']
+    import sys;sys.argv = ['', 'VCTests.test_vc_smn1']
     unittest.main()

@@ -380,7 +380,7 @@ class DeltaPEstimator(LandscapeEstimator):
     def __init__(self, P, a=None, num_reg=20, nfolds=5,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
-                 gtol=1e-3, max_L_size=False):
+                 gtol=1e-3, max_L_size=None):
         super().__init__(max_L_size=max_L_size)
         self.P = P
         self.a = a

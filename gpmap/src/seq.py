@@ -10,7 +10,7 @@ from scipy.sparse.csr import csr_matrix
 from Bio.Seq import Seq 
 from Bio.Data.CodonTable import CodonTable
 
-from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT, ALPHABETS, ALPHABET, ALPHABETS
+from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT, ALPHABETS, ALPHABET
 from gpmap.src.utils import check_error, get_sparse_diag_matrix
 from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
 

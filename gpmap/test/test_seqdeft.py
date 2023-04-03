@@ -196,5 +196,5 @@ class SeqDEFTTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests']
+    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_inference']
     unittest.main()
