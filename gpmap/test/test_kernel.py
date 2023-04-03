@@ -6,6 +6,7 @@ import numpy as np
 from gpmap.src.inference import VCregression
 from gpmap.src.kernel import (VarianceComponentKernel, SequenceKernel,
                               KernelAligner, FullKernelAligner)
+from scipy.special._basic import comb
 
 
 class KernelTest(unittest.TestCase):
@@ -214,9 +215,20 @@ class KernelTest(unittest.TestCase):
         aligner.set_data(X=X, y=y, y_var=y_var, alleles=alleles)
         lambdas_star = aligner.fit()
         assert(np.allclose(lambdas_star / lambdas_star[1], lambdas))
+    
+    def test_NK_lambdas(self):
+        l, a = 7, 4
+        P = 3
+        kernel = VarianceComponentKernel(l, a)
+        lambdas = np.array([a**(-P) * comb(l-k, l-P) for k in range(l+1)])
+        # lambdas = np.array([a**(-P) * comb(P, k) for k in range(l+1)])
+        print(lambdas)
+        print(kernel.W_kd.dot(lambdas))
+        cov = np.array([comb(l-d, P) for d in range(l+1)])
+        print(cov)
         
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'KernelTest.test_full_kernel_alignment_small']
+    import sys;sys.argv = ['', 'KernelTest.test_NK_lambdas']
     unittest.main()

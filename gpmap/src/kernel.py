@@ -6,7 +6,7 @@ from scipy.special._logsumexp import logsumexp
 from scipy.optimize._minimize import minimize
 
 from gpmap.src.seq import seq_to_one_hot
-from gpmap.src.utils import check_error, inner_product
+from gpmap.src.utils import check_error, inner_product, quad
 
 
 class SequenceKernel(object):
@@ -249,7 +249,7 @@ class KernelAligner(object):
         Frob2 = 2 * lambdas.dot(self.a)
         Frob = Frob1 - Frob2
         if self.beta > 0:
-            Frob += self.beta * log_lambdas[1:].dot(self.second_order_diff_matrix).dot(log_lambdas[1:])
+            Frob += self.beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
         return(Frob)
     
     def frobenius_norm_grad(self, log_lambdas):
@@ -293,7 +293,7 @@ class KernelAligner(object):
     
     def fit(self):
         lambdas0 = np.dot(self.M_inv, self.a).flatten()
-        lambdas0[lambdas0<0] = 1e-5
+        lambdas0[lambdas0<0] = 1e-10
         log_lambda0 = np.log(lambdas0)
         if self.beta == 0:
             res = minimize(fun=self.frobenius_norm,
