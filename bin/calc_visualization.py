@@ -33,7 +33,7 @@ def main():
     help_msg += 'sequences to those allowed by this codon table'
     coding_group.add_argument('-c', '--codon_table', default=None, help=help_msg)
     coding_group.add_argument('-sf', '--stop_f', default=None, type=float,
-                              help='Function for stop codons')
+                              help='Function for stop codons (minimum in dataset by default)')
     
     viz_group = parser.add_argument_group('Visualization options')
     viz_group.add_argument('-k', '--n_components', default=5, type=int,
