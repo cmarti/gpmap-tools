@@ -32,7 +32,7 @@ def main():
     help_msg += 'without -C option, it will restrict transitions in protein '
     help_msg += 'sequences to those allowed by this codon table'
     coding_group.add_argument('-c', '--codon_table', default=None, help=help_msg)
-    coding_group.add_argument('-sf', '--stop_f', default=-10, type=float,
+    coding_group.add_argument('-sf', '--stop_f', default=None, type=float,
                               help='Function for stop codons')
     
     viz_group = parser.add_argument_group('Visualization options')
