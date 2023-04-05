@@ -1016,12 +1016,18 @@ def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
 
 def plot_density_vs_frequency(seq_density, axes):
     with warnings.catch_warnings():
+        logf = np.log10(seq_density['frequency'])
+        logq = np.log10(seq_density['Q_star'])
         warnings.simplefilter("ignore")
-        data = pd.DataFrame({'logR': np.log10(seq_density['frequency']),
-                             'logQ': np.log10(seq_density['Q_star'])}).dropna()
+        data = pd.DataFrame({'logR': logf, 'logQ': logq}).dropna()
                              
     axes.scatter(data['logR'], data['logQ'],
                  color='black', s=5, alpha=0.4, zorder=2)
+    zero_counts_logq = logq[np.isinf(logf)]
+    fake_logf = (data['logQ'].min()-1) * np.ones(zero_counts_logq.shape)
+    axes.scatter(fake_logf, zero_counts_logq, marker='<',
+                 color='red', s=5, alpha=0.2, zorder=2)
+    
     xlims, ylims = axes.get_xlim(), axes.get_ylim()
     lims = min(xlims[0], ylims[0]), max(xlims[1], ylims[1])
     axes.plot(lims, lims, color='grey', linewidth=0.5, alpha=0.5, zorder=1)
