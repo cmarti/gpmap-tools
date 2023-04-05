@@ -12,7 +12,7 @@ from scipy.sparse.extract import triu
 
 from gpmap.src.seq import (translate_seqs, guess_space_configuration,
                            guess_alphabet_type, get_seqs_from_alleles,
-    get_product_states)
+                           get_product_states)
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
                              calc_cartesian_product)
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
