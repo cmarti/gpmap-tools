@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 import unittest
 import numpy as np
+import pandas as pd
 
 from itertools import combinations
 from timeit import timeit
 
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             VjProjectionOperator, KernelOperator)
+                             VjProjectionOperator, KernelOperator,
+                             compute_vjs_norms)
 from gpmap.src.kernel import VarianceComponentKernel
-from gpmap.src.settings import ALPHABET
+from gpmap.src.settings import ALPHABET, TEST_DATA_DIR
 from gpmap.src.seq import generate_possible_sequences
+from os.path import join
 
 
 class LinOpsTests(unittest.TestCase):
@@ -280,6 +283,20 @@ class LinOpsTests(unittest.TestCase):
         #         ss3 = vjp.quad(v) # only applies in equally weighted case
         #         assert(np.allclose(ss1, ss2))
         #         assert(np.allclose(ss1, ss3))
+    
+    def test_compute_vjs_squared_norms(self):
+        fpath = join(TEST_DATA_DIR, 'gb1.csv')
+        data = pd.read_csv(fpath, index_col=0)
+        
+        norms = compute_vjs_norms(data['log_binding'].values, k=1,
+                                  seq_length=4, n_alleles=20)
+        assert(norms[(2,)] > norms[(0,)])
+        assert(norms[(3,)] > norms[(1,)])
+        
+        norms = compute_vjs_norms(data['log_binding'].values, k=2,
+                                  seq_length=4, n_alleles=20)
+        for v in norms.values():
+            assert(norms[(2,3)] >= v)
     
         
 if __name__ == '__main__':

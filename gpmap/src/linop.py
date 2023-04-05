@@ -84,7 +84,8 @@ class LaplacianOperator(SeqLinOperator):
     
     def calc_Kns(self):
         Kns = [self.calc_Kn(p) for p in self.ps]
-        if self.max_size is not None:            
+        if self.max_size is not None:
+            print(self.max_size)            
             size = self.guess_n_products()
             i = self.l - size
             Kns = Kns[:i] + [calc_cartesian_product([csr_matrix(m) for m in Kns[i:]]).tocsr()]
@@ -155,7 +156,7 @@ class LaplacianOperator(SeqLinOperator):
                 
 
 class LapDepOperator(SeqLinOperator):
-    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=False):
+    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=None):
         if L is None:
             msg = 'either L or both seq_length and n_alleles must be given'
             check_error(n_alleles is not None and seq_length is not None, msg=msg)
@@ -170,7 +171,7 @@ class LapDepOperator(SeqLinOperator):
     
 
 class DeltaPOperator(LapDepOperator):
-    def __init__(self, P, n_alleles=None, seq_length=None, L=None, max_L_size=False):
+    def __init__(self, P, n_alleles=None, seq_length=None, L=None, max_L_size=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
                          max_L_size=max_L_size)
         self.set_P(P)
@@ -268,6 +269,16 @@ class VjProjectionOperator(LapDepOperator):
         able to do it directly through recursive product
         '''
         return(calc_tensor_product_quad(self.matrices, v1=self.pi * v, v2=v))
+
+
+def compute_vjs_norms(y, k, seq_length, n_alleles, L=None):
+    Pj = VjProjectionOperator(n_alleles, seq_length, L=L)
+    positions = np.arange(seq_length)
+    norms = {}
+    for j in combinations(positions, k):
+        Pj.set_j(np.array(j))
+        norms[j] = np.sqrt(Pj.quad(y))
+    return(norms) 
 
     
 class ProjectionOperator(LapDepOperator):
