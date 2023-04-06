@@ -455,6 +455,7 @@ class SequenceSpace(ProductSpace):
                                  alphabet_type=alphabet_type)
         prot = pd.Series(translate_seqs(nc_space.genotypes, codon_table),
                          index=nc_space.genotypes)
+        nc_space.protein_seqs = prot.values
 
         if stop_y is None:
             stop_y = self.y.min()

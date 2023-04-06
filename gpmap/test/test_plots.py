@@ -15,7 +15,7 @@ from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             figure_allele_grid, save_holoviews,
                             plot_relaxation_times, plot_interactive,
                             figure_Ns_grid, plot_SeqDEFT_summary,
-                            plot_hyperparam_cv)
+                            plot_hyperparam_cv, figure_axis_grid)
 from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWSWalk
 from gpmap.src.space import CodonSpace
@@ -103,6 +103,15 @@ class PlottingTests(unittest.TestCase):
         
         figure_allele_grid_datashader(nodes_df, plot_fpath, edges_df=edges_df,
                                       x='1', y='2')
+    
+    def test_axis_grid(self):  
+        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
+        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+        edges_df = pd.read_csv(edges_fpath)
+        figure_axis_grid(nodes_df, max_axis=5, edges_df=edges_df, fpath=plot_fpath,
+                         fmt='svg')
     
     def test_alleles_variable_sites(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
@@ -416,6 +425,6 @@ class PlottingTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'PlottingTests.test_plot_beta_optimization']
+    import sys;sys.argv = ['', 'PlottingTests']
     unittest.main()
 

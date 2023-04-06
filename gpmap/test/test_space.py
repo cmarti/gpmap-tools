@@ -283,6 +283,8 @@ class SpaceTests(unittest.TestCase):
         s = SequenceSpace(X=data.index.values, y=data['function'].values)
         s = s.to_nucleotide_space(codon_table='Standard', stop_y=0)
         assert(s.n_genotypes == 64)
+        assert(hasattr(s,'protein_seqs'))
+        assert(np.unique(s.protein_seqs).shape[0] == 21)
     
     def test_write_edges_npz(self):
         s = SequenceSpace(seq_length=6, alphabet_type='dna')
