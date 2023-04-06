@@ -19,6 +19,7 @@ from gpmap.src.seq import guess_space_configuration
 from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
                                  minimize_nodes_distance)
 import warnings
+from gpmap.src.utils import check_error
 
 
 # Functions
@@ -697,7 +698,60 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
                 empty_axes(axes)
     
     savefig(fig, fpath, fmt=fmt)
+
+
+
+def figure_axis_grid(nodes_df, max_axis=None, edges_df=None, fpath=None,
+                     nodes_size=None, nodes_color='function',
+                     nodes_cmap='viridis', nodes_cmap_label='Function', 
+                     edges_color='grey', edges_width=0.5, edges_cmap='binary',
+                     edges_alpha=0.1, colsize=3, rowsize=2.7,
+                     fmt='png'):
     
+    if max_axis is None:
+        max_axis = 1
+        while str(max_axis) in nodes_df.columns:
+            max_axis += 1
+        max_axis -= 1
+    else:
+        msg = 'max_axis should be in nodes_df.columns'
+        check_error(str(max_axis) in nodes_df.columns, msg=msg)
+    max_axis -= 1
+    
+    fig, subplots = init_fig(max_axis, max_axis,
+                             colsize=colsize, rowsize=rowsize)
+    fig.subplots_adjust(right=0.90)
+    cbar_axes = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+    plot_cbar = True
+    
+    for i in range(max_axis):
+        y = str(i+2)
+        for j in range(max_axis):
+            x = str(j+1)
+            axes = subplots[i][j]
+            
+            if j > i:
+                empty_axes(axes)
+            else:
+                plot_visualization(axes, nodes_df, edges_df=edges_df,
+                                   x=x, y=y, nodes_color=nodes_color,
+                                   nodes_size=nodes_size, nodes_cmap=nodes_cmap,
+                                   cbar=plot_cbar, cbar_axes=cbar_axes if plot_cbar else None,
+                                   nodes_cmap_label=nodes_cmap_label, 
+                                   edges_color=edges_color, edges_width=edges_width,
+                                   edges_cmap=edges_cmap, edges_alpha=edges_alpha,  
+                                   sort_nodes=True, ascending=True, sort_by=None)
+                plot_cbar = False
+                
+            if i < max_axis - 1:
+                axes.set_xlabel('')
+                axes.set_xticks([])
+            if j > 0:
+                axes.set_ylabel('')
+                axes.set_yticks([])
+                    
+    savefig(fig, fpath, fmt=fmt, tight=False)
+
 
 def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
                    ncol=4, nrow=3, show_edges=True,
