@@ -9,7 +9,8 @@ from scipy.sparse.csr import csr_matrix
 from gpmap.src.genotypes import (select_genotypes, dataframe_to_csr_matrix,
                                  select_d_neighbors, select_genotypes_re,
                                  select_genotypes_ambiguous_seqs,
-                                 select_closest_genotypes, select_local_optima)
+                                 select_closest_genotypes, select_local_optima,
+    marginalize_landscape_positions)
 
 
 class GenotypeTests(unittest.TestCase):
@@ -128,7 +129,16 @@ class GenotypeTests(unittest.TestCase):
         local_optima = select_local_optima(nodes_df, edges_df)
         assert(np.all(local_optima.index == ['AA', 'BB']))
         assert(np.all(local_optima['function'] == 3))
+    
+    def test_marginalize_positions(self):
+        nodes_df = pd.DataFrame({'index': np.arange(4)},
+                                index=['AA', 'AB', 'BA', 'BB'])
+        ndf = marginalize_landscape_positions(nodes_df, keep_pos=[0])
+        assert(np.allclose(ndf['index'],  [0.5, 2.5]))
         
+        ndf, edf = marginalize_landscape_positions(nodes_df, keep_pos=[0],
+                                                   return_edges=True)
+        assert(np.allclose(edf,  [[0, 1], [1, 0]]))
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'GenotypeTests']

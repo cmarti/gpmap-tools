@@ -12,6 +12,7 @@ from scipy.sparse._matrix_io import load_npz
 from gpmap.src.settings import PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
 from gpmap.src.utils import check_error, write_log
 from gpmap.src.seq import extend_ambigous_seq, translate_seqs
+from gpmap.src.space import SequenceSpace
 
 
 def get_edges_coords(nodes_df, edges_df, x='1', y='2', z=None, avoid_dups=False):
@@ -275,4 +276,15 @@ def read_edges(fpath, log=None):
         edges_df = None
     
     return(edges_df)
+
+
+def marginalize_landscape_positions(nodes_df, keep_pos, return_edges=False):
+    df = nodes_df.select_dtypes(include='number')
+    df['keep_seq'] = [''.join([x[i] for i in keep_pos]) for x in df.index]
+    out = df.groupby(['keep_seq']).mean()
+    
+    if return_edges:
+        space = SequenceSpace(X=out.index.values, y=np.ones(out.shape[0]))
+        out = out, space.get_edges_df()
+    return(out) 
     
