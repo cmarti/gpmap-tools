@@ -287,4 +287,3 @@ def marginalize_landscape_positions(nodes_df, keep_pos, return_edges=False):
         space = SequenceSpace(X=out.index.values, y=np.ones(out.shape[0]))
         out = out, space.get_edges_df()
     return(out) 
-    

@@ -276,6 +276,12 @@ class SpaceTests(unittest.TestCase):
         s = SequenceSpace(X=data.index.values, y=data['y'].values)
         assert(np.all(sorted(s.state_labels[s.y > 1.5]) == sorted(codons)))
     
+    def test_calculate_variance_components(self):
+        data = pd.read_csv(join(TEST_DATA_DIR, 'gb1.csv')).set_index('seq')
+        space = SequenceSpace(X=data.index.values, y=data.log_binding.values)
+        lambdas = space.calc_variance_components()
+        assert(np.all(lambdas > 0))
+    
     def test_to_codon_space(self):
         fpath = join(TEST_DATA_DIR, 'serine.protein.csv')
         data = pd.read_csv(fpath, index_col=0)

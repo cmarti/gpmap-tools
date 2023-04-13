@@ -85,7 +85,6 @@ class LaplacianOperator(SeqLinOperator):
     def calc_Kns(self):
         Kns = [self.calc_Kn(p) for p in self.ps]
         if self.max_size is not None:
-            print(self.max_size)            
             size = self.guess_n_products()
             i = self.l - size
             Kns = Kns[:i] + [calc_cartesian_product([csr_matrix(m) for m in Kns[i:]]).tocsr()]
@@ -143,7 +142,7 @@ class LaplacianOperator(SeqLinOperator):
         """return value of the Krawtchouk polynomial for k, d"""
         l, a = self.l, self.alpha
         s = 0
-        for q in range(l + 1):
+        for q in range(k + 1):
             s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
         return(1 / a**l * s)
     

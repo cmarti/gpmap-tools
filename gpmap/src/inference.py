@@ -267,7 +267,7 @@ class VCregression(LandscapeEstimator):
         return(cov, distance_class_ns)
     
     def lambdas_to_variance(self, lambdas):
-        variance_components = (lambdas * self.W.L.m_k)[1:]
+        variance_components = (lambdas * self.W.L.lambdas_multiplicity)[1:]
         variance_components = variance_components / variance_components.sum()
         return(variance_components)
     

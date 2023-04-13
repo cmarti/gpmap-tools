@@ -47,6 +47,7 @@ class LinOpsTests(unittest.TestCase):
         
         ps = np.array([[0.4, 0.6], [0.5, 0.5]])
         L = LaplacianOperator(2, 2, ps=ps)
+        print(L.lambdas)
         assert(np.allclose(L.lambdas, [0, 1, 2]))
 
     def test_laplacian_split(self):
@@ -300,5 +301,5 @@ class LinOpsTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests']
+    import sys;sys.argv = ['', 'LinOpsTests.test_laplacian_eigenvalues']
     unittest.main()

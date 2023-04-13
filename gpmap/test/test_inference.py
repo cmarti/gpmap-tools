@@ -16,6 +16,7 @@ from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator)
 from gpmap.src.utils import get_sparse_diag_matrix
+from gpmap.src.space import SequenceSpace
 
 
 class VCTests(unittest.TestCase):
@@ -148,6 +149,18 @@ class VCTests(unittest.TestCase):
         # Ensure regularization improves results
         assert(sd1 > sd2)
     
+    def test_calculate_variance_components(self):
+        vc = VCregression()
+        vc.init(n_alleles=4, seq_length=6)
+        lambdas = np.array([0, 10, 5, 2, 1, 0.5, 0.2])
+        data = vc.simulate(lambdas=lambdas)
+        
+        # Ensure kernel alignment and calculation of variance components is the same
+        space = SequenceSpace(X=data.index.values, y=data.y.values)
+        lambdas1 = space.calc_variance_components()
+        vc.fit(X=data.index.values, y=data.y.values)
+        assert(np.allclose(vc.lambdas, lambdas1))
+    
     def test_vc_smn1(self):
         data_fpath = join(TEST_DATA_DIR, 'smn1.0.train.csv')
         out_fpath = join(TEST_DATA_DIR, 'smn1.0.out')
@@ -277,5 +290,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_vc_smn1']
+    import sys;sys.argv = ['', 'VCTests']
     unittest.main()
