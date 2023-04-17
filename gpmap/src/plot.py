@@ -1051,21 +1051,34 @@ def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
         sns.lineplot(x=x, y=y, hue='fold', ax=axes, legend=False,
                      data=df.sort_values(x), alpha=0.4, linewidth=0.5,
                      zorder=1)
-        
     axes.plot(sdf['x'], sdf['mean'], color='black', lw=1, zorder=1)
     axes.scatter(sdf['x'], sdf['mean'], color='black', s=15)
     axes.scatter(x_star, y_star, color='red', s=25, zorder=10, alpha=1)
     
     for a, m, s in zip(sdf['x'], sdf['mean'], sdf[err_bars]):
         color = 'red' if a == x_star else 'black'
-        axes.plot((a, a), (m-s, m+s), lw=1, color=color)
+        
+        if a == x_star:
+            label = '{}* = {:.1f}'.format(xlabel, x_star)
+        else:
+            label = None
+        
+        axes.plot((a, a), (m-s, m+s), lw=1, color=color, label=label)
     
     xlims, ylims = axes.get_xlim(), axes.get_ylim()
     ylims = (ylims[0], ylims[1] + (ylims[1] - ylims[0]) * 0.1)
-    x = xlims[0] + 0.05 * (xlims[1] - xlims[0])
-    y = ylims[0] + 0.93 * (ylims[1] - ylims[0])
-    axes.annotate('{}* = {:.1f}'.format(xlabel, x_star), xy=(x, y))
-    axes.set(xlabel=xlabel, ylabel='Out of sample {}'.format(ylabel), ylim=ylims)
+    
+    for r in sdf.loc[np.isinf(sdf['x']), :].to_dict(orient='index').values():
+        x, y = r['x'], r['mean']
+        label = r'{} = $\infty$'.format(xlabel)
+        if y < 0:
+            label = r'{} = -$\infty$'.format(xlabel)
+        if not np.isnan(y):
+            axes.plot(xlims, (y, y), lw=0.5, c='darkred', linestyle='--',
+                      label=label)
+    axes.legend(loc=1)
+    axes.set(xlabel=xlabel, ylabel='Out of sample {}'.format(ylabel),
+             ylim=ylims, xlim=xlims)
 
 
 def plot_density_vs_frequency(seq_density, axes):
