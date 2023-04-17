@@ -425,7 +425,8 @@ class SequenceSpace(ProductSpace):
         lambdas = []
         for k in np.arange(self.seq_length + 1):
             self.W.set_lambdas(k=k)
-            lambdas.append(self.W.quad(self.y) / self.W.L.lambdas_multiplicity[k])
+            ss = np.sum(self.W.dot(self.y) ** 2) / self.W.L.lambdas_multiplicity[k]
+            lambdas.append(ss)
         return(np.array(lambdas))
         
     def to_nucleotide_space(self, codon_table='Standard', stop_y=None,
