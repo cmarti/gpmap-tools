@@ -1090,8 +1090,10 @@ def plot_density_vs_frequency(seq_density, axes):
                              
     axes.scatter(data['logR'], data['logQ'],
                  color='black', s=5, alpha=0.4, zorder=2)
-    zero_counts_logq = logq[np.isinf(logf)]
-    fake_logf = (data['logQ'].min()-1) * np.ones(zero_counts_logq.shape)
+    
+    mask = np.isinf(logf)
+    zero_counts_logq = logq[mask]
+    fake_logf = np.full(zero_counts_logq.shape, logf[mask == False].min() - 0.5) 
     axes.scatter(fake_logf, zero_counts_logq, marker='<',
                  color='red', s=5, alpha=0.2, zorder=2)
     
