@@ -151,15 +151,16 @@ class VCTests(unittest.TestCase):
     
     def test_calculate_variance_components(self):
         vc = VCregression()
-        vc.init(n_alleles=4, seq_length=6)
-        lambdas = np.array([0, 10, 5, 2, 1, 0.5, 0.2])
-        data = vc.simulate(lambdas=lambdas)
+        vc.init(n_alleles=4, seq_length=8)
+        lambdas0 = np.array([0, 10, 5, 2, 1, 0.5, 0.2, 0, 0])
+        data = vc.simulate(lambdas=lambdas0)
         
         # Ensure kernel alignment and calculation of variance components is the same
         space = SequenceSpace(X=data.index.values, y=data.y.values)
         lambdas1 = space.calc_variance_components()
         vc.fit(X=data.index.values, y=data.y.values)
-        assert(np.allclose(vc.lambdas, lambdas1))
+        lambdas2 = vc.lambdas
+        assert(np.allclose(lambdas2, lambdas1))
     
     def test_vc_smn1(self):
         data_fpath = join(TEST_DATA_DIR, 'smn1.0.train.csv')
@@ -290,5 +291,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests']
+    import sys;sys.argv = ['', 'VCTests.test_calculate_variance_components']
     unittest.main()
