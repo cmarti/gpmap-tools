@@ -4,6 +4,7 @@ import numpy as np
 from math import factorial
 from itertools import combinations
 
+from scipy.linalg import lu_factor, lu_solve
 from scipy.sparse.csr import csr_matrix
 from scipy.linalg.decomp_svd import orth
 from scipy.special._basic import comb
@@ -284,11 +285,13 @@ class ProjectionOperator(LapDepOperator):
     def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
                          max_L_size=max_L_size)
-        self.calc_polynomial_coeffs()
+        self.calc_eig_vandermonde_matrix()
+        self.calc_polynomial_coeffs(numeric=False)
     
     def calc_eig_vandermonde_matrix(self):
-        V = np.vstack([self.L.lambdas ** i for i in range(self.lp1)]).T
-        return(V)
+        self.V = np.vstack([self.L.lambdas ** i for i in range(self.lp1)]).T
+        self.V_LU = lu_factor(self.V)
+        return(self.V)
     
     def calc_polynomial_coeffs(self, numeric=False):
         '''
@@ -305,7 +308,7 @@ class ProjectionOperator(LapDepOperator):
             different powers
         '''
         if numeric:
-            self.B = np.linalg.inv(self.calc_eig_vandermonde_matrix())
+            self.B = np.linalg.inv(self.V)
 
         else:        
             B = np.zeros((self.lp1, self.lp1))
@@ -324,8 +327,12 @@ class ProjectionOperator(LapDepOperator):
             
         return(self.B)
     
-    def lambdas_to_coeffs(self, lambdas):
-        return(self.B.dot(lambdas))
+    def lambdas_to_coeffs(self, lambdas, use_lu=False):
+        if use_lu:
+            coeffs = lu_solve(self.V_LU, lambdas)
+        else:
+            coeffs = self.B.dot(lambdas)
+        return(coeffs)
     
     def set_lambdas(self, lambdas=None, k=None):
         msg = 'Only one "k" or "lambdas" can and must be provided'

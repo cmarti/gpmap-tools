@@ -90,6 +90,22 @@ class LinOpsTests(unittest.TestCase):
             # Test that projections are also equal
             assert(np.allclose(p1, p2))
     
+    def test_calc_coefficients(self):
+        for l in range(2, 14):
+            W = ProjectionOperator(2, l)
+            lambdas0 = 10 ** (-np.cumsum(np.exp(np.random.normal(size=W.lp1))))
+            
+            coeffs1 = W.lambdas_to_coeffs(lambdas0, use_lu=False)
+            lambdas1 = W.V.dot(coeffs1)
+            
+            coeffs2 = W.lambdas_to_coeffs(lambdas0, use_lu=True)
+            lambdas2 = W.V.dot(coeffs2) 
+            
+            assert(np.allclose(lambdas0, lambdas1, atol=1e-3))
+            assert(np.allclose(lambdas0, lambdas2, atol=1e-3))
+            assert(np.all(lambdas1 > -1e-6))
+            assert(np.all(lambdas2 > -1e-6))
+            
     def test_projection_operator(self):
         W = ProjectionOperator(2, 2)
         
@@ -97,15 +113,12 @@ class LinOpsTests(unittest.TestCase):
         y = np.array([-1.5, -0.5, 0.5, 1.5])
         
         W.set_lambdas(k=2)
-        print(W.dot(y))
-        # assert(np.allclose(W.dot(y), 0))
+        assert(np.allclose(W.dot(y), 0))
         
         W.set_lambdas(k=1)
-        print(W.dot(y))
-        # assert(np.allclose(W.dot(y), y))
+        assert(np.allclose(W.dot(y), y))
         
         W.set_lambdas(k=0)
-        print(W.dot(y))
         assert(np.allclose(W.dot(y), 0))
         
         # Non-zero orthogonal projections
@@ -130,6 +143,19 @@ class LinOpsTests(unittest.TestCase):
         # Test inverse
         W.set_lambdas(np.array([1, 10, 1.]))
         assert(np.allclose(W.inv_dot(W.dot(y)), y))
+    
+    def test_projection_operator_large(self):
+        for l in range(10, 14):
+            W = ProjectionOperator(seq_length=l, n_alleles=2)
+            
+            for _ in range(10):
+                v = np.random.normal(size=W.shape[0])
+                
+                for k in range(l+1):
+                    W.set_lambdas(k=k)
+                    u = W.dot(v)
+                    q = np.sum(u**2)
+                    assert(q >= 0)
     
     def test_vj_projection_operator(self):
         vjp = VjProjectionOperator(2, 2)
@@ -301,5 +327,5 @@ class LinOpsTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests.test_laplacian_eigenvalues']
+    import sys;sys.argv = ['', 'LinOpsTests']
     unittest.main()
