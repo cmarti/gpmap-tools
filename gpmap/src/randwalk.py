@@ -188,7 +188,8 @@ class TimeReversibleRandomWalk(RandomWalk):
         self.calc_diffusion_axis()
         self.calc_relaxation_times()
     
-    def write_tables(self, prefix, write_edges=False, edges_format='npz'):
+    def write_tables(self, prefix, write_edges=False,
+                     nodes_format='parquet', edges_format='npz'):
         '''
         Write the output of the visualization in tables with a common prefix.
         The output can consist in 2 to 3 different tables, as one of them
@@ -196,7 +197,8 @@ class TimeReversibleRandomWalk(RandomWalk):
         
             - nodes coordinates : contains the coordinates for each genotype and
             the associated function values and stationary frequencies.
-            It is stored in CSV format with suffix "nodes.csv"
+            It is stored in CSV format with suffix "nodes.csv" or parquet
+            with suffix "nodes.pq"
             - decay rates : contains the decay rates and relaxation times
             associated to each component or diffusion axis. It is stored
             in CSV format with suffix "decay_rates.csv"
@@ -216,14 +218,25 @@ class TimeReversibleRandomWalk(RandomWalk):
             Option to write also the information about the adjacency relationships
             between pairs for genotypes for plotting the edges
         
+        nodes_format: str {'parquet', 'csv'}
+            Format to store the nodes information. parquet is more efficient but
+            CSV can be used in smaller cases for plain text storage.
+        
         edges_format: str {'npz', 'csv'}
             Format to store the edges information. npz is more efficient but CSV
             can be used in smaller cases for plain text storage.
         
         '''
-        self.nodes_df.to_csv('{}.nodes.csv'.format(prefix))
-        self.decay_rates_df.to_csv('{}.decay_rates.csv'.format(prefix),
-                                   index=False)
+        self.decay_rates_df.to_csv('{}.decay_rates.csv'.format(prefix), index=False)
+        
+        if nodes_format == 'parquet':
+            self.nodes_df.to_parquet('{}.nodes.pq'.format(prefix))
+        elif nodes_format == 'csv':
+            self.nodes_df.to_csv('{}.nodes.csv'.format(prefix))
+        else:
+            msg = 'nodes_format can only take values ["parquet", "csv"]'
+            raise ValueError(msg)
+        
         if write_edges:
             if edges_format == 'npz':
                 fpath = '{}.edges.npz'.format(prefix)

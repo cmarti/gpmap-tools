@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
-import pandas as pd
-
-from gpmap.src.utils import LogTrack
+from gpmap.src.utils import LogTrack, read_dataframe
 from gpmap.src.plot import (plot_holoview, figure_allele_grid_datashader,
                             figure_allele_grid, save_holoviews,
                             figure_visualization)
@@ -116,7 +114,7 @@ def main():
     log.write('Start analysis')
     
     log.write('Reading genotype data from {}'.format(nodes_fpath))
-    nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+    nodes_df = read_dataframe(nodes_fpath)
     edges_df = read_edges(edges_fpath)
     
     if genotypes is not None:

@@ -629,16 +629,3 @@ def CodonSpace(allowed_aminoacids, codon_table='Standard',
             np.random.seed(seed)
         nuc_space.y += 1 / 10 * np.random.normal(size=nuc_space.n_genotypes)
     return(nuc_space)
-
-
-def read_sequence_space_csv(fpath, y_col, seq_col=0, sort_seqs=True):
-    df = pd.read_csv(fpath, index_col=seq_col)
-    if sort_seqs:
-        df.sort_index(inplace=True)
-    
-    y = df[y_col].values
-    seqs = df.index.values
-    config = guess_space_configuration(seqs, ensure_full_space=True)
-    space = SequenceSpace(alphabet=config['alphabet'], y=y,
-                          alphabet_type='custom')
-    return(space)

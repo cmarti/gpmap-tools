@@ -373,19 +373,47 @@ def write_seqs(seqs, fpath):
             fhand.write('{}\n'.format(seq))
         
 
-def write_split_data(out_prefix, splits):
+def write_dataframe(df, fpath):
+    suffix = fpath.split('.')[-1]
+    if suffix == 'csv':
+        df.to_csv(fpath)
+    elif suffix == 'pq' or suffix == 'parquet':
+        df.to_parquet(fpath)
+    else:
+        msg = 'output format {} not recognized'.format(suffix)
+        raise ValueError(msg)
+
+def read_dataframe(fpath):
+    suffix = fpath.split('.')[-1]
+    if suffix == 'csv':
+        df = pd.read_csv(fpath, index_col=0)
+    elif suffix == 'pq' or suffix == 'parquet':
+        df = pd.read_parquet(fpath)
+    else:
+        msg = 'input format {} not recognized'.format(suffix)
+        raise ValueError(msg)
+    return(df)
+
+def write_split_data(out_prefix, splits, out_format='csv'):
     for i, train, test in splits:
+        fpath = '{}.{}.train.{}'.format(out_prefix, i, out_format=out_format)
         train_df = data_to_df(train)
-        train_df.to_csv('{}.{}.train.csv'.format(out_prefix, i))
+        write_dataframe(train_df, fpath)
 
         test_x = test[0]        
         write_seqs(test_x, fpath='{}.{}.test.txt'.format(out_prefix, i))
         
 
-def read_split_data(prefix, suffix=None):
+def read_split_data(prefix, suffix=None, in_format='csv'):
     fdir = abspath(dirname(prefix))
     prefix = prefix.split('/')[-1]
-    suffix = 'test_pred.csv' if suffix is None else '{}.test_pred.csv'.format(suffix) 
+    
+    suffix2 = 'test_pred.{}'.format(in_format)
+    if suffix is None:
+        suffix = suffix2
+    else:
+        suffix = '{}.{}'.format(suffix, suffix2)
+         
     for fname in listdir(fdir):
         fpath = join(fdir, fname)
         if fname.startswith(prefix) and fname.endswith(suffix):
@@ -406,5 +434,3 @@ def calc_r2_values(test_pred_sets, data):
             print('problem found in {}. Skipping it'.format(label))
             continue
     return(pd.DataFrame(r2))
-
-
