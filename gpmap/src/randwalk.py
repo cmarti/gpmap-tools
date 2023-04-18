@@ -229,7 +229,7 @@ class TimeReversibleRandomWalk(RandomWalk):
         '''
         self.decay_rates_df.to_csv('{}.decay_rates.csv'.format(prefix), index=False)
         
-        if nodes_format == 'parquet':
+        if nodes_format in ['parquet', 'pq']:
             self.nodes_df.to_parquet('{}.nodes.pq'.format(prefix))
         elif nodes_format == 'csv':
             self.nodes_df.to_csv('{}.nodes.csv'.format(prefix))

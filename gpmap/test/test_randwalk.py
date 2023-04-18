@@ -2,19 +2,19 @@
 import unittest
 import sys
 
-from os.path import join
-from subprocess import check_call
-
 import numpy as np
 import pandas as pd
+
+from os.path import join
+from subprocess import check_call
+from itertools import product
+from tempfile import NamedTemporaryFile
 from scipy.sparse._matrix_io import load_npz
 
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace
 from gpmap.src.randwalk import WMWSWalk
-from gpmap.src.plot import figure_Ns_grid
 from gpmap.src.utils import get_sparse_diag_matrix
-from itertools import product
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -91,7 +91,6 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.sum(times) == 1)
         assert(len(path) == len(times))
         
-    
     def calc_neutral_stat_freqs(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
         
@@ -234,7 +233,6 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
         assert(np.unique(mc.neutral_rate_matrix.data).shape[0] > 2)
         
-        
     def test_stationary_frequencies(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
         codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
@@ -339,19 +337,16 @@ class RandomWalkTests(unittest.TestCase):
         nd2 = mc.nodes_df
         assert(not np.allclose(nd2['1'], nd1['1']))
     
-    def test_figure_Ns(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
-        fpath = join(TEST_DATA_DIR, 'serine.Ns_grid')
-        figure_Ns_grid(mc, fpath=fpath, nodes_color='function')
-    
     def test_write_visualization(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
         mc.calc_visualization(Ns=1, n_components=20)
-        prefix = join(TEST_DATA_DIR, 'serine')
-        mc.write_tables(prefix, write_edges=True)
         
-        nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
-        assert(np.allclose(nodes_df.values, mc.nodes_df.values))
+        with NamedTemporaryFile() as fhand:
+            prefix = fhand.name
+            mc.write_tables(prefix, write_edges=True, nodes_format='csv')
+            
+            nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
+            assert(np.allclose(nodes_df.values, mc.nodes_df.values))
         
     def test_calc_visualization_bin_help(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
@@ -363,69 +358,72 @@ class RandomWalkTests(unittest.TestCase):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
         fpath = join(TEST_DATA_DIR, 'serine.csv')
         
-        out_fpath = join(TEST_DATA_DIR, 'serine') 
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-p', '90', '-e']
-        check_call(cmd)
-        
-        df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
-        assert(df.iloc[np.argmax(df['1']), :]['function'] > 1.5)
-        assert(df.iloc[np.argmin(df['1']), :]['function'] > 1.5)
-        
-        edges = load_npz('{}.edges.npz'.format(out_fpath))
-        assert(np.all(edges.shape == (64, 64)))
+        with NamedTemporaryFile() as fhand:
+            out_fpath = fhand.name
+            cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath,
+                   '-p', '90', '-e', '-nf', 'csv']
+            check_call(cmd)
+            
+            df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+            assert(df.iloc[np.argmax(df['1']), :]['function'] > 1.5)
+            assert(df.iloc[np.argmin(df['1']), :]['function'] > 1.5)
+            
+            edges = load_npz('{}.edges.npz'.format(out_fpath))
+            assert(np.all(edges.shape == (64, 64)))
     
     def test_calc_visualization_bin_guess_config(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
         fpath = join(TEST_DATA_DIR, 'test.csv')
         
-        out_fpath = join(TEST_DATA_DIR, 'test') 
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.5', '-e']
-        check_call(cmd)
+        with NamedTemporaryFile() as fhand:
+            cmd = [sys.executable, bin_fpath, fpath, '-o', fhand.name,
+                   '-m', '0.5', '-e']
+            check_call(cmd)
     
     def test_calc_visualization_codon_restricted(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
         fpath = join(TEST_DATA_DIR, 'test.csv')
+        data = pd.read_csv(fpath, index_col=0)
+        cmd = [sys.executable, bin_fpath, fpath, '-m', '0.65', '-e', '-nf', 'csv']
         
         # run with standard genetic code
-        out_fpath = join(TEST_DATA_DIR, 'test') 
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65', '-e']
-        check_call(cmd)
-        edges1 = load_npz('{}.edges.npz'.format(out_fpath))
+        with NamedTemporaryFile() as fhand:
+            out_fpath = fhand.name
+            check_call(cmd + ['-o', out_fpath])
+            edges1 = load_npz('{}.edges.npz'.format(out_fpath))
         
         # run with bacterial genetic code 11
-        out_fpath = join(TEST_DATA_DIR, 'test.codon') 
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
-               '-e', '-c', '11']
-        check_call(cmd)
-        
-        df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
-        data = pd.read_csv(fpath, index_col=0)
-        assert(df.shape[0] == data.shape[0])
+        with NamedTemporaryFile() as fhand:
+            out_fpath = fhand.name
+            check_call(cmd + ['-o', out_fpath, '-c', '11']) 
+            df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+            assert(df.shape[0] == data.shape[0])
 
-        # Ensure we have less edges when using codon restricted transitions        
-        edges2 = load_npz('{}.edges.npz'.format(out_fpath))
-        assert(edges1.sum() > edges2.sum())
+            # Ensure we have less edges when using codon restricted transitions        
+            edges2 = load_npz('{}.edges.npz'.format(out_fpath))
+            assert(edges1.sum() > edges2.sum())
 
     def test_calc_visualization_codon_bin(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
         fpath = join(TEST_DATA_DIR, 'serine.protein.csv')
+        cmd = [sys.executable, bin_fpath, fpath, '-Ns', '1', 
+               '-e', '-C', '-nf', 'csv']
         
         # standard genetic code
-        out_fpath = join(TEST_DATA_DIR, 'serine.codon')
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
-               '-e', '-C', '-c', 'Standard']
-        check_call(cmd)
-        nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
-        assert(nodes.shape[0] == 64)
+        with NamedTemporaryFile() as fhand:
+            out_fpath = fhand.name
+            check_call(cmd + ['-o', out_fpath, '-c', 'Standard'])
+            
+            nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+            assert(nodes.shape[0] == 64)
         
         # custom genetic code
-        out_fpath = join(TEST_DATA_DIR, 'serine.codon.custom')
-        codon_fpath = join(TEST_DATA_DIR, 'code_6037.csv')
-        cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath, '-m', '0.65',
-               '-e', '-C', '-c', codon_fpath]
-        check_call(cmd)
-        nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
-        assert(nodes.shape[0] == 64)
+        with NamedTemporaryFile() as fhand:
+            out_fpath = fhand.name
+            codon_fpath = join(TEST_DATA_DIR, 'code_6037.csv')
+            check_call(cmd + ['-o', out_fpath, '-c', codon_fpath])
+            nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+            assert(nodes.shape[0] == 64)
         
         
 if __name__ == '__main__':
