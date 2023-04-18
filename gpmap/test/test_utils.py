@@ -6,10 +6,11 @@ import pandas as pd
 
 from os.path import join
 
-from gpmap.src.utils import calc_cartesian_product, get_CV_splits,\
-    calc_tensor_product, calc_cartesian_product_dot, calc_tensor_product_dot,\
-    calc_tensor_product_quad, quad
 from gpmap.src.settings import TEST_DATA_DIR
+from gpmap.src.utils import (calc_cartesian_product, get_CV_splits,
+                             calc_tensor_product, calc_cartesian_product_dot,
+                             calc_tensor_product_dot,
+                             calc_tensor_product_quad, quad)
 
 
 class UtilsTests(unittest.TestCase):
@@ -143,10 +144,10 @@ class UtilsTests(unittest.TestCase):
         
         splits = get_CV_splits(X, y, nfolds=3)
         for _, (x_train, y_train, _), (x_test, y_test, _) in splits:
-            assert(x_train.shape[0] == 1)
-            assert(y_train.shape[0] == 1)
-            assert(x_test.shape[0] == 2)
-            assert(y_test.shape[0] == 2)
+            assert(x_train.shape[0] == 2)
+            assert(y_train.shape[0] == 2)
+            assert(x_test.shape[0] == 1)
+            assert(y_test.shape[0] == 1)
             
         splits = list(get_CV_splits(X, y, nfolds=nfolds, count_data=True))
         assert(len(splits) == nfolds)
@@ -176,11 +177,9 @@ class UtilsTests(unittest.TestCase):
         data = pd.read_csv(join(TEST_DATA_DIR, 'seqdeft_counts.csv'),
                            index_col=0)
         X, y = data.index.values, data.iloc[:, 0].values
-        print(y.sum())
         splits = get_CV_splits(X, y, nfolds=nfolds, count_data=True)
         test_counts = {}
         for i, (x_train, y_train), (x_test, y_test) in splits:
-            print(y_train.sum())
             assert(y_train.sum() + y_test.sum() == y.sum())
             
             counts = {seq: c for seq, c in zip(x_train, y_train)}
