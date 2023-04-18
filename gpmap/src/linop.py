@@ -371,6 +371,10 @@ class KernelOperator(SeqLinOperator):
         self.n = W.n
         self.shape = (self.n, self.n)
         self.known_var = False
+    
+    @property
+    def lambdas_multiplicity(self):
+        return(self.W.L.lambdas_multiplicity)
         
     def set_y_var(self, y_var=None, obs_idx=None):
         

@@ -32,6 +32,13 @@ class VCTests(unittest.TestCase):
         assert(np.all(m[4:, :] == 0))
         assert(m.shape == (8, 4))
     
+    def test_lambdas_to_variance_p(self):
+        vc = VCregression()
+        vc.init(3, 2)
+        lambdas = np.array([0, 1, 0.5, 0.1])
+        v = vc.lambdas_to_variance(lambdas)
+        assert(np.allclose(v, [3/4.6, 1.5/4.6, 0.1/4.6]))
+    
     def test_simulate_vc(self):
         np.random.seed(1)
         sigma = 0.1
@@ -291,5 +298,5 @@ class VCTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests.test_calculate_variance_components']
+    import sys;sys.argv = ['', 'VCTests']
     unittest.main()

@@ -267,7 +267,7 @@ class VCregression(LandscapeEstimator):
         return(cov, distance_class_ns)
     
     def lambdas_to_variance(self, lambdas):
-        variance_components = (lambdas * self.W.L.lambdas_multiplicity)[1:]
+        variance_components = (lambdas * self.K.lambdas_multiplicity)[1:]
         variance_components = variance_components / variance_components.sum()
         return(variance_components)
     
@@ -667,6 +667,8 @@ class SeqDEFT(DeltaPEstimator):
         a_min = self.calc_a_min(phi_inf) 
         a_max = self.calc_a_max(phi_inf)
         a_values = np.geomspace(a_min, a_max, self.num_reg)
+        a_values = np.hstack([0, a_values, np.inf])
+        self.total_folds = self.nfolds * (self.num_reg + 2)
         return(a_values)
 
     def fill_zeros_counts(self, X, y):
