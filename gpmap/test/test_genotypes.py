@@ -133,10 +133,34 @@ class GenotypeTests(unittest.TestCase):
     def test_marginalize_positions(self):
         nodes_df = pd.DataFrame({'index': np.arange(4)},
                                 index=['AA', 'AB', 'BA', 'BB'])
+        
+        # Check error capture
+        try:
+            marginalize_landscape_positions(nodes_df)
+            self.fail()
+        except ValueError:
+            pass
+        
+        try:
+            marginalize_landscape_positions(nodes_df, keep_pos=[1],
+                                            skip_pos=[1])
+            self.fail()
+        except ValueError:
+            pass
+        
+        # Check that the averaging is done properly with keep_pos
         ndf = marginalize_landscape_positions(nodes_df, keep_pos=[0])
         assert(np.allclose(ndf['index'],  [0.5, 2.5]))
         
         ndf, edf = marginalize_landscape_positions(nodes_df, keep_pos=[0],
+                                                   return_edges=True)
+        assert(np.allclose(edf,  [[0, 1], [1, 0]]))
+        
+        # Check that the averaging is done properly with skip_pos
+        ndf = marginalize_landscape_positions(nodes_df, skip_pos=[1])
+        assert(np.allclose(ndf['index'],  [0.5, 2.5]))
+        
+        ndf, edf = marginalize_landscape_positions(nodes_df, skip_pos=[1],
                                                    return_edges=True)
         assert(np.allclose(edf,  [[0, 1], [1, 0]]))
         
