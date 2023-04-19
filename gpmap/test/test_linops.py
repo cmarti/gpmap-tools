@@ -5,13 +5,13 @@ import numpy as np
 from itertools import combinations
 from timeit import timeit
 
-from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             VjProjectionOperator, KernelOperator,
-                             DeltaPOperator)
-from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.settings import ALPHABET
 from gpmap.src.seq import generate_possible_sequences
 from gpmap.src.utils import get_sparse_diag_matrix
+from gpmap.src.kernel import VarianceComponentKernel
+from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
+                             VjProjectionOperator, KernelOperator,
+                             DeltaPOperator)
 
 
 class LinOpsTests(unittest.TestCase):
