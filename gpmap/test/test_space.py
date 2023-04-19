@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import unittest
-
 import pandas as pd
 import numpy as np
 
@@ -9,9 +8,9 @@ from tempfile import NamedTemporaryFile
 from scipy.sparse.csr import csr_matrix
 
 from gpmap.src.settings import TEST_DATA_DIR
+from gpmap.src.datasets import DataSet
 from gpmap.src.space import (SequenceSpace, DiscreteSpace, CodonSpace,
                              ProductSpace, GridSpace)
-from gpmap.src.datasets import DataSet
 
 
 class SpaceTests(unittest.TestCase):
@@ -279,9 +278,7 @@ class SpaceTests(unittest.TestCase):
         assert(np.all(sorted(s.state_labels[s.y > 1.5]) == sorted(codons)))
     
     def test_calculate_variance_components(self):
-        gb1 = DataSet('gb1')
-        data = gb1.landscape
-        space = SequenceSpace(X=data.index.values, y=data.log_binding.values)
+        space = DataSet('gb1').to_sequence_space()
         lambdas = space.calc_variance_components()
         assert(np.all(lambdas > 0))
         
@@ -291,6 +288,17 @@ class SpaceTests(unittest.TestCase):
         space = SequenceSpace(X=data.index.values, y=data.y.values)
         lambdas = space.calc_variance_components()
         assert(np.all(lambdas > 0))
+    
+    def test_calc_vjs_variance_components(self):
+        space = DataSet('gb1').to_sequence_space()
+        
+        vj1 = space.calc_vjs_variance_components(k=1)  
+        assert(vj1[(2,)] > vj1[(0,)])
+        assert(vj1[(3,)] > vj1[(1,)])
+        
+        vj2 = space.calc_vjs_variance_components(k=2)
+        for v in vj2.values():
+            assert(vj2[(2,3)] >= v)
     
     def test_to_codon_space(self):
         fpath = join(TEST_DATA_DIR, 'serine.protein.csv')

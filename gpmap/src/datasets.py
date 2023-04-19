@@ -2,6 +2,7 @@ from os.path import join
 
 from gpmap.src.utils import check_error, read_dataframe
 from gpmap.src.settings import DATASETS, RAW_DATA_DIR, LANDSCAPES_DIR
+from gpmap.src.space import SequenceSpace
 
 
 class DataSet(object):
@@ -26,4 +27,8 @@ class DataSet(object):
     def load_landscape(self):
         fpath = join(LANDSCAPES_DIR, '{}.pq'.format(self.name))
         self.landscape = read_dataframe(fpath)
-        
+    
+    def to_sequence_space(self):
+        space = SequenceSpace(X=self.landscape.index.values,
+                              y=self.landscape.iloc[:, 0].values)
+        return(space)
