@@ -1,12 +1,13 @@
 from os.path import join, abspath, dirname
 from Bio.Data import IUPACData
 
-VERSION = '0.1.0'
-
 # Directories
 BASE_DIR = abspath(join(dirname(__file__), '..'))
 BIN_DIR = join(BASE_DIR, '..', 'bin')
 TEST_DATA_DIR = join(BASE_DIR, 'test', 'data')
+DATASETS_DIR = join(BASE_DIR, '..', 'datasets')
+RAW_DATA_DIR = join(DATASETS_DIR, 'data')
+LANDSCAPES_DIR = join(DATASETS_DIR, 'landscapes')
 
 # File paths
 PLOTS_FORMAT = 'png'
@@ -39,3 +40,5 @@ PHI_UB, PHI_LB = 100, 0
 NUCLEOTIDES = ['A', 'U', 'G', 'C']
 COMPLEMENT = {'U': 'A', 'A': 'U', 'G': 'C', 'C': 'G', 'N': 'N',
               'T': 'A', '[': ']', ']': '['}
+
+DATASETS = ['gb1', 'f1u']
