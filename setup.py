@@ -2,7 +2,7 @@
 
 from setuptools import setup, find_packages
 
-VERSION = '0.1.1'
+VERSION = '0.1.2'
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
                 'filter_genotypes = bin.filter_genotypes:main',
             ]},
         install_requires=['biopython',
-                          'datashader', 'holoviews', 'plotly', 'logomaker',
+                          'datashader', 'holoviews', 'plotly',
                           'seaborn', 'matplotlib', 'tqdm',
                           'fastparquet', 'pandas', 'scipy', 'numpy'],
         python_requires='>=3',
