@@ -970,7 +970,7 @@ def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
 def save_holoviews(dsg, fpath, fmt='png', figsize=None):
     fig = hv.render(dsg)
     if figsize is not None:
-        fig.set_size_inches(*figsize)
+        fig.set_size_inches(figsize[0], figsize[1])
     savefig(fig, fpath, tight=False, fmt=fmt)
 
 

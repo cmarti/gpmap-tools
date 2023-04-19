@@ -49,9 +49,9 @@ def main():
                            help='Make interactive html')
     fig_group.add_argument('--datashader', default=False, action='store_true',
                            help='Use datashader for plotting. Recommended for big landscapes')
-    fig_group.add_argument('-H', '--height', default=5, type=int,
+    fig_group.add_argument('-H', '--height', default=5, type=float,
                            help='Figure height in inches (5)')
-    fig_group.add_argument('-W', '--width', default=5, type=int,
+    fig_group.add_argument('-W', '--width', default=5, type=float,
                            help='Figure height in inches (5)')
     fig_group.add_argument('-nr', '--nodes_resolution', default=600, type=int,
                            help='Resolution for datashader plotting of nodes (600)')
@@ -141,6 +141,7 @@ def main():
                                 edges_cmap='grey', background_color='white',
                                 nodes_resolution=nodes_resolution,
                                 edges_resolution=edges_resolution)
+            log.write('Setting figure size to {}'.format(figsize))
             save_holoviews(dsg, out_fpath, fmt=fmt, figsize=figsize)
     else:
         if alleles_grid:
