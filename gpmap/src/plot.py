@@ -967,8 +967,10 @@ def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
     return(dsg)
 
 
-def save_holoviews(dsg, fpath, fmt='png'):
+def save_holoviews(dsg, fpath, fmt='png', figsize=None):
     fig = hv.render(dsg)
+    if figsize is not None:
+        fig.set_size_inches(*figsize)
     savefig(fig, fpath, tight=False, fmt=fmt)
 
 
@@ -976,7 +978,7 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
                                   positions=None, position_labels=None,
                                   edges_cmap='grey', background_color='white',
                                   nodes_resolution=800, edges_resolution=1200,
-                                  fmt='png'):
+                                  fmt='png', figsize=None):
     if edges_df is not None:
         edges = plot_edges_datashader(nodes_df, edges_df, x, y,
                                       cmap=edges_cmap,
@@ -1031,6 +1033,8 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
                 plots += dsg
     dsg = plots.cols(length)
     fig = hv.render(dsg)
+    if figsize is not None:
+        fig.set_size_inches(*figsize)
     savefig(fig, fpath, tight=False, fmt=fmt)
 
 

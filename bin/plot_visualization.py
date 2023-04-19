@@ -49,6 +49,10 @@ def main():
                            help='Make interactive html')
     fig_group.add_argument('--datashader', default=False, action='store_true',
                            help='Use datashader for plotting. Recommended for big landscapes')
+    fig_group.add_argument('-H', '--height', default=5, type=int,
+                           help='Figure height in inches (5)')
+    fig_group.add_argument('-W', '--width', default=5, type=int,
+                           help='Figure height in inches (5)')
     fig_group.add_argument('-nr', '--nodes_resolution', default=600, type=int,
                            help='Resolution for datashader plotting of nodes (600)')
     fig_group.add_argument('-er', '--edges_resolution', default=1200, type=int,
@@ -97,6 +101,8 @@ def main():
     x, y, z = axis
     interactive = parsed_args.interactive
     use_datashader = parsed_args.datashader
+    height = parsed_args.height
+    width = parsed_args.edges_width
     nodes_resolution = parsed_args.nodes_resolution
     edges_resolution = parsed_args.edges_resolution 
     
@@ -121,20 +127,21 @@ def main():
         genotypes = str(genotypes).split(',')
     
     log.write('Plot visualization')
+    figsize = (width, height)
     if use_datashader:
         if alleles_grid:
             figure_allele_grid_datashader(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
                                           edges_cmap='grey', background_color='white',
                                           nodes_resolution=nodes_resolution,
                                           edges_resolution=edges_resolution,
-                                          fmt=fmt)
+                                          fmt=fmt, figsize=figsize)
         else:
             dsg = plot_holoview(nodes_df, x=x, y=y, edges_df=edges_df,
                                 nodes_color=nodes_color, nodes_cmap=nodes_cmap,
                                 edges_cmap='grey', background_color='white',
                                 nodes_resolution=nodes_resolution,
                                 edges_resolution=edges_resolution)
-            save_holoviews(dsg, out_fpath, fmt=fmt)
+            save_holoviews(dsg, out_fpath, fmt=fmt, figsize=figsize)
     else:
         if alleles_grid:
             figure_allele_grid(nodes_df, edges_df=edges_df, fpath=out_fpath, x=x, y=y,
