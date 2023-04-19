@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import warnings
 import numpy as np
 import seaborn as sns
 import pandas as pd
@@ -15,14 +16,12 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from holoviews.operation.datashader import datashade
 
 from gpmap.src.settings import PLOTS_FORMAT
+from gpmap.src.utils import check_error
 from gpmap.src.seq import guess_space_configuration
 from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
                                  minimize_nodes_distance)
-import warnings
-from gpmap.src.utils import check_error
 
 
-# Functions
 def init_fig(nrow=1, ncol=1, figsize=None, style='ticks',
              colsize=3, rowsize=3):
     sns.set_style(style)
