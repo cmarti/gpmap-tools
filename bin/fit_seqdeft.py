@@ -53,9 +53,9 @@ def main():
     data = pd.read_csv(counts_fpath, index_col=0)
 
     # Load annotation data
-    seqdeft = SeqDEFT(P, a=a_value, num_a=num_a)
+    seqdeft = SeqDEFT(P, a=a_value, num_reg=num_a)
     if get_a_values:
-        seqdeft.init(X=data.index.values)
+        seqdeft.init(genotypes=data.index.values)
         seqdeft.set_data(X=data.index.values, y=data['counts'].values)
         log.write('Calculating only a values')
         with open(out_fpath, 'w') as fhand:
@@ -65,7 +65,7 @@ def main():
         result = seqdeft.fit(X=data.index.values, y=data['counts'].values)
         result.to_csv(out_fpath)
         
-        fig = plot_SeqDEFT_summary(seqdeft.cv_log_L, result)
+        fig = plot_SeqDEFT_summary(seqdeft.logL_df, result)
         savefig(fig, out_fpath)
     
     log.finish()

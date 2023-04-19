@@ -278,8 +278,55 @@ def read_edges(fpath, log=None):
     return(edges_df)
 
 
-def marginalize_landscape_positions(nodes_df, keep_pos, return_edges=False):
+def marginalize_landscape_positions(nodes_df, keep_pos=None, skip_pos=None,
+                                    return_edges=False):
+    '''
+    Averages out some positions in the sequences for all numeric values provided
+    in the input dataframe
+    
+    Parameters
+    ----------
+    nodes_df : pd.DataFrame
+        DataFrame with sequence names as index and at least one numeric 
+        column to calculate the average across the selected backgrounds
+    
+    keep_pos : array-like (None)
+        If provided, list of 0-index positions that are to
+        be preserved and averaged across all genetic backgrounds specified
+        by the remaining positions
+    
+    skip_pos : array-like (None)
+        If provided, list of 0-index positions to average out
+    
+    return_edges : bool (False)
+        Return also an edges_df DataFrame to use directly for visualization
+        
+    Returns
+    -------
+    nodes_df :  pd.DataFrame
+        DataFrame containing the average value of every numeric column in the
+        input DataFrame with the subsequences at the desired positions as index
+        
+    edges_df :  pd.DataFrame
+        DataFrame containing the edges of the reduced sequence space. It
+        will only be provided if ```return_edges=True```
+    '''
+    
+    # Select only numeric fields for averaging
     df = nodes_df.select_dtypes(include='number')
+    
+    # Check errors
+    msg = 'Positions to keep or marginalize out must be provided'
+    check_error(keep_pos is not None or skip_pos is not None, msg=msg)
+    
+    msg = 'Specify only positions to keep or avoid'
+    check_error(keep_pos is None or skip_pos is None, msg=msg)
+    
+    # Select positions to keep: assumes constant sequence length
+    if keep_pos is None:
+        seq_length = len(df.index[0])
+        keep_pos = [i for i in range(seq_length) if i not in skip_pos] 
+    
     df['keep_seq'] = [''.join([x[i] for i in keep_pos]) for x in df.index]
     out = df.groupby(['keep_seq']).mean()
     

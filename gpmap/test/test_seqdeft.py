@@ -1,17 +1,16 @@
 #!/usr/bin/env python
 import unittest
-
-from os.path import join
-from subprocess import check_call
-
 import numpy as np
 import pandas as pd
 
+from os.path import join
+from subprocess import check_call
+from scipy.stats.stats import pearsonr
+
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.inference import SeqDEFT
-from gpmap.src.utils import get_sparse_diag_matrix
 from gpmap.src.plot import plot_SeqDEFT_summary, savefig
-from scipy.stats.stats import pearsonr
+from tempfile import NamedTemporaryFile
 
 
 class SeqDEFTTests(unittest.TestCase):
@@ -19,46 +18,6 @@ class SeqDEFTTests(unittest.TestCase):
         a = 1e6
         seqdeft = SeqDEFT(4, 6, P=2)
         data = seqdeft.simulate(N=10000, a_true=a, random_seed=None)
-    
-    def test_construct_D_kernel_basis(self):
-        seqdeft = SeqDEFT(P=3)
-        seqdeft.init(seq_length=5, n_alleles=4, alphabet_type='custom')
-        basis1 = seqdeft.construct_D_kernel_basis()
-        basis2 = seqdeft.construct_D_kernel_basis2()
-        
-        # Ensure basis is orthonormal
-        prod = basis1.T.dot(basis1)
-        identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
-        assert(np.allclose((prod - identity).todense(), 0))
-        
-        prod = basis2.T.dot(basis2)
-        identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
-        assert(np.allclose((prod - identity).todense(), 0))
-        
-        # Ensure basis is sparse
-        max_values = basis1.shape[0] * basis1.shape[1]
-        assert(basis1.data.shape[0] < max_values) 
-        
-        max_values = basis2.shape[0] * basis2.shape[1]
-        assert(basis2.data.shape[0] < max_values) 
-        
-        # Ensure they generate good projection matrices
-        u = np.dot(basis1, basis1.T).dot(basis1)
-        error = (basis1 - u).mean()
-        assert(np.allclose(error, 0))
-        
-        u = np.dot(basis2, basis2.T).dot(basis2)
-        error = (basis2 - u).mean()
-        assert(np.allclose(error, 0))
-        
-        # Ensure both basis represent the same subspace
-        u = np.dot(basis1, basis1.T).dot(basis2)
-        error = (basis2 - u).mean()
-        assert(np.allclose(error, 0))
-        
-        u = np.dot(basis2, basis2.T).dot(basis1)
-        error = (basis1 - u).mean()
-        assert(np.allclose(error, 0))
     
     def test_seq_deft_inference(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
@@ -89,7 +48,7 @@ class SeqDEFTTests(unittest.TestCase):
                                     y=data['counts'].values)
         seq_densities.sort_index(inplace=True)
         r = pearsonr(np.log(seq_densities['Q_star']), np.log(Q))[0]
-        assert(r > 0.98)#             self.calc_A_triu()
+        assert(r > 0.98)
         
         # Infer hyperparameter using CV
         seqdeft = SeqDEFT(P=2)
@@ -110,18 +69,6 @@ class SeqDEFTTests(unittest.TestCase):
         fpath = join(TEST_DATA_DIR, 'seqdeft_output')
         savefig(fig, fpath)
     
-    def test_seq_deft_bin(self):
-        counts_fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
-        out_fpath = join(TEST_DATA_DIR, 'seqdeft.output.csv')
-        bin_fpath = join(BIN_DIR, 'fit_seqdeft.py')
-        
-        cmd = [sys.executable, bin_fpath, counts_fpath, '-o', out_fpath]
-        check_call(cmd)
-        
-        cmd = [sys.executable, bin_fpath, counts_fpath, '-o', out_fpath,
-               '--get_a_values']
-        check_call(cmd)
-        
     def test_missing_alleles(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
         seqdeft = SeqDEFT(P=2)
@@ -180,21 +127,17 @@ class SeqDEFTTests(unittest.TestCase):
         seq_densities = seqdeft.fit(X=data.index.values,
                                     y=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
-        
-    def test_tk_gloop(self):
-        data = pd.read_csv(join(TEST_DATA_DIR, 'tk_gloop5.3.counts.csv'))
-        print(data, data['counts'].sum())
-        X, y = data['seq'].values, data['counts'].values
-        
-        seqdeft = SeqDEFT(P=2, num_a=10, nfolds=10)
-        result = seqdeft.fit(X, y)
-        print(seqdeft.logL_df)
-        
-        fig = plot_SeqDEFT_summary(seqdeft.logL_df, result)
-        out_fpath = join(TEST_DATA_DIR, 'tk.fit2')
-        savefig(fig, out_fpath)
 
+    def test_seq_deft_bin(self):
+        counts_fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
+        bin_fpath = join(BIN_DIR, 'fit_seqdeft.py')
         
+        with NamedTemporaryFile() as fhand:
+            cmd = [sys.executable, bin_fpath, counts_fpath, '-o', fhand.name]
+            check_call(cmd + ['--get_a_values'])
+            check_call(cmd)
+        
+
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_cv_plot']
+    import sys;sys.argv = ['', 'SeqDEFTTests']
     unittest.main()

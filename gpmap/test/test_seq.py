@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 import unittest
-
-from os.path import join
-
 import numpy as np
 import pandas as pd
 
+from os.path import join
 from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
                            guess_space_configuration, get_custom_codon_table,

@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from itertools import product
+from itertools import product, combinations
 from _collections import defaultdict
 
 from scipy.sparse.csr import csr_matrix
@@ -19,7 +19,7 @@ from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
 from scipy.special._logsumexp import logsumexp
-from gpmap.src.linop import ProjectionOperator
+from gpmap.src.linop import ProjectionOperator, VjProjectionOperator
 
 
 class DiscreteSpace(object):
@@ -414,6 +414,9 @@ class SequenceSpace(ProductSpace):
         self._check_y()
     
     def calc_variance_components(self):
+        '''
+        
+        '''
         if not hasattr(self, 'W'):
             n_alleles = np.unique(self.n_alleles)
             msg = 'Variance components can only be calculated for spaces'
@@ -425,8 +428,28 @@ class SequenceSpace(ProductSpace):
         lambdas = []
         for k in np.arange(self.seq_length + 1):
             self.W.set_lambdas(k=k)
-            lambdas.append(self.W.quad(self.y) / self.W.L.lambdas_multiplicity[k])
+            ss = np.sum(self.W.dot(self.y) ** 2) / self.W.L.lambdas_multiplicity[k]
+            lambdas.append(ss)
         return(np.array(lambdas))
+    
+    def calc_vjs_variance_components(self, k):
+        '''
+        
+        '''
+        if not hasattr(self, 'Pj'):
+            n_alleles = np.unique(self.n_alleles)
+            msg = 'Variance components can only be calculated for spaces'
+            msg += ' with constant number of alleles across sites'
+            check_error(n_alleles.shape[0] == 1, msg)
+            n_alleles = n_alleles[0]
+            self.Pj = VjProjectionOperator(n_alleles, self.seq_length)
+            
+        positions = np.arange(self.seq_length)
+        variances = {}
+        for j in combinations(positions, k):
+            self.Pj.set_j(np.array(j))
+            variances[j] = np.sum(self.Pj.dot(self.y) ** 2)
+        return(variances) 
         
     def to_nucleotide_space(self, codon_table='Standard', stop_y=None,
                             alphabet_type='dna'):
@@ -628,16 +651,3 @@ def CodonSpace(allowed_aminoacids, codon_table='Standard',
             np.random.seed(seed)
         nuc_space.y += 1 / 10 * np.random.normal(size=nuc_space.n_genotypes)
     return(nuc_space)
-
-
-def read_sequence_space_csv(fpath, y_col, seq_col=0, sort_seqs=True):
-    df = pd.read_csv(fpath, index_col=seq_col)
-    if sort_seqs:
-        df.sort_index(inplace=True)
-    
-    y = df[y_col].values
-    seqs = df.index.values
-    config = guess_space_configuration(seqs, ensure_full_space=True)
-    space = SequenceSpace(alphabet=config['alphabet'], y=y,
-                          alphabet_type='custom')
-    return(space)

@@ -54,7 +54,9 @@ def main():
                               help='Output file')
     output_group.add_argument('-e', '--edges', default=False, action='store_true',
                               help='Write edges')
-    output_group.add_argument('-f', '--edges_format', default='npz',
+    output_group.add_argument('-nf', '--nodes_format', default='pq',
+                              help='Nodes format [pq, csv] (pq)')
+    output_group.add_argument('-ef', '--edges_format', default='npz',
                               help='Edges format [npz, csv] (npz)')
     
 
@@ -73,6 +75,7 @@ def main():
     
     out_fpath = parsed_args.output
     write_edges = parsed_args.edges
+    nodes_format = parsed_args.nodes_format
     edges_format = parsed_args.edges_format
     
     # Load data
@@ -101,7 +104,7 @@ def main():
                           mean_function_perc=mean_function_perc,
                           n_components=n_components)
     rw.write_tables(out_fpath, write_edges=write_edges,
-                    edges_format=edges_format)
+                    nodes_format=nodes_format, edges_format=edges_format)
     
     log.finish()
 

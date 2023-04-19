@@ -2,9 +2,8 @@
 import argparse
 
 import numpy as np
-import pandas as pd
 
-from gpmap.src.utils import LogTrack
+from gpmap.src.utils import LogTrack, read_dataframe, write_dataframe
 from gpmap.src.inference import VCregression
 
         
@@ -22,16 +21,16 @@ def main():
     options_group = parser.add_argument_group('VC options')
     options_group.add_argument('--lambdas', default=None,
                                help='File containing known lambdas to use for prediction directly')
-    options_group.add_argument('-r', '--regularize',
-                               action='store_true', default=False,
-                               help='Regularize variance components to exponential decay through CV')
+    help_msg = 'Regularize variance components to exponential decay through CV'
+    options_group.add_argument('-r', '--regularize', action='store_true',
+                               default=False, help=help_msg)
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True, help='Output file')
-    output_group.add_argument('-p', '--pred',
-                              help='File containing sequencse for predicting genotype')
-    output_group.add_argument('--var', action='store_true',
-                              help='Report also posterior variance for the predicted values')
+    help_msg = 'File containing sequences for predicting the associated phenotype'
+    output_group.add_argument('-p', '--pred', help=help_msg)
+    help_msg = 'Report also posterior variance for the predicted values'
+    output_group.add_argument('--var', action='store_true', help=help_msg)
 
     # Parse arguments
     parsed_args = parser.parse_args()
@@ -47,8 +46,7 @@ def main():
     # Load counts data
     log = LogTrack()
     log.write('Start analysis')
-    data = pd.read_csv(data_fpath, dtype=str)
-    data = data.set_index(data.columns[0]).astype(float)
+    data = read_dataframe(data_fpath)
     
     # Get processed data
     X = data.index.values
@@ -74,7 +72,7 @@ def main():
     result = vc.predict(Xpred=Xpred, calc_variance=calc_variance)
     
     # Save output
-    result.to_csv(out_fpath)
+    write_dataframe(result, out_fpath)
     
     # Save lambdas
     prefix = '.'.join(out_fpath.split('.')[:-1])

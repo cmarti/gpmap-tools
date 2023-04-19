@@ -2,20 +2,25 @@
 
 from setuptools import setup, find_packages
 
-VERSION = '0.1.0'
+VERSION = '0.1.2'
 
 
 def main():
-    description = 'Tools for inference and visualization of genotype-phenotype'
-    description += ' maps'
+    description = 'Tools for inference and visualization of complex '
+    description += 'genotype-phenotype maps'
     setup(
         name='gpmap_tools',
         version=VERSION,
+        license='MIT',
         description=description,
+        author='Carlos Martí-Gómez',
         author_email='martigo@cshl.edu',
         url='https://bitbucket.org/cmartiga/gpmap_tools',
         packages=find_packages(),
         include_package_data=True,
+        package_data = {'': ['datasets/*/gb1*',
+                             'datasets/*/f1u*',
+                             'datasets/*/smn1*']},
         entry_points={
             'console_scripts': [
                 'fit_SeqDEFT = bin.fit_seqdeft:main',
@@ -28,13 +33,14 @@ def main():
                 'plot_decay_rates = bin.plot_decay_rates:main',
                 'filter_genotypes = bin.filter_genotypes:main',
             ]},
-        install_requires=['biopython==1.79', 'datashader', 'holoviews',
-                          'plotly==5.6.0', 'logomaker==0.8',
-                          'seaborn==0.11.2', 'matplotlib==3.5.1',
-                          'tqdm==4.63.0',
-                          'pandas==1.3.5', 'scipy==1.7.3', 'numpy==1.21.5'],
+        install_requires=['biopython',
+                          'datashader', 'holoviews', 'plotly',
+                          'seaborn', 'matplotlib', 'tqdm',
+                          'fastparquet', 'pandas', 'scipy', 'numpy'],
+        python_requires='>=3',
         platforms='ALL',
-        keywords=['genotype-phenotyp maps', 'fitness landscape'],
+        keywords=['genotype-phenotype maps', 'fitness landscape',
+                  'exact gaussian process regression'],
         classifiers=[
             "Programming Language :: Python :: 3",
             'Intended Audience :: Science/Research',
