@@ -50,9 +50,9 @@ def main():
     fig_group.add_argument('--datashader', default=False, action='store_true',
                            help='Use datashader for plotting. Recommended for big landscapes')
     fig_group.add_argument('-H', '--height', default=5, type=float,
-                           help='Figure height in inches (5)')
+                           help='Figure height in inches when using datashader (5)')
     fig_group.add_argument('-W', '--width', default=5, type=float,
-                           help='Figure height in inches (5)')
+                           help='Figure width in inches when using datashader (5)')
     fig_group.add_argument('-nr', '--nodes_resolution', default=600, type=int,
                            help='Resolution for datashader plotting of nodes (600)')
     fig_group.add_argument('-er', '--edges_resolution', default=1200, type=int,
@@ -102,7 +102,7 @@ def main():
     interactive = parsed_args.interactive
     use_datashader = parsed_args.datashader
     height = parsed_args.height
-    width = parsed_args.edges_width
+    width = parsed_args.width
     nodes_resolution = parsed_args.nodes_resolution
     edges_resolution = parsed_args.edges_resolution 
     
