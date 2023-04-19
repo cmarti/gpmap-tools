@@ -4,12 +4,14 @@ import unittest
 import pandas as pd
 import numpy as np
 
-from gpmap.src.space import SequenceSpace, DiscreteSpace, CodonSpace,\
-    ProductSpace, GridSpace
-from scipy.sparse.csr import csr_matrix
-from gpmap.src.settings import TEST_DATA_DIR
 from os.path import join
 from tempfile import NamedTemporaryFile
+from scipy.sparse.csr import csr_matrix
+
+from gpmap.src.settings import TEST_DATA_DIR
+from gpmap.src.space import (SequenceSpace, DiscreteSpace, CodonSpace,
+                             ProductSpace, GridSpace)
+from gpmap.src.datasets import DataSet
 
 
 class SpaceTests(unittest.TestCase):
@@ -277,7 +279,8 @@ class SpaceTests(unittest.TestCase):
         assert(np.all(sorted(s.state_labels[s.y > 1.5]) == sorted(codons)))
     
     def test_calculate_variance_components(self):
-        data = pd.read_csv(join(TEST_DATA_DIR, 'gb1.csv')).set_index('seq')
+        gb1 = DataSet('gb1')
+        data = gb1.landscape
         space = SequenceSpace(X=data.index.values, y=data.log_binding.values)
         lambdas = space.calc_variance_components()
         assert(np.all(lambdas > 0))
