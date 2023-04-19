@@ -81,12 +81,13 @@ def write_log(log, msg):
 
 
 def check_eigendecomposition(matrix, eigenvalues, right_eigenvectors, tol=1e-3):
-    for l, u in zip(eigenvalues, right_eigenvectors.T):
+    for i, (l, u) in enumerate(zip(eigenvalues, right_eigenvectors.T)):
         v1 = matrix.dot(u)
         v2 = l * u
         abs_err = np.mean(np.abs(v1 - v2))
 
         msg = 'Numeric error in eigendecomposition: abs error = {:.5f} > {:.5f}'
+        msg += ' in the {}th component'.format(i)
         check_error(abs_err <= tol, msg.format(abs_err, tol))
 
 
