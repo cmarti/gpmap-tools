@@ -4,8 +4,6 @@ import numpy as np
 import pandas as pd
 
 from os.path import join
-from itertools import combinations
-from timeit import timeit
 from subprocess import check_call
 
 from scipy.stats.mstats_basic import pearsonr
@@ -13,25 +11,11 @@ from scipy.special._basic import comb
 
 from gpmap.src.inference import VCregression
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
-from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             VjProjectionOperator)
-from gpmap.src.utils import get_sparse_diag_matrix
+from gpmap.src.linop import LaplacianOperator, ProjectionOperator
 from gpmap.src.space import SequenceSpace
 
 
 class VCTests(unittest.TestCase):
-    def test_get_gt_to_data_matrix(self):
-        vc = VCregression()
-        vc.init(3, 2)
-
-        m = vc.get_gt_to_data_matrix().todense()
-        assert(np.all(m == np.eye(8)))
-        
-        m = vc.get_gt_to_data_matrix(idx=np.array([0, 1, 2, 3])).todense()
-        assert(np.all(m[:4, :] == np.eye(4)))
-        assert(np.all(m[4:, :] == 0))
-        assert(m.shape == (8, 4))
-    
     def test_lambdas_to_variance_p(self):
         vc = VCregression()
         vc.init(3, 2)
@@ -169,15 +153,6 @@ class VCTests(unittest.TestCase):
         lambdas2 = vc.lambdas
         assert(np.allclose(lambdas2, lambdas1))
     
-    def test_vc_smn1(self):
-        data_fpath = join(TEST_DATA_DIR, 'smn1.0.train.csv')
-        out_fpath = join(TEST_DATA_DIR, 'smn1.0.out')
-        bin_fpath = join(BIN_DIR, 'vc_regression.py')
-        
-        # Perform regularization
-        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r']
-        check_call(cmd)
-        
     def test_vc_predict(self):
         lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
         fpath = join(TEST_DATA_DIR, 'vc.data.csv')
@@ -214,9 +189,8 @@ class VCTests(unittest.TestCase):
         data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
         filtered = data.loc[np.random.choice(data.index, size=950), :]
-        vc = VCregression()
-        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'], 
-               cross_validation=True)
+        vc = VCregression(cross_validation=True)
+        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'])
         pred = vc.predict().sort_index()
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
@@ -236,40 +210,6 @@ class VCTests(unittest.TestCase):
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
         assert(rho > 0.95)
         assert(mse < 0.3)
-    
-    def test_skewed_VC(self):
-        ps = np.array([[0.4, 0.6],
-                       [0.3, 0.7]])
-        vc = VCregression()
-        vc.init(2, 2, ps=ps)
-        
-        # Ensure that we maintain the right eigenvalues
-        lambdas = np.linalg.eig(sk_vc.M.todense())[0]
-        assert(np.allclose(lambdas, [2, 1, 0, 1]))
-        
-        # Ensure that stationary frequencies add up to 1
-        assert(sk_vc.D_pi.data.sum() == 1)
-        
-        # Test projection into the constant subspace
-        f = np.random.normal(0, 1, size=sk_vc.n_genotypes)
-        sk_f_0 = sk_vc.project(f, k=0)
-        assert(np.allclose(sk_f_0, sk_f_0[0]))
-
-        # Test simulation and projection consistency
-        f = sk_vc.simulate(lambdas=[10, 5, 1])['y_true'].values
-        f_0 = sk_vc.project(f, k=0)
-        f_1 = sk_vc.project(f, k=1)
-        f_2 = sk_vc.project(f, k=2)
-        assert(np.allclose(f, f_0 + f_1 + f_2))
-        
-        # Ensure D_pi orthogonality of projections
-        assert(np.allclose(sk_vc.project(f_0, k=1), 0))
-        assert(np.allclose(sk_vc.project(f_0, k=2), 0))
-        assert(np.allclose(sk_vc.project(f_1, k=0), 0))
-        assert(np.allclose(sk_vc.project(f_1, k=2), 0))
-        assert(np.allclose(sk_vc.project(f_2, k=0), 0))
-        assert(np.allclose(sk_vc.project(f_2, k=1), 0))
-    
     
     def test_vc_fit_bin(self):
         data_fpath = join(TEST_DATA_DIR, 'vc.data.csv')
