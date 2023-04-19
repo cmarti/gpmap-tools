@@ -5,7 +5,7 @@ from os.path import exists
 
 import pandas as pd
 
-from gpmap.src.utils import LogTrack
+from gpmap.src.utils import LogTrack, read_dataframe
 from gpmap.src.space import SequenceSpace
 from gpmap.src.randwalk import WMWSWalk
 from gpmap.src.seq import get_custom_codon_table
@@ -20,7 +20,7 @@ def main():
     # Create arguments
     parser = argparse.ArgumentParser(description=description)
     input_group = parser.add_argument_group('Input')
-    help_msg = 'CSV file with sequence-function map sorted by sequence'
+    help_msg = 'CSV or Parquet file with sequence-function map sorted by sequence'
     input_group.add_argument('input', help=help_msg)
 
     coding_group = parser.add_argument_group('Coding options')
@@ -81,7 +81,7 @@ def main():
     # Load data
     log = LogTrack()
     log.write('Start analysis')
-    data = pd.read_csv(data_fpath, index_col=0)
+    data = read_dataframe(data_fpath)
     
     # Build space
     X, y = data.index.values, data.iloc[:, 0].values 
