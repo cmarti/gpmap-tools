@@ -18,6 +18,9 @@ def main():
         url='https://bitbucket.org/cmartiga/gpmap_tools',
         packages=find_packages(),
         include_package_data=True,
+        package_data = {'': ['datasets/*/gb1*',
+                             'datasets/*/f1u*',
+                             'datasets/*/smn1*']},
         entry_points={
             'console_scripts': [
                 'fit_SeqDEFT = bin.fit_seqdeft:main',
@@ -34,6 +37,7 @@ def main():
                           'datashader', 'holoviews', 'plotly', 'logomaker',
                           'seaborn', 'matplotlib', 'tqdm',
                           'fastparquet', 'pandas', 'scipy', 'numpy'],
+        python_requires='>=3',
         platforms='ALL',
         keywords=['genotype-phenotype maps', 'fitness landscape',
                   'exact gaussian process regression'],

@@ -5,7 +5,7 @@ from Bio.Data import IUPACData
 BASE_DIR = abspath(join(dirname(__file__), '..'))
 BIN_DIR = join(BASE_DIR, '..', 'bin')
 TEST_DATA_DIR = join(BASE_DIR, 'test', 'data')
-DATASETS_DIR = join(BASE_DIR, '..', 'datasets')
+DATASETS_DIR = join(BASE_DIR, 'datasets')
 RAW_DATA_DIR = join(DATASETS_DIR, 'data')
 LANDSCAPES_DIR = join(DATASETS_DIR, 'landscapes')
 
@@ -41,4 +41,4 @@ NUCLEOTIDES = ['A', 'U', 'G', 'C']
 COMPLEMENT = {'U': 'A', 'A': 'U', 'G': 'C', 'C': 'G', 'N': 'N',
               'T': 'A', '[': ']', ']': '['}
 
-DATASETS = ['gb1', 'f1u']
+DATASETS = ['gb1', 'f1u', 'smn1']
