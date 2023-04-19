@@ -39,6 +39,9 @@ class SeqLinOperator(object):
                 break
         return(k)
     
+    def todense(self):
+        return(self.dot(np.eye(self.shape[0])))
+    
     def quad(self, v):
         return(np.sum(v * self.dot(v)))
     
@@ -59,7 +62,7 @@ class LaplacianOperator(SeqLinOperator):
         else:
             self.dot = self.dot1
             
-        self.calc_lambdas()
+        self.calc_lambdas(ps=ps)
         self.calc_lambdas_multiplicity()
         if ps is None:
             self.calc_W_kd_matrix()
@@ -75,8 +78,10 @@ class LaplacianOperator(SeqLinOperator):
         self.ps = np.vstack([p / p.sum() * self.alpha for p in ps])
         self.pi = calc_tensor_product([p.reshape((p.shape[0], 1)) for p in ps]).flatten()
     
-    def calc_lambdas(self):
+    def calc_lambdas(self, ps=None):
         self.lambdas = np.arange(self.l + 1) * self.alpha
+#         if ps is None:
+#             self.lambdas *= self.alpha
     
     def calc_Kn(self, p):
         Kn = np.vstack([p] * p.shape[0])
@@ -270,16 +275,6 @@ class VjProjectionOperator(LapDepOperator):
         '''
         return(calc_tensor_product_quad(self.matrices, v1=self.pi * v, v2=v))
 
-
-def compute_vjs_norms(y, k, seq_length, n_alleles, L=None):
-    Pj = VjProjectionOperator(n_alleles, seq_length, L=L)
-    positions = np.arange(seq_length)
-    norms = {}
-    for j in combinations(positions, k):
-        Pj.set_j(np.array(j))
-        norms[j] = np.sqrt(Pj.quad(y))
-    return(norms) 
-
     
 class ProjectionOperator(LapDepOperator):
     def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=None):
@@ -408,9 +403,9 @@ class KernelOperator(SeqLinOperator):
             return(self.W.dot(v))
 
     def calc_gt_to_data_matrix(self, obs_idx):
-        self.gt2data = csr_matrix((np.ones(self.n_obs),
-                                   (obs_idx, np.arange(self.n_obs))),
-                                  shape=(self.n, self.n_obs))   
+        n_obs = obs_idx.shape[0]
+        self.gt2data = csr_matrix((np.ones(n_obs), (obs_idx, np.arange(n_obs))),
+                                  shape=(self.n, n_obs))   
     
     def dot(self, v, all_rows=False, add_y_var_diag=True, full_v=False):
         if full_v or not self.known_var:
