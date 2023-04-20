@@ -415,6 +415,7 @@ class RandomWalkTests(unittest.TestCase):
             check_call(cmd + ['-o', out_fpath, '-c', 'Standard'])
             
             nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+            assert('protein' in nodes.columns)
             assert(nodes.shape[0] == 64)
         
         # custom genetic code
@@ -423,6 +424,7 @@ class RandomWalkTests(unittest.TestCase):
             codon_fpath = join(TEST_DATA_DIR, 'code_6037.csv')
             check_call(cmd + ['-o', out_fpath, '-c', codon_fpath])
             nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
+            assert('protein' in nodes.columns)
             assert(nodes.shape[0] == 64)
         
         

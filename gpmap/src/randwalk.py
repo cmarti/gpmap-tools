@@ -120,8 +120,8 @@ class TimeReversibleRandomWalk(RandomWalk):
         
         self.nodes_df['function'] = self.space.y
         self.nodes_df['stationary_freq'] = self.stationary_freqs
-        if hasattr(self, 'protein_seqs'):
-            self.nodes_df['protein'] = self.protein_seqs
+        if hasattr(self.space, 'protein_seqs'):
+            self.nodes_df['protein'] = self.space.protein_seqs
         
     def calc_relaxation_times(self):
         decay_rates = -self.eigenvalues[1:]
