@@ -6,22 +6,14 @@ import pandas as pd
 
 from scipy.sparse.csr import csr_matrix
 
-from gpmap.src.genotypes import (select_genotypes, dataframe_to_csr_matrix,
+from gpmap.src.genotypes import (select_genotypes,
                                  select_d_neighbors, select_genotypes_re,
                                  select_genotypes_ambiguous_seqs,
                                  select_closest_genotypes, select_local_optima,
-    marginalize_landscape_positions)
+                                 marginalize_landscape_positions)
 
 
 class GenotypeTests(unittest.TestCase):
-    def test_dataframe_to_csr_matrix(self):
-        edges_df = pd.DataFrame({'i': [0, 0, 1, 1, 2, 2],
-                                 'j': [1, 2, 0, 2, 0, 1]})
-        m = dataframe_to_csr_matrix(edges_df).tocoo()
-        assert(np.all(m.row == [0, 0, 1, 1, 2, 2]))
-        assert(np.all(m.col == [1, 2, 0, 2, 0, 1]))
-        assert(np.all(m.data == np.arange(6)))
-        
     def test_select_genotypes_nodes(self):
         nodes_df = pd.DataFrame({'index': np.arange(3)}, index=['A', 'B', 'C'])
         genotypes = ['A', 'B']

@@ -10,10 +10,57 @@ from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.utils import (calc_cartesian_product, get_CV_splits,
                              calc_tensor_product, calc_cartesian_product_dot,
                              calc_tensor_product_dot,
-                             calc_tensor_product_quad, quad)
+                             calc_tensor_product_quad, quad,
+                             edges_df_to_csr_matrix, read_edges,  write_edges)
+from tempfile import NamedTemporaryFile
 
 
 class UtilsTests(unittest.TestCase):
+    def test_dataframe_to_csr_matrix(self):
+        edges_df = pd.DataFrame({'i': [0, 0, 1, 1, 2, 2],
+                                 'j': [1, 2, 0, 2, 0, 1]})
+        m = edges_df_to_csr_matrix(edges_df).tocoo()
+        assert(np.all(m.row == [0, 0, 1, 1, 2, 2]))
+        assert(np.all(m.col == [1, 2, 0, 2, 0, 1]))
+        assert(np.all(m.data == np.arange(6)))
+    
+    def test_edges_io(self):
+        edges_df = pd.DataFrame({'i': [0, 0, 1, 1, 2, 2],
+                                 'j': [1, 2, 0, 2, 0, 1]})
+        
+        with NamedTemporaryFile() as fhand:
+            fpath = '{}.npz'.format(fhand.name)
+            write_edges(edges_df, fpath, triangular=False)
+            edf = read_edges(fpath)
+            assert(np.all(edges_df == edf))
+            
+            fpath = '{}.pq'.format(fhand.name)
+            write_edges(edges_df, fpath, triangular=False)
+            edf = read_edges(fpath)
+            assert(np.all(edges_df == edf))
+            
+            fpath = '{}.csv'.format(fhand.name)
+            write_edges(edges_df, fpath, triangular=False)
+            edf = read_edges(fpath)
+            assert(np.all(edges_df == edf))
+        
+        edges_df = edges_df_to_csr_matrix(edges_df)
+        with NamedTemporaryFile() as fhand:
+            fpath = '{}.npz'.format(fhand.name)
+            write_edges(edges_df, fpath, triangular=False)
+            edf = read_edges(fpath, return_df=False)
+            assert(np.all(edges_df.todense() == edf.todense()))
+            
+            fpath = '{}.pq'.format(fhand.name)
+            write_edges(edges_df, fpath, triangular=False)
+            edf = read_edges(fpath, return_df=False)
+            assert(np.all(edges_df.todense() == edf.todense()))
+            
+            fpath = '{}.csv'.format(fhand.name)
+            write_edges(edges_df, fpath, triangular=False)
+            edf = read_edges(fpath, return_df=False)
+            assert(np.all(edges_df.todense() == edf.todense()))
+    
     def test_cartesian_product(self):
         # With adjacency matrices
         matrix = np.array([[0, 1],
@@ -202,7 +249,7 @@ class UtilsTests(unittest.TestCase):
                     assert(c == 0)
         
         assert(i == nfolds - 1)
-        
+    
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'UtilsTests']

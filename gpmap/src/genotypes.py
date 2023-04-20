@@ -7,10 +7,9 @@ import pandas as pd
 
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.coo import coo_matrix
-from scipy.sparse._matrix_io import load_npz
 
 from gpmap.src.settings import PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
-from gpmap.src.utils import check_error, write_log
+from gpmap.src.utils import check_error, edges_df_to_csr_matrix
 from gpmap.src.seq import extend_ambigous_seq, translate_seqs
 from gpmap.src.space import SequenceSpace
 
@@ -76,21 +75,11 @@ def get_nodes_df_highlight(nodes_df, genotype_groups, is_prot=False,
 
 def filter_csr_matrix(matrix, idxs):
     return(matrix[idxs, :][:, idxs])
-
-
-def dataframe_to_csr_matrix(edges_df):
-    size = max(edges_df['i'].max(), edges_df['j'].max()) + 1
-    idxs = np.arange(edges_df.shape[0])
-    
-    # idxs are store for filtering edges later on rather than just ones
-    m = csr_matrix((idxs, (edges_df['i'], edges_df['j'])),
-                   shape=(size, size))
-    return(m)
     
 
 def select_edges_from_genotypes(nodes_idxs, edges):
     if isinstance(edges, pd.DataFrame):
-        m = filter_csr_matrix(dataframe_to_csr_matrix(edges),
+        m = filter_csr_matrix(edges_df_to_csr_matrix(edges),
                               nodes_idxs).tocoo()
         edges = edges.iloc[m.data, :].copy()
         edges['i'] = m.row
@@ -239,43 +228,6 @@ def select_local_optima(nodes_df, edges_df, field_function='function'):
                    shape=(nodes_df.shape[0], nodes_df.shape[0])).sum(1)
     idx = np.where(m == m.max())[0]
     return(select_genotypes(nodes_df, idx, edges=edges_df, is_idx=True)[0])
-
-
-def read_edges(fpath, log=None):
-    '''
-    Reads the incidence matrix containing the adjacency information among 
-    genotypes from a sequence space
-    
-    Parameters
-    ----------
-    fpath : str
-        File path containing the edges of a sequence space. The extension will 
-        be used to differentiate between csv and the more efficient npz 
-        format
-        
-    Returns
-    -------
-    edges_df : pd.DataFrame of shape (n_edges, 2)
-        DataFrame with column names ``i`` and ``j`` containing the indexes
-        of the genotypes that are separated by a single mutation in a 
-        sequence space
-    
-    '''
-    if fpath is not None:
-        write_log(log, 'Reading edges data from {}'.format(fpath))
-        edges_format = fpath.split('.')[-1]
-        if edges_format == 'npz':
-            A = load_npz(fpath).tocoo()
-            edges_df = pd.DataFrame({'i': A.row, 'j': A.col})
-        elif edges_format == 'csv':
-            edges_df = pd.read_csv(fpath)
-        else:
-            raise ValueError('edges format has to be ".npz" or ".csv"')
-    else:
-        write_log(log, 'No edges provided for plotting')
-        edges_df = None
-    
-    return(edges_df)
 
 
 def marginalize_landscape_positions(nodes_df, keep_pos=None, skip_pos=None,

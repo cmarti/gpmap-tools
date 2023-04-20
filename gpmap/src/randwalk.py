@@ -238,15 +238,8 @@ class TimeReversibleRandomWalk(RandomWalk):
             raise ValueError(msg)
         
         if write_edges:
-            if edges_format == 'npz':
-                fpath = '{}.edges.npz'.format(prefix)
-                self.space.write_edges_npz(fpath)
-            elif edges_format == 'csv':
-                fpath = '{}.edges.csv'.format(prefix)
-                self.space.write_edges_csv(fpath)
-            else:
-                msg = 'edges_format can only take values ["npz", "csv"]'
-                raise ValueError(msg)
+            fpath = '{}.edges.{}'.format(prefix, edges_format)
+            self.space.write_edges(fpath, fmt=edges_format)
     
 
 class WMWSWalk(TimeReversibleRandomWalk):

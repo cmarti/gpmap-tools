@@ -7,18 +7,17 @@ from itertools import product, combinations
 from _collections import defaultdict
 
 from scipy.sparse.csr import csr_matrix
-from scipy.sparse._matrix_io import save_npz
-from scipy.sparse.extract import triu
+from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.seq import (translate_seqs, guess_space_configuration,
                            guess_alphabet_type, get_seqs_from_alleles,
                            get_product_states)
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
-                             calc_cartesian_product)
+                             calc_cartesian_product, write_edges)
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
-from scipy.special._logsumexp import logsumexp
+
 from gpmap.src.linop import ProjectionOperator, VjProjectionOperator
 
 
@@ -206,15 +205,9 @@ class DiscreteSpace(object):
         edges_df = pd.DataFrame({'i': i, 'j': j})
         return(edges_df)
     
-    def write_edges_npz(self, fpath, triangular=True):
-        if triangular:
-            save_npz(fpath, triu(self.adjacency_matrix))
-        else:
-            save_npz(fpath, self.adjacency_matrix)
-    
-    def write_edges_csv(self, fpath):
-        edges_df = self.get_edges_df()
-        edges_df.to_csv(fpath, index=False)
+    def write_edges(self, fpath, fmt, triangular=True):
+        write_edges(self.adjacency_matrix, fpath, fmt=fmt,
+                    triangular=triangular)
     
     def write_csv(self, fpath):
         df = pd.DataFrame({'y': self.y}, 

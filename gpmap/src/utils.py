@@ -1,19 +1,19 @@
 import sys
 import time
-
 from time import ctime
-
 import numpy as np
 import pandas as pd
-
 import scipy.sparse as sp
 
 from os import listdir
 from os.path import join, dirname, abspath
+from itertools import product
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.dia import dia_matrix
 from scipy.stats.stats import pearsonr
-from itertools import product
+from scipy.sparse.extract import triu
+from scipy.sparse._matrix_io import load_npz, save_npz
+
 
 
 def check_error(condition, msg, error_type=ValueError):
@@ -384,6 +384,7 @@ def write_dataframe(df, fpath):
         msg = 'output format {} not recognized'.format(suffix)
         raise ValueError(msg)
 
+
 def read_dataframe(fpath):
     suffix = fpath.split('.')[-1]
     if suffix == 'csv':
@@ -394,6 +395,115 @@ def read_dataframe(fpath):
         msg = 'input format {} not recognized'.format(suffix)
         raise ValueError(msg)
     return(df)
+
+
+def read_edges(fpath, log=None, return_df=True):
+    '''
+    Reads the incidence matrix containing the adjacency information among 
+    genotypes from a sequence space
+    
+    Parameters
+    ----------
+    fpath : str
+        File path containing the edges of a sequence space. The extension will 
+        be used to differentiate between csv and the more efficient npz 
+        format
+        
+    return_df : bool (True)
+        Whether to return a pd.DataFrame with the edges. Alternatively
+        it will return a csr_matrix
+        
+    Returns
+    -------
+    edges_df : pd.DataFrame of shape (n_edges, 2) or csr_matrix
+        DataFrame with column names ``i`` and ``j`` containing the indexes
+        of the genotypes that are separated by a single mutation in a 
+        sequence space
+    
+    '''
+    if fpath is not None:
+        write_log(log, 'Reading edges data from {}'.format(fpath))
+        edges_format = fpath.split('.')[-1]
+        if edges_format == 'npz':
+            A = load_npz(fpath).tocoo()
+            if return_df:
+                write_log(log, 'Transforming sparse matrix into dataframe')
+                edges_df = pd.DataFrame({'i': A.row, 'j': A.col})
+            else:
+                edges_df = A
+        else:
+            edges_df = read_dataframe(fpath)
+            if not return_df:
+                edges_df = edges_df_to_csr_matrix(edges_df)
+    else:
+        write_log(log, 'No edges provided')
+        edges_df = None
+    
+    return(edges_df)
+
+
+def edges_df_to_csr_matrix(edges_df):
+    size = max(edges_df['i'].max(), edges_df['j'].max()) + 1
+    idxs = np.arange(edges_df.shape[0])
+    
+    # idxs are store for filtering edges later on rather than just ones
+    m = csr_matrix((idxs, (edges_df['i'], edges_df['j'])),
+                   shape=(size, size))
+    return(m)
+
+
+def csr_matrix_to_edges_df(A):
+    try:
+        edges_df = pd.DataFrame({'i': A.row, 'j': A.col})
+    except AttributeError:
+        A = A.tocoo()
+        edges_df = pd.DataFrame({'i': A.row, 'j': A.col})
+    return(edges_df)
+
+
+def write_edges(edges, fpath, triangular=True):
+    '''
+    Writes the incidence matrix containing the adjacency information among 
+    genotypes from a sequence space.
+    
+    Parameters
+    ----------
+    edges : csr_matrix or pd.DataFrame
+        edges object to write into a file.
+        
+    fpath : str
+        File path containing the edges of a sequence space. The extension will 
+        be used to differentiate between csv or pq and the more efficient npz 
+        format
+        
+    triangular : bool (True)
+        Whether to write only the upper triangular for more efficient storing
+        of the adjacency relationships when plotting. 
+    '''
+    # Transform into the right object given a format
+    fmt = fpath.split('.')[-1]
+    if isinstance(edges, pd.DataFrame):
+        if triangular:
+            edges = edges.loc[edges['j'] > edges['i'], :]
+        if fmt == 'npz':
+            edges = edges_df_to_csr_matrix(edges)
+            
+    elif isinstance(edges, csr_matrix):
+        if triangular:
+            edges = triu(edges)
+        if fmt != 'npz':
+            edges = csr_matrix_to_edges_df(edges)
+    
+    else:
+        msg = 'Invalid edges object. Use csr_matrix or pd.DataFrame'
+        raise ValueError(msg)
+
+    # Write into disk
+    if fmt == 'npz':
+        save_npz(fpath, edges)
+    else:
+        write_dataframe(edges, fpath)
+
 
 def write_split_data(out_prefix, splits, out_format='csv'):
     for i, train, test in splits:
