@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 import argparse
 
-from gpmap.src.utils import LogTrack, read_dataframe
+from gpmap.src.utils import LogTrack, read_dataframe, read_edges
 from gpmap.src.plot import (plot_holoview, figure_allele_grid_datashader,
                             figure_allele_grid, save_holoviews,
                             figure_visualization)
-from gpmap.src.genotypes import read_edges
 
         
 def main():
