@@ -339,3 +339,16 @@ def seq_to_one_hot(X, alleles=None):
             onehot.append(c == allele)
     onehot = np.stack(onehot, 1)
     return(onehot)
+
+
+def msa_to_counts(seqs, positions=None, phylo_correction=False):
+    if positions is None:
+        X, counts = np.unique(seqs, return_counts=True)
+    
+    else:
+        if phylo_correction:
+            X = 0
+        else:
+            seqs = [''.join([seq[i] for i in positions]) for seq in seqs]
+            X, counts = np.unique(seqs, return_counts=True) 
+    
