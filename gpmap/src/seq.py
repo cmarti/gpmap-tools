@@ -2,6 +2,7 @@
 import itertools
 from _collections import defaultdict
 
+import pandas as pd
 import numpy as np
 import scipy.sparse as sp
 
@@ -9,6 +10,7 @@ from itertools import chain
 from scipy.sparse.csr import csr_matrix
 from Bio.Seq import Seq 
 from Bio.Data.CodonTable import CodonTable
+from jellyfish._rustyfish import hamming_distance
 
 from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT, ALPHABETS, ALPHABET
 from gpmap.src.utils import check_error, get_sparse_diag_matrix
@@ -341,14 +343,22 @@ def seq_to_one_hot(X, alleles=None):
     return(onehot)
 
 
-def msa_to_counts(seqs, positions=None, phylo_correction=False):
+def msa_to_counts(seqs, positions=None, phylo_correction=False, threshold=0.2):
+    l  = len(seqs[0])
     if positions is None:
         X, counts = np.unique(seqs, return_counts=True)
-    
     else:
         if phylo_correction:
-            X = 0
+            weights = []
+            for seq1 in seqs:
+                d = np.array([hamming_distance(seq1, seq2) for seq2 in seqs]) / l
+                weights.append(1 / (d < threshold).sum())
+                
+            data = pd.DataFrame({'x': [''.join([seq[i] for i in positions]) for seq in seqs],
+                                 'w': weights}).groupby(['x'])['w'].sum().reset_index()
+            X, counts = data['x'].values, data['w'].values
         else:
             seqs = [''.join([seq[i] for i in positions]) for seq in seqs]
-            X, counts = np.unique(seqs, return_counts=True) 
+            X, counts = np.unique(seqs, return_counts=True)
+    return(X, counts) 
     
