@@ -1,12 +1,9 @@
 #!/usr/bin/env python
 import argparse
 
-import pandas as pd
-from scipy.sparse._matrix_io import load_npz
-
-from gpmap.utils import LogTrack
-from gpmap.visualization import filter_genotypes
-from gpmap.src.genotypes import read_edges
+from gpmap.src.genotypes import select_genotypes
+from gpmap.src.utils import (read_dataframe, write_dataframe, LogTrack,
+                             read_edges, write_edges)
 
         
 def main():
@@ -16,18 +13,19 @@ def main():
     # Create arguments
     parser = argparse.ArgumentParser(description=description)
     input_group = parser.add_argument_group('nodes')
-    help_msg = 'CSV file containing nodes coordinates and attributes'
+    help_msg = 'File containing nodes coordinates and attributes'
     input_group.add_argument('nodes', help=help_msg)
     input_group.add_argument('-e', '--edges', default=None,
-                             help='CSV files containing edges data for plotting')
+                             help='File containing edges data for plotting')
     
     nodes_group = parser.add_argument_group('Filtering options')
     nodes_group.add_argument('-m', '--min_value', default=None, type=float,
                              help='Minumum value to filter')
     nodes_group.add_argument('-M', '--max_value', default=None, type=float,
                              help='Maximum value to filter')
-    nodes_group.add_argument('-l', '--label', default='f',
-                             help='Attribute to filter genotypes (f)')
+    nodes_group.add_argument('-l', '--label', default='function',
+                             help='Attribute to filter genotypes (function)')
+    
     nodes_group.add_argument('-n', '--n_genotypes', default=None, type=int,
                              help='Number of genotypes to select from sorting "label"')
     nodes_group.add_argument('--bottom', default=False, action='store_true',
@@ -36,6 +34,10 @@ def main():
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True,
                               help='Output prefix')
+    output_group.add_argument('-nf', '--nodes_format', default='pq',
+                              help='Nodes format [pq, csv] (pq)')
+    output_group.add_argument('-ef', '--edges_format', default='npz',
+                              help='Edges format [npz, csv] (npz)')
 
     # Parse arguments
     parsed_args = parser.parse_args()
@@ -49,14 +51,16 @@ def main():
     bottom = parsed_args.bottom
     
     out_prefix = parsed_args.output
+    nodes_format = parsed_args.nodes_format
+    edges_format = parsed_args.edges_format
 
     # Load data
     log = LogTrack()
     log.write('Start analysis')
     
     log.write('Reading genotype data from {}'.format(nodes_fpath))
-    nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-    edges_df = read_edges(edges_fpath)
+    nodes_df = read_dataframe(nodes_fpath)
+    edges = read_edges(edges_fpath, return_df=False)
     
     if min_value is not None:
         log.write('Selecting genotypes with {} > {}'.format(label, min_value))
@@ -74,17 +78,19 @@ def main():
             genotypes = nodes_df[label] > sorted_values[-n_genotypes]
     
     log.write('Filtering genotypes')
-    if edges_df is None:
-        nodes_df = filter_genotypes(nodes_df, genotypes)
-    else:
-        nodes_df, edges_df = filter_genotypes(nodes_df, genotypes,
-                                              edges_df=edges_df)
+    nodes_df = select_genotypes(nodes_df, genotypes, edges=edges)
+    if edges is not None:
+        nodes_df, edges = nodes_df
 
-    log.write('Saving filtered nodes data at {}.nodes.csv'.format(out_prefix))
-    nodes_df.to_csv('{}.nodes.csv'.format(out_prefix))
-    if edges_df is not None:
-        log.write('Saving filtered edges data at {}.edges.csv'.format(out_prefix))
-        edges_df.to_csv('{}.edges.csv'.format(out_prefix))
+    # Write filtered landscape
+    fpath = '{}.nodes.{}'.format(out_prefix, nodes_format)
+    log.write('Saving filtered nodes data at {}'.format(fpath))
+    write_dataframe(nodes_df, fpath)
+    
+    if edges is not None:
+        fpath = '{}.edges.{}'.format(out_prefix, edges_format)
+        log.write('Saving filtered edges data at {}'.format(fpath))
+        write_edges(edges)
     
     log.finish()
 
