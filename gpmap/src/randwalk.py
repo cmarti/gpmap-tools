@@ -4,6 +4,8 @@ import warnings
 import numpy as np
 import pandas as pd
 
+from itertools import combinations
+from scipy.special._basic import comb
 from scipy.sparse import identity
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
@@ -13,8 +15,6 @@ from scipy.special._logsumexp import logsumexp
 from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix,
                              check_error, write_log, check_eigendecomposition,
                              calc_cartesian_product, calc_tensor_product)
-from scipy.special._basic import comb
-from itertools import combinations
 from gpmap.src.settings import DNA_ALPHABET
 
 
