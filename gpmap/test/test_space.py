@@ -299,6 +299,21 @@ class SpaceTests(unittest.TestCase):
         vj2 = space.calc_vjs_variance_components(k=2)
         for v in vj2.values():
             assert(vj2[(2,3)] >= v)
+            
+    def test_get_single_mutant_matrix(self):
+        space = DataSet('gb1').to_sequence_space()
+        m = space.get_single_mutant_matrix('WWLG', center=False)
+        assert(m.loc[0, 'W'] == 0)
+        assert(m.loc[1, 'W'] == 0)
+        assert(m.loc[2, 'L'] == 0)
+        assert(m.loc[3, 'G'] == 0)
+        
+        m = space.get_single_mutant_matrix('WWLG', center=True)
+        assert(m.loc[0, 'W'] != 0)
+        assert(m.loc[1, 'W'] != 0)
+        assert(m.loc[2, 'L'] != 0)
+        assert(m.loc[3, 'G'] != 0)
+        assert(np.allclose(m.mean(1), 0))
     
     def test_to_codon_space(self):
         fpath = join(TEST_DATA_DIR, 'serine.protein.csv')
@@ -322,5 +337,5 @@ class SpaceTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SpaceTests']
+    import sys;sys.argv = ['', 'SpaceTests.test_get_single_mutant_matrix']
     unittest.main()

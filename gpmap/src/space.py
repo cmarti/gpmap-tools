@@ -130,6 +130,12 @@ class DiscreteSpace(object):
         self.y = y
         self._check_y()
     
+    def get_y(self, state_labels=None):
+        if state_labels is None:
+            return(self.y)
+        idxs = self.get_state_idxs(state_labels)
+        return(self.y[idxs])
+    
     def init_space(self, adjacency_matrix, y=None, state_labels=None):
         # State labels
         state_idxs = np.arange(adjacency_matrix.shape[0])
@@ -442,7 +448,40 @@ class SequenceSpace(ProductSpace):
         for j in combinations(positions, k):
             self.Pj.set_j(np.array(j))
             variances[j] = np.sum(self.Pj.dot(self.y) ** 2)
-        return(variances) 
+        return(variances)
+    
+    def get_single_mutant_matrix(self, sequence, center=False):
+        '''
+        Returns the effects of single point mutantes from a focal sequences
+        
+        Parameters
+        ----------
+        sequence: str
+            String encoding the sequence from which to report all single point
+            mutant effects
+        
+        center: bool (False)
+            If True, results will be centered by position, so that the mean
+            of allelic effects is 0. If False, the focal sequence will have 0
+            and values would represent mutational effects from it
+        
+        Returns
+        -------
+        output: pd.DataFrame of shape (seq_length, total_alleles)
+            pd.DataFrame containin the mutational or allelic effects
+            for each allele across all sequence positions 
+        '''
+        seqy = self.get_y([sequence])
+        data = [] 
+        for i in range(self.seq_length):
+            alleles = self.alphabet[i]
+            mutants = [sequence[:i] + a + sequence[i+1:] for a in alleles]
+            dy = self.get_y(mutants) - seqy
+            if center:
+                dy = dy - dy.mean()
+            data.append(dict(zip(alleles, dy)))
+        data = pd.DataFrame(data)
+        return(data)
         
     def to_nucleotide_space(self, codon_table='Standard', stop_y=None,
                             alphabet_type='dna'):
