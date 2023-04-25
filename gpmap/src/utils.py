@@ -89,7 +89,7 @@ def check_eigendecomposition(matrix, eigenvalues, right_eigenvectors, tol=1e-3):
     msg += '{:2f}. number of non zero entries in Au: {})'.format(abs_error.mean(), n_error)
     check_error(mean_abs_err <= tol, msg)
     
-    u = right_eigenvectors[:, 0]   
+    u = np.abs(right_eigenvectors[:, 0])   
     abs_error = np.abs(u - 1)
     n_error = np.sum(abs_error > 1)
     mean_abs_err = np.mean(abs_error)
