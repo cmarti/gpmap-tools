@@ -701,7 +701,7 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
 
 
 def figure_axis_grid(nodes_df, max_axis=None, edges_df=None, fpath=None,
-                     nodes_size=None, nodes_color='function',
+                     nodes_size=2.5, nodes_color='function',
                      nodes_cmap='viridis', nodes_cmap_label='Function', 
                      edges_color='grey', edges_width=0.5, edges_cmap='binary',
                      edges_alpha=0.1, colsize=3, rowsize=2.7,
