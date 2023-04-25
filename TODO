@@ -22,3 +22,5 @@ even if we select top genotypes
 - Figure out inconsistency between using the correct eigenvalues and getting wrong projections in the skewed kernel. So far it makes more sense to have the correct projection operators
 - Clean up some options for plotting that we are not using that much and make everything confusing.
 - Fix error in calculation of rate matrix when having variable mutation rates
+- Have default figure configurations in some global variables or configuration that can be easily changed across all plots
+
