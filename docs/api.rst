@@ -42,6 +42,7 @@ Sequence utils
 .. autofunction:: gpmap.src.seq.get_one_hot_from_alleles
 .. autofunction:: gpmap.src.seq.get_alphabet
 .. autofunction:: gpmap.src.seq.generate_freq_reduced_alphabet
+.. autofunction:: gpmap.src.seq.msa_to_counts
 
 Genotypes handling
 ------------------
