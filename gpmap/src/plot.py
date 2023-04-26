@@ -884,16 +884,30 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
     
     savefig(fig, fpath)
     
+
+def calc_ds_size(nodes_df, x, y, resolution, square=True):
+    if square:
+        xlim = nodes_df[x].min(), nodes_df[x].max()
+        ylim = nodes_df[y].min(), nodes_df[y].max()
+        dx, dy = xlim[1]- xlim[0], ylim[1] - ylim[0]
+        w, h = resolution, resolution * dx / dy
+    else:
+        w, h = resolution, resolution
+    return(int(w), int(h))
+
     
 def plot_edges_datashader(nodes_df, edges_df, x='1', y='2', cmap='grey',
                           width=0.5, alpha=0.2, color='grey',
-                          shade=True, resolution=800, hw_ratio=1):
+                          shade=True, resolution=800, square=True):
     line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
     dsg = hv.Curve(line_coords)
     if shade:
-        dsg = datashade(dsg, cmap=cmap, width=resolution, height=resolution*hw_ratio)
+        w, h = calc_ds_size(nodes_df, x, y, resolution, square=square)
+        dsg = datashade(dsg, cmap=cmap, width=w, height=h)
     else:
         dsg = dsg.opts(color=color, linewidth=width, alpha=alpha)
+    aspect = 'square' if square else 'equal'
+    dsg.opts(aspect=aspect)
     return(dsg)
 
 
@@ -901,7 +915,7 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
                           size=5, linewidth=0, edgecolor='black',
                           vmin=None, vmax=None,
                           sort_by=None, ascending=True,
-                          shade=True, resolution=800):
+                          shade=True, resolution=800, square=True):
     if sort_by is not None:
         nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
         
@@ -912,13 +926,12 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
     
     if shade:
         nodes = hv.Points(nodes_df, kdims=[x, y], label='Nodes')
+        w, h = calc_ds_size(nodes_df, x, y, resolution, square=square)
         if sort_by is not None:
-            dsg = datashade(nodes, cmap=cmap,
-                            width=resolution, height=resolution,
+            dsg = datashade(nodes, cmap=cmap, width=w, height=h,
                             aggregator=ds.first(color))
         else:
-            dsg = datashade(nodes, cmap=cmap, 
-                            width=resolution, height=resolution,
+            dsg = datashade(nodes, cmap=cmap, width=w, height=h,
                             aggregator=ds.max(color))
     else:
         hv.extension('matplotlib')
@@ -929,7 +942,8 @@ def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridi
         dsg = scatter.opts(color=color, cmap=cmap, clim=(vmin, vmax),
                            s=size, linewidth=linewidth, 
                            edgecolor=edgecolor)
-    
+    aspect = 'square' if square else 'equal'
+    dsg.opts(aspect=aspect)
     return(dsg)
 
 
@@ -941,14 +955,14 @@ def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
                   edges_width=0.5, edges_alpha=0.2, edges_color='grey',
                   edges_cmap='grey', background_color='white',
                   nodes_resolution=800, edges_resolution=1200,
-                  shade_nodes=True, shade_edges=True):
+                  shade_nodes=True, shade_edges=True, square=True):
     dsg = plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap,
                                 linewidth=linewidth, edgecolor=edgecolor,
                                 size=nodes_size,
                                 vmin=nodes_vmin, vmax=nodes_vmax,
                                 sort_by=sort_by, ascending=ascending,
                                 resolution=nodes_resolution,
-                                shade=shade_nodes)
+                                shade=shade_nodes, square=square)
     
     if edges_df is not None:
         edges_dsg = plot_edges_datashader(nodes_df, edges_df, x, y,
@@ -957,7 +971,7 @@ def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
                                           alpha=edges_alpha,
                                           color=edges_color,
                                           resolution=edges_resolution,
-                                          shade=shade_edges)
+                                          shade=shade_edges, square=square)
         dsg = edges_dsg * dsg
     
     dsg.opts(xlabel='Diffusion axis {}'.format(x),
@@ -978,11 +992,12 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
                                   positions=None, position_labels=None,
                                   edges_cmap='grey', background_color='white',
                                   nodes_resolution=800, edges_resolution=1200,
-                                  fmt='png', figsize=None):
+                                  fmt='png', figsize=None, square=True):
     if edges_df is not None:
         edges = plot_edges_datashader(nodes_df, edges_df, x, y,
                                       cmap=edges_cmap,
-                                      resolution=edges_resolution)
+                                      resolution=edges_resolution,
+                                      square=square)
     else:
         edges = None
         
@@ -1013,7 +1028,7 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
                                           x, y,
                                           color='allele', cmap='viridis',
                                           resolution=nodes_resolution,
-                                          shade=True)
+                                          shade=True, square=square)
             nodes = nodes.relabel('{}{}'.format(j+1, allele))
             dsg = nodes if edges is None else edges * nodes
             
