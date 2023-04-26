@@ -884,14 +884,14 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
     
     savefig(fig, fpath)
     
-
+    
 def plot_edges_datashader(nodes_df, edges_df, x='1', y='2', cmap='grey',
                           width=0.5, alpha=0.2, color='grey',
-                          shade=True, resolution=800):
+                          shade=True, resolution=800, hw_ratio=1):
     line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
     dsg = hv.Curve(line_coords)
     if shade:
-        dsg = datashade(dsg, cmap=cmap, width=resolution, height=resolution)
+        dsg = datashade(dsg, cmap=cmap, width=resolution, height=resolution*hw_ratio)
     else:
         dsg = dsg.opts(color=color, linewidth=width, alpha=alpha)
     return(dsg)
