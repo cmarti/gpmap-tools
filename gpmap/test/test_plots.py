@@ -15,10 +15,12 @@ from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             figure_allele_grid, save_holoviews,
                             plot_relaxation_times, plot_interactive,
                             figure_Ns_grid, plot_SeqDEFT_summary,
-                            plot_hyperparam_cv, figure_axis_grid)
+                            plot_hyperparam_cv, figure_axis_grid,
+    plot_genotypes_box)
 from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWSWalk
 from gpmap.src.space import CodonSpace
+from tempfile import NamedTemporaryFile
         
 
 class PlottingTests(unittest.TestCase):
@@ -47,6 +49,21 @@ class PlottingTests(unittest.TestCase):
             assert(a == b or (np.isnan(a) and np.isnan(b)))
             assert(c == d or (np.isnan(c) and np.isnan(d)))
             assert(e == f or (np.isnan(e) and np.isnan(f)))
+        
+    def test_plot_genotypes_box(self):
+        fig, axes = init_fig(1, 1)
+        plot_genotypes_box(axes, (0, 1), (0, 1), c='black', title='bigbox',
+                           pos='top')
+        plot_genotypes_box(axes, (0.2, 0.4), (0.1, 0.3), c='red',
+                           title='inner box', pos='right')
+        
+        plot_genotypes_box(axes, (-0.5, 0.3), (-0.1, 0.2), c='blue',
+                           title='other box', pos='bottom')
+        axes.set(xlim=(-1, 2), ylim=(-1, 2))
+        
+        with NamedTemporaryFile('w') as fhand:
+            fig.savefig(fhand.name)
+        
         
     def test_datashader_small(self):
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')

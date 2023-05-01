@@ -236,6 +236,33 @@ def get_axis_lims(nodes_df, x, y, z=None):
     return(axis_lims)
 
 
+def plot_genotypes_box(axes, xlims, ylims, lw=1, c='black', facecolor='none',
+                       title=None, pos='top', fontsize=10):
+    
+    dx, dy = xlims[1] - xlims[0], ylims[1] - ylims[0]
+    rect = mpatches.Rectangle((xlims[0], ylims[0]), dx, dy,
+                              linewidth=lw, edgecolor=c,
+                              facecolor=facecolor)
+    axes.add_patch(rect)
+    
+    if title is not None:
+        if pos == 'top':
+            axes.text(xlims[0] + dx / 2, ylims[0] + 1.1 * dy, title, 
+                      va='bottom', ha='center', fontsize=fontsize)
+        elif pos == 'right':
+            axes.text(xlims[0] + 1.1 * dx, ylims[0] + dy / 2, title, 
+                      va='center', ha='left', fontsize=fontsize)
+        elif pos == 'left':
+            axes.text(xlims[0] - 0.1 * dx, ylims[0] + dy / 2, title, 
+                      va='center', ha='right', fontsize=fontsize)
+        elif pos == 'bottom':
+            axes.text(xlims[0] + 0.5 * dx, ylims[0] - 0.1 * dy, title, 
+                      va='top', ha='center', fontsize=fontsize)
+        else:
+            msg = 'Incorrect position for title: '
+            raise ValueError(msg + 'try {"top", "bottom", "left", "right"}')
+
+
 def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                color='function', size=2.5, cmap='viridis',
                cbar=True, cbar_axes=None, palette='Set1',
