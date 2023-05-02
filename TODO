@@ -24,3 +24,4 @@ even if we select top genotypes
 - Fix error in calculation of rate matrix when having variable mutation rates
 - Have default figure configurations in some global variables or configuration that can be easily changed across all plots
 - Add section to tutorial for how to select Ns in case of trying to represent directly a probability distribution
+- Try out https://github.com/Quantco/tabmat CategoricalMatrix in the Laplacian class for faster and memory implementation of dot product
