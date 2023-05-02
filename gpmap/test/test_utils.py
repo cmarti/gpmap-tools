@@ -110,6 +110,18 @@ class UtilsTests(unittest.TestCase):
                              [0, 0.4, 0.3, 0]])
         result = calc_cartesian_product([matrix1, matrix2])
         assert(np.all(result == expected))
+        
+        # With boolean matrices
+        matrix = np.array([[False, True],
+                           [True, False]])
+        expected = np.array([[False, True, True, False],
+                             [True, False, False, True],
+                             [True, False, False, True],
+                             [False, True, True, False]])
+        
+        result = calc_cartesian_product([matrix, matrix])
+        assert(result.dtype == bool)
+        assert(np.all(result == expected))
     
     def test_cartesian_product_dot(self):
         m1 = np.array([[0, 1],

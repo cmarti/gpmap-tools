@@ -139,7 +139,7 @@ def calc_cartesian_product(matrices):
         return(matrices[0])
     
     m1, m2 = matrices[0], calc_cartesian_product(matrices[1:])
-    i = sp.identity(m2.shape[0])
+    i = sp.identity(m2.shape[0], dtype=m1.dtype)
     
     rows = []
     for j in range(m1.shape[0]): 
