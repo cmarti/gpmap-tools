@@ -38,11 +38,13 @@ class LinOpsTests(unittest.TestCase):
         
         ps = np.array([[0.4, 0.6], [0.5, 0.5]])
         L = LaplacianOperator(2, 2, ps=ps)
-        assert(np.allclose(L.lambdas, [0, 1, 2]))
+        assert(np.allclose(L.lambdas, [0, 2, 4]))
 
     def test_laplacian_split(self):
-        L1 = LaplacianOperator(4, 7)
-        L2 = LaplacianOperator(4, 7, max_size=500)
+        l = 9
+        L0 = LaplacianOperator(4, l)
+        L1 = LaplacianOperator(4, l, use_bool=True)
+        L2 = LaplacianOperator(4, l, max_size=500)
         
         for d in L2.Kns_shape:
             assert(d[0] < 500)
@@ -54,12 +56,17 @@ class LinOpsTests(unittest.TestCase):
         v = np.random.normal(size=L1.shape[0])
         L2.dot(v)
         
-        print(timeit(lambda: L1.dot0(v), number=10))
-        print(timeit(lambda : L1.dot1(v), number=10))
-        print(timeit(lambda : L2.dot1(v), number=10))
+        print(timeit(lambda: L0.L.dot(v), number=20))
+        print(timeit(lambda: L0.dot0(v), number=20))
         
-        assert(np.allclose(L1.dot0(v), L1.dot1(v)))
-        assert(np.allclose(L1.dot0(v), L2.dot1(v)))
+        print(timeit(lambda: L1.dot1(v), number=20))
+        L1.A = L1.A.astype(np.float64)
+        print(timeit(lambda: L1.dot1(v), number=20))
+        
+        print(timeit(lambda : L2.dot2(v), number=20))
+        
+        assert(np.allclose(L0.dot0(v), L1.dot2(v)))
+        assert(np.allclose(L0.dot0(v), L2.dot2(v)))
         
     def test_calc_polynomial_coeffs_analytical(self):
         for l in range(3, 9):

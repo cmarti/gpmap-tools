@@ -50,17 +50,22 @@ class SeqLinOperator(object):
 
 
 class LaplacianOperator(SeqLinOperator):
-    def __init__(self, n_alleles, seq_length, ps=None, max_size=None):
+    def __init__(self, n_alleles, seq_length, ps=None, max_size=None,
+                 use_bool=False):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length,
                          max_size=max_size)
         self.set_ps(ps)
         self.calc_Kns()
             
         if max_size is None:
-            self.calc_L()
-            self.dot = self.dot0
+            if use_bool:
+                self.calc_A()
+                self.dot = self.dot1
+            else:
+                self.calc_L()
+                self.dot = self.dot0
         else:
-            self.dot = self.dot1
+            self.dot = self.dot2
             
         self.calc_lambdas(ps=ps)
         self.calc_lambdas_multiplicity()
@@ -84,8 +89,12 @@ class LaplacianOperator(SeqLinOperator):
 #             self.lambdas *= self.alpha
     
     def calc_Kn(self, p):
-        Kn = np.vstack([p] * p.shape[0])
-        np.fill_diagonal(Kn, np.zeros(Kn.shape[0]))
+        if self.variable_ps:
+            Kn = np.vstack([p] * p.shape[0])
+            np.fill_diagonal(Kn, np.zeros(Kn.shape[0]))
+        else:
+            Kn = np.full((self.alpha, self.alpha), True)
+            np.fill_diagonal(Kn, np.full(self.alpha, False))
         return(Kn)
     
     def calc_Kns(self):
@@ -97,8 +106,11 @@ class LaplacianOperator(SeqLinOperator):
         self.Kns = Kns
         self.Kns_shape = [x.shape for x in Kns]
     
+    def calc_A(self):
+        self.A = calc_cartesian_product(self.Kns)
+    
     def calc_L(self):
-        L = -calc_cartesian_product(self.Kns)
+        L = - calc_cartesian_product(self.Kns).astype(np.float64)
         L.setdiag(-L.sum(1).A1)
         self.L = L.tocsr()
     
@@ -106,6 +118,9 @@ class LaplacianOperator(SeqLinOperator):
         return(self.L.dot(v))
     
     def dot1(self, v):
+        return(self.d * v - self.A.dot(v))
+    
+    def dot2(self, v):
         return(self.d * v - calc_cartesian_product_dot(self.Kns, v))
     
     def get_Vj_basis(self, j):
