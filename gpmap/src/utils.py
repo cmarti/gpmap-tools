@@ -13,6 +13,7 @@ from scipy.sparse.dia import dia_matrix
 from scipy.stats.stats import pearsonr
 from scipy.sparse.extract import triu
 from scipy.sparse._matrix_io import load_npz, save_npz
+from scipy.sparse.coo import coo_matrix
 
 
 
@@ -499,13 +500,14 @@ def write_edges(edges, fpath, triangular=True):
     '''
     # Transform into the right object given a format
     fmt = fpath.split('.')[-1]
+    print(edges, type(edges))
     if isinstance(edges, pd.DataFrame):
         if triangular:
             edges = edges.loc[edges['j'] > edges['i'], :]
         if fmt == 'npz':
             edges = edges_df_to_csr_matrix(edges)
             
-    elif isinstance(edges, csr_matrix):
+    elif isinstance(edges, csr_matrix) or isinstance(edges, coo_matrix):
         if triangular:
             edges = triu(edges)
         if fmt != 'npz':
