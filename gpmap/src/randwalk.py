@@ -239,7 +239,7 @@ class TimeReversibleRandomWalk(RandomWalk):
         
         if write_edges:
             fpath = '{}.edges.{}'.format(prefix, edges_format)
-            self.space.write_edges(fpath, fmt=edges_format)
+            self.space.write_edges(fpath)
     
 
 class WMWSWalk(TimeReversibleRandomWalk):

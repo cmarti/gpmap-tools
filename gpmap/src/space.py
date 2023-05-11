@@ -211,9 +211,8 @@ class DiscreteSpace(object):
         edges_df = pd.DataFrame({'i': i, 'j': j})
         return(edges_df)
     
-    def write_edges(self, fpath, fmt, triangular=True):
-        write_edges(self.adjacency_matrix, fpath, fmt=fmt,
-                    triangular=triangular)
+    def write_edges(self, fpath, triangular=True):
+        write_edges(self.adjacency_matrix, fpath, triangular=triangular)
     
     def write_csv(self, fpath):
         df = pd.DataFrame({'y': self.y}, 
