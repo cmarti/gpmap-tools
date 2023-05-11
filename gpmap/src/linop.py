@@ -56,16 +56,21 @@ class LaplacianOperator(SeqLinOperator):
                          max_size=max_size)
         self.set_ps(ps)
         self.calc_Kns()
-            
-        if max_size is None:
-            if use_bool:
-                self.calc_A()
-                self.dot = self.dot1
-            else:
-                self.calc_L()
-                self.dot = self.dot0
+        
+        if seq_length > 7:
+            # For long sequences this is the most memory efficient 
+            # and fastest dot product method. 
+            self.dot = self.dot3
         else:
-            self.dot = self.dot2
+            if max_size is None:
+                if use_bool:
+                    self.calc_A()
+                    self.dot = self.dot1
+                else:
+                    self.calc_L()
+                    self.dot = self.dot0
+            else:
+                self.dot = self.dot2
             
         self.calc_lambdas(ps=ps)
         self.calc_lambdas_multiplicity()
@@ -122,6 +127,20 @@ class LaplacianOperator(SeqLinOperator):
     
     def dot2(self, v):
         return(self.d * v - calc_cartesian_product_dot(self.Kns, v))
+
+    def contract_v(self, v):
+        return(v.reshape(tuple([self.alpha]*self.l)))
+
+    def expand_v(self, v):
+        return(v.reshape(self.n))
+
+    def dot3(self, v):
+        v = self.contract_v(v)
+        u = np.zeros(v.shape)
+        for i in range(self.l):
+            u += np.stack([v.sum(i)] * self.alpha, axis=i)
+        u = self.l * self.alpha * v - u
+        return(self.expand_v(u))
     
     def get_Vj_basis(self, j):
         if not hasattr(self, 'vj'):
