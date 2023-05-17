@@ -21,6 +21,8 @@ even if we select top genotypes
 - Write docstrings for space variance components and vjs calculations and add to API reference
 - Figure out inconsistency between using the correct eigenvalues and getting wrong projections in the skewed kernel. So far it makes more sense to have the correct projection operators
 - Clean up some options for plotting that we are not using that much and make everything confusing.
+- Add colorbar functionality for datashader plots
+- Add functionto center the spines in the visualizations
 - Fix error in calculation of rate matrix when having variable mutation rates
 - Have default figure configurations in some global variables or configuration that can be easily changed across all plots
 - Add section to tutorial for how to select Ns in case of trying to represent directly a probability distribution
@@ -31,3 +33,4 @@ even if we select top genotypes
 - Fix problem when building nucleotide spaces and transform specifically values with stop codons and not every genotype without assigned phenotype to be able to detect problems in the code. 
 - Reimplement datashader plotting functions using v0.12 native mpl interface
 - Think whether to implement and embedding object
+- Add docstrings to seqdeft and methods
