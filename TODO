@@ -24,4 +24,10 @@ even if we select top genotypes
 - Fix error in calculation of rate matrix when having variable mutation rates
 - Have default figure configurations in some global variables or configuration that can be easily changed across all plots
 - Add section to tutorial for how to select Ns in case of trying to represent directly a probability distribution
-- Try out https://github.com/Quantco/tabmat CategoricalMatrix in the Laplacian class for faster and memory implementation of dot product
+- Optimize Laplacian matvec method for further efficiency if possible
+- Fix problem cross validation problem with non integer counts deriving from phylogenetic correction
+- Remove reference in docs and send references to David
+- Implement hamming ball space
+- Fix problem when building nucleotide spaces and transform specifically values with stop codons and not every genotype without assigned phenotype to be able to detect problems in the code. 
+- Reimplement datashader plotting functions using v0.12 native mpl interface
+- Think whether to implement and embedding object
