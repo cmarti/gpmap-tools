@@ -436,7 +436,7 @@ def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
                        nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
                        edges_color='grey', edges_width=0.5, edges_cmap='binary',
                        edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
-                       sort_nodes=True, ascending=False, sort_by=None,
+                       sort_nodes=True, ascending=True, sort_by=None,
                        fontsize=12, prev_nodes_df=None, autoscale_axis=False):
     
     if prev_nodes_df is not None:
@@ -701,7 +701,7 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
 
 
 def figure_axis_grid(nodes_df, max_axis=None, edges_df=None, fpath=None,
-                     nodes_size=None, nodes_color='function',
+                     nodes_size=2.5, nodes_color='function',
                      nodes_cmap='viridis', nodes_cmap_label='Function', 
                      edges_color='grey', edges_width=0.5, edges_cmap='binary',
                      edges_alpha=0.1, colsize=3, rowsize=2.7,

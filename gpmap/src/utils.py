@@ -22,8 +22,9 @@ def check_error(condition, msg, error_type=ValueError):
 
 
 def check_symmetric(sparse_matrix, tol=1e-6):
-    if not (abs(sparse_matrix - sparse_matrix.T)> tol).nnz == 0:
-        raise ValueError('Re-scaled rate matrix is not symmetric')
+    e = abs(sparse_matrix - sparse_matrix.T)
+    if not (e > tol).nnz == 0:
+        raise ValueError('Re-scaled rate matrix is not symmetric: (A - A.T).max() = {:.2}'.format(e.max()))
 
 
 def get_sparse_diag_matrix(values):
@@ -81,14 +82,30 @@ def write_log(log, msg):
 
 
 def check_eigendecomposition(matrix, eigenvalues, right_eigenvectors, tol=1e-3):
-    for i, (l, u) in enumerate(zip(eigenvalues, right_eigenvectors.T)):
+    abs_error = np.abs(matrix.sum(1))
+    n_error = np.sum(abs_error > 1)
+    mean_abs_err = np.mean(abs_error)
+    msg = 'Numeric error in matrix: rows do not add to 0. (Mean error = '
+    msg += '{:2f}. number of non zero entries in Au: {})'.format(abs_error.mean(), n_error)
+    check_error(mean_abs_err <= tol, msg)
+    
+    u = np.abs(right_eigenvectors[:, 0])   
+    abs_error = np.abs(u - 1)
+    n_error = np.sum(abs_error > 1)
+    mean_abs_err = np.mean(abs_error)
+    msg = 'Numeric error in eigendecomposition: abs error = {:.5f} > {:.5f}'
+    msg += ' in the {}th component ({} sequences > 1)'.format(0, n_error)
+    check_error(mean_abs_err <= tol, msg.format(mean_abs_err, tol))
+    
+    for i, (l, u) in enumerate(zip(eigenvalues[1:], right_eigenvectors.T[1:])):
         v1 = matrix.dot(u)
         v2 = l * u
-        abs_err = np.mean(np.abs(v1 - v2))
-
+        abs_error = np.abs(v1 - v2)
+        n_error = np.sum(abs_error > 1)
+        mean_abs_err = np.mean(abs_error)
         msg = 'Numeric error in eigendecomposition: abs error = {:.5f} > {:.5f}'
-        msg += ' in the {}th component'.format(i)
-        check_error(abs_err <= tol, msg.format(abs_err, tol))
+        msg += ' in the {}th component ({} sequences > 1)'.format(i, n_error)
+        check_error(mean_abs_err <= tol, msg.format(mean_abs_err, tol))
 
 
 def calc_Kn_matrix(k=None, p=None):

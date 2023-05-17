@@ -35,7 +35,7 @@ def main():
             ]},
         install_requires=['biopython',
                           'datashader', 'holoviews', 'plotly',
-                          'seaborn', 'matplotlib', 'tqdm',
+                          'seaborn', 'matplotlib', 'tqdm', 'jellyfish',
                           'fastparquet', 'pandas', 'scipy', 'numpy'],
         python_requires='>=3',
         platforms='ALL',

@@ -8,7 +8,8 @@ from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
                            guess_space_configuration, get_custom_codon_table,
                            get_seqs_from_alleles, get_one_hot_from_alleles,
-                           generate_freq_reduced_code, transcribe_seqs)
+                           generate_freq_reduced_code, transcribe_seqs,
+    msa_to_counts)
 
 
 class SeqTests(unittest.TestCase):
@@ -154,6 +155,33 @@ class SeqTests(unittest.TestCase):
         
         new_seqs = transcribe_seqs(seqs, code)
         assert(np.all(new_seqs == ['AG', 'AA', 'CG', 'CA', 'XG', 'XX']))
+    
+    def test_msa_to_counts(self):
+        msa = ['AGTGG',
+               'AGTGT',
+               'GGTGG',
+               'ATACC',
+               'ATACC',
+               'ATACG']
+        
+        # Regular counting
+        X, y = msa_to_counts(msa)
+        assert(np.all(X == np.array(['AGTGG', 'AGTGT', 'ATACC', 'ATACG', 'GGTGG'])))
+        assert(np.all(y == np.array([1, 1, 2, 1, 1])))
+        
+        # Count subsequences at some positions
+        X, y = msa_to_counts(msa, positions=[1, 2])
+        assert(np.all(X == np.array(['GT', 'TA'])))
+        assert(np.all(y == np.array([3, 3])))
+        
+        # Count subsequences at some positions with phylogenetic correction
+        X, y = msa_to_counts(msa, positions=[1, 2], phylo_correction=True, threshold=0.15)
+        assert(np.all(X == np.array(['GT', 'TA'])))
+        assert(np.all(y == np.array([3., 2.])))
+        
+        X, y = msa_to_counts(msa, positions=[1, 2], phylo_correction=True, threshold=0.25)
+        assert(np.all(X == np.array(['GT', 'TA'])))
+        assert(np.all(y == np.array([4/3., 1.])))
     
         
 if __name__ == '__main__':

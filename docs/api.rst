@@ -11,7 +11,9 @@ Discrete spaces
         get_state_idxs, get_neighbors, get_neighbor_pairs
 
 .. autoclass:: gpmap.src.space.SequenceSpace
-   :members: to_nucleotide_space, remove_codon_incompatible_transitions
+   :members: to_nucleotide_space, remove_codon_incompatible_transitions,
+        get_single_mutant_matrix, calc_variance_components,
+        calc_vjs_variance_components
             
 Random walks
 ------------
@@ -40,6 +42,7 @@ Sequence utils
 .. autofunction:: gpmap.src.seq.get_one_hot_from_alleles
 .. autofunction:: gpmap.src.seq.get_alphabet
 .. autofunction:: gpmap.src.seq.generate_freq_reduced_alphabet
+.. autofunction:: gpmap.src.seq.msa_to_counts
 
 Genotypes handling
 ------------------
