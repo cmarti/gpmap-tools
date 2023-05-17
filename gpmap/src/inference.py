@@ -674,7 +674,6 @@ class SeqDEFT(DeltaPEstimator):
     def fill_zeros_counts(self, X, y):
         data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
         data.loc[X] = y
-        data = data.astype(int)
         return(data)
 
     def phi_to_logQ(self, phi):
