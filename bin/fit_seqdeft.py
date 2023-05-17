@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
-from gpmap.src.utils import LogTrack, read_dataframe
+from gpmap.src.utils import LogTrack, read_dataframe, write_dataframe
 from gpmap.src.inference import SeqDEFT
 from gpmap.src.plot import plot_SeqDEFT_summary, savefig
 
@@ -15,7 +15,7 @@ def main():
     # Create arguments
     parser = argparse.ArgumentParser(description=description)
     input_group = parser.add_argument_group('Input')
-    input_group.add_argument('counts', help='CSV table with sequence counts')
+    input_group.add_argument('counts', help='CSV or parquet table with sequence counts')
 
     options_group = parser.add_argument_group('SeqDEFT options')
     help_msg = 'Value of the hyperparameter a for SeqDEFT. If not provided, '
@@ -61,7 +61,7 @@ def main():
                 fhand.write('{}\n'.format(a_value))
     else:
         result = seqdeft.fit(X=data.index.values, y=data['counts'].values)
-        result.to_csv(out_fpath)
+        write_dataframe(result, out_fpath)
         
         fig = plot_SeqDEFT_summary(seqdeft.logL_df, result)
         savefig(fig, out_fpath)
