@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
-import pandas as pd
-
-from gpmap.src.utils import LogTrack
+from gpmap.src.utils import LogTrack, read_dataframe
 from gpmap.src.inference import SeqDEFT
 from gpmap.src.plot import plot_SeqDEFT_summary, savefig
 
@@ -50,7 +48,7 @@ def main():
     # Load counts data
     log = LogTrack()
     log.write('Start analysis')
-    data = pd.read_csv(counts_fpath, index_col=0)
+    data = read_dataframe(counts_fpath)
 
     # Load annotation data
     seqdeft = SeqDEFT(P, a=a_value, num_reg=num_a)
