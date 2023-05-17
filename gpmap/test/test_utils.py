@@ -11,7 +11,8 @@ from gpmap.src.utils import (calc_cartesian_product, get_CV_splits,
                              calc_tensor_product, calc_cartesian_product_dot,
                              calc_tensor_product_dot,
                              calc_tensor_product_quad, quad,
-                             edges_df_to_csr_matrix, read_edges,  write_edges)
+                             edges_df_to_csr_matrix, read_edges,  write_edges,
+    counts_to_seqs)
 from tempfile import NamedTemporaryFile
 
 
@@ -194,6 +195,23 @@ class UtilsTests(unittest.TestCase):
         u1 = quad(m, v)
         u2 = calc_tensor_product_quad(ms, v)
         assert(np.allclose(u1, u2))
+    
+    def test_counts_to_seqs(self):
+        X = ['AA', 'AB', 'BA', 'BB']
+        y = [2, 3, 2, 1]
+        X_seqs = ['AA', 'AA', 'AB', 'AB', 'AB', 'BA', 'BA', 'BB']
+        
+        # With integer counts
+        seqs = counts_to_seqs(X, y)
+        assert(np.all(seqs == X_seqs))
+        
+        # Fail with float counts
+        y = [2, 3, 2, 1.2]
+        try:
+            seqs = counts_to_seqs(X, y)
+            self.fail()
+        except TypeError:
+            pass
     
     def test_get_CV_splits(self):
         np.random.seed(0)
