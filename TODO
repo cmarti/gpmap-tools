@@ -25,3 +25,4 @@ even if we select top genotypes
 - Add functionto center the spines in the visualizations
 - Fix error in calculation of rate matrix when having variable mutation rates
 - Have default figure configurations in some global variables or configuration that can be easily changed across all plots
+- Add docstrings to seqdeft and methods
