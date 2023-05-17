@@ -222,7 +222,8 @@ class UtilsTests(unittest.TestCase):
             pass
     
         # Test with re-weighted counts
-        y = np.array([1, 2, 1.5])
+        X = np.array(['A', 'B', 'C', 'D'])
+        y = np.array([1, 2, 1.5, 0])
         splits = list(get_CV_splits(X, y, nfolds=nfolds, count_data=True))
         assert(len(splits) == nfolds)
         for _, (x_train, y_train), (x_test, y_test) in splits:
@@ -238,7 +239,7 @@ class UtilsTests(unittest.TestCase):
                     counts[seq] = c
             
             for seq, c in zip(X, y):
-                assert(c == counts[seq])
+                assert(c == counts.get(seq, 0))
     
     def test_get_CV_splits_big_dataset(self):
         nfolds = 7
