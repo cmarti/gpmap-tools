@@ -189,13 +189,40 @@ class UtilsTests(unittest.TestCase):
         X = np.array(['A', 'B', 'C'])
         y = np.array([1, 2, 2])
         
+        # Test with real values data
         splits = get_CV_splits(X, y, nfolds=3)
         for _, (x_train, y_train, _), (x_test, y_test, _) in splits:
             assert(x_train.shape[0] == 2)
             assert(y_train.shape[0] == 2)
             assert(x_test.shape[0] == 1)
             assert(y_test.shape[0] == 1)
-            
+             
+        # Test with integer counts
+        splits = list(get_CV_splits(X, y, nfolds=nfolds, count_data=True))
+        assert(len(splits) == nfolds)
+        for _, (x_train, y_train), (x_test, y_test) in splits:
+            # Test total numbers are preserved
+            assert(y_train.sum() + y_test.sum() == y.sum())
+             
+            # Test exact counts match total data
+            counts = {seq: c for seq, c in zip(x_train, y_train)}
+            for seq, c in zip(x_test, y_test):
+                try:
+                    counts[seq] += c
+                except KeyError:
+                    counts[seq] = c
+             
+            for seq, c in zip(X, y):
+                assert(c == counts[seq])
+                 
+        try:
+            splits = list(get_CV_splits(X, y, nfolds=10, count_data=True))
+            self.fail()
+        except ValueError:
+            pass
+    
+        # Test with re-weighted counts
+        y = np.array([1, 2, 1.5])
         splits = list(get_CV_splits(X, y, nfolds=nfolds, count_data=True))
         assert(len(splits) == nfolds)
         for _, (x_train, y_train), (x_test, y_test) in splits:
@@ -212,12 +239,6 @@ class UtilsTests(unittest.TestCase):
             
             for seq, c in zip(X, y):
                 assert(c == counts[seq])
-                
-        try:
-            splits = list(get_CV_splits(X, y, nfolds=10, count_data=True))
-            self.fail()
-        except ValueError:
-            pass
     
     def test_get_CV_splits_big_dataset(self):
         nfolds = 7
