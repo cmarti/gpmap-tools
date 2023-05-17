@@ -318,12 +318,14 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
                 train = seqs_to_counts(np.append(seqs[:i], seqs[i+n_test:]))
                 yield(j, train, test)
         elif y.dtype == float:
+            idx = y > 0
+            X_new, y_new = X[idx], y[idx] 
             foldsw = np.array([w * np.random.dirichlet([w / nfolds] * nfolds)
-                               for i, w in enumerate(y)])
+                               for i, w in enumerate(y_new)])
             for j in range(nfolds):
                 test = foldsw[:, j]
-                train = y - test
-                yield(j, (X, train), (X, test))
+                train = y_new - test
+                yield(j, (X_new, train), (X_new, test))
         else:
             msg = 'Unrecognized data type: {}'.format(y.dtype)
             raise ValueError(msg)
