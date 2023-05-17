@@ -467,10 +467,10 @@ class DeltaPEstimator(LandscapeEstimator):
         for a, fold, train, test in tqdm(cv_data, total=self.total_folds):
             (X_train, y_train), (X_test, y_test) = train, test
 
-            self.set_data(X=X_train, y=y_train)
+            self._set_data(X=X_train, y=y_train)
             phi = self._fit(a, phi_initial=phi_initial)
             
-            self.set_data(X=X_test, y=y_test)
+            self._set_data(X=X_test, y=y_test)
             test_logL = -self.calc_neg_log_likelihood(phi)
             yield({'a': a, 'fold': fold, 'logL': test_logL})
 
@@ -564,13 +564,12 @@ class DeltaPEstimator(LandscapeEstimator):
             sequence in the space
         
         """
-        self.init(genotypes=X)
         self.set_data(X, y)
         phi_inf = self._fit(np.inf)
         
         if not self.a_is_fixed and force_fit_a:
             self.fit_a_cv(phi_inf=phi_inf)
-            self.set_data(X, y)
+            self._set_data(X, y)
         
         # Fit model with a_star or provided a
         phi = self._fit(self.a, phi_initial=phi_inf)
@@ -580,7 +579,7 @@ class DeltaPEstimator(LandscapeEstimator):
 
 class SeqDEFT(DeltaPEstimator):
     # Required methods
-    def set_data(self, X, y):
+    def _set_data(self, X, y):
         self.X = X
         self.y = y
         self.y_var = None
@@ -588,6 +587,10 @@ class SeqDEFT(DeltaPEstimator):
         data = self.fill_zeros_counts(X, y)
         self.N = data.sum()
         self.R = (data / self.N)
+    
+    def set_data(self, X, y):
+        self.init(genotypes=X)
+        self._set_data(X, y)
     
     @property
     def count_data(self):

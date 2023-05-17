@@ -58,6 +58,24 @@ class SeqDEFTTests(unittest.TestCase):
         seqdeft.logL_df.to_csv(fpath)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
     
+    def test_weighted_inference(self):
+        fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
+        data = pd.read_csv(fpath, index_col=0)
+        w = np.exp(np.random.normal(0, 0.5, size=data.shape[0]))
+        data['counts'] = data['counts'] * w
+        
+        # Test that data splitting works and returns float weights
+        seqdeft = SeqDEFT(P=2)
+        seqdeft.set_data(X=data.index.values, y=data['counts'].values)
+        for _, _, train, test in seqdeft.get_cv_iter([1]):
+            assert(train[1].dtype == float)
+            assert(test[1].dtype == float)
+        
+        # Test inference
+        seq_densities = seqdeft.fit(X=data.index.values,
+                                    y=data['counts'].values)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+    
     def test_seq_deft_cv_plot(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_output.csv')
         seq_densities = pd.read_csv(fpath, index_col=0)
