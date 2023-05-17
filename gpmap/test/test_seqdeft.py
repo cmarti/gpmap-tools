@@ -70,6 +70,11 @@ class SeqDEFTTests(unittest.TestCase):
         for _, _, train, test in seqdeft.get_cv_iter([1]):
             assert(train[1].dtype == float)
             assert(test[1].dtype == float)
+            
+            # Ensure that set_data is not really transforming the data
+            seqdeft._set_data(X=train[0], y=train[1])
+            assert(seqdeft.y.dtype == float)
+            assert(np.allclose(seqdeft.y, train[1]))
         
         # Test inference
         seq_densities = seqdeft.fit(X=data.index.values,
