@@ -82,7 +82,7 @@ def guess_alphabet_type(alphabet):
     
 
 def guess_space_configuration(seqs, ensure_full_space=True,
-                              force_regular=False):
+                              force_regular=False, force_regular_alleles=False):
     """
     Guess the sequence space configuration from a collection of sequences
     This allows to have different number of alleles per site and maintain 
@@ -102,9 +102,13 @@ def guess_space_configuration(seqs, ensure_full_space=True,
         random walk to visualize the full landscape.
     
     force_regular: bool
-        Option to ensure that there are the same alleles number of alleles per
-        site. If not, the alphabet will be expanded to include all observed
-        alleles for every site
+        Option to ensure that there are the same number of alleles per
+        site. New allele names will be added to sites with less than the
+        maximum number of alleles across sites
+        
+    force_regular_alleles: bool
+        Option to additionally ensure that the same alleles are
+        common across all sites
            
     Returns
     -------
@@ -129,12 +133,27 @@ def guess_space_configuration(seqs, ensure_full_space=True,
         check_error(np.prod(n_alleles) == seqs.shape[0], msg)
     
     if force_regular:
-        if np.unique(n_alleles).shape[0] > 1:
+        if force_regular_alleles:
             new_alphabet = set()
             for alleles in alphabet:
                 new_alphabet = new_alphabet.union(alleles)
             n_alleles = [len(new_alphabet)] * seq_length
             alphabet = [sorted(new_alphabet)] * seq_length
+        
+        else:
+            if np.unique(n_alleles).shape[0] > 1:
+                new_alphabet = []
+                max_alleles = max(n_alleles)
+                for site_alleles in alphabet:
+                    i = 0
+                    while len(site_alleles) < max_alleles:
+                        new_allele = str(i)
+                        if new_allele not in site_alleles:
+                            site_alleles.append(new_allele)
+                        i += 1
+                    new_alphabet.append(site_alleles)
+                alphabet = [sorted(x) for x in new_alphabet]
+                n_alleles = [max_alleles] * seq_length 
             
     config = {'length': seq_length, 'n_alleles': n_alleles,
               'alphabet': alphabet}

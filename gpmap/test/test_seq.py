@@ -54,6 +54,33 @@ class SeqTests(unittest.TestCase):
         except ValueError:
             pass
         
+        # Incomplete sequence space
+        config = guess_space_configuration(seqs, ensure_full_space=False)
+        assert(config['n_alleles'] == [2, 3])
+        assert(config['alphabet'] == [['A', 'B'], ['A', 'B', 'C']])
+        
+        # Make complete landscape with all alleles
+        config = guess_space_configuration(seqs, ensure_full_space=False, 
+                                           force_regular=True)
+        assert(config['n_alleles'] == [3, 3])
+        assert(config['alphabet'] == [['0', 'A', 'B'], ['A', 'B', 'C']])
+        
+        # With different alleles per site but same number
+        seqs = np.array(['AA', 'AC',
+                         'BA', 'BC'])
+        config = guess_space_configuration(seqs, ensure_full_space=False, 
+                                           force_regular=True,
+                                           force_regular_alleles=False)
+        assert(config['n_alleles'] == [2, 2])
+        assert(config['alphabet'] == [['A', 'B'], ['A', 'C']])
+        
+        # Make complete landscape with all alleles
+        config = guess_space_configuration(seqs, ensure_full_space=False, 
+                                           force_regular=True,
+                                           force_regular_alleles=True)
+        assert(config['n_alleles'] == [3, 3])
+        assert(config['alphabet'] == [['A', 'B', 'C'], ['A', 'B', 'C']])
+        
         # With a real file
         fpath = join(TEST_DATA_DIR, 'gfp.short.csv')
         data = pd.read_csv(fpath).sort_values('pseudo_prot').set_index('pseudo_prot')
@@ -175,11 +202,11 @@ class SeqTests(unittest.TestCase):
         assert(np.all(y == np.array([3, 3])))
         
         # Count subsequences at some positions with phylogenetic correction
-        X, y = msa_to_counts(msa, positions=[1, 2], phylo_correction=True, threshold=0.15)
+        X, y = msa_to_counts(msa, positions=[1, 2], phylo_correction=True, max_dist=0.15)
         assert(np.all(X == np.array(['GT', 'TA'])))
         assert(np.all(y == np.array([3., 2.])))
         
-        X, y = msa_to_counts(msa, positions=[1, 2], phylo_correction=True, threshold=0.25)
+        X, y = msa_to_counts(msa, positions=[1, 2], phylo_correction=True, max_dist=0.25)
         assert(np.all(X == np.array(['GT', 'TA'])))
         assert(np.all(y == np.array([4/3., 1.])))
     
