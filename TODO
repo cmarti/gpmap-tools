@@ -37,3 +37,4 @@ even if we select top genotypes
 - Streamline reduced alphabet
 - Think about matrix free version of projection operators into the Vj's
 - There is a clear problem when calculating the rate matrix with mutational biases
+- Add function to plot path using nodes_df and a list of sequences
