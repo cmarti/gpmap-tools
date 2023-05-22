@@ -35,3 +35,4 @@ even if we select top genotypes
 - Think whether to implement and embedding object
 - Add docstrings to seqdeft and methods
 - Streamline reduced alphabet
+- Think about matrix free version of projection operators into the Vj's
