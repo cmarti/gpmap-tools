@@ -10,7 +10,7 @@ from scipy.sparse.csr import csr_matrix
 from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.datasets import DataSet
 from gpmap.src.space import (SequenceSpace, DiscreteSpace, CodonSpace,
-                             ProductSpace, GridSpace)
+                             ProductSpace, GridSpace, HammingBallSpace)
 
 
 class SpaceTests(unittest.TestCase):
@@ -172,6 +172,12 @@ class SpaceTests(unittest.TestCase):
         
         s = CodonSpace(['K'], add_variation=True, seed=0)
         assert(np.all(s.state_labels[s.y > 1.5] == ['AAA', 'AAG']))
+    
+    def test_hamming_ball_space(self):
+        X0 = 'ATG'
+        alphabet = [['A', 'C', 'G', 'T']] * len(X0)
+        space = HammingBallSpace(X0=X0, alphabet=alphabet, d=2)
+        
         
     def test_n_alleles(self):
         s = SequenceSpace(seq_length=2, alphabet_type='dna')
@@ -337,5 +343,5 @@ class SpaceTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SpaceTests.test_get_single_mutant_matrix']
+    import sys;sys.argv = ['', 'SpaceTests.test_hamming_ball_space']
     unittest.main()

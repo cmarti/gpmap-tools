@@ -219,6 +219,85 @@ class DiscreteSpace(object):
                           index=self.state_labels)
         df.to_csv(fpath)
         
+
+class HammingBallSpace(DiscreteSpace):
+    '''
+    Class for the space representing the Hamming ball around a target sequence
+    up to a certain number of mutations from it. 
+    
+    '''
+    def __init__(self, X0, d, alphabet=None, alphabet_type='custom',
+                 X=None, y=None):
+        self.X0 = X0
+        self.d = d
+        self.alphabet = alphabet
+        self.seq_length = len(X0)
+#         if X is not None and y is not None:
+#             config = guess_space_configuration(X, ensure_full_space=True)
+#             seq_length = config['length']
+#             alphabet_type = config['alphabet_type']
+#             alphabet = config['alphabet']
+#             y = pd.Series(y, index=X)
+#         
+#         self.set_seq_length(seq_length, n_alleles, alphabet)
+#         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles,
+#                                alphabet=alphabet)
+#         self.n_states = np.prod(self.n_alleles)
+#         
+#         msg='Sequence space is too big to handle ({})'.format(self.n_states)
+#         check_error(self.n_states <= MAX_STATES, msg=msg)
+#         
+#         adjacency_matrix = self.calc_adjacency_matrix()
+        state_labels = self.get_genotypes()
+        print(state_labels.shape)
+        adjacency_matrix = self.get_adjacency_matrix()
+        self.init_space(adjacency_matrix, state_labels=state_labels)
+        
+        if y is not None:
+            if X is None:
+                X = self.genotypes
+            self.set_y(X, y)
+        
+        
+    @property
+    def n_genotypes(self):
+        return(self.n_states)
+    
+    @property
+    def genotypes(self):
+        return(self.state_labels)
+    
+    def set_y(self, X, y):
+        y = pd.Series(y, index=X)
+        y = y.reindex(self.genotypes).values
+            
+        self.y = y
+        self._check_y()
+    
+    def get_genotypes(self):
+        positions = np.arange(self.seq_length)
+        pos_alleles = []
+        for j in np.arange(self.seq_length):
+            j_alleles = self.alphabet[j][:]
+            j_alleles.remove(self.X0[j])
+            pos_alleles.append(j_alleles)
+
+        genotypes = [self.X0]
+        X0_list = [x for x in self.X0] 
+        for i in range(1, self.d + 1):
+            for pos in combinations(positions, i):
+                pos_alphabet = [pos_alleles[j] for j in pos]
+                for alleles in get_seqs_from_alleles(pos_alphabet):
+                    X_i = X0_list.copy()
+                    for k, a in zip(pos, alleles):
+                        X_i[k] = a
+                    genotypes.append(''.join(X_i))
+        genotypes = np.array(genotypes)
+        return(genotypes)
+    
+    def get_adjacency_matrix(self):
+        return()
+        
     
 class ProductSpace(DiscreteSpace):
     def __init__(self, elementary_graphs, y=None, state_labels=None):
