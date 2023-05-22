@@ -512,7 +512,6 @@ def write_edges(edges, fpath, triangular=True):
     '''
     # Transform into the right object given a format
     fmt = fpath.split('.')[-1]
-    print(edges, type(edges))
     if isinstance(edges, pd.DataFrame):
         if triangular:
             edges = edges.loc[edges['j'] > edges['i'], :]
