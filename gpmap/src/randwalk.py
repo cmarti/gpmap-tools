@@ -22,6 +22,10 @@ class RandomWalk(object):
     def __init__(self):
         return()
     
+    @property
+    def shape(self):
+        return(self.space.n_states, self.space.n_states)
+    
     def calc_jump_matrix(self):
         self.leaving_rates = -self.rate_matrix.diagonal()
         jump_matrix = get_sparse_diag_matrix(1/self.leaving_rates).dot(self.rate_matrix)
@@ -59,9 +63,9 @@ class TimeReversibleRandomWalk(RandomWalk):
         self.space = space
         self.log = log
     
-    def set_stationary_freqs(self, stationary_freqs):
-        self.stationary_freqs = stationary_freqs
-        sqrt_freqs = np.sqrt(stationary_freqs)
+    def set_stationary_freqs(self, log_freqs):
+        self.stationary_freqs = np.exp(log_freqs)
+        sqrt_freqs = np.sqrt(self.stationary_freqs)
         self.diag_freq = get_sparse_diag_matrix(sqrt_freqs) 
         self.diag_freq_inv = get_sparse_diag_matrix(1 / sqrt_freqs)
     
@@ -84,16 +88,15 @@ class TimeReversibleRandomWalk(RandomWalk):
         return(rate_matrix, sandwich_rate_m)
     
     def calc_eigendecomposition(self, n_components=10, tol=1e-14, eig_tol=1e-2):
-        n_components = min(n_components, self.space.n_states - 1)
-        self.n_components = n_components
+        self.n_components = min(n_components + 1, self.space.n_states - 1)
         
         # Transform matrix shifting eigenvalues close to 0 to avoid numerical problems
         upper_bound = np.abs(self.sandwich_rate_matrix).sum(1).max()
         sandwich_aux_matrix = identity(self.space.n_states) + 1 / upper_bound * self.sandwich_rate_matrix
         
-        self.report('Calculating {} eigenvalue-eigenvector pairs'.format(n_components))
+        self.report('Calculating {} eigenvalue-eigenvector pairs'.format(self.n_components))
         v0 = self.diag_freq.dot(self.stationary_freqs)
-        lambdas, q = eigsh(sandwich_aux_matrix, n_components,
+        lambdas, q = eigsh(sandwich_aux_matrix, self.n_components,
                            v0=v0, which='LM', tol=tol)
         
         # Reverse order
@@ -176,14 +179,16 @@ class TimeReversibleRandomWalk(RandomWalk):
             msg += 'is required to calculate the rate matrix'
             raise ValueError(msg)
         
-        Ns = self.set_Ns(Ns=Ns, mean_function=mean_function,
-                         mean_function_perc=mean_function_perc,
-                         neutral_stat_freqs=neutral_stat_freqs)
+        self.set_Ns(Ns=Ns, mean_function=mean_function,
+                    mean_function_perc=mean_function_perc,
+                    neutral_stat_freqs=neutral_stat_freqs)
         
         # Calculate rate matrix and re-scaled visualization coordinates
-        self.set_stationary_freqs(self.calc_stationary_frequencies(Ns, neutral_stat_freqs))
-        self.calc_rate_matrix(Ns=Ns, neutral_rate_matrix=neutral_rate_matrix,
-                              tol=tol)
+        log_freqs = self.calc_log_stationary_frequencies(self.Ns, neutral_stat_freqs)
+        self.set_stationary_freqs(log_freqs)
+        self.calc_sandwich_rate_matrix(Ns=self.Ns,
+                                       neutral_rate_matrix=neutral_rate_matrix,
+                                       tol=tol)
         self.calc_eigendecomposition(n_components, tol=tol, eig_tol=eig_tol)
         self.calc_diffusion_axis()
         self.calc_relaxation_times()
@@ -331,6 +336,16 @@ class WMWSWalk(TimeReversibleRandomWalk):
         
         return(neutral_site_Qs)
 
+    def calc_exchange_rate_matrix(self, exchange_rates=None):
+        if exchange_rates is None:
+            exchange_rates
+            exchange_rates_m = [np.ones(int(comb(alpha, 2)))
+                                for alpha in self.space.n_alleles]
+        matrices = [csr_matrix(self.ex_rates_vector_to_matrix(m, a))
+                    for m, a in zip(exchange_rates_m, self.space.n_alleles)]
+        ex_rates_m = calc_cartesian_product(matrices)
+        return(ex_rates_m) 
+
     def calc_neutral_stat_freqs(self, sites_stat_freqs):
         '''
         Calculates the neutral stationary frequencies assuming site independence
@@ -473,7 +488,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
     def _calc_delta_function(self, rows, cols):
         return(self.space.y[cols] - self.space.y[rows])
     
-    def calc_stationary_frequencies(self, Ns, neutral_stat_freqs=None):
+    def calc_log_stationary_frequencies(self, Ns, neutral_stat_freqs=None):
         '''Calculates the genotype stationary frequencies using Ns stored in 
         the object and stores the corresponding diagonal matrices with the
         sqrt transformation and its inverse
@@ -505,17 +520,17 @@ class WMWSWalk(TimeReversibleRandomWalk):
             log_phi = Ns * self.space.y
         
         if neutral_stat_freqs is not None:
-            log_phi = neutral_stat_freqs + np.log(neutral_stat_freqs)
-        log_total = logsumexp(log_phi)
-        log_stationary_freqs = log_phi - log_total
-        self.stationary_freqs = np.exp(log_stationary_freqs)
-        return(self.stationary_freqs)
+            log_phi += np.log(neutral_stat_freqs)
+            
+        log_stationary_freqs = log_phi - logsumexp(log_phi)
+        return(log_stationary_freqs)
     
-    def calc_stationary_mean_function(self):
-        check_error(hasattr(self, 'stationary_freqs'),
-                    'Calculate the stationary frequencies first')
-        self.fmean = np.sum(self.space.y * self.stationary_freqs)
-        return(self.fmean)
+    def calc_stationary_mean_function(self, freqs=None):
+        if freqs is None:
+            check_error(hasattr(self, 'stationary_freqs'),
+                        'Calculate the stationary frequencies first')
+            freqs = self.stationary_freqs
+        return(np.sum(self.space.y * freqs))
     
     def set_Ns(self, Ns=None, mean_function=None, mean_function_perc=None,
                neutral_stat_freqs=None,
@@ -550,8 +565,8 @@ class WMWSWalk(TimeReversibleRandomWalk):
         function = self.space.y
         def calc_stationary_function_error(logNs):
             Ns = np.exp(logNs)
-            freqs = self.calc_stationary_frequencies(Ns, neutral_stat_freqs=neutral_stat_freqs)
-            x = np.sum(function * freqs)
+            log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs=neutral_stat_freqs)
+            x = self.calc_stationary_mean_function(np.exp(log_freqs))
             sq_error = (mean_function - x) ** 2
             return(sq_error)
         
@@ -570,7 +585,6 @@ class WMWSWalk(TimeReversibleRandomWalk):
             raise ValueError(msg.format(mean_function, inferred_mean_function))
 
         self.Ns = Ns
-        return(self.Ns)
     
     def _calc_rate(self, delta_function, Ns):
         S = Ns * delta_function
@@ -588,11 +602,27 @@ class WMWSWalk(TimeReversibleRandomWalk):
         
         return(rate)
     
-    def calc_rate_matrix(self, Ns, neutral_rate_matrix=None, tol=1e-8,
-                         ensure_time_reversible=True):
+    def _calc_sandwich_rate(self, delta_function, Ns):
+        S = Ns * delta_function
+        S_half = 0.5 * S
+        return(S / (np.exp(S_half) - np.exp(-S_half)))
+
+    def _calc_sandwich_rate_vector(self, delta_function, Ns, neutral_rate_matrix=None):
+        rate = np.ones(delta_function.shape[0])
+        idxs = np.isclose(delta_function, 0) == False
+        rate[idxs] = self._calc_rate(delta_function[idxs], Ns)
+        if neutral_rate_matrix is not None:
+            m = neutral_rate_matrix.copy()
+            m.setdiag(0)
+            m.eliminate_zeros()
+            rate = rate * m.data
+        
+        return(rate)
+
+    def calc_sandwich_rate_matrix(self, self, Ns, neutral_rate_matrix=None, tol=1e-8):
         '''
-        Calculates the rate matrix for the random walk in the discrete space
-        and stores it in the attribute `rate_matrix`
+        Calculates the sandwich rate matrix for the random walk in the
+        discrete space D^{1/2} Q D^{-1/2}
         
         Parameters
         ----------
@@ -608,23 +638,36 @@ class WMWSWalk(TimeReversibleRandomWalk):
         if neutral_rate_matrix is None and hasattr(self, 'neutral_rate_matrix'):
             neutral_rate_matrix = self.neutral_rate_matrix
         
-        self.report('Calculating rate matrix with Ns={}'.format(Ns))
+        self.report('Calculating D^{1/2} Q D^{-1/2} matrix with Ns={}'.format(Ns))
         i, j = self.space.get_neighbor_pairs()
         delta_function = self._calc_delta_function(i, j)
-        size = (self.space.n_states, self.space.n_states)
         rate_ij = self._calc_rate_vector(delta_function, Ns,
                                          neutral_rate_matrix=neutral_rate_matrix)
-        rate_matrix = csr_matrix((rate_ij, (i, j)), shape=size)
-        
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            rate_matrix.setdiag(-rate_matrix.sum(1).A1)
+        log_freqs = self.calc_log_stationary_frequencies(Ns, self.neutral_stat_freqs)
+        sqrt_fi_fj = np.exp(0.5 * (log_freqs[i] - log_freqs[j]))
+        self.sandwich_rate_m = csr_matrix((sqrt_fi_fj * rate_ij, (i, j)), shape=self.shape)
+        check_symmetric(self.sandwich_rate_m, tol=tol)
     
-        if ensure_time_reversible:
-            rate_matrix, sandwich_rate_m = self._ensure_time_reversibility(rate_matrix, tol=tol)
-            self.sandwich_rate_matrix = sandwich_rate_m
+    def calc_rate_matrix(self, Ns, neutral_rate_matrix=None, tol=1e-8):
+        '''
+        Calculates the rate matrix for the random walk in the discrete space
+        and stores it in the attribute `rate_matrix`
+        
+        Parameters
+        ----------
+        Ns : real 
+            Scaled effective population size for the evolutionary model
+        
+        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+            Sparse matrix containing the neutral transition rates for the 
+            whole sequence space. If not provided, uniform mutational dynamics
+            are assumed
             
-        self.rate_matrix = rate_matrix
+        '''
+        self.report('Calculating rate matrix with Ns={}'.format(Ns))
+        m = self.calc_sandwich_rate_matrix(Ns=Ns, neutral_rate_matrix=neutral_rate_matrix,
+                                           tol=tol)
+        self.rate_matrix = self.diag_freq_inv.dot(m).dot(self.diag_freq)
     
     def calc_stationary_rate_matrix(self, rate_matrix, freqs):
         D = get_sparse_diag_matrix(freqs)
