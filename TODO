@@ -34,3 +34,4 @@ even if we select top genotypes
 - Reimplement datashader plotting functions using v0.12 native mpl interface
 - Think whether to implement and embedding object
 - Add docstrings to seqdeft and methods
+- Streamline reduced alphabet
