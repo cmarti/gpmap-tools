@@ -18,8 +18,8 @@ def main():
     input_group.add_argument('nodes', help=help_msg)
 
     nodes_group = parser.add_argument_group('Nodes options')
-    nodes_group.add_argument('-nc', '--nodes_color', default='f',
-                             help='Color genotypes according to this property (f)')
+    nodes_group.add_argument('-nc', '--nodes_color', default='function',
+                             help='Color genotypes according to this property (function)')
     nodes_group.add_argument('-l', '--label', default=None,
                              help='Function label to show on colorbar')
     nodes_group.add_argument('--cmap', default='viridis',

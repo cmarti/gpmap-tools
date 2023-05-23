@@ -643,7 +643,7 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
         plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
                          x=x, y=y, z=z,
                          nodes_color=nodes_color, nodes_size=nodes_size,
-                         cmap=nodes_cmap, nodes_cmap_label=nodes_cmap_label,
+                         nodes_cmap=nodes_cmap, nodes_cmap_label=nodes_cmap_label,
                          edges_width=edges_width, edges_color=edges_color,
                          text=text)
     else:
