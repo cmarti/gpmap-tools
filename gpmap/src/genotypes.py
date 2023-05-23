@@ -167,21 +167,24 @@ def select_genotypes(nodes_df, genotypes, edges=None, is_idx=False):
     '''
     
     size = nodes_df.shape[0]
-    nodes_df['index'] = np.arange(size)
+    
+    if edges is not None:
+        nodes_df['idx'] = np.arange(size)
+    
     if is_idx:
         nodes_df = nodes_df.iloc[genotypes, :]
     else:
         nodes_df = nodes_df.loc[genotypes, :]
     
     if edges is not None:
-        edges = select_edges_from_genotypes(nodes_df['index'], edges)
+        edges = select_edges_from_genotypes(nodes_df['idx'], edges)
+        nodes_df.drop(['idx'], axis=1, inplace=True)
         return(nodes_df, edges)
     else:
         return(nodes_df)
     
     
 def select_d_neighbors(nodes_df, genotype_labels, d=1, edges=None):
-    # TODO: add option to select only edges starting from the selected genotypes
     seq_matrix = np.array([[s for s in seq] for seq in nodes_df.index])
     distances = np.array([np.vstack([allele != col for allele, col in zip(gt, seq_matrix.T)]).sum(0)
                           for gt in genotype_labels])

@@ -35,6 +35,7 @@ class GenotypeTests(unittest.TestCase):
         genotypes = ['A', 'B']
         
         nodes_df, edges_df = select_genotypes(nodes_df, genotypes, edges=edges_df)
+        assert('idx' not in nodes_df.columns)
         assert(np.all(nodes_df.index == ['A', 'B']))
         assert(np.all(edges_df['i'] == [0, 1]))
         assert(np.all(edges_df['j'] == [1, 0]))
