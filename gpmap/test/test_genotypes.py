@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import unittest
+import sys
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,11 @@ from gpmap.src.genotypes import (select_genotypes,
                                  select_genotypes_ambiguous_seqs,
                                  select_closest_genotypes, select_local_optima,
                                  marginalize_landscape_positions)
+from tempfile import NamedTemporaryFile
+from gpmap.src.utils import write_dataframe, read_dataframe
+from gpmap.src.settings import BIN_DIR
+from os.path import join
+from subprocess import check_call
 
 
 class GenotypeTests(unittest.TestCase):
@@ -33,6 +39,28 @@ class GenotypeTests(unittest.TestCase):
         assert(np.all(edges_df['i'] == [0, 1]))
         assert(np.all(edges_df['j'] == [1, 0]))
         assert(np.all(edges_df['id'] == [0, 2]))
+    
+    def test_filter_genotypes_bin(self):
+        bin_fpath = join(BIN_DIR, 'filter_genotypes.py')
+        nodes_df = pd.DataFrame({'function': np.arange(3)}, index=['A', 'B', 'C'])
+        edges_df = pd.DataFrame({'i': [0, 0, 1, 1, 2, 2],
+                                 'j': [1, 2, 0, 2, 0, 1],
+                                 'id': np.arange(6)})
+        
+        with NamedTemporaryFile('w') as fhand:
+            ndf_fpath = '{}.nodes.csv'.format(fhand.name)
+            edf_fpath = '{}.edges.csv'.format(fhand.name)
+            write_dataframe(nodes_df, ndf_fpath)
+            write_dataframe(edges_df, edf_fpath)
+            
+            filtered_fpath = '{}.filtered'.format(fhand.name)
+            cmd = [sys.executable, bin_fpath, ndf_fpath, '-o', filtered_fpath,
+                   '-m', '1', '-e', edf_fpath]
+            check_call(cmd)
+            
+            ndf_fpath = '{}.nodes.pq'.format(filtered_fpath)
+            ndf = read_dataframe(ndf_fpath) 
+            assert(ndf.index == ['C'])
     
     def test_select_genotypes_csr(self):
         nodes_df = pd.DataFrame({'index': np.arange(3)}, index=['A', 'B', 'C'])
