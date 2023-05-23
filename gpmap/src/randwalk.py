@@ -290,63 +290,16 @@ class WMWSWalk(TimeReversibleRandomWalk):
             ex_rates_m[j, i] = x
         return(ex_rates_m)
     
-    def calc_GTR_rate_matrix(self, freqs, ex_rates):
-        ex_rates_m = self.ex_rates_vector_to_matrix(ex_rates, freqs.shape[0])
-        D = get_sparse_diag_matrix(freqs).todense()
-        site_Q = csr_matrix(np.dot(ex_rates_m, D))
-        site_Q.setdiag(-site_Q.sum(1).A1)
-        site_Q = self._ensure_time_reversibility(site_Q, freqs=freqs)[0]
-        return(site_Q)
-    
-    def calc_sites_GTR_mut_matrices(self, sites_stat_freqs=None,
-                                    exchange_rates=None, site_mut_rates=None,
-                                    force_constant_leaving_rate=False):
-        if sites_stat_freqs is None:
-            sites_stat_freqs = [np.ones(alpha) for alpha in self.space.n_alleles]
-        
-        if exchange_rates is None:
-            exchange_rates = [np.ones(int(comb(alpha, 2)))
-                              for alpha in  self.space.n_alleles]
-        
-        if site_mut_rates is None:
-            site_mut_rates = np.ones(self.space.seq_length)
-        
-        neutral_site_Qs = []
-        for freqs, ex_rates, site_mu in zip(sites_stat_freqs, exchange_rates, site_mut_rates):
-            n_alleles = freqs.shape[0]
-
-            # Normalize frequencies to make sure they add up to 1
-            freqs = freqs / freqs.sum()
-            
-            # Calculate rate matrix
-            site_Q = self.calc_GTR_rate_matrix(freqs, ex_rates)
-            
-            # Normalize to have a specific leaving rate at stationarity
-            eq_Q = self.calc_stationary_rate_matrix(site_Q, freqs)
-            leaving_rates = eq_Q.diagonal()
-            if force_constant_leaving_rate:
-                scaling_factor = - 1 / leaving_rates.sum()
-            else:
-                scaling_factor = - (n_alleles-1) / leaving_rates.sum()
-            site_Q = scaling_factor * site_Q * site_mu
-            neutral_site_Qs.append(site_Q)
-            
-        if len(neutral_site_Qs) == 1 and self.space.seq_length > 1:
-            neutral_site_Qs = neutral_site_Qs * self.space.seq_length
-        
-        return(neutral_site_Qs)
-
     def calc_exchange_rate_matrix(self, exchange_rates=None):
         if exchange_rates is None:
-            exchange_rates
-            exchange_rates_m = [np.ones(int(comb(alpha, 2)))
-                                for alpha in self.space.n_alleles]
+            exchange_rates = [np.ones(int(comb(alpha, 2)))
+                              for alpha in self.space.n_alleles]
         matrices = [csr_matrix(self.ex_rates_vector_to_matrix(m, a))
-                    for m, a in zip(exchange_rates_m, self.space.n_alleles)]
+                    for m, a in zip(exchange_rates, self.space.n_alleles)]
         ex_rates_m = calc_cartesian_product(matrices)
         return(ex_rates_m) 
 
-    def calc_neutral_stat_freqs(self, sites_stat_freqs):
+    def calc_neutral_stat_freqs(self, sites_stat_freqs=None):
         '''
         Calculates the neutral stationary frequencies assuming site independence
         
@@ -355,7 +308,8 @@ class WMWSWalk(TimeReversibleRandomWalk):
         sites_stat_freqs: list of array-like of shape (n_alleles,)
             Matrix containing the site stationary frequencies that are used to
             parameterize the neutral dynamics with mutational biases for each
-            independent site
+            independent site. If `None`, uniform frequencies across alleles
+            will be set
             
         Returns
         -------
@@ -364,77 +318,15 @@ class WMWSWalk(TimeReversibleRandomWalk):
             site-level stationary frequencies at neutrality
         
         '''
+        if sites_stat_freqs is None:
+            sites_stat_freqs = [np.ones(a) / a for a in self.space.n_alleles]
+            
         sites_stat_freqs = [np.array([freqs]).T for freqs in sites_stat_freqs]
         freqs = calc_tensor_product(sites_stat_freqs).flatten()
         return(freqs)
         
-    def calc_neutral_rate_matrix(self, sites_stat_freqs=None,
-                                 exchange_rates=None, site_mut_rates=None,
-                                 force_constant_leaving_rate=False):
-        '''
-        Calculates the rate matrix for the neutral process under possibly
-        site-dependent biased mutation rates under the assumption of neutral
-        General Time-Reversible (GTR) dynamics.
-        
-        The neutral GTR model is parameterized through:calc_neutral_stat_freqs
-        
-            - Stationary frequencies
-            - Exchange rates
-        
-        Parameters
-        ----------
-        sites_stat_freqs : array-like of shape (seq_length, n_alleles)
-            Matrix containing the site stationary frequencies that are used to
-            parameterize the neutral dynamics with mutational biases for each
-            independent site. If not provided, uniform stationary frequencies
-            are assumed for the neutral process
-        
-        exchange_rates : array-like of shape (seq_length, n_alleles choose 2)
-            Matrix containing the exchangeability rates matrix for each of the
-            sites in the sequence and for every pairwise combination of alleles
-            If not provided, they are assumed to be equal. 
-        
-        site_mut_rates : array-like of shape (seq_length,)
-            Vector containing the relative mutation rates of the different 
-            sites. If not provided, all sites are assumed to mutate at the
-            same rate
-        
-        force_constant_leaving_rate: bool (False)
-            Force the leaving rate at each site to be the same. By default, 
-            The leaving rate is scaled to be `n_alleles-1` for each site.
-        
-        Returns
-        -------
-        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
-            Sparse matrix containin the neutral transition rates for the 
-            whole sequence space
-        
-        '''
-        
-        sites_Q = self.calc_sites_GTR_mut_matrices(sites_stat_freqs=sites_stat_freqs,
-                                                   exchange_rates=exchange_rates,
-                                                   site_mut_rates=site_mut_rates,
-                                                   force_constant_leaving_rate=force_constant_leaving_rate)
-        for Q in sites_Q:
-            Q.setdiag(0)
-        
-        neutral_rate_matrix = calc_cartesian_product(sites_Q)
-        
-        # Re-scale to a given leaving rate at stationarity
-        leaving_rates = neutral_rate_matrix.sum(1).A1
-        neutral_rate_matrix.setdiag(-leaving_rates)
-        
-        if force_constant_leaving_rate:
-            scaling_factor = 1 / leaving_rates.sum()
-        else:
-            scaling_factor = (np.array(self.space.n_alleles)-1).sum() / leaving_rates.sum()
-        
-        neutral_rate_matrix = scaling_factor * neutral_rate_matrix
-        return(neutral_rate_matrix)
-        
-
-    def calc_neutral_mixing_rates(self, neutral_site_Qs=None,
-                                  neutral_site_freqs=None, site_weights=None):
+    def calc_neutral_mixing_rates(self, site_exchange_rates,
+                                  neutral_site_freqs):
         '''
         Calculates the neutral mixing rates for a SequenceSpace
         In case no GTR mutation model is specified, then the neutral
@@ -469,24 +361,9 @@ class WMWSWalk(TimeReversibleRandomWalk):
             Neutral mixing rate as the smallest second largest eigenvalue across
             sites.
         
-                        
+        TODO: Re-implement functionality             
         '''
-        if neutral_site_Qs is None:
-            neutral_mixing_rate = np.min(self.space.n_alleles)
-        else:
-            neutral_mixing_rate = np.inf
-            
-            for freqs, site_Q, site_w in zip(neutral_site_freqs, neutral_site_Qs, site_weights):
-                r = np.sqrt(freqs)
-                m = get_sparse_diag_matrix(r).dot(csr_matrix(site_w*site_Q)).dot(get_sparse_diag_matrix(1/r))
-                m = (m + m.T) / 2
-                lambdas = eigsh(m, 2, v0=freqs, which='SM', tol=1e-5)[0]
-                if -lambdas[0] < neutral_mixing_rate:
-                    neutral_mixing_rate = -lambdas[0]
-        return(neutral_mixing_rate)
-    
-    def _calc_delta_function(self, rows, cols):
-        return(self.space.y[cols] - self.space.y[rows])
+        return()
     
     def calc_log_stationary_frequencies(self, Ns, neutral_stat_freqs=None):
         '''Calculates the genotype stationary frequencies using Ns stored in 
@@ -586,40 +463,32 @@ class WMWSWalk(TimeReversibleRandomWalk):
 
         self.Ns = Ns
     
-    def _calc_rate(self, delta_function, Ns):
-        S = Ns * delta_function
-        return(S / (1 - np.exp(-S)))
-
-    def _calc_rate_vector(self, delta_function, Ns, neutral_rate_matrix=None):
-        rate = np.ones(delta_function.shape[0])
-        idxs = np.isclose(delta_function, 0) == False
-        rate[idxs] = self._calc_rate(delta_function[idxs], Ns)
-        if neutral_rate_matrix is not None:
-            m = neutral_rate_matrix.copy()
-            m.setdiag(0)
-            m.eliminate_zeros()
-            rate = rate * m.data
+    def _calc_sandwich_rate_vector(self, i, j, Ns,
+                                   neutral_stat_freqs=None,
+                                   neutral_exchange_rates=None):
+        df = self.space.y[j] - self.space.y[i]
         
-        return(rate)
-    
-    def _calc_sandwich_rate(self, delta_function, Ns):
-        S = Ns * delta_function
+        # Initialize entries
+        values = np.ones(df.shape[0])
+        idxs = np.isclose(df, 0) == False
+        
+        # Calculate selection driven part
+        S = Ns * df[idxs]
         S_half = 0.5 * S
-        return(S / (np.exp(S_half) - np.exp(-S_half)))
+        values[idxs] = S / (np.exp(S_half) - np.exp(-S_half))
 
-    def _calc_sandwich_rate_vector(self, delta_function, Ns, neutral_rate_matrix=None):
-        rate = np.ones(delta_function.shape[0])
-        idxs = np.isclose(delta_function, 0) == False
-        rate[idxs] = self._calc_rate(delta_function[idxs], Ns)
-        if neutral_rate_matrix is not None:
-            m = neutral_rate_matrix.copy()
-            m.setdiag(0)
-            m.eliminate_zeros()
-            rate = rate * m.data
+        # Adjust with neutral rates if provided
+        if neutral_stat_freqs is not None:
+            log_freqs = np.log(neutral_stat_freqs)
+            values = values * np.exp(0.5 * log_freqs[i] + 0.5 * log_freqs[j] + np.log(self.space.n_genotypes))
         
-        return(rate)
+        if neutral_exchange_rates is not None:
+            values = values * neutral_exchange_rates.data
+            
+        return(values)
 
-    def calc_sandwich_rate_matrix(self, self, Ns, neutral_rate_matrix=None, tol=1e-8):
+    def calc_sandwich_rate_matrix(self, Ns, neutral_stat_freqs=None,
+                                  neutral_exchange_rates=None, tol=1e-8):
         '''
         Calculates the sandwich rate matrix for the random walk in the
         discrete space D^{1/2} Q D^{-1/2}
@@ -629,23 +498,26 @@ class WMWSWalk(TimeReversibleRandomWalk):
         Ns : real 
             Scaled effective population size for the evolutionary model
         
-        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
-            Sparse matrix containing the neutral transition rates for the 
-            whole sequence space. If not provided, uniform mutational dynamics
-            are assumed
+        neutral_stat_freqs:
+        
+        
+        neutral_exchange_rates: 
+        
+        Returns
+        -------
+        
+        M : csr_matrix of shape (n_genotypes, n_genotypes)
+         
             
         '''
-        if neutral_rate_matrix is None and hasattr(self, 'neutral_rate_matrix'):
-            neutral_rate_matrix = self.neutral_rate_matrix
-        
         self.report('Calculating D^{1/2} Q D^{-1/2} matrix with Ns={}'.format(Ns))
         i, j = self.space.get_neighbor_pairs()
-        delta_function = self._calc_delta_function(i, j)
-        rate_ij = self._calc_rate_vector(delta_function, Ns,
-                                         neutral_rate_matrix=neutral_rate_matrix)
-        log_freqs = self.calc_log_stationary_frequencies(Ns, self.neutral_stat_freqs)
-        sqrt_fi_fj = np.exp(0.5 * (log_freqs[i] - log_freqs[j]))
-        self.sandwich_rate_m = csr_matrix((sqrt_fi_fj * rate_ij, (i, j)), shape=self.shape)
+        values = self._calc_sandwich_rate_vector(i, j, Ns, neutral_stat_freqs,
+                                                 neutral_exchange_rates)
+        m = csr_matrix((values, (i, j)), shape=self.shape)
+        sqrt_freqs = np.exp(0.5 * self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs))
+        m.setdiag(-m.dot(sqrt_freqs))
+        self.sandwich_rate_m = m 
         check_symmetric(self.sandwich_rate_m, tol=tol)
     
     def calc_rate_matrix(self, Ns, neutral_rate_matrix=None, tol=1e-8):
@@ -669,13 +541,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
                                            tol=tol)
         self.rate_matrix = self.diag_freq_inv.dot(m).dot(self.diag_freq)
     
-    def calc_stationary_rate_matrix(self, rate_matrix, freqs):
-        D = get_sparse_diag_matrix(freqs)
-        return(D.dot(rate_matrix))
-    
-    def calc_model_neutral_rate_matrix(self, model, exchange_rates={}, 
-                                       stat_freqs={}, site_mut_rates=None,
-                                       force_constant_leaving_rate=False):
+    def calc_neutral_model(self, model, exchange_rates={}, stat_freqs={}):
         '''
         Calculate the neutral rate matrix for classic nucleotide substitution
         rates parameterized as in 
@@ -696,19 +562,10 @@ class WMWSWalk(TimeReversibleRandomWalk):
             Dictionary containing the allele stationary frequencies to use
             in the models that allow them to be different
             
-        site_mut_rates : array-like of shape (seq_length,)
-            Vector containing the relative mutation rates of the different 
-            sites. If not provided, all sites are assumed to mutate at the
-            same rate
-        
-        force_constant_leaving_rate: bool (False)
-            Force the leaving rate at each site to be the same. By default, 
-            The leaving rate is scaled to be `n_alleles-1` for each site.
-
         Returns
         -------
         neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
-            Sparse matrix containin the neutral transition rates for the 
+            Sparse matrix containing the neutral transition rates for the 
             whole sequence space
         
         '''
@@ -763,14 +620,8 @@ class WMWSWalk(TimeReversibleRandomWalk):
         msg = 'Ensure that the provided stationary frequencies add up to 1'
         check_error(np.sum(stat_freqs) == 1, msg=msg)
 
-        # Create the corresponding rate matrix        
-        exchange_rates = [np.array(exchange_rates)] * self.space.seq_length
         sites_stat_freqs = [np.array(stat_freqs)] * self.space.seq_length
-        
-        Q = self.calc_neutral_rate_matrix(sites_stat_freqs=sites_stat_freqs,
-                                          exchange_rates=exchange_rates,
-                                          site_mut_rates=site_mut_rates,
-                                          force_constant_leaving_rate=force_constant_leaving_rate)
-        self.neutral_rate_matrix = Q
         self.neutral_stat_freqs = self.calc_neutral_stat_freqs(sites_stat_freqs)
-        return(Q)
+        
+        exchange_rates = [np.array(exchange_rates)] * self.space.seq_length
+        self.neutral_exchange_rates = self.calc_exchange_rate_matrix(exchange_rates)

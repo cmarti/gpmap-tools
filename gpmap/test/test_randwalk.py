@@ -12,9 +12,10 @@ from tempfile import NamedTemporaryFile
 from scipy.sparse._matrix_io import load_npz
 
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
-from gpmap.src.space import CodonSpace
+from gpmap.src.space import CodonSpace, SequenceSpace
 from gpmap.src.randwalk import WMWSWalk
 from gpmap.src.utils import get_sparse_diag_matrix
+from scipy.sparse.csr import csr_matrix
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -101,6 +102,44 @@ class RandomWalkTests(unittest.TestCase):
         sites_stat_freqs = np.array([[0.4, 0.6], [0.3, 0.7]])
         freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
         assert(np.allclose(freqs, [0.12, 0.28, 0.18, 0.42]))
+    
+    def calc_neutral_exchange_rates(self):
+        rw = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+    
+        # Calculate default exchange rates matrix
+        m = rw.calc_exchange_rate_matrix(exchange_rates=None)
+        i, j = rw.space.get_neighbor_pairs()
+        expected = csr_matrix((np.ones(i.shape[0]), (i, j)), shape=rw.shape) 
+        assert(np.allclose(m.todense(),  expected.todense()))
+        
+        # Simpler space with different exchange rates
+        X = np.array(['AA', 'AB', 'BA', 'BB'])
+        y = np.ones(X.shape[0])
+        rw = WMWSWalk(SequenceSpace(X=X, y=y))
+        m = rw.calc_exchange_rate_matrix([[1], [2]]).todense()
+        expected = np.array([[0, 2, 1, 0], [2, 0, 0, 1], 
+                             [1, 0, 0, 2], [0, 1, 2, 0]])
+        assert(np.allclose(m, expected))
+        
+        # 3 alleles 1 site
+        X = np.array(['A', 'B', 'C'])
+        y = np.ones(X.shape[0])
+        rw = WMWSWalk(SequenceSpace(X=X, y=y))
+        m = rw.calc_exchange_rate_matrix([[1, 2, 3]]).todense()
+        expected = np.array([[0, 1, 2], [1, 0, 3], [2, 3, 0]])
+        assert(np.allclose(m, expected))
+        
+        # 3 alleles 2 sites
+        X = np.array(['AA', 'AB', 'AC', 'BA', 'BB', 'BC', 'CA', 'CB', 'CC'])
+        y = np.ones(X.shape[0])
+        rw = WMWSWalk(SequenceSpace(X=X, y=y))
+        m = rw.calc_exchange_rate_matrix([[1, 2, 3]] * 2).todense()
+        assert(np.allclose(m[:3, :][:, :3], expected))
+        assert(np.allclose(m[3:6, :][:, 3:6], expected))
+        assert(np.allclose(m[6:, :][:, 6:], expected))
+        assert(np.allclose(m[:3, :][:, 3:6], 1 * np.eye(3)))
+        assert(np.allclose(m[:3, :][:, 6:], 2 * np.eye(3)))
+        assert(np.allclose(m[3:6, :][:, 6:], 3 * np.eye(3)))
         
     def test_calc_sites_mut_rates(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
@@ -429,5 +468,5 @@ class RandomWalkTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests.test_calc_visualization']
+    sys.argv = ['', 'RandomWalkTests.calc_neutral_exchange_rates']
     unittest.main()
