@@ -78,19 +78,19 @@ def main():
             genotypes = nodes_df[label] > sorted_values[-n_genotypes]
     
     log.write('Filtering genotypes')
-    nodes_df = select_genotypes(nodes_df, genotypes, edges=edges)
+    ndf = select_genotypes(nodes_df, genotypes, edges=edges)
     if edges is not None:
-        nodes_df, edges = nodes_df
+        ndf, edges = ndf
 
     # Write filtered landscape
     fpath = '{}.nodes.{}'.format(out_prefix, nodes_format)
     log.write('Saving filtered nodes data at {}'.format(fpath))
-    write_dataframe(nodes_df, fpath)
+    write_dataframe(ndf, fpath)
     
     if edges is not None:
         fpath = '{}.edges.{}'.format(out_prefix, edges_format)
         log.write('Saving filtered edges data at {}'.format(fpath))
-        write_edges(edges)
+        write_edges(edges, fpath)
     
     log.finish()
 
