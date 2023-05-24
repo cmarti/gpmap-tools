@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-import warnings
-
 import numpy as np
 import pandas as pd
 
@@ -12,10 +10,9 @@ from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
-from gpmap.src.utils import (check_symmetric, get_sparse_diag_matrix,
-                             check_error, write_log, check_eigendecomposition,
-                             calc_cartesian_product, calc_tensor_product)
 from gpmap.src.settings import DNA_ALPHABET
+from gpmap.src.utils import (get_sparse_diag_matrix, check_error, write_log,
+                             calc_cartesian_product, calc_tensor_product)
 
 
 class RandomWalk(object):
@@ -28,9 +25,8 @@ class RandomWalk(object):
     
     def calc_jump_matrix(self):
         self.leaving_rates = -self.rate_matrix.diagonal()
-        jump_matrix = get_sparse_diag_matrix(1/self.leaving_rates).dot(self.rate_matrix)
-        jump_matrix.setdiag(0)
-        self.jump_matrix = jump_matrix
+        self.jump_matrix = get_sparse_diag_matrix(1/self.leaving_rates).dot(self.rate_matrix)
+        self.jump_matrix.setdiag(0)
     
     def run_forward(self, time, state_idx=None):
         if state_idx is None:
@@ -65,29 +61,10 @@ class TimeReversibleRandomWalk(RandomWalk):
     
     def set_stationary_freqs(self, log_freqs):
         self.stationary_freqs = np.exp(log_freqs)
-        sqrt_freqs = np.sqrt(self.stationary_freqs)
-        self.diag_freq = get_sparse_diag_matrix(sqrt_freqs) 
-        self.diag_freq_inv = get_sparse_diag_matrix(1 / sqrt_freqs)
+        self.diag_freq = get_sparse_diag_matrix(np.exp(0.5 * log_freqs)) 
+        self.diag_freq_inv = get_sparse_diag_matrix(np.exp(-0.5 * log_freqs))
     
-    def _ensure_time_reversibility(self, rate_matrix, freqs=None, tol=1e-8):
-        '''D_pi^{1/2} Q D_pi^{-1/2} has to be symmetric'''
-        self.report('Checking numerical time reversibility')
-        
-        if freqs is None:
-            diag_freq = self.diag_freq
-            diag_freq_inv = self.diag_freq_inv
-        else:
-            r = np.sqrt(freqs)
-            diag_freq = get_sparse_diag_matrix(r)
-            diag_freq_inv = get_sparse_diag_matrix(1/r)
-        
-        sandwich_rate_m = diag_freq.dot(rate_matrix).dot(diag_freq_inv)
-        sandwich_rate_m = (sandwich_rate_m + sandwich_rate_m.T) / 2
-        check_symmetric(sandwich_rate_m, tol=tol)
-        rate_matrix = diag_freq_inv.dot(sandwich_rate_m).dot(diag_freq)
-        return(rate_matrix, sandwich_rate_m)
-    
-    def calc_eigendecomposition(self, n_components=10, tol=1e-14, eig_tol=1e-2):
+    def calc_eigendecomposition(self, n_components=10, tol=1e-14):
         self.n_components = min(n_components + 1, self.space.n_states - 1)
         
         # Transform matrix shifting eigenvalues close to 0 to avoid numerical problems
@@ -108,8 +85,6 @@ class TimeReversibleRandomWalk(RandomWalk):
         
         # Store right eigenvectors of the rate matrix
         self.right_eigenvectors = self.diag_freq_inv.dot(q)
-        check_eigendecomposition(self.rate_matrix, self.eigenvalues,
-                                 self.right_eigenvectors, tol=eig_tol)
 
     def calc_diffusion_axis(self):
         self.report('Scaling projection axis')
@@ -135,8 +110,8 @@ class TimeReversibleRandomWalk(RandomWalk):
     
     def calc_visualization(self, Ns=None, mean_function=None, 
                            mean_function_perc=None, n_components=10,
-                           neutral_rate_matrix=None, neutral_stat_freqs=None,
-                           tol=1e-12, eig_tol=1e-2):
+                           neutral_exchange_rates=None, neutral_stat_freqs=None,
+                           tol=1e-12):
         '''
         Calculates the genotype coordinates to use for visualization 
         of the provided discrete space under a given time-reversible
@@ -163,13 +138,14 @@ class TimeReversibleRandomWalk(RandomWalk):
         n_components: int (10)
             Number of eigenvectors or diffusion axis to calculate
         
-        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
-            Sparse matrix containing the neutral transition rates for the 
+        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+            Sparse matrix containing the neutral exchange rates for the 
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
         
         neutral_stat_freqs : array-like of shape (n_genotypes,)
-            Genotype stationary frequencies at neutrality
+            Genotype stationary frequencies at neutrality to define the
+            time reversible neutral dynamics
             
         '''
         
@@ -187,9 +163,9 @@ class TimeReversibleRandomWalk(RandomWalk):
         log_freqs = self.calc_log_stationary_frequencies(self.Ns, neutral_stat_freqs)
         self.set_stationary_freqs(log_freqs)
         self.calc_sandwich_rate_matrix(Ns=self.Ns,
-                                       neutral_rate_matrix=neutral_rate_matrix,
-                                       tol=tol)
-        self.calc_eigendecomposition(n_components, tol=tol, eig_tol=eig_tol)
+                                       neutral_exchange_rates=neutral_exchange_rates,
+                                       neutral_stat_freqs=neutral_stat_freqs)
+        self.calc_eigendecomposition(n_components, tol=tol)
         self.calc_diffusion_axis()
         self.calc_relaxation_times()
     
@@ -324,6 +300,19 @@ class WMWSWalk(TimeReversibleRandomWalk):
         sites_stat_freqs = [np.array([freqs]).T for freqs in sites_stat_freqs]
         freqs = calc_tensor_product(sites_stat_freqs).flatten()
         return(freqs)
+    
+    def calc_gtr_rate_matrix(self, exchange_rates_matrix, stationary_freqs):
+        D = get_sparse_diag_matrix(stationary_freqs)
+        Q = exchange_rates_matrix.dot(D)
+        Q.setdiag(-Q.sum(1))
+        return(Q)
+    
+    def calc_neutral_rate_matrix(self, sites_exchange_rates=None,
+                                 sites_stat_freqs=None):
+        self.neutral_exchange_rates = self.calc_exchange_rate_matrix(sites_exchange_rates)
+        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(sites_stat_freqs)
+        return(self.calc_gtr_rate_matrix(self.neutral_exchange_rates,
+                                         self.neutral_stat_freqs))
         
     def calc_neutral_mixing_rates(self, site_exchange_rates,
                                   neutral_site_freqs):
@@ -488,7 +477,7 @@ class WMWSWalk(TimeReversibleRandomWalk):
         return(values)
 
     def calc_sandwich_rate_matrix(self, Ns, neutral_stat_freqs=None,
-                                  neutral_exchange_rates=None, tol=1e-8):
+                                  neutral_exchange_rates=None):
         '''
         Calculates the sandwich rate matrix for the random walk in the
         discrete space D^{1/2} Q D^{-1/2}
@@ -503,24 +492,29 @@ class WMWSWalk(TimeReversibleRandomWalk):
         
         neutral_exchange_rates: 
         
-        Returns
-        -------
-        
-        M : csr_matrix of shape (n_genotypes, n_genotypes)
-         
             
         '''
-        self.report('Calculating D^{1/2} Q D^{-1/2} matrix with Ns={}'.format(Ns))
+        self.report('Calculating D^(1/2) Q D^(-1/2) matrix with Ns={}'.format(Ns))
+        
+        if neutral_stat_freqs is None and hasattr(self, 'neutral_stat_freqs'):
+            neutral_stat_freqs = self.neutral_stat_freqs
+        if neutral_exchange_rates is None and hasattr(self, 'neutral_exchange_rates'):
+            neutral_exchange_rates = self.neutral_exchange_rates
+        
         i, j = self.space.get_neighbor_pairs()
         values = self._calc_sandwich_rate_vector(i, j, Ns, neutral_stat_freqs,
                                                  neutral_exchange_rates)
         m = csr_matrix((values, (i, j)), shape=self.shape)
-        sqrt_freqs = np.exp(0.5 * self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs))
-        m.setdiag(-m.dot(sqrt_freqs))
-        self.sandwich_rate_m = m 
-        check_symmetric(self.sandwich_rate_m, tol=tol)
+        
+        # Fill diagonal entries
+        log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs)
+        self.set_stationary_freqs(log_freqs)
+        sqrt_freqs = np.exp(0.5 * (log_freqs + np.log(self.space.n_genotypes)))
+        m.setdiag(-m.dot(sqrt_freqs) / sqrt_freqs)
+        self.sandwich_rate_matrix = m 
     
-    def calc_rate_matrix(self, Ns, neutral_rate_matrix=None, tol=1e-8):
+    def calc_rate_matrix(self, Ns, neutral_stat_freqs=None,
+                         neutral_exchange_rates=None, tol=1e-8):
         '''
         Calculates the rate matrix for the random walk in the discrete space
         and stores it in the attribute `rate_matrix`
@@ -537,9 +531,11 @@ class WMWSWalk(TimeReversibleRandomWalk):
             
         '''
         self.report('Calculating rate matrix with Ns={}'.format(Ns))
-        m = self.calc_sandwich_rate_matrix(Ns=Ns, neutral_rate_matrix=neutral_rate_matrix,
-                                           tol=tol)
-        self.rate_matrix = self.diag_freq_inv.dot(m).dot(self.diag_freq)
+        self.calc_sandwich_rate_matrix(Ns=Ns,
+                                       neutral_stat_freqs=neutral_stat_freqs,
+                                       neutral_exchange_rates=neutral_exchange_rates,
+                                       tol=tol)
+        self.rate_matrix = self.diag_freq_inv.dot(self.sandwich_rate_matrix).dot(self.diag_freq)
     
     def calc_neutral_model(self, model, exchange_rates={}, stat_freqs={}):
         '''
