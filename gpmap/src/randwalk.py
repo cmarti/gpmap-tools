@@ -440,8 +440,8 @@ class WMWSWalk(TimeReversibleRandomWalk):
             result = minimize(calc_stationary_function_error, x0=0, tol=tol,
                               options={'maxiter': maxiter})
             Ns = np.exp(result.x[0])
-            freqs = self.calc_stationary_frequencies(Ns, neutral_stat_freqs)
-            inferred_mean_function = np.sum(function * freqs)
+            log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs=neutral_stat_freqs)
+            inferred_mean_function = np.sum(function * np.exp(log_freqs))
             if calc_stationary_function_error(result.x[0]) < tol:
                 break
         else:
