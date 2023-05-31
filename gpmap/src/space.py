@@ -19,6 +19,7 @@ from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
 
 from gpmap.src.linop import ProjectionOperator, VjProjectionOperator
+from jellyfish._jellyfish import hamming_distance
 
 
 class DiscreteSpace(object):
@@ -248,10 +249,9 @@ class HammingBallSpace(DiscreteSpace):
 #         check_error(self.n_states <= MAX_STATES, msg=msg)
 #         
 #         adjacency_matrix = self.calc_adjacency_matrix()
-        state_labels = self.get_genotypes()
-        print(state_labels.shape)
-        adjacency_matrix = self.get_adjacency_matrix()
-        self.init_space(adjacency_matrix, state_labels=state_labels)
+        genotypes = self.get_genotypes()
+        adjacency_matrix = self.get_adjacency_matrix(genotypes)
+        self.init_space(adjacency_matrix, state_labels=genotypes)
         
         if y is not None:
             if X is None:
@@ -295,8 +295,24 @@ class HammingBallSpace(DiscreteSpace):
         genotypes = np.array(genotypes)
         return(genotypes)
     
-    def get_adjacency_matrix(self):
-        return()
+    def get_adjacency_matrix(self, genotypes=None):
+        if genotypes is None:
+            genotypes = self.genotypes
+        n_genotypes = genotypes.shape[0]
+            
+        gts1, gts2 = [], []
+        for i, seq1 in enumerate(genotypes):
+            for j, seq2 in enumerate(genotypes[i+1:]):
+                j += i+1
+                if hamming_distance(seq1, seq2) == 1:
+                    gts1.extend([i, j]) 
+                    gts2.extend([j, i])
+        gts1 = np.array(gts1, dtype=int)
+        gts2 = np.array(gts2, dtype=int)
+        data = np.ones(gts1.shape[0])
+        adjacency_matrix = csr_matrix((data, (gts1, gts2)),
+                                      shape=(n_genotypes, n_genotypes)) 
+        return(adjacency_matrix)
         
     
 class ProductSpace(DiscreteSpace):
