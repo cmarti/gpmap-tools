@@ -12,6 +12,7 @@ from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator, KernelOperator,
                              DeltaPOperator)
+from scipy.special._basic import comb
 
 
 class LinOpsTests(unittest.TestCase):
@@ -39,11 +40,51 @@ class LinOpsTests(unittest.TestCase):
         ps = np.array([[0.4, 0.6], [0.5, 0.5]])
         L = LaplacianOperator(2, 2, ps=ps)
         assert(np.allclose(L.lambdas, [0, 2, 4]))
+    
+    def test_laplacian2s(self):
+        a, l = 2, 3
+        n = l * (a-1)
+        
+        v = np.ones(tuple([a]*l))
+        print(v)
+        
+        # v = np.arange(a**l).reshape(tuple([a]*l))
+        # print(v)
+        
+        v = np.random.normal(size=tuple([a]*l))
+        print(v)
+        
+        
+        class Lap(object):
+            def __init__(self, a, l):
+                self.a = a
+                self.l = l
+            
+            def dot(self, v):
+                v = v.reshape(tuple([self.a]*self.l))
+                u = np.zeros(v.shape)
+                for i in range(self.l):
+                    u += np.stack([v.sum(i)] * self.a, axis=i)
+                u = l * a * v - u
+                return(u.reshape(a**l))
+
+        v = np.random.normal(size=a**l)
+
+        L1 = Lap(a, l)
+        u1 = L1.dot(v)
+        print(u1)
+        
+        L2 = LaplacianOperator(a, l)
+        u2 = L2.dot(v)
+        print(u2)
+        
 
     def test_laplacian_split(self):
         l = 9
         L0 = LaplacianOperator(4, l)
+        L0.calc_L()
         L1 = LaplacianOperator(4, l, use_bool=True)
+        L1.calc_A()
         L2 = LaplacianOperator(4, l, max_size=500)
         
         for d in L2.Kns_shape:
@@ -64,6 +105,9 @@ class LinOpsTests(unittest.TestCase):
         print(timeit(lambda: L1.dot1(v), number=20))
         
         print(timeit(lambda : L2.dot2(v), number=20))
+        
+        u = L2.contract_v(v)
+        print(timeit(lambda : L2.dot3(u), number=20))
         
         assert(np.allclose(L0.dot0(v), L1.dot2(v)))
         assert(np.allclose(L0.dot0(v), L2.dot2(v)))
@@ -317,6 +361,15 @@ class LinOpsTests(unittest.TestCase):
                       0, 1, 1, 3])
         assert(DP2.quad(v) > 0)
         assert(DP3.quad(v) == 0)
+    
+    def test_DeltaP_operator_eigenvalues(self):
+        l, a, P = 5, 4, 2
+        DP = DeltaPOperator(P=P, n_alleles=a, seq_length=l)
+        DP.calc_lambdas()
+        
+        for k in range(P, l+1):
+            lambda_k = a ** P * comb(k, P)
+            assert(DP.lambdas[k] == lambda_k)
     
     def test_DP_calc_kernel_basis(self):
         DP = DeltaPOperator(P=2, n_alleles=4, seq_length=5)
