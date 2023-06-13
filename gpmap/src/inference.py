@@ -44,16 +44,18 @@ class LandscapeEstimator(object):
         if genotypes is not None:
             configuration = guess_space_configuration(genotypes,
                                                       ensure_full_space=False,
-                                                      force_regular=True)
+                                                      force_regular=True,
+                                                      force_regular_alleles=False)
             seq_length = configuration['length']
             alphabet = configuration['alphabet']
             n_alleles = configuration['n_alleles'][0]
             n_alleles = len(alphabet[0])
         else:
-            msg = 'Either seq_length and alleles or genotypes must be provided'
-            check_error(seq_length is not None and n_alleles is not None, msg=msg)
+            msg = 'Either seq_length or genotypes must be provided'
+            check_error(seq_length is not None, msg=msg)
             alphabet = get_alphabet(n_alleles=n_alleles,
                                     alphabet_type=alphabet_type)
+            n_alleles = len(alphabet)
             alphabet = [alphabet] * seq_length
         
         self.set_config(seq_length, n_alleles, alphabet)
@@ -380,7 +382,7 @@ class DeltaPEstimator(LandscapeEstimator):
     def __init__(self, P, a=None, num_reg=20, nfolds=5,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
-                 gtol=1e-3, max_L_size=None):
+                 gtol=1e-3, ftol=1e-8, max_L_size=None):
         super().__init__(max_L_size=max_L_size)
         self.P = P
         self.a = a
@@ -409,7 +411,7 @@ class DeltaPEstimator(LandscapeEstimator):
         # Optimization attributes
         self.opt_method = opt_method
         optimization_opts['gtol'] = gtol
-        optimization_opts['ftol'] = 0
+        optimization_opts['ftol'] = ftol
         self.optimization_opts = optimization_opts
         
     def calc_n_p_faces(self, length, P, n_alleles):
@@ -534,7 +536,7 @@ class DeltaPEstimator(LandscapeEstimator):
             if not res.success:
                 print(res.message)
             phi = res.x
-
+        
         # a, N = a * scale_by, N *scale_by    
         return(phi)
     
@@ -576,6 +578,20 @@ class DeltaPEstimator(LandscapeEstimator):
         output = self.phi_to_output(phi)
         return(output)
     
+    def _get_vc(self):
+        if not hasattr(self, '_vc'):
+            self._vc = VCregression()
+            self._vc.init(genotypes=self.genotypes)
+        return(self._vc)
+    
+    def simulate_phi(self, a):
+        vc = self._get_vc()
+        self.DP.calc_lambdas()
+        lambdas = np.zeros(self.DP.lambdas.shape)
+        lambdas[self.P:] = 1 / self.DP.lambdas[self.P:]
+        phi = vc.simulate(lambdas)['y'].values * (2*self.n_p_faces) / a
+        return(phi)
+
 
 class SeqDEFT(DeltaPEstimator):
     # Required methods
@@ -690,8 +706,23 @@ class SeqDEFT(DeltaPEstimator):
             phi = -np.log(self.R)
         return(phi)
     
+    def simulate(self, N, a=None, seed=None, phi=None):
+        if seed is not None:
+            np.random.seed(seed)
+        
+        if phi is not None:
+            check_error(phi.shape == (self.n_genotypes,),
+                        msg='Ensure "phi" has the shape (n_genotypes,)')
+        else:
+            check_error(a is not None, '"a" must be provided if "phi=None"')
+            phi = self.simulate_phi(a)
+            
+        Q = self.phi_to_Q(phi)
+        X = np.random.choice(self.genotypes, size=N, replace=True, p=Q)
+        return(X)
+    
     # TODO: fix and refactor simulation code
-    def simulate(self, N, a_true, random_seed=None):
+    def simulate_old(self, N, a_true, random_seed=None):
         # Set random seed
         np.random.seed(random_seed)
     
