@@ -6,11 +6,13 @@ import numpy as np
 from os.path import join
 from tempfile import NamedTemporaryFile
 from scipy.sparse.csr import csr_matrix
+from jellyfish import hamming_distance
 
 from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.datasets import DataSet
 from gpmap.src.space import (SequenceSpace, DiscreteSpace, CodonSpace,
                              ProductSpace, GridSpace, HammingBallSpace)
+from scipy.special._basic import comb
 
 
 class SpaceTests(unittest.TestCase):
@@ -110,17 +112,6 @@ class SpaceTests(unittest.TestCase):
         assert(n_neighbors['L'] == 51)
         assert(n_neighbors['R'] == 52)
     
-    def test_calc_laplacian(self):
-        space = SequenceSpace(seq_length=1, alphabet_type='dna')
-        space.calc_laplacian()
-        assert(np.all(np.diag(space.laplacian.todense()) == 3))
-        assert(np.all(space.laplacian.sum(1) == 0))
-        
-        space = SequenceSpace(seq_length=2, alphabet_type='dna')
-        space.calc_laplacian()
-        assert(np.all(np.diag(space.laplacian.todense()) == 6))
-        assert(np.all(space.laplacian.sum(1) == 0))
-    
     def test_calc_site_adjacency_matrices(self):
         space = SequenceSpace(seq_length=1, alphabet_type='protein')
         
@@ -178,6 +169,29 @@ class SpaceTests(unittest.TestCase):
         alphabet = [['A', 'C', 'G', 'T']] * len(X0)
         space = HammingBallSpace(X0=X0, alphabet=alphabet, d=2)
         
+        # Ensure it contains the right number of genotypes
+        n_genotypes = np.sum([comb(3, k) * 3 ** k for k in range(3)])
+        assert(space.n_genotypes == n_genotypes)
+        
+        # Ensure all sequences within the riht distance
+        for x in space.genotypes:
+            assert(hamming_distance(x, X0) <= 2)
+            
+        # Build space from list of sequences
+        genotypes = space.genotypes.copy()
+        np.random.shuffle(genotypes)
+        y = np.random.normal(size=genotypes.shape[0])
+        space = HammingBallSpace(X0=X0, X=genotypes, y=y)
+
+        assert(space.n_genotypes == n_genotypes)
+        for x in space.genotypes:
+            assert(hamming_distance(x, X0) <= 2)
+        
+        # Ensure right adjacency matrix
+        space = HammingBallSpace(X0=X0, alphabet=alphabet, d=1)
+        degrees = space.adjacency_matrix.sum(axis=0)
+        assert(degrees[0, 0] == 9)
+        assert(np.all(degrees[0, 1:] == 3))
         
     def test_n_alleles(self):
         s = SequenceSpace(seq_length=2, alphabet_type='dna')
@@ -331,17 +345,13 @@ class SpaceTests(unittest.TestCase):
         assert(hasattr(s,'protein_seqs'))
         assert(np.unique(s.protein_seqs).shape[0] == 21)
     
-    def test_write_edges_npz(self):
+    def test_write_edges(self):
         s = SequenceSpace(seq_length=6, alphabet_type='dna')
         with NamedTemporaryFile('w') as fhand:
-            s.write_edges_npz(fhand.name)
-    
-    def test_write_edges_csv(self):
-        s = SequenceSpace(seq_length=6, alphabet_type='dna')
-        with NamedTemporaryFile('w') as fhand:
-            s.write_edges_csv(fhand.name)
+            s.write_edges(fhand.name + '.npz')
+            s.write_edges(fhand.name + '.csv')
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SpaceTests.test_hamming_ball_space']
+    import sys;sys.argv = ['', 'SpaceTests']
     unittest.main()

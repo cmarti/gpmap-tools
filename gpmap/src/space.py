@@ -8,6 +8,7 @@ from _collections import defaultdict
 
 from scipy.sparse.csr import csr_matrix
 from scipy.special._logsumexp import logsumexp
+from jellyfish import hamming_distance
 
 from gpmap.src.seq import (translate_seqs, guess_space_configuration,
                            guess_alphabet_type, get_seqs_from_alleles,
@@ -17,9 +18,7 @@ from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
-
 from gpmap.src.linop import ProjectionOperator, VjProjectionOperator
-from jellyfish._jellyfish import hamming_distance
 
 
 class DiscreteSpace(object):
@@ -103,10 +102,6 @@ class DiscreteSpace(object):
             neighbors = np.unique(self.adjacency_matrix.sum(1))
             self._is_regular = neighbors.shape[0] == 1
         return(self._is_regular)
-    
-    def calc_laplacian(self):
-        D = get_sparse_diag_matrix(self.adjacency_matrix.sum(1).A1.flatten())
-        self.laplacian = D - self.adjacency_matrix
     
     def _check_attributes(self, tol=1e-6):
         # TODO: check that the space is connected
@@ -219,46 +214,9 @@ class DiscreteSpace(object):
         df = pd.DataFrame({'y': self.y}, 
                           index=self.state_labels)
         df.to_csv(fpath)
-        
 
-class HammingBallSpace(DiscreteSpace):
-    '''
-    Class for the space representing the Hamming ball around a target sequence
-    up to a certain number of mutations from it. 
-    
-    '''
-    def __init__(self, X0, d, alphabet=None, alphabet_type='custom',
-                 X=None, y=None):
-        self.X0 = X0
-        self.d = d
-        self.alphabet = alphabet
-        self.seq_length = len(X0)
-#         if X is not None and y is not None:
-#             config = guess_space_configuration(X, ensure_full_space=True)
-#             seq_length = config['length']
-#             alphabet_type = config['alphabet_type']
-#             alphabet = config['alphabet']
-#             y = pd.Series(y, index=X)
-#         
-#         self.set_seq_length(seq_length, n_alleles, alphabet)
-#         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles,
-#                                alphabet=alphabet)
-#         self.n_states = np.prod(self.n_alleles)
-#         
-#         msg='Sequence space is too big to handle ({})'.format(self.n_states)
-#         check_error(self.n_states <= MAX_STATES, msg=msg)
-#         
-#         adjacency_matrix = self.calc_adjacency_matrix()
-        genotypes = self.get_genotypes()
-        adjacency_matrix = self.get_adjacency_matrix(genotypes)
-        self.init_space(adjacency_matrix, state_labels=genotypes)
-        
-        if y is not None:
-            if X is None:
-                X = self.genotypes
-            self.set_y(X, y)
-        
-        
+
+class GeneralSequenceSpace(DiscreteSpace):
     @property
     def n_genotypes(self):
         return(self.n_states)
@@ -270,9 +228,140 @@ class HammingBallSpace(DiscreteSpace):
     def set_y(self, X, y):
         y = pd.Series(y, index=X)
         y = y.reindex(self.genotypes).values
+        
+        if np.any(np.isnan(y)):
+            msg = 'Make sure to include all required genotypes'
+            raise ValueError(msg.format(self.d, self.X0))
             
         self.y = y
         self._check_y()
+    
+    def set_seq_length(self, seq_length=None, n_alleles=None, alphabet=None):
+        if seq_length is None:
+            check_error(n_alleles is not None or alphabet is not None,
+                        'One of seq_length, n_alleles or alphabet is required')
+            seq_length = len(n_alleles) if n_alleles is not None else len(alphabet)
+        self.seq_length = seq_length
+        
+    def _check_alphabet(self, n_alleles, alphabet_type, alphabet):
+        if alphabet is not None:
+            msg = 'n_alleles cannot be specified when the alphabet is provided'
+            check_error(n_alleles is None, msg=msg)
+            
+            if alphabet_type != 'custom':
+                atype = guess_alphabet_type(alphabet)
+                msg = 'The provided alphabet is not compatible with the'
+                msg += ' alphabet_type {}'.format(alphabet_type)
+                check_error(alphabet_type == atype, msg=msg)
+            
+        elif alphabet_type == 'custom':
+            msg = 'n_alleles must be provided for alphabet_type="custom"'
+            check_error(n_alleles is not None, msg=msg)
+            
+        else:
+            msg = 'n_alleles can only be specified for alphabet_type="custom"'
+            check_error(n_alleles is None, msg=msg)
+    
+    def set_alphabet_type(self, alphabet_type, n_alleles=None, alphabet=None):
+        self._check_alphabet(n_alleles, alphabet_type, alphabet)
+        self.alphabet_type = alphabet_type
+        
+        if alphabet is not None:
+            self.alphabet = alphabet
+            
+        elif alphabet_type == 'dna':
+            self.alphabet = [DNA_ALPHABET] * self.seq_length
+            self.complements = {'A': ['T'], 'T': ['A'],
+                                'G': ['C'], 'C': ['G']}
+            self.ambiguous_values = [DNA_AMBIGUOUS_VALUES] * self.seq_length
+            
+        elif alphabet_type == 'rna':
+            self.alphabet = [RNA_ALPHABET] * self.seq_length
+            self.complements = {'A': ['U'], 'U': ['A', 'G'],
+                                'G': ['C', 'U'], 'C': ['G']}
+            self.ambiguous_values = [RNA_AMBIGUOUS_VALUES] * self.seq_length
+            
+        elif alphabet_type == 'protein':
+            self.ambiguous_values = [PROT_AMBIGUOUS_VALUES] * self.seq_length
+            self.alphabet = [PROTEIN_ALPHABET] * self.seq_length
+            
+        elif alphabet_type == 'custom':
+            n_alleles = [n_alleles] * self.seq_length if isinstance(n_alleles, int) else n_alleles
+            self.alphabet = [[ALPHABET[x] for x in range(a)] for a in n_alleles]
+            self.ambiguous_values = [{'X': ''.join(a)} for a in self.alphabet]
+            for i, alleles in enumerate(self.alphabet):
+                self.ambiguous_values[i].update(dict(zip(alleles, alleles)))
+                
+        else:
+            alphabet_types = ['dna', 'rna', 'protein', 'custom']
+            raise ValueError('alphabet_type can only be: {}'.format(alphabet_types))
+        
+        if n_alleles is None:
+            n_alleles = [len(a) for a in self.alphabet]
+        self.n_alleles = n_alleles
+    
+    def calc_adjacency_matrix(self, genotypes=None):
+        if genotypes is None:
+            genotypes = self.genotypes
+        n_genotypes = genotypes.shape[0]
+            
+        gts1, gts2 = [], []
+        for i, seq1 in enumerate(genotypes):
+            for j, seq2 in enumerate(genotypes[i+1:]):
+                j += i+1
+                if hamming_distance(seq1, seq2) == 1:
+                    gts1.extend([i, j]) 
+                    gts2.extend([j, i])
+        gts1 = np.array(gts1, dtype=int)
+        gts2 = np.array(gts2, dtype=int)
+        data = np.ones(gts1.shape[0])
+        adjacency_matrix = csr_matrix((data, (gts1, gts2)),
+                                      shape=(n_genotypes, n_genotypes)) 
+        return(adjacency_matrix)
+        
+
+class HammingBallSpace(GeneralSequenceSpace):
+    '''
+    Class for the space representing the Hamming ball around a target sequence
+    up to a certain number of mutations from it. 
+    
+    '''
+    def __init__(self, X0, X=None, y=None,
+                 d=None, n_alleles=None,
+                 alphabet_type='dna', alphabet=None):
+        
+        if X is not None and y is not None:
+            config = guess_space_configuration(X, ensure_full_space=False,
+                                               force_regular=False,
+                                               force_regular_alleles=False)
+            alphabet_type = config['alphabet_type']
+            alphabet = config['alphabet']
+            d = np.max([hamming_distance(X0, x) for x in X])
+            y = pd.Series(y, index=X)
+        
+        self.X0 = X0
+        self.d = d
+        
+        self.set_seq_length(len(X0), n_alleles, alphabet)
+        self.set_alphabet_type(alphabet_type, n_alleles=n_alleles,
+                               alphabet=alphabet)
+        
+        genotypes = self.get_genotypes()
+        adjacency_matrix = self.calc_adjacency_matrix(genotypes)
+        self.init_space(adjacency_matrix, state_labels=genotypes)
+        
+        if y is not None:
+            if X is None:
+                X = self.genotypes
+            self.set_y(X, y)
+        
+    @property
+    def n_genotypes(self):
+        return(self.n_states)
+    
+    @property
+    def genotypes(self):
+        return(self.state_labels)
     
     def get_genotypes(self):
         positions = np.arange(self.seq_length)
@@ -292,28 +381,11 @@ class HammingBallSpace(DiscreteSpace):
                     for k, a in zip(pos, alleles):
                         X_i[k] = a
                     genotypes.append(''.join(X_i))
+                    if len(genotypes) > MAX_STATES:
+                        raise ValueError('Sequence space too big')
         genotypes = np.array(genotypes)
         return(genotypes)
     
-    def get_adjacency_matrix(self, genotypes=None):
-        if genotypes is None:
-            genotypes = self.genotypes
-        n_genotypes = genotypes.shape[0]
-            
-        gts1, gts2 = [], []
-        for i, seq1 in enumerate(genotypes):
-            for j, seq2 in enumerate(genotypes[i+1:]):
-                j += i+1
-                if hamming_distance(seq1, seq2) == 1:
-                    gts1.extend([i, j]) 
-                    gts2.extend([j, i])
-        gts1 = np.array(gts1, dtype=int)
-        gts2 = np.array(gts2, dtype=int)
-        data = np.ones(gts1.shape[0])
-        adjacency_matrix = csr_matrix((data, (gts1, gts2)),
-                                      shape=(n_genotypes, n_genotypes)) 
-        return(adjacency_matrix)
-        
     
 class ProductSpace(DiscreteSpace):
     def __init__(self, elementary_graphs, y=None, state_labels=None):
@@ -384,7 +456,7 @@ class GridSpace(ProductSpace):
         return(nodes_df)
         
 
-class SequenceSpace(ProductSpace):
+class SequenceSpace(GeneralSequenceSpace, ProductSpace):
     """
     Class for creating a Sequence space characterized by having sequences as
     states. States are connected in the discrete space if they differ by a 
@@ -490,21 +562,6 @@ class SequenceSpace(ProductSpace):
     @property
     def is_regular(self):
         return(np.unique(self.n_alleles).shape[0] == 1)
-    
-    @property
-    def n_genotypes(self):
-        return(self.n_states)
-    
-    @property
-    def genotypes(self):
-        return(self.state_labels)
-    
-    def set_y(self, X, y):
-        y = pd.Series(y, index=X)
-        y = y.reindex(self.genotypes).values
-            
-        self.y = y
-        self._check_y()
     
     def calc_variance_components(self):
         '''
@@ -659,13 +716,6 @@ class SequenceSpace(ProductSpace):
         transitions = transitions.loc[PROTEIN_ALPHABET, PROTEIN_ALPHABET]
         return(transitions)
     
-    def set_seq_length(self, seq_length=None, n_alleles=None, alphabet=None):
-        if seq_length is None:
-            check_error(n_alleles is not None or alphabet is not None,
-                        'One of seq_length, n_alleles or alphabet is required')
-            seq_length = len(n_alleles) if n_alleles is not None else len(alphabet)
-        self.seq_length = seq_length
-    
     def _calc_site_matrix(self, alleles, transitions=None):
         n_alleles = len(alleles)
         if transitions is None:
@@ -695,63 +745,6 @@ class SequenceSpace(ProductSpace):
         sites_A = self._calc_site_adjacency_matrices(self.alphabet, codon_table=codon_table)
         adjacency_matrix = calc_cartesian_product(sites_A)
         return(adjacency_matrix)
-    
-    def _check_alphabet(self, n_alleles, alphabet_type, alphabet):
-        if alphabet is not None:
-            msg = 'n_alleles cannot be specified when the alphabet is provided'
-            check_error(n_alleles is None, msg=msg)
-            
-            if alphabet_type != 'custom':
-                atype = guess_alphabet_type(alphabet)
-                msg = 'The provided alphabet is not compatible with the'
-                msg += ' alphabet_type {}'.format(alphabet_type)
-                check_error(alphabet_type == atype, msg=msg)
-            
-        elif alphabet_type == 'custom':
-            msg = 'n_alleles must be provided for alphabet_type="custom"'
-            check_error(n_alleles is not None, msg=msg)
-            
-        else:
-            msg = 'n_alleles can only be specified for alphabet_type="custom"'
-            check_error(n_alleles is None, msg=msg)
-        
-    def set_alphabet_type(self, alphabet_type, n_alleles=None, alphabet=None):
-        self._check_alphabet(n_alleles, alphabet_type, alphabet)
-        self.alphabet_type = alphabet_type
-        
-        if alphabet is not None:
-            self.alphabet = alphabet
-            
-        elif alphabet_type == 'dna':
-            self.alphabet = [DNA_ALPHABET] * self.seq_length
-            self.complements = {'A': ['T'], 'T': ['A'],
-                                'G': ['C'], 'C': ['G']}
-            self.ambiguous_values = [DNA_AMBIGUOUS_VALUES] * self.seq_length
-            
-        elif alphabet_type == 'rna':
-            self.alphabet = [RNA_ALPHABET] * self.seq_length
-            self.complements = {'A': ['U'], 'U': ['A', 'G'],
-                                'G': ['C', 'U'], 'C': ['G']}
-            self.ambiguous_values = [RNA_AMBIGUOUS_VALUES] * self.seq_length
-            
-        elif alphabet_type == 'protein':
-            self.ambiguous_values = [PROT_AMBIGUOUS_VALUES] * self.seq_length
-            self.alphabet = [PROTEIN_ALPHABET] * self.seq_length
-            
-        elif alphabet_type == 'custom':
-            n_alleles = [n_alleles] * self.seq_length if isinstance(n_alleles, int) else n_alleles
-            self.alphabet = [[ALPHABET[x] for x in range(a)] for a in n_alleles]
-            self.ambiguous_values = [{'X': ''.join(a)} for a in self.alphabet]
-            for i, alleles in enumerate(self.alphabet):
-                self.ambiguous_values[i].update(dict(zip(alleles, alleles)))
-                
-        else:
-            alphabet_types = ['dna', 'rna', 'protein', 'custom']
-            raise ValueError('alphabet_type can only be: {}'.format(alphabet_types))
-        
-        if n_alleles is None:
-            n_alleles = [len(a) for a in self.alphabet]
-        self.n_alleles = n_alleles
     
     def get_genotypes(self):
         return(np.array([x for x in get_seqs_from_alleles(self.alphabet)]))
