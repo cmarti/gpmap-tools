@@ -4,20 +4,43 @@ import numpy as np
 import pandas as pd
 
 from os.path import join
+from tempfile import NamedTemporaryFile
 from subprocess import check_call
 from scipy.stats.stats import pearsonr
 
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.inference import SeqDEFT
 from gpmap.src.plot import plot_SeqDEFT_summary, savefig
-from tempfile import NamedTemporaryFile
+from gpmap.src.utils import write_dataframe
 
 
 class SeqDEFTTests(unittest.TestCase):
-    def xtest_seq_deft_simulate(self):
-        a = 1e6
-        seqdeft = SeqDEFT(4, 6, P=2)
-        data = seqdeft.simulate(N=10000, a_true=a, random_seed=None)
+    def test_seq_deft_simulate(self):
+        seqdeft = SeqDEFT(P=2)
+        seqdeft.init(seq_length=5, alphabet_type='dna')
+        
+        # Ensure right scale of phi
+        np.random.seed(1)
+        a = 5e3
+        phi = seqdeft.simulate_phi(a=a)
+        ss = seqdeft.DP.quad(phi) / seqdeft.n_genotypes
+        print(ss)
+        assert(np.abs(ss - 1) < 0.1)
+        
+        # Sample sequences directly
+        X = seqdeft.simulate(N=100, a=a)
+        assert(X.shape[0] == 100)
+        
+        # Sample sequences indirectly
+        X = seqdeft.simulate(N=2000, phi=phi)
+        assert(X.shape[0] == 2000)
+        
+        # Ensure frequencies correlate with probabilities
+        x, y = np.unique(X, return_counts=True)
+        merged = pd.DataFrame({'phi': phi}, index=seqdeft.genotypes)
+        merged = merged.join(pd.DataFrame({'logy': np.log(y)}, index=x)).dropna()
+        r = pearsonr(-merged['phi'], merged['logy'])[0]
+        assert(r > 0.6)
     
     def test_seq_deft_inference(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_counts.csv')
@@ -80,7 +103,23 @@ class SeqDEFTTests(unittest.TestCase):
         seq_densities = seqdeft.fit(X=data.index.values,
                                     y=data['counts'].values)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
-    
+        
+    def test_weighted_inference2(self):
+        fpath = '/home/martigo/elzar/projects/tk/data/dfg.reweighted.pq'
+        data = pd.read_parquet(fpath)
+        data['counts'] = data['counts'] * 2 / 3
+        
+        # Test inference
+        seqdeft = SeqDEFT(P=2, num_reg=10)
+        out_fpath = '/home/martigo/elzar/projects/tk/data/dfg.reweighted.out.pq'
+        seq_densities = seqdeft.fit(X=data.index.values, y=data['counts'].values)
+        write_dataframe(seq_densities, out_fpath)
+        
+        out_fpath = '/home/martigo/elzar/projects/tk/data/dfg.reweighted.out'
+        fig = plot_SeqDEFT_summary(seqdeft.logL_df, seq_densities)
+        savefig(fig, out_fpath)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        
     def test_seq_deft_cv_plot(self):
         fpath = join(TEST_DATA_DIR, 'seqdeft_output.csv')
         seq_densities = pd.read_csv(fpath, index_col=0)
@@ -162,5 +201,5 @@ class SeqDEFTTests(unittest.TestCase):
         
 
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests']
+    import sys;sys.argv = ['', 'SeqDEFTTests.test_seq_deft_simulate']
     unittest.main()
