@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 import argparse
+import numpy as np
 
-from gpmap.src.utils import LogTrack, read_dataframe, write_dataframe
+from gpmap.src.utils import LogTrack, write_dataframe
 from gpmap.src.inference import SeqDEFT
 from gpmap.src.plot import plot_SeqDEFT_summary, savefig
 
@@ -15,7 +16,13 @@ def main():
     # Create arguments
     parser = argparse.ArgumentParser(description=description)
     input_group = parser.add_argument_group('Input')
-    input_group.add_argument('counts', help='CSV or parquet table with sequence counts')
+    input_group.add_argument('sequences',
+                             help='File containing a list of equally long sequences')
+    help_msg = 'File containing the weights associated to each input sequence'
+    input_group.add_argument('-y', '--weights', default=None, help=help_msg)
+    
+    help_msg = 'Comma separated list of positions to select from the input sequences'
+    input_group.add_argument('-p', '--positions', default=None, help=help_msg)
 
     options_group = parser.add_argument_group('SeqDEFT options')
     help_msg = 'Value of the hyperparameter a for SeqDEFT. If not provided, '
@@ -29,6 +36,9 @@ def main():
                                type=int)
     options_group.add_argument('--get_a_values', default=False, action='store_true',
                                help='Only calculate the series of a values for CV')
+    help_msg = 'Apply phylogenetic correction to input sequences (--positions required)'
+    options_group.add_argument('--phylo_correction', default=False, action='store_true',
+                               help=help_msg)
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True,
@@ -36,33 +46,53 @@ def main():
 
     # Parse arguments
     parsed_args = parser.parse_args()
-    counts_fpath = parsed_args.counts
+    x_fpath = parsed_args.sequences
+    y_fpath = parsed_args.weights
+    positions = parsed_args.positions
 
     P = parsed_args.P_delta
     a_value = parsed_args.a_value
     num_a = parsed_args.num_a
     get_a_values = parsed_args.get_a_values
+    phylo_correction = parsed_args.phylo_correction
     
     out_fpath = parsed_args.output
     
     # Load counts data
     log = LogTrack()
-    log.write('Start analysis')
-    data = read_dataframe(counts_fpath)
+    log.write('Loading input sequences')
+    X = np.array([x.strip() for x in open(x_fpath)])
+    
+    if positions is not None:
+        positions = [int(x) for x in positions.split(',')]
+
+    if y_fpath is None:
+        y = None
+    else:
+        log.write('Loading weights for input sequences')
+        y = np.array([x.strip() for x in open(y_fpath)])
 
     # Load annotation data
     seqdeft = SeqDEFT(P, a=a_value, num_reg=num_a)
     if get_a_values:
-        seqdeft.init(genotypes=data.index.values)
-        seqdeft.set_data(X=data.index.values, y=data['counts'].values)
+        log.write('Initializint SeqDEFT model')
+        seqdeft.init(genotypes=X)
+        seqdeft.set_data(X=X, y=y, phylo_correction=phylo_correction, 
+                         positions=positions)
+        
         log.write('Calculating only a values')
         with open(out_fpath, 'w') as fhand:
             for a_value in seqdeft.get_a_values():
                 fhand.write('{}\n'.format(a_value))
     else:
-        result = seqdeft.fit(X=data.index.values, y=data['counts'].values)
+        log.write('Fitting SeqDEFT model to observed data')
+        result = seqdeft.fit(X=X, y=y, phylo_correction=phylo_correction, 
+                             positions=positions)
+        
+        log.write('Writing output to {}'.format(out_fpath))
         write_dataframe(result, out_fpath)
         
+        log.write('Creating summary plot and saving to {}.png'.format(out_fpath))
         fig = plot_SeqDEFT_summary(seqdeft.logL_df, result)
         savefig(fig, out_fpath)
     

@@ -17,7 +17,8 @@ from gpmap.src.utils import (check_error,
                              reciprocal, get_CV_splits,
                              calc_matrix_polynomial_quad)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
-                           get_seqs_from_alleles)
+                           get_seqs_from_alleles, msa_to_counts,
+    calc_msa_weights, get_subsequences)
 from gpmap.src.linop import (DeltaPOperator, ProjectionOperator,
                              LaplacianOperator, KernelOperator)
 from gpmap.src.kernel import KernelAligner
@@ -47,7 +48,7 @@ class LandscapeEstimator(object):
                                                       force_regular=True,
                                                       force_regular_alleles=False)
             seq_length = configuration['length']
-            alphabet = configuration['alphabet']
+            alphabet = [sorted(a) for a in configuration['alphabet']]
             n_alleles = configuration['n_alleles'][0]
             n_alleles = len(alphabet[0])
         else:
@@ -467,12 +468,12 @@ class DeltaPEstimator(LandscapeEstimator):
     
     def calc_cv_logL(self, cv_data, phi_initial=None):
         for a, fold, train, test in tqdm(cv_data, total=self.total_folds):
-            (X_train, y_train), (X_test, y_test) = train, test
+            (X_train, y_train, y_var_train), (X_test, y_test, y_var_test) = train, test
 
-            self._set_data(X=X_train, y=y_train)
+            self._set_data(X=X_train, y=y_train, y_var=y_var_train)
             phi = self._fit(a, phi_initial=phi_initial)
             
-            self._set_data(X=X_test, y=y_test)
+            self._set_data(X=X_test, y=y_test, y_var=y_var_test)
             test_logL = -self.calc_neg_log_likelihood(phi)
             yield({'a': a, 'fold': fold, 'logL': test_logL})
 
@@ -525,7 +526,8 @@ class DeltaPEstimator(LandscapeEstimator):
                            x0=b_initial, method=self.opt_method,
                            options=self.optimization_opts)
             if not res.success:
-                self.report(res.message)
+                print(res.message)
+                
             b_a = res.x
             phi = self._b_to_phi(b_a)
             
@@ -540,7 +542,55 @@ class DeltaPEstimator(LandscapeEstimator):
         # a, N = a * scale_by, N *scale_by    
         return(phi)
     
-    def fit(self, X, y, force_fit_a=True):
+    def _get_vc(self):
+        if not hasattr(self, '_vc'):
+            self._vc = VCregression()
+            self._vc.init(genotypes=self.genotypes)
+        return(self._vc)
+    
+    def simulate_phi(self, a):
+        vc = self._get_vc()
+        self.DP.calc_lambdas()
+        lambdas = np.zeros(self.DP.lambdas.shape)
+        lambdas[self.P:] = self.n_p_faces / (a * self.DP.lambdas[self.P:])
+        phi = vc.simulate(lambdas)['y'].values
+        return(phi)
+
+
+class SeqDEFT(DeltaPEstimator):
+    # Required methods
+    @property
+    def count_data(self):
+        return(False)
+    
+    def fill_zeros_counts(self, X, y):
+        obs = pd.DataFrame({'x': X, 'y': y}).groupby(['x'])['y'].sum().reset_index()
+        data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
+        data.loc[obs['x'].values] = obs['y'].values
+        return(data)
+    
+    def _set_data(self, X, y=None, y_var=None):
+        # TODO: make it work with phylogenetic correction and positions
+        check_error(y_var is None, msg='y_var is not compatible with SeqDEFT')
+        if y is None:
+            y = calc_msa_weights(X, phylo_correction=self.phylo_correction)
+            
+        self.X = get_subsequences(X, positions=self.positions)
+        self.y = y
+        self.y_var = None
+        
+        data = self.fill_zeros_counts(self.X, y)
+        self.N = data.sum()
+        self.R = (data / self.N)
+    
+    def set_data(self, X, y=None, positions=None, phylo_correction=False):
+        self.init(genotypes=get_subsequences(X, positions=positions))
+        self.positions = positions
+        self.phylo_correction = phylo_correction
+        self._set_data(X, y=y)
+    
+    def fit(self, X, y=None, positions=None, phylo_correction=False,
+            force_fit_a=True):
         """
         Infers the sequence-function relationship under the specified
         \Delta^{(P)} prior 
@@ -548,11 +598,19 @@ class DeltaPEstimator(LandscapeEstimator):
         Parameters
         ----------
         X : array-like of shape (n_obs,)
-            Vector containing the genotypes for which have observations provided
-            by `counts`. Missing sequences are assumed to have observed 0 times
+            Vector containing the observed sequences
             
-        y : array-like of shape (n_obs,) or (n_obs, n_cols)
-            Vector or matrix containing the expected type of data for each model
+        y : array-like of shape (n_obs,)
+            Vector containing the weights for each observed sequence. 
+            By default, each sequence takes a weight of 1. These weights
+            can be calculated using phylogenetic correction
+        
+        positions: array-like of shape (n_pos,)
+            If provided, subsequences at these positions in the provided
+            input sequences will be used as input
+        
+        phylo_correction: bool
+            Apply phylogenetic correction using the full length sequences
             
         force_fit_a : bool 
             Whether to re-fit ``a`` using cross-validation even if it is already
@@ -566,7 +624,8 @@ class DeltaPEstimator(LandscapeEstimator):
             sequence in the space
         
         """
-        self.set_data(X, y)
+        self.set_data(X, y=y, positions=positions,
+                      phylo_correction=phylo_correction)
         phi_inf = self._fit(np.inf)
         
         if not self.a_is_fixed and force_fit_a:
@@ -577,40 +636,6 @@ class DeltaPEstimator(LandscapeEstimator):
         phi = self._fit(self.a, phi_initial=phi_inf)
         output = self.phi_to_output(phi)
         return(output)
-    
-    def _get_vc(self):
-        if not hasattr(self, '_vc'):
-            self._vc = VCregression()
-            self._vc.init(genotypes=self.genotypes)
-        return(self._vc)
-    
-    def simulate_phi(self, a):
-        vc = self._get_vc()
-        self.DP.calc_lambdas()
-        lambdas = np.zeros(self.DP.lambdas.shape)
-        lambdas[self.P:] = 1 / self.DP.lambdas[self.P:]
-        phi = vc.simulate(lambdas)['y'].values * (2*self.n_p_faces) / a
-        return(phi)
-
-
-class SeqDEFT(DeltaPEstimator):
-    # Required methods
-    def _set_data(self, X, y):
-        self.X = X
-        self.y = y
-        self.y_var = None
-        
-        data = self.fill_zeros_counts(X, y)
-        self.N = data.sum()
-        self.R = (data / self.N)
-    
-    def set_data(self, X, y):
-        self.init(genotypes=X)
-        self._set_data(X, y)
-    
-    @property
-    def count_data(self):
-        return(True)
     
     def calc_regularization(self, phi):
         regularizer = 0
@@ -689,11 +714,6 @@ class SeqDEFT(DeltaPEstimator):
         a_values = np.hstack([0, a_values, np.inf])
         self.total_folds = self.nfolds * (self.num_reg + 2)
         return(a_values)
-
-    def fill_zeros_counts(self, X, y):
-        data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
-        data.loc[X] = y
-        return(data)
 
     def phi_to_logQ(self, phi):
         return(-phi - logsumexp(-phi))

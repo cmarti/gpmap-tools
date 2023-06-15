@@ -362,7 +362,26 @@ def seq_to_one_hot(X, alleles=None):
     return(onehot)
 
 
-def msa_to_counts(seqs, positions=None, phylo_correction=False, max_dist=0.2):
+def calc_msa_weights(X, phylo_correction=False, max_dist=0.2):
+    l = len(X[0])
+    if phylo_correction:
+        y = []
+        for seq1 in X:
+            d = np.array([hamming_distance(seq1, seq2) for seq2 in X]) / l
+            y.append(1 / (d < max_dist).sum())
+        y = np.array(y)
+    else:
+        y = np.ones(X.shape[0])
+    return(y)
+
+
+def get_subsequences(X, positions=None):
+    if positions is None:
+        return(X)
+    return(np.array([''.join([seq[i] for i in positions]) for seq in X]))
+
+
+def msa_to_counts(X, y=None, positions=None, phylo_correction=False, max_dist=0.2):
     '''
     Obtains a series of sequences and their counts from a Multiple Sequence 
     Alignment (MSA) provided as a list of sequences. It can select subsequences
@@ -372,20 +391,23 @@ def msa_to_counts(seqs, positions=None, phylo_correction=False, max_dist=0.2):
     
     Parameters
     ----------
-    seqs: array-like of aligned sequences
+    X : array-like of aligned sequences
         Input sequences from which to extract counts
         
-    positions: array-like of positions (None)
+    y : array-like of weights (None)
+        Pre-calculated weights associated to the input sequences
+        
+    positions : array-like of positions (None)
         If provided, subsequences at this subset of positions will be used
         to provide counts or re-weighted counts
     
-    phylo_correction: bool
+    phylo_correction : bool (False)
         If True, observations will be re-weighted using sequence
         similarity along the whole sequence as 1 over the number of similar
         sequences in the MSA. Similar sequences are defined as those that 
         differ less from each other than the specified ```max_dist```
         
-    max_dist: float (0.2)
+    max_dist : float (0.2)
         Pairs of sequences that differ more than this value will be consired
         similar for re-weighting
     
@@ -398,21 +420,19 @@ def msa_to_counts(seqs, positions=None, phylo_correction=False, max_dist=0.2):
         Counts or re-weighted counts for each of the unique subsequences in
         the MSA
     '''
-    l  = len(seqs[0])
-    if positions is None:
-        X, counts = np.unique(seqs, return_counts=True)
-    else:
-        if phylo_correction:
-            weights = []
-            for seq1 in seqs:
-                d = np.array([hamming_distance(seq1, seq2) for seq2 in seqs]) / l
-                weights.append(1 / (d < max_dist).sum())
-                
-            data = pd.DataFrame({'x': [''.join([seq[i] for i in positions]) for seq in seqs],
-                                 'w': weights}).groupby(['x'])['w'].sum().reset_index()
-            X, counts = data['x'].values, data['w'].values
-        else:
-            seqs = [''.join([seq[i] for i in positions]) for seq in seqs]
-            X, counts = np.unique(seqs, return_counts=True)
+    if phylo_correction:
+        if not positions:
+            raise ValueError('"positions" must be provided for phylogenetic correction')
+        if y is not None:
+            raise ValueError('phylogenetic correction can not be calculated when "y" is provided')
+    
+    if y is None:
+        y = calc_msa_weights(X, phylo_correction=phylo_correction, max_dist=max_dist)
+        
+    if positions:
+        X = get_subsequences(X, positions=positions)
+    
+    data = pd.DataFrame({'x': X, 'y': y}).groupby(['x'])['y'].sum().reset_index()
+    X, counts = data['x'].values, data['y'].values
     return(X, counts) 
     
