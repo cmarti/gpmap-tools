@@ -179,7 +179,7 @@ class SeqDEFTTests(unittest.TestCase):
         fpath = join(TEST_DATA_DIR, 'logL.csv')
         log_Ls = pd.read_csv(fpath, index_col=0)
         
-        fig = plot_SeqDEFT_summary(log_Ls, seq_densities)
+        fig = plot_SeqDEFT_summary(log_Ls, seq_densities, legend_loc=2)
         fpath = join(TEST_DATA_DIR, 'seqdeft_output')
         savefig(fig, fpath)
         

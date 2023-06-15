@@ -1082,7 +1082,8 @@ def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
 
 def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
                        xlabel=r'$\log_{10}(a)$',
-                       ylabel='log(L)',  show_folds=True, highlight='max'):
+                       ylabel='log(L)',  show_folds=True, highlight='max',
+                       legend_loc=1):
     
     sdf = df.groupby(x, as_index=False).agg({y: ('mean', 'std', 'count')})
     sdf.columns = ['x', 'mean', 'sd', 'count']
@@ -1121,7 +1122,7 @@ def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
         if not np.isnan(y):
             axes.plot(xlims, (y, y), lw=0.5, c='darkred', linestyle='--',
                       label=label)
-    axes.legend(loc=1)
+    axes.legend(loc=legend_loc, fontsize=9)
     axes.set(xlabel=xlabel, ylabel='Out of sample {}'.format(ylabel),
              ylim=ylims, xlim=xlims)
 
@@ -1134,23 +1135,26 @@ def plot_density_vs_frequency(seq_density, axes):
         data = pd.DataFrame({'logR': logf, 'logQ': logq}).dropna()
                              
     axes.scatter(data['logR'], data['logQ'],
-                 color='black', s=5, alpha=0.4, zorder=2)
+                 color='black', s=5, alpha=0.4, zorder=2,
+                 label='Observed sequences')
     
     mask = np.isinf(logf)
     zero_counts_logq = logq[mask]
     fake_logf = np.full(zero_counts_logq.shape, logf[mask == False].min() - 0.5) 
     axes.scatter(fake_logf, zero_counts_logq, marker='<',
-                 color='red', s=5, alpha=0.2, zorder=2)
+                 color='red', s=5, alpha=0.2, zorder=2,
+                 label='Unobserved sequences')
     
     xlims, ylims = axes.get_xlim(), axes.get_ylim()
     lims = min(xlims[0], ylims[0]), max(xlims[1], ylims[1])
     axes.plot(lims, lims, color='grey', linewidth=0.5, alpha=0.5, zorder=1)
     axes.set(xlabel=r'$log_{10}$(Frequency)', ylabel=r'$log_{10}$(Q*)', 
              xlim=lims, ylim=lims)
+    axes.legend(loc=2, fontsize=9)
 
 
 def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
-                         show_folds=True):
+                         show_folds=True, legend_loc=1):
     '''
     Generates a 2 panel figure showing how the cross-validated likelihood
     changes with ``a`` hyperparameter and the best selected value for model
@@ -1183,14 +1187,14 @@ def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
     
     '''
     if seq_density is None:
-        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
+        fig, axes = init_fig(1, 1, colsize=5, rowsize=4.3)
     else:
         fig, subplots = init_fig(1, 2, colsize=4, rowsize=3.5)
         plot_density_vs_frequency(seq_density, subplots[1])
         axes = subplots[0]
         
     plot_hyperparam_cv(log_Ls, axes, err_bars=err_bars,
-                       show_folds=show_folds)
+                       show_folds=show_folds, legend_loc=legend_loc)
     
     if seq_density is not None:
         fig.tight_layout()
