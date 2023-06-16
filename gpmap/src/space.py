@@ -225,9 +225,13 @@ class GeneralSequenceSpace(DiscreteSpace):
     def genotypes(self):
         return(self.state_labels)
     
-    def set_y(self, X, y):
+    def set_y(self, X, y, stop_y=None):
         y = pd.Series(y, index=X)
-        y = y.reindex(self.genotypes).values
+        y = y.reindex(self.genotypes)
+        if stop_y is not None:
+            idx = np.array(['*' in x for x in self.genotypes])
+            y[idx] = stop_y
+        y = y.values
         
         if np.any(np.isnan(y)):
             msg = 'Make sure to include all required genotypes'
@@ -262,7 +266,11 @@ class GeneralSequenceSpace(DiscreteSpace):
             msg = 'n_alleles can only be specified for alphabet_type="custom"'
             check_error(n_alleles is None, msg=msg)
     
-    def set_alphabet_type(self, alphabet_type, n_alleles=None, alphabet=None):
+    def set_alphabet_type(self, alphabet_type, n_alleles=None, alphabet=None, 
+                          add_stop=False):
+        if add_stop and alphabet_type != 'protein':
+            raise ValueError('add_stop is only valid in protein spaces')
+        
         self._check_alphabet(n_alleles, alphabet_type, alphabet)
         self.alphabet_type = alphabet_type
         
@@ -295,6 +303,9 @@ class GeneralSequenceSpace(DiscreteSpace):
         else:
             alphabet_types = ['dna', 'rna', 'protein', 'custom']
             raise ValueError('alphabet_type can only be: {}'.format(alphabet_types))
+        
+        if add_stop and alphabet_type == 'protein':
+            self.alphabet = [a + ['*'] for a in self.alphabet]
         
         if n_alleles is None:
             n_alleles = [len(a) for a in self.alphabet]
@@ -514,10 +525,11 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
     
     """
     def __init__(self, X=None, y=None, seq_length=None, n_alleles=None,
-                 alphabet_type='dna', alphabet=None):
+                 alphabet_type='dna', alphabet=None, stop_y=None):
         
         self._init(X=X, y=y, seq_length=seq_length, n_alleles=n_alleles, 
-                   alphabet_type=alphabet_type, alphabet=alphabet)
+                   alphabet_type=alphabet_type, alphabet=alphabet,
+                   stop_y=stop_y)
     
     def __str__(self):
         s = 'Sequence Space:\n'
@@ -533,7 +545,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
     
     def _init(self, X=None, y=None,
               seq_length=None, n_alleles=None,
-              alphabet_type='dna', alphabet=None):
+              alphabet_type='dna', alphabet=None, stop_y=None):
         
         if X is not None and y is not None:
             config = guess_space_configuration(X, ensure_full_space=True)
@@ -544,7 +556,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         
         self.set_seq_length(seq_length, n_alleles, alphabet)
         self.set_alphabet_type(alphabet_type, n_alleles=n_alleles,
-                               alphabet=alphabet)
+                               alphabet=alphabet, add_stop=stop_y is not None)
         self.n_states = np.prod(self.n_alleles)
         
         msg='Sequence space is too big to handle ({})'.format(self.n_states)
@@ -557,7 +569,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         if y is not None:
             if X is None:
                 X = self.genotypes
-            self.set_y(X, y)
+            self.set_y(X, y, stop_y=stop_y)
     
     @property
     def is_regular(self):
@@ -634,8 +646,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         data = pd.DataFrame(data)
         return(data)
         
-    def to_nucleotide_space(self, codon_table='Standard', stop_y=None,
-                            alphabet_type='dna'):
+    def to_nucleotide_space(self, codon_table='Standard', alphabet_type='dna'):
         '''
         Transforms a protein space into a nucleotide space using a codon table
         for translating the sequence
@@ -663,7 +674,6 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
             the number of sites of the current space
         '''
         
-        
         msg = 'Only protein spaces can be transformed to nucleotide space'
         msg += ' through a codon model: {} not allowed'.format(self.alphabet_type)
         check_error(self.alphabet_type == 'protein', msg)
@@ -678,11 +688,13 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         prot = pd.Series(translate_seqs(nc_space.genotypes, codon_table),
                          index=nc_space.genotypes)
         nc_space.protein_seqs = prot.values
-
-        if stop_y is None:
-            stop_y = self.y.min()
         y = pd.Series(self.y, index=self.genotypes)
-        y = y.reindex(prot).fillna(stop_y).values
+        y = y.reindex(prot).values
+        
+        if np.any(np.isnan(y)):
+            msg = 'Make sure to include all protein sequences including stops'
+            raise ValueError(msg)
+        
         nc_space.set_y(nc_space.genotypes, y)
         return(nc_space)
     
@@ -762,8 +774,9 @@ def CodonSpace(allowed_aminoacids, codon_table='Standard',
     y = pd.Series(np.ones(20), index=PROTEIN_ALPHABET)
     y.loc[allowed_aminoacids] = 2
     
-    prot_space = SequenceSpace(seq_length=1, alphabet_type='protein', y=y)
-    nuc_space = prot_space.to_nucleotide_space(codon_table=codon_table, stop_y=0)
+    prot_space = SequenceSpace(seq_length=1, alphabet_type='protein', y=y,
+                               stop_y=0)
+    nuc_space = prot_space.to_nucleotide_space(codon_table=codon_table)
     
     if add_variation:
         if seed is not None:

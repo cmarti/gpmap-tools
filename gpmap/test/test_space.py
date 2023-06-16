@@ -339,11 +339,30 @@ class SpaceTests(unittest.TestCase):
         fpath = join(TEST_DATA_DIR, 'serine.protein.csv')
         data = pd.read_csv(fpath, index_col=0)
         
-        s = SequenceSpace(X=data.index.values, y=data['function'].values)
-        s = s.to_nucleotide_space(codon_table='Standard', stop_y=0)
+        # Fail if stop_y is not provided
+        try:
+            s = SequenceSpace(X=data.index.values, y=data['function'].values)
+            s = s.to_nucleotide_space(codon_table='Standard')
+            self.fail()
+        except ValueError:
+            pass
+        
+        # Fail if there are missing protein sequences
+        try:
+            s = SequenceSpace(X=data.index.values[:-1],
+                              y=data['function'].values[:-1], stop_y=0)
+            s = s.to_nucleotide_space(codon_table='Standard')
+            self.fail()
+        except ValueError:
+            pass
+        
+        # Correct run        
+        s = SequenceSpace(X=data.index.values, y=data['function'].values, stop_y=0)
+        s = s.to_nucleotide_space(codon_table='Standard')
         assert(s.n_genotypes == 64)
         assert(hasattr(s,'protein_seqs'))
         assert(np.unique(s.protein_seqs).shape[0] == 21)
+        
     
     def test_write_edges(self):
         s = SequenceSpace(seq_length=6, alphabet_type='dna')
