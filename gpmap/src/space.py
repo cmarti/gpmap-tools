@@ -13,8 +13,7 @@ from jellyfish import hamming_distance
 from gpmap.src.seq import (translate_seqs, guess_space_configuration,
                            guess_alphabet_type, get_seqs_from_alleles,
                            get_product_states)
-from gpmap.src.utils import (get_sparse_diag_matrix, check_error,
-                             calc_cartesian_product, write_edges)
+from gpmap.src.utils import check_error, calc_cartesian_product, write_edges
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
@@ -336,6 +335,54 @@ class HammingBallSpace(GeneralSequenceSpace):
     Class for the space representing the Hamming ball around a target sequence
     up to a certain number of mutations from it. 
     
+    Parameters
+    ----------
+    X0: str
+        Focal sequence around which to build the Hamming ball space
+    
+    X: array-like of shape (n_genotypes,)
+        Sequences to use as state labels of the discrete sequence space
+    
+    y: array-like of shape (n_genotypes,)
+        Quantitative phenotype or fitness associated to each genotype
+    
+    d: int (None)
+        Maximum distance from the focal sequence to include in the space
+    
+    n_alleles: list of size `seq_length` (None)
+        List containing the number of alleles present in each of the sites
+        of the sequence space. It can only be specified for 
+        `alphabet_type=custom`
+    
+    alphabet_type: str ('dna')
+        Sequence type: {'dna', 'rna', 'protein', 'custom'}
+        
+    alphabet: list of `seq_length' lists
+        Every element of the list is itself a list containing the different
+        alleles allowed in each site. Note that the number and type of alleles
+        can be different for every site.
+    
+    Attributes
+    ----------
+    n_genotypes: int
+        Number of states in the complete sequence space
+    
+    genotypes: array-like of shape (n_genotypes, )
+        Genotype labels in the sequence space
+        
+    adjacency_matrix: scipy.sparse.csr_matrix of shape (n_genotypes, n_genotypes)
+        Sparse matrix representing the adjacency relationships between
+        genotypes. The ij'th entry contains a 1 if the genotypes `i` and `j`
+        are separated by a single mutation and 0 otherwise
+    
+    y: array-like of shape (n_genotypes,)
+        Quantitative phenotype or fitness associated to each genotype
+        
+    is_regular: bool
+        Boolean variable storing whether the resulting Hamming graph is regular
+        or not. In other words, whether every site has the same number of
+        alleles   
+    
     '''
     def __init__(self, X0, X=None, y=None,
                  d=None, n_alleles=None,
@@ -365,6 +412,10 @@ class HammingBallSpace(GeneralSequenceSpace):
             if X is None:
                 X = self.genotypes
             self.set_y(X, y)
+    
+    @property
+    def is_regular(self):
+        return(False)
         
     @property
     def n_genotypes(self):
