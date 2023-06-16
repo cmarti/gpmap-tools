@@ -7,7 +7,6 @@ from tqdm import tqdm
 from numpy.linalg.linalg import matrix_power
 from scipy.optimize._minimize import minimize
 from scipy.special._basic import comb
-from scipy.linalg.basic import solve
 from scipy.special._logsumexp import logsumexp
 from scipy.stats.stats import pearsonr
 from scipy.stats._continuous_distns import norm
@@ -17,8 +16,8 @@ from gpmap.src.utils import (check_error,
                              reciprocal, get_CV_splits,
                              calc_matrix_polynomial_quad)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
-                           get_seqs_from_alleles, msa_to_counts,
-    calc_msa_weights, get_subsequences)
+                           get_seqs_from_alleles,  calc_msa_weights,
+                           get_subsequences)
 from gpmap.src.linop import (DeltaPOperator, ProjectionOperator,
                              LaplacianOperator, KernelOperator)
 from gpmap.src.kernel import KernelAligner
@@ -383,8 +382,8 @@ class DeltaPEstimator(LandscapeEstimator):
     def __init__(self, P, a=None, num_reg=20, nfolds=5,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
-                 gtol=1e-3, ftol=1e-8, max_L_size=None):
-        super().__init__(max_L_size=max_L_size)
+                 gtol=1e-3, ftol=1e-8):
+        super().__init__()
         self.P = P
         self.a = a
         self.a_is_fixed = a is not None
@@ -549,6 +548,25 @@ class DeltaPEstimator(LandscapeEstimator):
         return(self._vc)
     
     def simulate_phi(self, a):
+        '''
+        Simulates data under the specified `a` penalization for
+        local P-epistatic coefficients
+        
+        Parameters
+        ----------
+        a : float
+            Parameter related to the inverse of the variance of the P-order
+            epistatic coefficients that are being penalized. Larger values
+            induce stronger penalization and approximation to the 
+            Maximum-Entropy model of order P-1.
+        
+        Returns
+        -------
+        phi : array-like of shape (n_genotypes,)
+            Vector containing values for the latent phenotype or field
+            sampled from the prior characterized by `a`
+        '''
+        
         vc = self._get_vc()
         self.DP.calc_lambdas()
         lambdas = np.zeros(self.DP.lambdas.shape)
@@ -558,7 +576,35 @@ class DeltaPEstimator(LandscapeEstimator):
 
 
 class SeqDEFT(DeltaPEstimator):
-    # Required methods
+    '''
+    Sequence Density Estimation using Field Theory model that allows inference
+    of a complete sequence probability distribution under a Gaussian Process prior
+    parameterized by variance of local epistatic coefficients of order P 
+    
+    It requires the use of the same number of alleles per sites
+    
+    Parameters
+    ----------
+    P : int
+        Order of the local interaction coefficients that we are penalized 
+        under the prior i.e. `P=2` penalizes local pairwise interaction
+        across all posible faces of the Hamming graph while `P=3` penalizes
+        local 3-way interactions across all possible cubes.
+    
+    a : float (None)
+        Parameter related to the inverse of the variance of the P-order
+        epistatic coefficients that are being penalized. Larger values
+        induce stronger penalization and approximation to the 
+        Maximum-Entropy model of order P-1. If `a=None` the best a is found
+        through cross-validation
+    
+    num_reg : int (20)
+        Number of a values to evaluate through cross-validation
+        
+    nfolds: int (5)
+        Number of folds to use in the cross-validation procedure
+    
+    '''
     @property
     def count_data(self):
         return(False)
@@ -570,7 +616,6 @@ class SeqDEFT(DeltaPEstimator):
         return(data)
     
     def _set_data(self, X, y=None, y_var=None):
-        # TODO: make it work with phylogenetic correction and positions
         check_error(y_var is None, msg='y_var is not compatible with SeqDEFT')
         if y is None:
             y = calc_msa_weights(X, phylo_correction=self.phylo_correction)
@@ -726,7 +771,37 @@ class SeqDEFT(DeltaPEstimator):
             phi = -np.log(self.R)
         return(phi)
     
-    def simulate(self, N, a=None, seed=None, phi=None):
+    def simulate(self, N, a=None, phi=None, seed=None):
+        '''
+        Simulates data under the specified `a` penalization for
+        local P-epistatic coefficients
+        
+        Parameters
+        ----------
+        N : int
+            Number of total sequences to sample
+        
+        a : float
+            Parameter related to the inverse of the variance of the P-order
+            epistatic coefficients that are being penalized. Larger values
+            induce stronger penalization and approximation to the 
+            Maximum-Entropy model of order P-1.
+        
+        phi : array-like of shape (n_genotypes,)
+            Vector containing values for the field underlying the probability
+            distribution from which to sample sequences. If provided, they 
+            will be used instead of sampling them from the prior characterized 
+            by the given `a`.
+        
+        seed: int (None)
+            Random seed to use for simulation
+            
+        Returns
+        -------
+        X : array-like of shape (N,)
+            Vector containing the sampled sequences from the probability distribution
+        '''
+        
         if seed is not None:
             np.random.seed(seed)
         
@@ -741,69 +816,6 @@ class SeqDEFT(DeltaPEstimator):
         X = np.random.choice(self.genotypes, size=N, replace=True, p=Q)
         return(X)
     
-    # TODO: fix and refactor simulation code
-    def simulate_old(self, N, a_true, random_seed=None):
-        # Set random seed
-        np.random.seed(random_seed)
-    
-        # Simulate phi from prior distribution
-        v = np.random.normal(size=self.n_genotypes)
-        phi_true = np.zeros(self.n_genotypes)
-        
-        for k in range(self.P, self.seq_length+1):
-            eta_k = np.sqrt(self.n_p_faces) / np.sqrt(a_true * self.D_eig_vals[k])
-            self.solve_b_k(k)
-            phi_true += eta_k * self.W_k_opt(v)
-    
-        # Construct Q_true from the simulated phi
-        Q_true = np.exp(-phi_true) / np.sum(np.exp(-phi_true))
-    
-        # Simulate N data points from Q_true
-        data = np.random.choice(self.n_genotypes, size=N, replace=True, p=Q_true)
-    
-        # Obtain count data
-        values, counts = np.unique(data, return_counts=True)
-        Ns = np.zeros(self.n_genotypes)
-        Ns[values] = counts
-    
-        # Normalize count data
-        R = Ns / N
-    
-        # Save N and R
-        data_dict = {'N': int(N), 'R': R, 'Q_true': Q_true}
-    
-        # Return
-        return data_dict
-    
-    def solve_b_k(self, k):
-        # Tabulate w_k(d)
-        w_k = np.zeros(self.seq_length+1)
-        for d in range(self.seq_length+1):
-            w_k[d] = self.w(k, d)
-    
-        # Solve for b_k
-        b_k = solve(self.MAT, w_k)
-        
-        self.b_k = b_k
-    
-    def w(self, k, d):
-        ss = 0
-        for q in range(self.seq_length+1):
-            ss += (-1)**q * (self.n_alleles-1)**(k-q) * comb(d,q) * comb(self.seq_length-d,k-q)
-        return 1/self.n_alleles**self.seq_length * ss
-    
-    def W_k_opt(self, v):
-        max_power = len(self.b_k) - 1
-        Lsv = np.zeros([self.n_genotypes,len(self.b_k)])
-        Lsv[:,0] = self.b_k[0] * v
-        power = 1
-        while power <= max_power:
-            v = self.L_opt(v)
-            Lsv[:,power] = self.b_k[power] * v
-            power += 1
-        Wkv = Lsv.sum(axis=1)
-        return Wkv
-
 
 def D_geo(phi1, phi2):
     logQ1 = -phi1 - logsumexp(-phi1)

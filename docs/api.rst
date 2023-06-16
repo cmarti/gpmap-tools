@@ -32,7 +32,7 @@ Landscape Inference
     :members: fit, predict, lambdas_to_variance, project, simulate, calc_L_polynomial_coeffs
 
 .. autoclass:: gpmap.src.inference.SeqDEFT
-    :members: fit
+    :members: fit, simulate_phi, simulate
 
 Sequence utils
 --------------
