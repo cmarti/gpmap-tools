@@ -502,6 +502,11 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         alleles allowed in each site. Note that the number and type of alleles
         can be different for every site.
     
+    stop_y: float (None)
+        Value of the function given for protein sequence with an
+        in-frame stop codon. If given, it will increase the protein 
+        alphabet to incorporate `*` for stops
+    
     Attributes
     ----------
     n_genotypes: int
@@ -656,12 +661,6 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         codon_table: str or Bio.Data.CodonTable
             NCBI code for an existing genetic code or a custom CodonTable 
             object to translate nucleotide sequences into protein
-        
-        stop_y: float (None)
-            Value of the function given for every nucleotide sequence with an
-            in-frame stop codon. If 'None', it will use the minimum
-            value found across of the sequences, assumed to be equal to a 
-            complete loss of function
         
         alphabet_type: str ('dna')
             Sequence type to use in the resulting nucleotide space
