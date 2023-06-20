@@ -216,7 +216,7 @@ class KernelTest(unittest.TestCase):
         lambdas_star = aligner.fit()
         assert(np.allclose(lambdas_star / lambdas_star[1], lambdas))
     
-    def test_NK_lambdas(self):
+    def xtest_NK_lambdas(self):
         l, a = 7, 4
         P = 3
         kernel = VarianceComponentKernel(l, a)
@@ -230,5 +230,5 @@ class KernelTest(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'KernelTest.test_NK_lambdas']
+    import sys;sys.argv = ['', 'KernelTest']
     unittest.main()

@@ -421,5 +421,5 @@ class RandomWalkTests(unittest.TestCase):
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests.test_calc_visualization']
+    sys.argv = ['', 'RandomWalkTests']
     unittest.main()
