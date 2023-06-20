@@ -33,3 +33,9 @@ even if we select top genotypes
 - There is a clear problem when calculating the rate matrix with mutational biases
 - Add function to plot path using nodes_df and a list of sequences
 - Add method to sequence space to calculate best path between two sequences
+- Remove data folder from docs and use always the built-in datasets
+- Remove ParD datasets from docs
+- Re-test mutational biases
+- Release new stable version to pypi
+- Update README from repository to refer to documentation directly
+- Add seqdeft tutorial for the 5'ss using wei-chias dataset
