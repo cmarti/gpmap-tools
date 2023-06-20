@@ -23,8 +23,8 @@ underlying the method as well as explain how to use it for calculating the embed
 the functionalities provided for advanced plotting of their own fitness landscapes. Please do not hesitate 
 to contact us with any questions or suggestions for improvements.
 
-- For technical assistance or to report bugs, please contact [Carlos Marti](martigo@cshl.edu)
-- For more general correspondence, please contact [David McCandlish](mccandlish@cshl.edu)
+- For technical assistance or to report bugs, please contact [Carlos Marti](<martigo@cshl.edu>)
+- For more general correspondence, please contact [David McCandlish](<mccandlish@cshl.edu>)
 
 
 ## Installation
@@ -56,5 +56,6 @@ python -m unittest gpmap/test/*py
 ```
 
 # Cite
-
-- Mccandlish, D. M. (2011). Visualizing fitness landscapes. Evolution, 65(6), 1544–1558. [https://doi.org/10.1111/j.1558-5646.2011.01236.x](https://doi.org/10.1111/j.1558-5646.2011.01236.x)
+- Zhou, J.; Wong, M. S.; Chen, W.; Krainer, A. R.; Justin, B.; Mccandlish, D. M. Higher-Order Epistasis and Phenotypic Prediction. PNAS (2022). [doi](https://doi.org/10.1073/pnas.2204233119).
+- Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM. Field theoretic density estimation for biological sequence space with applications to 5' splice site diversity and aneuploidy in cancer. PNAS (2021). [doi](https://www.pnas.org/doi/10.1073/pnas.2025782118)
+- Mccandlish, D. M. Visualizing fitness landscapes. Evolution (2011). [doi](https://doi.org/10.1111/j.1558-5646.2011.01236.x)
