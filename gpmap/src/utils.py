@@ -202,6 +202,23 @@ def calc_tensor_product_dot(matrices, v):
     return(u)
 
 
+def calc_tensor_product_dot2(m1, m2, v):
+    m = v.reshape((m1.shape[1], m2.shape[1])).T
+    return(m1.dot(m2.dot(m).T).reshape(v.shape))
+
+def calc_tensor_products_dot(matrices, v):
+    shape = tuple([m_i.shape[1] for m_i in matrices])
+    m = v.reshape(shape)
+    
+    for i, m_i in enumerate(matrices):
+        axes = np.arange(len(shape))
+        axes[[i, 0]] = np.array([0, i])
+        new_shape = (m_i.shape[0], int(v.shape[0] / m_i.shape[0]))
+        m = np.transpose(m_i.dot(np.transpose(m, axes=axes).reshape(new_shape)).reshape(shape), axes=axes)
+    
+    return(m.reshape(v.shape))
+
+
 def calc_tensor_product_quad(matrices, v1, v2=None):
     if v2 is None:
         v2 = v1.copy()
