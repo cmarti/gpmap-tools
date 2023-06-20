@@ -12,7 +12,8 @@ from gpmap.src.utils import (calc_cartesian_product, get_CV_splits,
                              calc_tensor_product_dot,
                              calc_tensor_product_quad, quad,
                              edges_df_to_csr_matrix, read_edges,  write_edges,
-    counts_to_seqs)
+                             counts_to_seqs,
+                             calc_tensor_product_dot2, calc_tensor_products_dot)
 from tempfile import NamedTemporaryFile
 
 
@@ -173,7 +174,42 @@ class UtilsTests(unittest.TestCase):
         u1 = m.dot(v)
         u2 = calc_tensor_product_dot(ms, v)
         assert(np.allclose(u1, u2))
-    
+        
+    def test_tensor_product_dot2(self):
+        v = np.random.normal(size=4)
+        m1 = 0.5 * np.array([[1, 1],
+                             [1, 1]])
+        m2 = 0.5 * np.array([[1, -1],
+                             [-1, 1]])
+        
+        m = np.kron(m1, m2)
+        u1 = m.dot(v)
+        u2 = calc_tensor_product_dot2(m1, m2, v)
+        assert(np.allclose(u1, u2))
+        
+        m = np.kron(m1, m1)
+        u1 = m.dot(v)
+        u2 = calc_tensor_product_dot2(m1, m1, v)
+        assert(np.allclose(u1, u2))
+        
+        m = np.kron(m2, m2)
+        u1 = m.dot(v)
+        u2 = calc_tensor_product_dot2(m2, m2, v)
+        assert(np.allclose(u1, u2))
+
+        v = np.random.normal(size=8)
+        m3 = np.kron(m1, m2)
+        m = np.kron(m2, m3)
+        u1 = m.dot(v)
+        u2 = calc_tensor_product_dot2(m2, m3, v)
+        assert(np.allclose(u1, u2))
+
+        v = np.array([1, 1, 1, 1, 0 , 0, 0, 0])
+        m = np.kron(m2, np.kron(m1, m1))
+        u1 = m.dot(v)
+        u2 = calc_tensor_products_dot([m2, m1, m1], v)
+        assert(np.allclose(u1, u2))
+        
     def test_tensor_product_quad(self):
         m1 = 0.5 * np.array([[1, 1],
                              [1, 1]])

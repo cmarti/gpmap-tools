@@ -84,8 +84,12 @@ def main():
     data = read_dataframe(data_fpath)
     
     # Build space
-    X, y = data.index.values, data.iloc[:, 0].values 
-    space = SequenceSpace(X=X, y=y)
+    X, y = data.index.values, data.iloc[:, 0].values
+    
+    if stop_y is None and use_codon_model:
+        stop_y = y.min()
+        
+    space = SequenceSpace(X=X, y=y, stop_y=stop_y)
         
     # Transform to nucleotide space if required
     if codon_table is not None:
@@ -94,7 +98,7 @@ def main():
             codon_table = get_custom_codon_table(aa_mapping)
         
         if use_codon_model:
-            space = space.to_nucleotide_space(codon_table, stop_y)
+            space = space.to_nucleotide_space(codon_table)
         else:
             space.remove_codon_incompatible_transitions(codon_table)
     

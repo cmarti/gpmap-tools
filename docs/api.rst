@@ -14,6 +14,8 @@ Discrete spaces
    :members: to_nucleotide_space, remove_codon_incompatible_transitions,
         get_single_mutant_matrix, calc_variance_components,
         calc_vjs_variance_components
+
+.. autoclass:: gpmap.src.space.HammingBallSpace
             
 Random walks
 ------------
@@ -32,7 +34,7 @@ Landscape Inference
     :members: fit, predict, lambdas_to_variance, project, simulate, calc_L_polynomial_coeffs
 
 .. autoclass:: gpmap.src.inference.SeqDEFT
-    :members: fit
+    :members: fit, simulate_phi, simulate
 
 Sequence utils
 --------------
