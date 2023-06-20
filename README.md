@@ -1,126 +1,40 @@
 # Visualizing fitness landscapes
 
+GPMAP-tools is a python library to create low dimensional visualizations for large fitness landscapes or the structure of any sequence-function relationship for large genotypic spaces, up to several millions. It provides an open-source and easy to use interface of a slightly modified version of the original method [#McCandlish2011]_. Briefly, genotypes are embedded into a low dimensional representation such that the square distances are proportional to the required time to evolve from one genotype to another under a Weak Mutation Weak Selection evolutionary model.
+
+
+The main limitation for the applicability of these method for visualizing a landscape is that we need to have a full characterization of the funcion associated to each possible genotype in the sequence space. As the total number of genotypes scales exponentially with sequence length, this method is inherently limited to the study of relatively short sequences. Another limitation that derives from the difficulty to experimentally assess every possible sequence in a high throughput experiment reliably. To tackle this issue, we provide also a simple interface to previously published methods for inference of quantitative sequence-function relationships in presence of complex epistatic interactions, either from high throughput experiments [#Zhou2022]_ or from the number of times a sequences has been observed in nature [#Chen2021]_.
+
+GPMAP-tools is written for Python 3 and is provided under an MIT open source license. The documentation provided [here](https://gpmap-tools.readthedocs.io) is meant guide users through the basic principles underlying the method as well as explain how to use it for calculating the embedding coordinates and use the functionalities provided for advanced plotting of their own fitness landscapes. Please do not hesitate to contact us with any questions or suggestions for improvements. For technical assistance or to report bugs, please contact Carlos Marti (`Email: martigo@cshl.edu <martigo@cshl.edu>`_, `Twitter: @cmarti_ga <https://twitter.com/cmarti_ga>`_) . For more general correspondence, please contact David McCandlish (`Email: mccandlish@cshl.edu <mccandlish@cshl.edu>`_, `Twitter: @TheDMMcC <https://twitter.com/TheDMMcC>`_).
+
 
 ## Installation
 
-Create a python3 conda environment and activate it
+### From PyPI
 
-```bash
-conda create -n gpmap python=3.7
-conda activate gpmap
 ```
+pip install gpmap-tools
+```
+
+### From latest version in repository
 
 Download the repository using git and cd into it
 
 ```bash
-git clone git@bitbucket.org:cmartiga/gpmap_tools.git
+git clone git@github.com:cmarti/gpmap-tools.git
 ```
 
 Install using setuptools
 ```bash
-cd gpmap_tools
-pip install -r requirements.txt
+cd gpmap
 python setup.py install
 ```
 
-Test installation
+### Test installation
 
 ```bash
 python -m unittest gpmap/test/*py
 ```
-
-# Command line usage
-
-The basic functionality is available through few utilities in the command line after installation. 
-
-
-## Calculating diffusion map
-
-To check all the options available run
-```bash
-calc_visualization -h
-```
-
-We provide with a small case use for the Serine fitness landscape. We have to provide a few options:
-
-- input file: csv separated file with sequence and function relationship sorted in a lexicographic order
-- alphabet type: -A rna, dna, protein or custom. In the latter case, we also have to specify number of alleles with -a
-- number of diffusion axis to calculate (5)
-- effective population size: it can be provided directly with -Ns option, or through setting the mean function at stationarity at a certain value (-m) or percetile (-p)
-- store also edges connecting the different genotypes for later plotting. This only needs to be done once even if we change the effective population size, as the connectivity among genotypes remains unchanged
-
-```bash
-cd gpmap/test/data
-calc_visualization serine.csv -o serine -A rna -p 90 -e -k 20
-```
-
-The script outputs several files with different information:
-
-- serine.nodes.csv: CSV file containing coordinates in each of the calculated diffusion axis for each genotype
-- serine.edges.npz: npz file containing the sparse matrix encoding genotype connectivity. It could be given in CSV format also but it is less efficient for storage, reading and writting
-- serine.decay_rates.csv: CSV file containing the decay rates of the different components
-
-These files use standard formats so one could use any other custom script or language to plot the diffusion map
-
-## Plotting the decay rates
-
-Generally, for the visualization to be as representative as possible, we want the diffusion axis that we plot to decay as slower as possible compared with the remaining dimensions. This way we ensure that most of the long term deviations from stationarity are shown in the visualization. While this is a very simple plot to do, we also provide a command line utility to do so.
-
-```bash
-plot_decay_rates serine.decay_rates.csv -o serine.decay_rates
-```
-
-![Decay rates](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.decay_rates.png)
-
-
-## Plotting the fitness landscape
-
-To check all the options available run
-```bash
-plot_visualization -h
-```
-
-For our case
-
-```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine -nc function -s function
-```
-
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.png)
-
-Additionally, one can highlight specific genotypes with a comma separated list IUPAC encoded genotypes. For instance, if we want to highlight the different types of codons encoding Serine:
-
-```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.2sets -nc function -s function -g UCN,AGY
-```
-
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.2sets.png)
-
-Or highlight directly the sequences that encode different aminoacid sequences under a specific genetic code e.g. S and L
-
-```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.aa -nc function -s function -g S,L -A protein --protein_seq
-```
-
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.aa.png)
-
-
-## Interactive 3D maps
-
-We make use of [plotly](https://plotly.com/python/) to make an interactive 3D plot of the fitness landscape that we can rotate and hover over the genotypes to show their corresponding sequences.
-
-```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot -nc function -s function --interactive
-```
-
-Click [here](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.html) for interactive visualization of the Serine landscape
-
-
-## Plotting very big landscapes
-
-For bigger landscapes, rendering can become very time consuming, specially due to the high number of edges. For this cases, one may want to explore different population sizes using only the nodes for plotting. Alternatively, we have implemented the --datashader option to use datashader library to pre-render the edges into bins for faster plotting. This option still has limited functionality compared to matplotlib based plotting e.g. genotype highlighting is not available yet
-
-
 
 # Cite
 
