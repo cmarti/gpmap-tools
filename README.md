@@ -23,8 +23,8 @@ underlying the method as well as explain how to use it for calculating the embed
 the functionalities provided for advanced plotting of their own fitness landscapes. Please do not hesitate 
 to contact us with any questions or suggestions for improvements.
 
-- For technical assistance or to report bugs, please contact [Carlos Marti](<martigo@cshl.edu>)
-- For more general correspondence, please contact [David McCandlish](<mccandlish@cshl.edu>)
+- For technical assistance or to report bugs, please contact Carlos Martí-Gómez(<martigo@cshl.edu>
+- For more general correspondence, please contact David M. McCandlish<mccandlish@cshl.edu>
 
 
 ## Installation
