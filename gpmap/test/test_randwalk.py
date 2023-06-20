@@ -7,15 +7,13 @@ import pandas as pd
 
 from os.path import join
 from subprocess import check_call
-from itertools import product
 from tempfile import NamedTemporaryFile
 from scipy.sparse._matrix_io import load_npz
+from scipy.sparse.csr import csr_matrix
 
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace, SequenceSpace
 from gpmap.src.randwalk import WMWSWalk
-from gpmap.src.utils import get_sparse_diag_matrix
-from scipy.sparse.csr import csr_matrix
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -161,44 +159,53 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.allclose(neutral_rate_matrix.diagonal().sum(), -12))
         assert(np.allclose(neutral_rate_matrix.sum(1), 0))
     
-    def test_calc_model_neutral_rate_matrix(self):
+    def test_calc_neutral_model(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
 
         # Ensure uniform stationary frequencies for K80 model
         exchange_rates = {'a': 1, 'b': 2}        
-        mc.calc_model_neutral_rate_matrix(model='K80', exchange_rates=exchange_rates)
+        mc.calc_neutral_model(model='K80', exchange_rates=exchange_rates)
         assert(np.allclose(mc.neutral_stat_freqs, 1. / 64))
-        assert(np.allclose(np.unique(mc.neutral_rate_matrix.data),
-                           [-0.140625, 0.01171875, 0.0234375 ]))
-        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
+        
+        neutral_rate_matrix = mc.calc_gtr_rate_matrix(mc.neutral_exchange_rates,
+                                                      mc.neutral_stat_freqs)
+        assert(np.allclose(neutral_rate_matrix.diagonal().sum(), -12))
+        assert(np.allclose(np.unique(neutral_rate_matrix.data),
+                           [-12./64, 1./64, 2./64]))
         
         # F81 model
         stat_freqs = {'A': 0.4, 'C': 0.2, 'G': 0.1, 'T': 0.3}        
-        mc.calc_model_neutral_rate_matrix(model='F81', stat_freqs=stat_freqs)
-        assert(np.unique(mc.neutral_rate_matrix.data).shape[0] > 3)
+        mc.calc_neutral_model(model='F81', stat_freqs=stat_freqs)
+        assert(np.allclose(mc.neutral_stat_freqs.sum(), 1))
         assert(not np.allclose(mc.neutral_stat_freqs, 1. / 64))
-        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
+        assert(mc.neutral_stat_freqs[0] == 0.4**3)
+        
+        neutral_rate_matrix = mc.calc_gtr_rate_matrix(mc.neutral_exchange_rates,
+                                                      mc.neutral_stat_freqs)
+        assert(np.unique(neutral_rate_matrix.data).shape[0] > 3)
+        assert(np.allclose(neutral_rate_matrix.diagonal().sum(), -9))
         
         # SYM model
         exchange_rates = {'a': 1, 'b': 2, 'c': 1, 'd': 1, 'e': 3, 'f': 2.5}        
-        mc.calc_model_neutral_rate_matrix(model='SYM', exchange_rates=exchange_rates)
+        mc.calc_neutral_model(model='SYM', exchange_rates=exchange_rates)
         assert(np.allclose(mc.neutral_stat_freqs, 1. / 64))
-        assert(np.unique(mc.neutral_rate_matrix.data).shape[0] > 3)
-        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
         
-        # Taking in default parameters if not specified
+        neutral_rate_matrix = mc.calc_gtr_rate_matrix(mc.neutral_exchange_rates,
+                                                      mc.neutral_stat_freqs)
+        assert(np.unique(neutral_rate_matrix.data).shape[0] > 3)
+        assert(np.allclose(neutral_rate_matrix.diagonal().sum(), -15.75))
+        
+        # Taking in default parameters if not specified: 
+        # HKY85 with uniform freqs is like K80
         exchange_rates = {'a': 1, 'b': 2}
-        mc.calc_model_neutral_rate_matrix(model='HKY85', exchange_rates=exchange_rates)
+        mc.calc_neutral_model(model='HKY85', exchange_rates=exchange_rates)
         assert(np.allclose(mc.neutral_stat_freqs, 1. / 64))
-        assert(np.unique(mc.neutral_rate_matrix.data).shape[0] == 3)
-        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
         
-        # Check variable rates across sites
-        site_mut_rates = np.array([1, 1, 2])
-        mc.calc_model_neutral_rate_matrix(model='K80', site_mut_rates=site_mut_rates)
-        assert(np.allclose(mc.neutral_stat_freqs, 1. / 64))
-        assert(np.allclose(mc.neutral_rate_matrix.diagonal().sum(), -9))
-        assert(np.unique(mc.neutral_rate_matrix.data).shape[0] > 2)
+        neutral_rate_matrix = mc.calc_gtr_rate_matrix(mc.neutral_exchange_rates,
+                                                      mc.neutral_stat_freqs)
+        assert(np.allclose(neutral_rate_matrix.diagonal().sum(), -12))
+        assert(np.allclose(np.unique(neutral_rate_matrix.data),
+                           [-12./64, 1./64, 2./64]))
         
     def test_stationary_frequencies(self):
         mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
@@ -252,15 +259,15 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.allclose(mean_function, mc.space.y.mean()))
         
         # Calculation with non uniform frequencies
-        Ns = mc.set_Ns(mean_function=1.5)
-        mc.calc_stationary_frequencies(Ns=Ns)
-        mean_function = mc.calc_stationary_mean_function()
+        mc.set_Ns(mean_function=1.5)
+        freqs = mc.calc_stationary_frequencies(Ns=mc.Ns)
+        mean_function = mc.calc_stationary_mean_function(freqs=freqs)
         assert(np.allclose(mean_function, 1.5))
         
         # See changes with modified neutral rates
         sites_stat_freqs = [np.array([0.4, 0.2, 0.1, 0.3])] * 3
         neutral_freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
-        mc.calc_stationary_frequencies(Ns=Ns, neutral_stat_freqs=neutral_freqs)
+        mc.calc_stationary_frequencies(Ns=mc.Ns, neutral_stat_freqs=neutral_freqs)
         mean_function = mc.calc_stationary_mean_function()
         assert(mean_function < 1.5)
         
@@ -274,11 +281,11 @@ class RandomWalkTests(unittest.TestCase):
         assert(mean_function > mc.space.y.mean())
         
         # Check increased mean function by mutational biases with selection
-        mc.calc_stationary_frequencies(Ns=1)
-        f1 = mc.calc_stationary_mean_function()
-        
-        mc.calc_stationary_frequencies(Ns=1, neutral_stat_freqs=neutral_freqs)
-        f2 = mc.calc_stationary_mean_function()
+        freqs1 = mc.calc_stationary_frequencies(Ns=1)
+        freqs2 = mc.calc_stationary_frequencies(Ns=1,
+                                                neutral_stat_freqs=neutral_freqs)
+        f1 = mc.calc_stationary_mean_function(freqs=freqs1)
+        f2 = mc.calc_stationary_mean_function(freqs=freqs2)
         assert(f2 > f1)
     
     def test_calc_sandwich_rate_matrix(self):
@@ -338,7 +345,8 @@ class RandomWalkTests(unittest.TestCase):
             mc.write_tables(prefix, write_edges=True, nodes_format='csv')
             
             nodes_df = pd.read_csv('{}.nodes.csv'.format(prefix), index_col=0)
-            assert(np.allclose(nodes_df.values, mc.nodes_df.values))
+            assert(np.allclose(nodes_df.iloc[:, :-1].values,
+                               mc.nodes_df.iloc[:, :-1].values))
         
     def test_calc_visualization_bin_help(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')

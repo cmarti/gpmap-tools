@@ -367,11 +367,12 @@ class VCregression(LandscapeEstimator):
         self.set_lambdas(np.sqrt(lambdas))
         yhat = self.K.W.dot(self.K.D_sqrt_pi_inv.dot(a))
         y = np.random.normal(yhat, sigma) if sigma > 0 else yhat
-        y_var = np.full(self.n_genotypes, sigma**2)
+        y_var = np.full(self.n_genotypes, sigma**2, dtype=np.float)
         
         if p_missing > 0:
             sel_idxs = np.random.uniform(size=y.shape[0]) < p_missing
-            y[sel_idxs], y_var[sel_idxs] = np.nan, np.nan
+            y[sel_idxs] = np.nan
+            y_var[sel_idxs] = np.nan
         
         data = pd.DataFrame({'y_true': yhat, 'y': y, 'y_var': y_var},
                             index=self.genotypes)

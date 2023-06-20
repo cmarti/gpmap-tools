@@ -184,12 +184,12 @@ class SeqTests(unittest.TestCase):
         assert(np.all(new_seqs == ['AG', 'AA', 'CG', 'CA', 'XG', 'XX']))
     
     def test_msa_to_counts(self):
-        msa = ['AGTGG',
-               'AGTGT',
-               'GGTGG',
-               'ATACC',
-               'ATACC',
-               'ATACG']
+        msa = np.array(['AGTGG',
+                        'AGTGT',
+                        'GGTGG',
+                        'ATACC',
+                        'ATACC',
+                        'ATACG'])
         
         # Regular counting
         X, y = msa_to_counts(msa)

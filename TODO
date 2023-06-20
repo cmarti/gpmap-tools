@@ -11,7 +11,6 @@ High priority
 - Add colorbar functionality for datashader plots
 - Add function to center the spines in the visualizations
 - Have default figure configurations in some global variables or configuration that can be easily changed across all plots
-- Reimplement datashader plotting functions using v0.12 native mpl interface
 - Add function to plot path using nodes_df and a list of sequences
 - Add method to sequence space to calculate best path between two sequences
 - Remove data folder from docs and use always the built-in datasets
@@ -19,8 +18,12 @@ High priority
 - Add seqdeft tutorial for the 5'ss using wei-chias dataset
 - Merge with master branch and release new stable version to pypi
 - Clean warnings and prints from running tests
+- Streamline LaplacianOperator
+- Remove tests dependencies on data outside the datasets. Use simulations
+- Investigate slow performance of VC regression. Potential issue in kernel alignment.
 
 Mid priority
+- Reimplement datashader plotting functions using v0.12 native mpl interface
 - There is a clear problem when calculating the rate matrix with mutational biases
   Review and test if there is still error in calculation of rate matrix when having variable mutation rates
   Re-test mutational biases
@@ -28,6 +31,7 @@ Mid priority
 - Streamline reduced alphabet
   
 Low priority
+- Add some descriptions to the datasets and reference to the original paper
 - Implement new likelihood functions for DeltaP based priors: poisson and binomial
   at least, maybe something similar to GLM for regression like approaches: have
   likelihood function classes with log-likelihood and gradient methods. 

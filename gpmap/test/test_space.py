@@ -302,13 +302,6 @@ class SpaceTests(unittest.TestCase):
         lambdas = space.calc_variance_components()
         assert(np.all(lambdas > 0))
         
-        data = pd.read_csv(join(TEST_DATA_DIR, 'negative_vc.tsv'),
-                           index_col=0, sep='\t')
-        data['y'] = np.log(data['Q_star'])
-        space = SequenceSpace(X=data.index.values, y=data.y.values)
-        lambdas = space.calc_variance_components()
-        assert(np.all(lambdas > 0))
-    
     def test_calc_vjs_variance_components(self):
         space = DataSet('gb1').to_sequence_space()
         

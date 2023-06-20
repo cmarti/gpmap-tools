@@ -82,7 +82,8 @@ def main():
     
     # Save running time
     with open('{}.time.txt'.format(prefix), 'w') as fhand:
-        fhand.write('fit,{}\n'.format(vc.fit_time))
+        if hasattr(vc, 'fit_time'):
+            fhand.write('fit,{}\n'.format(vc.fit_time))
         if hasattr(vc, 'pred_time'):
             fhand.write('pred,{}\n'.format(vc.pred_time))
     

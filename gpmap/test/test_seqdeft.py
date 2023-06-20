@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import sys
 import unittest
 import numpy as np
 import pandas as pd
@@ -185,5 +186,5 @@ class SeqDEFTTests(unittest.TestCase):
         
 
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'SeqDEFTTests']
+    sys.argv = ['', 'SeqDEFTTests']
     unittest.main()

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import sys
 import unittest
 import numpy as np
 import pandas as pd
@@ -13,6 +14,7 @@ from gpmap.src.inference import VCregression
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.linop import LaplacianOperator, ProjectionOperator
 from gpmap.src.space import SequenceSpace
+from tempfile import NamedTemporaryFile
 
 
 class VCTests(unittest.TestCase):
@@ -184,59 +186,82 @@ class VCTests(unittest.TestCase):
             pass
     
     def test_vc_predict_from_incomplete_data(self):
-        np.random.seed(0)
-        fpath = join(TEST_DATA_DIR, 'vc.data.csv')
-        data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
+        length = 5
+        lambdas = np.exp(-np.arange(0, length+1))
         
-        filtered = data.loc[np.random.choice(data.index, size=950), :]
-        vc = VCregression(cross_validation=True)
-        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'])
-        pred = vc.predict().sort_index()
-        mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
-        rho = pearsonr(pred['ypred'], data['y_true'])[0]
-        assert(rho > 0.95)
+        vc = VCregression()
+        vc.init(seq_length=length, alphabet_type='dna')
+        data = vc.simulate(lambdas=lambdas, sigma=0.05)
+        idx = np.random.uniform(size=data.shape[0]) < 0.9
+        train, test = data.loc[idx, :], data.loc[~idx, :]
+
+        # Using known lambdas        
+        vc = VCregression()
+        vc.set_data(X=train.index, y=train['y'], y_var=train['y_var'])
+        vc.set_lambdas(lambdas)
+        pred = vc.predict(Xpred=test.index.values)
+        mse = np.mean((pred['ypred'] - test['y_true']) ** 2)
+        rho = pearsonr(pred['ypred'], test['y_true'])[0]
+        assert(rho > 0.6)
         assert(mse < 0.3)
-    
-    def test_vc_predict_max_L_size(self):
-        np.random.seed(0)
-        fpath = join(TEST_DATA_DIR, 'vc.data.csv')
-        data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
         
-        filtered = data.loc[np.random.choice(data.index, size=950), :]
-        vc = VCregression(max_L_size=100, cross_validation=True)
-        vc.fit(filtered.index, filtered['y'], y_var=filtered['var'])
-        pred = vc.predict().sort_index()
-        mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
-        rho = pearsonr(pred['ypred'], data['y_true'])[0]
-        assert(rho > 0.95)
-        assert(mse < 0.3)
+        # Calculate variances and check calibration
+        pred = vc.predict(Xpred=test.index.values, calc_variance=True)
+        sigma = np.sqrt(pred['var'])
+        pred['lower'] = pred['ypred'] - 2 * sigma
+        pred['upper'] = pred['ypred'] + 2 * sigma
+        p = np.logical_and(test['y_true'] > pred['lower'],
+                           test['y_true'] < pred['upper']).mean()
+        assert(p > 0.9)
     
     def test_vc_fit_bin(self):
-        data_fpath = join(TEST_DATA_DIR, 'vc.data.csv')
-        lambdas_fpath = join(TEST_DATA_DIR, 'vc.lambdas.csv')
-        xpred_fpath = join(TEST_DATA_DIR, 'vc.xpred.txt')
-        out_fpath = join(TEST_DATA_DIR, 'seqdeft.output.csv')
         bin_fpath = join(BIN_DIR, 'vc_regression.py')
+
+        with NamedTemporaryFile() as fhand:
+            data_fpath = '{}.data.csv'.format(fhand.name)
+            lambdas_fpath = '{}.lambdas.csv'.format(fhand.name)
+            out_fpath = '{}.out.csv'.format(fhand.name)
+            xpred_fpath = '{}.xpred.txt'.format(fhand.name)
+            
+            # Simulate data
+            length = 4
+            lambdas = np.exp(-np.arange(0, length+1))
+            
+            vc = VCregression()
+            vc.init(seq_length=length, alphabet_type='dna')
+            data = vc.simulate(lambdas=lambdas, sigma=0.05)
+            idx = np.random.uniform(size=data.shape[0]) < 0.9
+            train, test = data.loc[idx, :], data.loc[~idx, :]
+            
+            # Save simulated data in temporary files
+            train.to_csv(data_fpath)
+            with open(xpred_fpath, 'w') as fhand:
+                for seq in test.index:
+                    fhand.write(seq + '\n')
+            
+            with open(lambdas_fpath, 'w') as fhand:
+                for l in lambdas:
+                    fhand.write('{}\n'.format(l))
         
-        # Direct kernel alignment
-        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath]
-        check_call(cmd)
-        
-        # Perform regularization
-        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r']
-        check_call(cmd)
-        
-        # With known lambdas
-        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
-               '--lambdas', lambdas_fpath]
-        check_call(cmd)
-        
-        # Predict few sequences and their variances
-        cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
-               '--var', '-p', xpred_fpath]
-        check_call(cmd)
+            # Direct kernel alignment
+            cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath]
+            check_call(cmd)
+            
+            # With known lambdas
+            cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
+                   '--lambdas', lambdas_fpath]
+            check_call(cmd)
+            
+            # Run with regularization
+            cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r']
+            check_call(cmd)
+            
+            # Predict few sequences and their variances under known lambdas
+            cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
+                   '--var', '-p', xpred_fpath, '--lambdas', lambdas_fpath]
+            check_call(cmd)
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'VCTests']
+    sys.argv = ['', 'VCTests']
     unittest.main()

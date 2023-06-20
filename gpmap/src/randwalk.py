@@ -13,6 +13,7 @@ from scipy.special._logsumexp import logsumexp
 from gpmap.src.settings import DNA_ALPHABET
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error, write_log,
                              calc_cartesian_product, calc_tensor_product)
+from scipy.sparse.lil import lil_matrix
 
 
 class RandomWalk(object):
@@ -138,15 +139,14 @@ class TimeReversibleRandomWalk(RandomWalk):
         n_components: int (10)
             Number of eigenvectors or diffusion axis to calculate
         
+        neutral_stat_freqs : array-like of shape (n_genotypes,)
+            Genotype stationary frequencies at neutrality to define the
+            time reversible neutral dynamics
+        
         neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
             Sparse matrix containing the neutral exchange rates for the 
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
-        
-        neutral_stat_freqs : array-like of shape (n_genotypes,)
-            Genotype stationary frequencies at neutrality to define the
-            time reversible neutral dynamics
-            
         '''
         
         # Set or find Ns value to use
@@ -163,8 +163,8 @@ class TimeReversibleRandomWalk(RandomWalk):
         log_freqs = self.calc_log_stationary_frequencies(self.Ns, neutral_stat_freqs)
         self.set_stationary_freqs(log_freqs)
         self.calc_sandwich_rate_matrix(Ns=self.Ns,
-                                       neutral_exchange_rates=neutral_exchange_rates,
-                                       neutral_stat_freqs=neutral_stat_freqs)
+                                       neutral_stat_freqs=neutral_stat_freqs,
+                                       neutral_exchange_rates=neutral_exchange_rates,)
         self.calc_eigendecomposition(n_components, tol=tol)
         self.calc_diffusion_axis()
         self.calc_relaxation_times()
@@ -303,9 +303,9 @@ class WMWSWalk(TimeReversibleRandomWalk):
     
     def calc_gtr_rate_matrix(self, exchange_rates_matrix, stationary_freqs):
         D = get_sparse_diag_matrix(stationary_freqs)
-        Q = exchange_rates_matrix.dot(D)
+        Q = exchange_rates_matrix.dot(D).tolil()
         Q.setdiag(-Q.sum(1))
-        return(Q)
+        return(Q.tocsr())
     
     def calc_neutral_rate_matrix(self, sites_exchange_rates=None,
                                  sites_stat_freqs=None):
@@ -390,6 +390,9 @@ class WMWSWalk(TimeReversibleRandomWalk):
             
         log_stationary_freqs = log_phi - logsumexp(log_phi)
         return(log_stationary_freqs)
+    
+    def calc_stationary_frequencies(self, Ns, neutral_stat_freqs=None):
+        return(np.exp(self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs)))
     
     def calc_stationary_mean_function(self, freqs=None):
         if freqs is None:
@@ -486,13 +489,15 @@ class WMWSWalk(TimeReversibleRandomWalk):
         ----------
         Ns : real 
             Scaled effective population size for the evolutionary model
+
+        neutral_stat_freqs : array-like of shape (n_genotypes,)
+            Genotype stationary frequencies at neutrality to define the
+            time reversible neutral dynamics
         
-        neutral_stat_freqs:
-        
-        
-        neutral_exchange_rates: 
-        
-            
+        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+            Sparse matrix containing the neutral exchange rates for the 
+            whole sequence space. If not provided, uniform mutational dynamics
+            are assumed.
         '''
         self.report('Calculating D^(1/2) Q D^(-1/2) matrix with Ns={}'.format(Ns))
         
@@ -504,17 +509,17 @@ class WMWSWalk(TimeReversibleRandomWalk):
         i, j = self.space.get_neighbor_pairs()
         values = self._calc_sandwich_rate_vector(i, j, Ns, neutral_stat_freqs,
                                                  neutral_exchange_rates)
-        m = csr_matrix((values, (i, j)), shape=self.shape)
+        m = csr_matrix((values, (i, j)), shape=self.shape).tolil()
         
         # Fill diagonal entries
         log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs)
         self.set_stationary_freqs(log_freqs)
         sqrt_freqs = np.exp(0.5 * (log_freqs + np.log(self.space.n_genotypes)))
         m.setdiag(-m.dot(sqrt_freqs) / sqrt_freqs)
-        self.sandwich_rate_matrix = m 
+        self.sandwich_rate_matrix = m.tocsr()
     
     def calc_rate_matrix(self, Ns, neutral_stat_freqs=None,
-                         neutral_exchange_rates=None, tol=1e-8):
+                         neutral_exchange_rates=None):
         '''
         Calculates the rate matrix for the random walk in the discrete space
         and stores it in the attribute `rate_matrix`
@@ -524,20 +529,23 @@ class WMWSWalk(TimeReversibleRandomWalk):
         Ns : real 
             Scaled effective population size for the evolutionary model
         
-        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
-            Sparse matrix containing the neutral transition rates for the 
+        neutral_stat_freqs : array-like of shape (n_genotypes,)
+            Genotype stationary frequencies at neutrality to define the
+            time reversible neutral dynamics
+        
+        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+            Sparse matrix containing the neutral exchange rates for the 
             whole sequence space. If not provided, uniform mutational dynamics
-            are assumed
+            are assumed.
             
         '''
         self.report('Calculating rate matrix with Ns={}'.format(Ns))
         self.calc_sandwich_rate_matrix(Ns=Ns,
                                        neutral_stat_freqs=neutral_stat_freqs,
-                                       neutral_exchange_rates=neutral_exchange_rates,
-                                       tol=tol)
+                                       neutral_exchange_rates=neutral_exchange_rates)
         self.rate_matrix = self.diag_freq_inv.dot(self.sandwich_rate_matrix).dot(self.diag_freq)
     
-    def calc_neutral_model(self, model, exchange_rates={}, stat_freqs={}):
+    def calc_neutral_model(self, model, stat_freqs={}, exchange_rates={}):
         '''
         Calculate the neutral rate matrix for classic nucleotide substitution
         rates parameterized as in 
@@ -550,13 +558,13 @@ class WMWSWalk(TimeReversibleRandomWalk):
             Specific nucleotide substitution model to use for every site in 
             the nucleotide sequence
             
-        exchange_rates : dict with keys {'a', 'b', 'c', 'd', 'e', 'f'}
-            Parameter values to use for each of the models. Only some of them 
-            need to be specified for each of the models
-            
         stat_freqs : dict with keys {'A', 'C', 'G', 'T'}
             Dictionary containing the allele stationary frequencies to use
             in the models that allow them to be different
+        
+        exchange_rates : dict with keys {'a', 'b', 'c', 'd', 'e', 'f'}
+            Parameter values to use for each of the models. Only some of them 
+            need to be specified for each of the models
             
         Returns
         -------
