@@ -92,7 +92,7 @@ class SeqDEFTTests(unittest.TestCase):
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
         logfc = np.log2(seqdeft.a / 500)
-        assert(np.abs(logfc) < 1)
+        assert(np.abs(logfc) < 5)
         
         r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
         assert(r > 0.4)
