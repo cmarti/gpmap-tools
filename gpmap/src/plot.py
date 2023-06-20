@@ -805,7 +805,7 @@ def figure_Ns_grid(rw, fpath=None, fmin=None, fmax=None,
     prev_nodes_df = None
     xmin, xmax, ymin, ymax = None, None, None, None
     for i, (mean_function, axes) in enumerate(zip(mean_fs, subplots)):
-        rw.calc_visualization(mean_function=mean_function, n_components=3, eig_tol=0.01)
+        rw.calc_visualization(mean_function=mean_function, n_components=3)
         is_last_plot = i == mean_fs.shape[0] - 1
         
         edges_df = None if not show_edges else rw.space.get_edges_df()
