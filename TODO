@@ -39,3 +39,4 @@ even if we select top genotypes
 - Release new stable version to pypi
 - Update README from repository to refer to documentation directly
 - Add seqdeft tutorial for the 5'ss using wei-chias dataset
+- Clean warnings and prints from running tests
