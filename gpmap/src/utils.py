@@ -206,7 +206,7 @@ def calc_tensor_product_dot2(m1, m2, v):
     m = v.reshape((m1.shape[1], m2.shape[1])).T
     return(m1.dot(m2.dot(m).T).reshape(v.shape))
 
-def calc_tensor_products_dot(matrices, v):
+def kron_dot(matrices, v):
     shape = tuple([m_i.shape[1] for m_i in matrices])
     m = v.reshape(shape)
     
