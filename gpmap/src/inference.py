@@ -18,8 +18,7 @@ from gpmap.src.utils import (check_error,
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences)
-from gpmap.src.linop import (DeltaPOperator, ProjectionOperator,
-                             LaplacianOperator, KernelOperator)
+from gpmap.src.linop import DeltaPOperator, KernelOperator
 from gpmap.src.kernel import KernelAligner
 
 
@@ -27,6 +26,7 @@ class LandscapeEstimator(object):
     def __init__(self, expand_alphabet=True, max_L_size=None):
         self.expand_alphabet = expand_alphabet
         self.max_L_size = max_L_size
+        self.count_data = False
     
     def get_regularization_constants(self):
         return(10**(np.linspace(self.min_log_reg, self.max_log_reg, self.num_reg)))
@@ -35,7 +35,7 @@ class LandscapeEstimator(object):
         for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
                                                      y_var=self.y_var,
                                                      nfolds=self.nfolds,
-                                                     count_data=self.count_data):        
+                                                     count_data=self.count_data):
             for param in hyperparam_values:
                 yield(param, fold, train, validation)
     
@@ -116,19 +116,12 @@ class VCregression(LandscapeEstimator):
         to the observed genetic variability of a continuous phenotype
         
         It requires the use of the same number of alleles per sites
-        
-        Parameters
-        ----------
-        p : np.array of shape (seq_length, n_alleles)
-            Stationary frequencies of alleles under a simple random walk
-            to use for the generalized or skewed variance component regression.
-            If not provided, regular VC regression will be applied
             
     '''
     def __init__(self, beta=0, cross_validation=False, 
                  num_beta=20, nfolds=5, min_log_beta=-2,
-                 max_log_beta=7, max_L_size=None):
-        super().__init__(max_L_size=max_L_size)
+                 max_log_beta=7, cv_loss_function='frobenius_norm'):
+        super().__init__()
         self.beta = beta
         self.nfolds = nfolds
         self.num_reg = num_beta
@@ -136,17 +129,15 @@ class VCregression(LandscapeEstimator):
         
         self.min_log_reg = min_log_beta
         self.max_log_reg = max_log_beta
-        self.count_data = False
         self.run_cv = cross_validation
+        self.cv_loss_function = cv_loss_function
         
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
-             alphabet_type='custom', ps=None):
+             alphabet_type='custom'):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
-        L =  LaplacianOperator(self.n_alleles, self.seq_length, ps=ps, 
-                               max_size=self.max_L_size)
-        self.K = KernelOperator(W=ProjectionOperator(L=L))
+        self.K = KernelOperator(self.n_alleles, self.seq_length)
         self.calc_L_powers_unique_entries_matrix() # For covariance d calculations
         
     def get_obs_idx(self, seqs):
@@ -164,29 +155,34 @@ class VCregression(LandscapeEstimator):
                 
         self.y_var = y_var
         self.K.set_y_var(y_var=y_var, obs_idx=self.get_obs_idx(X))
-        
+
     def calc_cv_loss(self, cv_data):
         for beta, fold, train, test in tqdm(cv_data, total=self.total_folds):
             X_train, y_train, y_var_train = train 
             X_test, y_test, y_var_test = test
 
-            # Fit on training data
+            # Find best lambdas
             self.set_data(X=X_train, y=y_train, y_var=y_var_train)
             lambdas = self._fit(beta)
 
-            # Calculate cv logL and r2 on test data
-            self.set_lambdas(lambdas)
-            ypred = self.predict(X_test)['ypred'].values
-            r2 = pearsonr(ypred, y_test)[0] ** 2
-            logL = norm.logpdf(y_test, loc=ypred, scale=np.sqrt(y_var_test)).sum()
-            
             # Calculate loss in test data
-            self.set_data(X=X_test, y=y_test, y_var=y_var_test)
-            cov, ns = self.calc_emp_dist_cov()
-            self.kernel_aligner.set_data(cov, ns)
-            mse = self.kernel_aligner.calc_mse(lambdas)
-            yield({'beta': beta, 'fold': fold, 'mse': mse, 'r2': r2,
-                   'logL': logL})
+            if self.cv_loss_function == 'frobenius_norm':
+                self.set_data(X=X_test, y=y_test, y_var=y_var_test)
+                cov, ns = self.calc_emp_dist_cov()
+                self.kernel_aligner.set_data(cov, ns)
+                loss = self.kernel_aligner.calc_mse(lambdas)
+            else:
+                self.set_lambdas(lambdas)
+                ypred = self.predict(X_test)['ypred'].values
+                if self.cv_loss_function == 'logL':
+                    loss = -norm.logpdf(y_test, loc=ypred, scale=np.sqrt(y_var_test)).sum()
+                elif self.cv_loss_function == 'r2':
+                    loss = -pearsonr(ypred, y_test)[0] ** 2
+                else:
+                    msg = 'Allowed loss functions are [frobenius_norm, r2, logL]'
+                    raise ValueError(msg)
+            
+            yield({'beta': beta, 'fold': fold, 'loss': loss})
             
     def fit_beta_cv(self):
         beta_values = self.get_regularization_constants()
@@ -195,8 +191,8 @@ class VCregression(LandscapeEstimator):
          
         self.cv_loss_df = pd.DataFrame(cv_loss)
         self.cv_loss_df['log_beta'] = np.log10(self.cv_loss_df['beta'])
-        logL = self.cv_loss_df.groupby('beta')['logL'].mean()
-        self.beta = logL.index[np.argmax(logL)]
+        loss = self.cv_loss_df.groupby('beta')['loss'].mean()
+        self.beta = loss.index[np.argmin(loss)]
     
     def _fit(self, beta=None):
         if beta is None:
@@ -259,7 +255,6 @@ class VCregression(LandscapeEstimator):
         cov, distance_class_ns = np.zeros(size), np.zeros(size)
         for d in range(size):
             c_k = self.L_powers_unique_entries_inv[:, d]
-            
             distance_class_ns[d] = calc_matrix_polynomial_quad(c_k, self.K.W.L,
                                                                observed_seqs)
             
@@ -365,9 +360,9 @@ class VCregression(LandscapeEstimator):
         
         a = np.random.normal(size=self.n_genotypes)
         self.set_lambdas(np.sqrt(lambdas))
-        yhat = self.K.W.dot(self.K.D_sqrt_pi_inv.dot(a))
+        yhat = self.K.W.dot(a)
         y = np.random.normal(yhat, sigma) if sigma > 0 else yhat
-        y_var = np.full(self.n_genotypes, sigma**2, dtype=np.float)
+        y_var = np.full(self.n_genotypes, sigma**2, dtype=float)
         
         if p_missing > 0:
             sel_idxs = np.random.uniform(size=y.shape[0]) < p_missing
@@ -415,26 +410,22 @@ class DeltaPEstimator(LandscapeEstimator):
         optimization_opts['ftol'] = ftol
         self.optimization_opts = optimization_opts
         
-    def calc_n_p_faces(self, length, P, n_alleles):
-        return(comb(length, P) * comb(n_alleles, 2) ** P * n_alleles ** (length - P))
-        
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom'):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
-        self.n_p_faces = self.calc_n_p_faces(self.seq_length, self.P, self.n_alleles) 
-        self.DP = DeltaPOperator(self.P, self.n_alleles, self.seq_length, max_L_size=self.max_L_size)
+        self.DP = DeltaPOperator(self.P, self.n_alleles, self.seq_length)
         self.DP.calc_kernel_basis()
     
     def get_a_values(self):
         return(self.get_regularization_constants())
     
     def calc_neg_log_prior_prob(self, phi, a):
-        S1 = a / (2*self.n_p_faces) * self.DP.quad(phi)
+        S1 = a / (2*self.DP.n_p_faces) * self.DP.quad(phi)
         return(S1)
     
     def calc_neg_log_prior_prob_grad(self, phi, a):
-        grad_S1 = a / self.n_p_faces * self.DP.dot(phi)
+        grad_S1 = a / self.DP.n_p_faces * self.DP.dot(phi)
         return(grad_S1)
     
     def S(self, phi, a):
@@ -505,10 +496,10 @@ class DeltaPEstimator(LandscapeEstimator):
         return(self.DP.kernel_basis.dot(b))
 
     def _a_to_sd(self, a):
-        return(np.sqrt(self.n_p_faces / a))
+        return(np.sqrt(self.DP.n_p_faces / a))
     
     def _sd_to_a(self, sd):
-        return(self.n_p_faces / sd ** 2)
+        return(self.DP.n_p_faces / sd ** 2)
     
     def _fit(self, a, phi_initial=None):
         check_error(a >= 0, msg='"a" must be larger or equal than 0')
@@ -571,7 +562,7 @@ class DeltaPEstimator(LandscapeEstimator):
         vc = self._get_vc()
         self.DP.calc_lambdas()
         lambdas = np.zeros(self.DP.lambdas.shape)
-        lambdas[self.P:] = self.n_p_faces / (a * self.DP.lambdas[self.P:])
+        lambdas[self.P:] = self.DP.n_p_faces / (a * self.DP.lambdas[self.P:])
         phi = vc.simulate(lambdas)['y'].values
         return(phi)
 
@@ -725,7 +716,7 @@ class SeqDEFT(DeltaPEstimator):
     
     # Optional methods
     def calc_a_max(self, phi_inf):
-        a_max = self.n_p_faces * self.fac_max
+        a_max = self.DP.n_p_faces * self.fac_max
         
         phi_max = self._fit(a_max, phi_initial=phi_inf)
         distance = D_geo(phi_max, phi_inf)
@@ -738,7 +729,7 @@ class SeqDEFT(DeltaPEstimator):
         return(a_max)
     
     def calc_a_min(self, phi_inf):
-        a_min = self.n_p_faces * self.fac_min
+        a_min = self.DP.n_p_faces * self.fac_min
         
         phi_0 = self._fit(0)
         phi_min = self._fit(a_min, phi_initial=phi_inf)
