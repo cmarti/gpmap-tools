@@ -29,6 +29,7 @@ Mid priority
   Re-test mutational biases
 - Think whether to implement an embedding object
 - Streamline reduced alphabet
+- Implement the 1SD rule to select hyperparameter in cv
   
 Low priority
 - Add some descriptions to the datasets and reference to the original paper
