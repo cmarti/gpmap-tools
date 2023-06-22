@@ -13,7 +13,7 @@ from gpmap.src.utils import (calc_cartesian_product, get_CV_splits,
                              calc_tensor_product_quad, quad,
                              edges_df_to_csr_matrix, read_edges,  write_edges,
                              counts_to_seqs,
-                             calc_tensor_product_dot2, calc_tensor_products_dot)
+                             calc_tensor_product_dot2, kron_dot)
 from tempfile import NamedTemporaryFile
 
 
@@ -207,7 +207,7 @@ class UtilsTests(unittest.TestCase):
         v = np.array([1, 1, 1, 1, 0 , 0, 0, 0])
         m = np.kron(m2, np.kron(m1, m1))
         u1 = m.dot(v)
-        u2 = calc_tensor_products_dot([m2, m1, m1], v)
+        u2 = kron_dot([m2, m1, m1], v)
         assert(np.allclose(u1, u2))
         
     def test_tensor_product_quad(self):
