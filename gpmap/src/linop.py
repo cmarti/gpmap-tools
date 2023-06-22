@@ -15,7 +15,7 @@ from gpmap.src.utils import (calc_cartesian_product, check_error,
                              calc_matrix_polynomial_dot, calc_tensor_product,
                              calc_cartesian_product_dot,
                              calc_tensor_product_dot, calc_tensor_product_quad, 
-                             get_sparse_diag_matrix, inner_product)
+                             get_sparse_diag_matrix, inner_product, kron_dot)
 
 
 class SeqLinOperator(object):
@@ -27,6 +27,12 @@ class SeqLinOperator(object):
         self.d = (self.alpha - 1) * self.l
         self.shape = (self.n, self.n)
         self.max_size = max_size
+    
+    def contract_v(self, v):
+        return(v.reshape(tuple([self.alpha]*self.l)))
+
+    def expand_v(self, v):
+        return(v.reshape(self.n))
     
     def guess_n_products(self):
         if self.max_size is None:
@@ -50,32 +56,84 @@ class SeqLinOperator(object):
 
 
 class LaplacianOperator(SeqLinOperator):
-    def __init__(self, n_alleles, seq_length, ps=None, max_size=None,
-                 use_bool=False):
+    def __init__(self, n_alleles, seq_length):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+            
+        self.calc_lambdas()
+        self.calc_lambdas_multiplicity()
+        self.calc_W_kd_matrix()
+    
+    def dot(self, v):
+        v = self.contract_v(v)
+        u = np.zeros(v.shape)
+        for i in range(self.l):
+            u += np.stack([v.sum(i)] * self.alpha, axis=i)
+        u = self.l * self.alpha * v - u
+        return(self.expand_v(u))
+    
+    def calc_lambdas(self):
+        self.lambdas = np.arange(self.l + 1) * self.alpha
+    
+    def calc_lambdas_multiplicity(self):
+        self.lambdas_multiplicity = [comb(self.l, k) * (self.alpha-1) ** k
+                                     for k in range(self.lp1)]
+    
+    def get_Vj_basis(self, j):
+        if not hasattr(self, 'vj'):
+            site_L = self.alpha * np.eye(self.alpha) - np.ones((self.alpha, self.alpha))
+            v0 = np.full((self.alpha, 1), 1 / np.sqrt(self.alpha)) 
+            v1 = orth(site_L)
+            
+            msg = 'Basis for subspaces V0 and V1 are not orthonormal'
+            check_error(np.allclose(v1.T.dot(v0), 0), msg)
+            
+            self.vj = {0: v0, 1: v1, (0,): v0, (1,): v1}
+
+        if j not in self.vj:
+            self.vj[j] = calc_tensor_product([self.vj[j[0]], self.get_Vj_basis(j[1:])])
+            
+        return(self.vj[j])
+    
+    def calc_eigenspace_basis(self, k):
+        basis = []
+        for idxs in combinations(range(self.l), k):
+            idxs = np.array(idxs, dtype=int)
+            j = np.zeros(self.l, dtype=int)
+            j[idxs] = 1
+            basis.append(self.get_Vj_basis(tuple(j)))
+        basis = np.hstack(basis)
+        return(basis)
+    
+    def calc_w(self, k, d):
+        """return value of the Krawtchouk polynomial for k, d"""
+        l, a = self.l, self.alpha
+        s = 0
+        for q in range(k + 1):
+            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
+        return(1 / a**l * s)
+    
+    def calc_W_kd_matrix(self):
+        """return full matrix l+1 by l+1 Krawtchouk matrix"""
+        self.W_kd = np.zeros([self.lp1, self.lp1])
+        for k in range(self.lp1):
+            for d in range(self.lp1):
+                self.W_kd[k, d] = self.calc_w(k, d)
+
+
+class SkewedLaplacianOperator(SeqLinOperator):
+    def __init__(self, n_alleles, seq_length, ps=None, max_size=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length,
                          max_size=max_size)
         self.set_ps(ps)
         self.calc_Kns()
-        
-        if seq_length > 7:
-            # For long sequences this is the most memory efficient 
-            # and fastest dot product method. 
-            self.dot = self.dot3
-        else:
-            if max_size is None:
-                if use_bool:
-                    self.calc_A()
-                    self.dot = self.dot1
-                else:
-                    self.calc_L()
-                    self.dot = self.dot0
-            else:
-                self.dot = self.dot2
-            
         self.calc_lambdas(ps=ps)
         self.calc_lambdas_multiplicity()
-        if ps is None:
-            self.calc_W_kd_matrix()
+        
+        if max_size is None:
+            self.calc_L()
+            self.dot = self.dot1
+        else:
+            self.dot = self.dot2
     
     def set_ps(self, ps):
         self.variable_ps = ps is not None
@@ -90,8 +148,10 @@ class LaplacianOperator(SeqLinOperator):
     
     def calc_lambdas(self, ps=None):
         self.lambdas = np.arange(self.l + 1) * self.alpha
-#         if ps is None:
-#             self.lambdas *= self.alpha
+    
+    def calc_lambdas_multiplicity(self):
+        self.lambdas_multiplicity = [comb(self.l, k) * (self.alpha-1) ** k
+                                     for k in range(self.lp1)]
     
     def calc_Kn(self, p):
         if self.variable_ps:
@@ -115,91 +175,23 @@ class LaplacianOperator(SeqLinOperator):
         self.A = calc_cartesian_product(self.Kns)
     
     def calc_L(self):
-        L = - calc_cartesian_product(self.Kns).astype(np.float64)
+        L = -calc_cartesian_product(self.Kns).astype(np.float64)
         L.setdiag(-L.sum(1).A1)
         self.L = L.tocsr()
     
-    def dot0(self, v):
-        return(self.L.dot(v))
-    
     def dot1(self, v):
-        return(self.d * v - self.A.dot(v))
+        return(self.L.dot(v))
     
     def dot2(self, v):
         return(self.d * v - calc_cartesian_product_dot(self.Kns, v))
-
-    def contract_v(self, v):
-        return(v.reshape(tuple([self.alpha]*self.l)))
-
-    def expand_v(self, v):
-        return(v.reshape(self.n))
-
-    def dot3(self, v):
-        v = self.contract_v(v)
-        u = np.zeros(v.shape)
-        for i in range(self.l):
-            u += np.stack([v.sum(i)] * self.alpha, axis=i)
-        u = self.l * self.alpha * v - u
-        return(self.expand_v(u))
-    
-    def get_Vj_basis(self, j):
-        if not hasattr(self, 'vj'):
-            site_L = self.alpha * np.eye(self.alpha) - np.ones((self.alpha, self.alpha))
-            v0 = np.full((self.alpha, 1), 1 / np.sqrt(self.alpha)) 
-            v1 = orth(site_L)
-            
-            msg = 'Basis for subspaces V0 and V1 are not orthonormal'
-            check_error(np.allclose(v1.T.dot(v0), 0), msg)
-            
-            self.vj = {0: v0, 1: v1, (0,): v0, (1,): v1}
-
-        if j not in self.vj:
-#             self.vj[j] = np.tensordot(self.vj[j[0]], self.get_Vj(j[1:]), axes=0)
-#             self.vj[j] = np.vstack([np.hstack([x * self.get_Vj_basis(j[1:]) for x in row])
-#                                     for row in self.vj[j[0]]])
-            self.vj[j] = calc_tensor_product([self.vj[j[0]], self.get_Vj_basis(j[1:])])
-            
-        return(self.vj[j])
-    
-    def calc_eigenspace_basis(self, k):
-        basis = []
-        for idxs in combinations(range(self.l), k):
-            idxs = np.array(idxs, dtype=int)
-            j = np.zeros(self.l, dtype=int)
-            j[idxs] = 1
-            basis.append(self.get_Vj_basis(tuple(j)))
-        basis = np.hstack(basis)
-        return(basis)
-    
-    def calc_lambdas_multiplicity(self):
-        self.lambdas_multiplicity = [comb(self.l, k) * (self.alpha-1) ** k
-                                     for k in range(self.lp1)]
-    
-    def calc_w(self, k, d):
-        if self.ps is not None and np.unique(self.ps).shape[0] > 1:
-            raise ValueError('w method not implemented for unequal ps')
-        
-        """return value of the Krawtchouk polynomial for k, d"""
-        l, a = self.l, self.alpha
-        s = 0
-        for q in range(k + 1):
-            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
-        return(1 / a**l * s)
-    
-    def calc_W_kd_matrix(self):
-        """return full matrix l+1 by l+1 Krawtchouk matrix"""
-        self.W_kd = np.zeros([self.lp1, self.lp1])
-        for k in range(self.lp1):
-            for d in range(self.lp1):
-                self.W_kd[k, d] = self.calc_w(k, d)
                 
 
 class LapDepOperator(SeqLinOperator):
-    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=None):
+    def __init__(self, n_alleles=None, seq_length=None, L=None):
         if L is None:
             msg = 'either L or both seq_length and n_alleles must be given'
             check_error(n_alleles is not None and seq_length is not None, msg=msg)
-            L = LaplacianOperator(n_alleles, seq_length, max_size=max_L_size)
+            L = LaplacianOperator(n_alleles, seq_length)
         else:
             msg = 'either L or both seq_length and n_alleles must be given'
             check_error(L is not None, msg=msg)
@@ -210,12 +202,12 @@ class LapDepOperator(SeqLinOperator):
     
 
 class DeltaPOperator(LapDepOperator):
-    def __init__(self, P, n_alleles=None, seq_length=None, L=None, max_L_size=None):
-        super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
-                         max_L_size=max_L_size)
+    def __init__(self, P, n_alleles=None, seq_length=None, L=None):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L)
         self.set_P(P)
         self.calc_kernel_dimension()
         self.calc_n_p_faces()
+        self.calc_lambdas()
 
     def calc_kernel_dimension(self):
         self.kernel_dimension = np.sum(self.L.lambdas_multiplicity[:self.P])
@@ -236,13 +228,10 @@ class DeltaPOperator(LapDepOperator):
             raise ValueError(msg)
         self.Pfactorial = factorial(self.P)
     
-    def _L_dot(self, v, p=0):
-        return(self.L.dot(v) - p * self.alpha * v)
-    
     def dot(self, v):
         dotv = v.copy()
         for p in range(self.P):
-            dotv = self._L_dot(dotv, p)
+            dotv = self.L.dot(v) - p * self.alpha * v
         return(dotv / self.Pfactorial)
 
     def calc_kernel_basis(self, max_value_to_zero=1e-12):
@@ -260,7 +249,37 @@ class DeltaPOperator(LapDepOperator):
         self.lambdas = np.array(lambdas)
 
 
-class VjProjectionOperator(LapDepOperator):
+class VjProjectionOperator(SeqLinOperator):
+    def __init__(self, n_alleles, seq_length):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        self.calc_elementary_W()
+    
+    def calc_elementary_W(self):
+        b = np.ones(self.alpha)
+        self.b = b
+        self.W0 = np.outer(b, b) / np.sum(b ** 2)
+        self.W1 = np.eye(self.alpha) - self.W0
+        
+    def set_j(self, positions):
+        self.positions = positions
+        self.k = len(positions) 
+        self.repeats = self.alpha ** (self.l - self.k)
+        self.matrices = [self.W1 if p in positions else self.W0
+                         for p in range(self.l)]
+    
+    def dot(self, v):
+        return(kron_dot(self.matrices, v))
+    
+    def dot_square_norm(self, v):
+        axis = [p not in self.positions for p in range(self.l)]
+        u = self.contract_v(v).mean(axis=axis)
+        
+        matrices = [self.W1] * self.k
+        sqnorm = self.repeats * self.np.sum(kron_dot(matrices, u) ** 2)
+        return(sqnorm)
+
+
+class SkewedVjProjectionOperator(LapDepOperator):
     def __init__(self, n_alleles=None, seq_length=None, L=None, max_size=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L)
         self.calc_elementary_W()
@@ -311,9 +330,8 @@ class VjProjectionOperator(LapDepOperator):
 
     
 class ProjectionOperator(LapDepOperator):
-    def __init__(self, n_alleles=None, seq_length=None, L=None, max_L_size=None):
-        super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L,
-                         max_L_size=max_L_size)
+    def __init__(self, n_alleles=None, seq_length=None, L=None):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L)
         self.calc_eig_vandermonde_matrix()
         self.calc_polynomial_coeffs(numeric=False)
     
@@ -401,10 +419,6 @@ class KernelOperator(SeqLinOperator):
         self.shape = (self.n, self.n)
         self.known_var = False
     
-    @property
-    def lambdas_multiplicity(self):
-        return(self.W.L.lambdas_multiplicity)
-        
     def set_y_var(self, y_var=None, obs_idx=None):
         
         if y_var is not None and obs_idx is not None:
@@ -422,7 +436,10 @@ class KernelOperator(SeqLinOperator):
         else:
             msg = 'y_var and obs_idx must be provided with each other'
             check_error(y_var is None and obs_idx is None, msg=msg)
-            
+
+    @property
+    def lambdas_multiplicity(self):
+        return(self.W.L.lambdas_multiplicity)
         
     def set_lambdas(self, lambdas):
         self.W.set_lambdas(lambdas)
@@ -431,7 +448,7 @@ class KernelOperator(SeqLinOperator):
         return(self.W.lambdas)
     
     def _dot(self, v):
-        if self.W.L.variable_ps:
+        if hasattr(self.W.L, 'variable_ps') and self.W.L.variable_ps:
             return(self.W.dot(self.D_pi_inv.dot(v)))
         else:
             return(self.W.dot(v))
@@ -451,7 +468,6 @@ class KernelOperator(SeqLinOperator):
 
         if not all_rows and self.known_var:
             u = self.gt2data.T.dot(u)
-            
         return(u)
     
     @property
