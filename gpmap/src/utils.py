@@ -208,6 +208,10 @@ def calc_tensor_product_dot2(m1, m2, v):
 
 def kron_dot(matrices, v):
     shape = tuple([m_i.shape[1] for m_i in matrices])
+    if np.prod(shape) != v.shape[0]:
+        msg = 'Incorrect dimensions of matrices and `v`'
+        raise ValueError(msg)
+    
     m = v.reshape(shape)
     
     for i, m_i in enumerate(matrices):

@@ -18,9 +18,7 @@ High priority
 - Add seqdeft tutorial for the 5'ss using wei-chias dataset
 - Merge with master branch and release new stable version to pypi
 - Clean warnings and prints from running tests
-- Streamline LaplacianOperator
 - Remove tests dependencies on data outside the datasets. Use simulations
-- Investigate slow performance of VC regression. Potential issue in kernel alignment.
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
@@ -31,6 +29,9 @@ Mid priority
 - Streamline reduced alphabet
 - Compare inv_dot using minres and taking the reciprocal of the eigenvalues.
   minres allows having different residual variances per observation though
+- Implement the 1SD rule to select hyperparameter in cv
+- Better figure out how to calculate the covariance distance using L polynomial
+  and reimplement without L_powers_unique_entries_inv
   
 Low priority
 - Add some descriptions to the datasets and reference to the original paper
@@ -39,6 +40,7 @@ Low priority
   likelihood function classes with log-likelihood and gradient methods. 
   Another interesting possiblity is the use of contrastive losses
 - Implement MEM model: either directly or using VCregression backbone. Fit a through Kernel alignment
+  Have prior on kernel aligner for lambdas that forces it to have a DeltaP prior
 - Create new classes of Discrete spaces for the extra models to  generate visualizations from: smily face and  tree-like
 - Write a method to plot a phylogenetic tree on a landscape: test on the codon landscape
 - Write a method to simulate evolution in the landscape: use the jump matrix and exponential waiting times. 
@@ -47,4 +49,11 @@ Low priority
   We lose precision with l=7 or 8 already with current implementation
 - Figure out inconsistency between using the correct eigenvalues and getting wrong projections in the skewed kernel. So far it makes more sense to have the correct projection operators
 - Optimize Laplacian matvec method for further efficiency if possible
-- Finish implementing matrix free version of projection operators into the Vj's
+- Figure out matrix free versions of Skewed Laplacian and Vj's projection operators
+
+Long term
+- Implement evidence maximization
+- Implement contrastive losses
+- Implement laplace approximation for variances in SeqDEFT
+- Try MCMC on marginal likelihood
+

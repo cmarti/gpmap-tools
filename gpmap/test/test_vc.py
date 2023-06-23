@@ -2,7 +2,6 @@
 import sys
 import unittest
 import numpy as np
-import pandas as pd
 
 from os.path import join
 from subprocess import check_call
@@ -11,7 +10,7 @@ from scipy.stats.mstats_basic import pearsonr
 from scipy.special._basic import comb
 
 from gpmap.src.inference import VCregression
-from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
+from gpmap.src.settings import BIN_DIR
 from gpmap.src.linop import LaplacianOperator, ProjectionOperator
 from gpmap.src.space import SequenceSpace
 from tempfile import NamedTemporaryFile
@@ -56,46 +55,6 @@ class VCTests(unittest.TestCase):
                 f_k_rq = W.rayleigh_quotient(f)
                 assert(np.allclose(f_k_rq, k1 == k2))
     
-    def test_simulate_skewed_vc(self):  
-        np.random.seed(1)
-        l, a = 2, 2 
-        vc = VCregression()
-        
-        # With p=1
-        ps = 1 * np.ones((l, a))
-        L = LaplacianOperator(a, l, ps=ps)
-        vc.init(l, a, ps=ps)
-        W = ProjectionOperator(L=L)
-        for k1 in range(l + 1):
-            lambdas = np.zeros(l+1)
-            lambdas[k1] = 1
-            
-            data = vc.simulate(lambdas)
-            f = data['y_true'].values
-        
-            for k2 in range(l+1):
-                W.set_lambdas(k=k2)
-                f_k_rq = W.rayleigh_quotient(f)
-                assert(np.allclose(f_k_rq, k1 == k2))
-        
-        # with variable ps
-        ps = np.random.dirichlet(np.ones(a), size=l) * a
-        L = LaplacianOperator(a, l, ps=ps)
-        vc.init(l, a, ps=ps)
-        W = ProjectionOperator(L=L)
-        
-        for k1 in range(l + 1):
-            lambdas = np.zeros(l+1)
-            lambdas[k1] = 1
-            
-            data = vc.simulate(lambdas)
-            f = data['y_true'].values
-        
-            for k2 in range(l+1):
-                W.set_lambdas(k=k2)
-                f_k_rq = W.rayleigh_quotient(f)
-                assert(np.allclose(f_k_rq, k1 == k2))
-    
     def test_calc_emp_dist_cov(self):
         np.random.seed(1)
         sigma, lambdas = 0.1, np.array([0, 200, 20, 2, 0.2])
@@ -121,23 +80,21 @@ class VCTests(unittest.TestCase):
     
     def test_vc_fit(self):
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
-        fpath = join(TEST_DATA_DIR, 'vc.data.csv')
-        data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
+        vc = VCregression()
+        vc.init(seq_length=lambdas.shape[0]-1, alphabet_type='dna')
+        data = vc.simulate(lambdas, sigma=0.1)
         
         # Ensure MSE is within a small range
-        vc = VCregression()
-        vc.fit(data.index.values, data['y'], y_var=data['var'])
+        vc.fit(data.index.values, data['y'], y_var=data['y_var'])
         sd1 = np.log2((vc.lambdas[1:]+1e-6) / (lambdas[1:]+1e-6)).std()
         assert(sd1 < 2)
         
-        # Try with regularization and CV and 
+        # Try with regularization and CV
         vc = VCregression(cross_validation=True)
-        vc.fit(data.index, data['y'], y_var=data['var'])
+        vc.fit(data.index, data['y'], y_var=data['y_var'])
         sd2 = np.log2((vc.lambdas[1:]+1e-6) / (lambdas[1:]+1e-6)).std()
         assert(sd2 < 1)
         assert(vc.beta > 0)
-        
-        vc.cv_loss_df.to_csv(join(TEST_DATA_DIR, 'vc.cv_loss.csv'))
         
         # Ensure regularization improves results
         assert(sd1 > sd2)
@@ -156,13 +113,14 @@ class VCTests(unittest.TestCase):
         assert(np.allclose(lambdas2, lambdas1))
     
     def test_vc_predict(self):
-        lambdas = np.array([0, 200, 20, 2, 0.2, 0.02])
-        fpath = join(TEST_DATA_DIR, 'vc.data.csv')
-        data = pd.read_csv(fpath, dtype={'seq': str}).set_index('seq')
+        lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
+        vc = VCregression()
+        vc.init(seq_length=lambdas.shape[0]-1, alphabet_type='dna')
+        data = vc.simulate(lambdas, sigma=0.1)
         
         # Using the a priori known variance components
         vc = VCregression()
-        vc.set_data(X=data.index, y=data['y'], y_var=data['var'])
+        vc.set_data(X=data.index, y=data['y'], y_var=data['y_var'])
         vc.set_lambdas(lambdas)
         pred = vc.predict()
         
@@ -178,7 +136,7 @@ class VCTests(unittest.TestCase):
         
         # Capture error with incomplete input
         vc = VCregression()
-        vc.set_data(X=data.index, y=data['y'], y_var=data['var'])
+        vc.set_data(X=data.index, y=data['y'], y_var=data['y_var'])
         try:
             pred = vc.predict()
             self.fail()
@@ -260,6 +218,48 @@ class VCTests(unittest.TestCase):
             cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
                    '--var', '-p', xpred_fpath, '--lambdas', lambdas_fpath]
             check_call(cmd)
+
+
+class SkewedVCTests(unittest.TestCase):
+    def test_simulate_skewed_vc(self):  
+        np.random.seed(1)
+        l, a = 2, 2 
+        vc = VCregression()
+        
+        # With p=1
+        ps = 1 * np.ones((l, a))
+        L = LaplacianOperator(a, l)
+        vc.init(l, a, ps=ps)
+        W = ProjectionOperator(L=L)
+        for k1 in range(l + 1):
+            lambdas = np.zeros(l+1)
+            lambdas[k1] = 1
+            
+            data = vc.simulate(lambdas)
+            f = data['y_true'].values
+        
+            for k2 in range(l+1):
+                W.set_lambdas(k=k2)
+                f_k_rq = W.rayleigh_quotient(f)
+                assert(np.allclose(f_k_rq, k1 == k2))
+        
+        # with variable ps
+        ps = np.random.dirichlet(np.ones(a), size=l) * a
+        L = LaplacianOperator(a, l, ps=ps)
+        vc.init(l, a, ps=ps)
+        W = ProjectionOperator(L=L)
+        
+        for k1 in range(l + 1):
+            lambdas = np.zeros(l+1)
+            lambdas[k1] = 1
+            
+            data = vc.simulate(lambdas)
+            f = data['y_true'].values
+        
+            for k2 in range(l+1):
+                W.set_lambdas(k=k2)
+                f_k_rq = W.rayleigh_quotient(f)
+                assert(np.allclose(f_k_rq, k1 == k2))
         
         
 if __name__ == '__main__':

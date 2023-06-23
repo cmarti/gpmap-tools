@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from itertools import combinations
-from timeit import timeit
+from scipy.special._basic import comb
 
 from gpmap.src.settings import ALPHABET
 from gpmap.src.seq import generate_possible_sequences
@@ -12,7 +12,6 @@ from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator, KernelOperator,
                              DeltaPOperator)
-from scipy.special._basic import comb
 
 
 class LinOpsTests(unittest.TestCase):
@@ -36,10 +35,6 @@ class LinOpsTests(unittest.TestCase):
         
         L = LaplacianOperator(3, 2)
         assert(np.allclose(L.lambdas, [0, 3, 6]))
-        
-        ps = np.array([[0.4, 0.6], [0.5, 0.5]])
-        L = LaplacianOperator(2, 2, ps=ps)
-        assert(np.allclose(L.lambdas, [0, 2, 4]))
         
     def test_calc_polynomial_coeffs_analytical(self):
         for l in range(3, 9):
@@ -165,52 +160,117 @@ class LinOpsTests(unittest.TestCase):
             
             assert(np.allclose(u1, u2))
     
-    def test_vj_projection_operator_mixed(self):
-        vjp = VjProjectionOperator(4, 5)
-        v = np.random.normal(size=vjp.n)
-        vjp.set_j([2, 3])
-        u1 = vjp.dot(v)
+    def test_vj_projection_operator_sq_norm(self):
+        vjp = VjProjectionOperator(2, 2)
+        y = np.array([-1.5, -0.5, 0.5, 1.5])
         
-        vjp2 = VjProjectionOperator(4, 5, max_size=100)
-        vjp2.set_j([2, 3])
-        u2 = vjp2.dot(v)
-        assert(np.allclose(u1, u2))
+        vjp.set_j([0])
+        f = vjp.dot(y)
+        fsqn = vjp.dot_square_norm(y)
+        assert(np.allclose(fsqn, np.sum(f**2)))
+        
+        vjp.set_j([1])
+        f = vjp.dot(y)
+        fsqn = vjp.dot_square_norm(y)
+        assert(np.allclose(fsqn, np.sum(f**2)))
+        
+        vjp.set_j([])
+        f = vjp.dot(y)
+        fsqn = vjp.dot_square_norm(y)
+        assert(np.allclose(fsqn, np.sum(f**2)))
+        
+        vjp.set_j([0, 1])
+        f = vjp.dot(y)
+        fsqn = vjp.dot_square_norm(y)
+        assert(np.allclose(fsqn, np.sum(f**2)))
+        
+    def test_vj_projection_operator_sq_norm_big(self):
+        vjp = VjProjectionOperator(4, 8)
+        vjp.set_j([0, 3, 5])
+        y = np.random.normal(size=vjp.n)
+        f = vjp.dot(y)
+        fsqn = vjp.dot_square_norm(y)
+        assert(np.allclose(fsqn, np.sum(f**2)))
+            
+    def test_kernel_opt_get_gt_to_data_matrix(self):
+        K = KernelOperator(n_alleles=2, seq_length=3)
+        obs_idx = np.arange(K.n)
+        K.calc_gt_to_data_matrix(obs_idx)
+        m = K.gt2data.todense()
+        assert(np.all(m == np.eye(8)))
+        
+        K.calc_gt_to_data_matrix(obs_idx=np.array([0, 1, 2, 3]))
+        m = K.gt2data.todense()
+        assert(np.all(m[:4, :] == np.eye(4)))
+        assert(np.all(m[4:, :] == 0))
+        assert(m.shape == (8, 4))
     
     def test_kernel_operator(self):
         lambdas = np.array([0, 1, 0])
         y_var = 0.1 * np.ones(4)
         obs_idx = np.arange(4)
-        W = ProjectionOperator(2, 2)
-        W.set_lambdas(lambdas)
-        K = KernelOperator(W)
+        K = KernelOperator(n_alleles=2, seq_length=2)
+        K.set_lambdas(lambdas)
         K.set_y_var(y_var=y_var, obs_idx=obs_idx)
         v = np.random.normal(size=K.n_obs)
         u = K.inv_dot(K.dot(v))
         assert(np.allclose(u, v))
         
-        # Large matrix
+    def test_kernel_operator_large(self):
         l = 9
-        K = KernelOperator(ProjectionOperator(4, l))
-        K.set_y_var(y_var=0.1 * np.ones(K.n), obs_idx=np.arange(K.n))
+        K = KernelOperator(n_alleles=4, seq_length=l)
         K.set_lambdas(lambdas=np.append([0], 2-np.arange(l)))
-        
+        K.set_y_var(y_var=0.1 * np.ones(K.n), obs_idx=np.arange(K.n))
         v = np.random.normal(size=K.n_obs)
         u = K.inv_dot(K.dot(v))
         assert(np.allclose(u, v))
     
-    def test_kernel_opt_get_gt_to_data_matrix(self):
-        vc = KernelOperator(ProjectionOperator(2, 3))
-        obs_idx = np.arange(vc.n)
-        vc.calc_gt_to_data_matrix(obs_idx)
-        m = vc.gt2data.todense()
-        assert(np.all(m == np.eye(8)))
+    def test_DeltaP_operator(self):
+        DP2 = DeltaPOperator(P=2, n_alleles=2, seq_length=3)
+        DP3 = DeltaPOperator(P=3, n_alleles=2, seq_length=3)
+
+        # Additive landscape        
+        v = np.array([0, 1, 1, 2,
+                      0, 1, 1, 2])
+        assert(DP2.quad(v) == 0)
+        assert(DP3.quad(v) == 0)
         
-        vc.calc_gt_to_data_matrix(obs_idx=np.array([0, 1, 2, 3]))
-        m = vc.gt2data.todense()
-        assert(np.all(m[:4, :] == np.eye(4)))
-        assert(np.all(m[4:, :] == 0))
-        assert(m.shape == (8, 4))
+        # Pairwise landscape
+        v = np.array([0, 1, 1, 3,
+                      0, 1, 1, 3])
+        assert(DP2.quad(v) > 0)
+        assert(DP3.quad(v) == 0)
     
+    def test_DeltaP_operator_eigenvalues(self):
+        l, a, P = 5, 4, 2
+        DP = DeltaPOperator(P=P, n_alleles=a, seq_length=l)
+        DP.calc_lambdas()
+        
+        for k in range(P, l+1):
+            lambda_k = a ** P * comb(k, P)
+            assert(DP.lambdas[k] == lambda_k)
+    
+    def test_DP_calc_kernel_basis(self):
+        DP = DeltaPOperator(P=2, n_alleles=4, seq_length=5)
+        DP.calc_kernel_basis()
+        basis = DP.kernel_basis
+        
+        # Ensure basis is orthonormal
+        prod = basis.T.dot(basis)
+        identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
+        assert(np.allclose((prod - identity).todense(), 0))
+        
+        # Ensure basis is sparse
+        max_values = basis.shape[0] * basis.shape[1]
+        assert(basis.data.shape[0] < max_values) 
+        
+        # Ensure they generate good projection matrices
+        u = np.dot(basis, basis.T).dot(basis)
+        error = (basis - u).mean()
+        assert(np.allclose(error, 0))
+
+
+class SkewedLinOpsTests(unittest.TestCase):
     def test_skewed_kernel_operator(self):
         ps = np.array([[0.3, 0.7], [0.5, 0.5]])
         log_p = np.log(ps)
@@ -274,51 +334,7 @@ class LinOpsTests(unittest.TestCase):
             k1 = K1.dot(I)
             k2 = kernel(lambdas=lambdas, log_p=log_p)
             assert(np.allclose(k1, k2))
-    
-    def test_DeltaP_operator(self):
-        DP2 = DeltaPOperator(P=2, n_alleles=2, seq_length=3)
-        DP3 = DeltaPOperator(P=3, n_alleles=2, seq_length=3)
 
-        # Additive landscape        
-        v = np.array([0, 1, 1, 2,
-                      0, 1, 1, 2])
-        assert(DP2.quad(v) == 0)
-        assert(DP3.quad(v) == 0)
-        
-        # Pairwise landscape
-        v = np.array([0, 1, 1, 3,
-                      0, 1, 1, 3])
-        assert(DP2.quad(v) > 0)
-        assert(DP3.quad(v) == 0)
-    
-    def test_DeltaP_operator_eigenvalues(self):
-        l, a, P = 5, 4, 2
-        DP = DeltaPOperator(P=P, n_alleles=a, seq_length=l)
-        DP.calc_lambdas()
-        
-        for k in range(P, l+1):
-            lambda_k = a ** P * comb(k, P)
-            assert(DP.lambdas[k] == lambda_k)
-    
-    def test_DP_calc_kernel_basis(self):
-        DP = DeltaPOperator(P=2, n_alleles=4, seq_length=5)
-        DP.calc_kernel_basis()
-        basis = DP.kernel_basis
-        
-        # Ensure basis is orthonormal
-        prod = basis.T.dot(basis)
-        identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
-        assert(np.allclose((prod - identity).todense(), 0))
-        
-        # Ensure basis is sparse
-        max_values = basis.shape[0] * basis.shape[1]
-        assert(basis.data.shape[0] < max_values) 
-        
-        # Ensure they generate good projection matrices
-        u = np.dot(basis, basis.T).dot(basis)
-        error = (basis - u).mean()
-        assert(np.allclose(error, 0))
-        
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'LinOpsTests']
