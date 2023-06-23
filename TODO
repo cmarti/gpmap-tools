@@ -29,6 +29,8 @@ Mid priority
   Re-test mutational biases
 - Think whether to implement an embedding object
 - Streamline reduced alphabet
+- Compare inv_dot using minres and taking the reciprocal of the eigenvalues.
+  minres allows having different residual variances per observation though
   
 Low priority
 - Add some descriptions to the datasets and reference to the original paper
