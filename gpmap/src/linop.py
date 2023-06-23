@@ -41,6 +41,17 @@ class SeqLinOperator(object):
     
     def rayleigh_quotient(self, v, metric=None):
         return(self.quad(v) / inner_product(v, v, metric=metric))
+    
+    @property
+    def linear_operator(self):
+        if not hasattr(self, '_op'):
+            self._op = LinearOperator((self.n_obs, self.n_obs), matvec=self.dot)
+        return(self._op)
+    
+    def inv_dot(self, v, show=False):
+        res = minres(self.linear_operator, v, tol=1e-6, show=show)
+        self.res = res[1]
+        return(res[0])
 
 
 class LaplacianOperator(SeqLinOperator):
@@ -53,9 +64,11 @@ class LaplacianOperator(SeqLinOperator):
     
     def dot(self, v):
         v = self.contract_v(v)
+        
         u = np.zeros(v.shape)
         for i in range(self.l):
-            u += np.stack([v.sum(i)] * self.alpha, axis=i)
+            u += np.expand_dims(v.sum(i), axis=i)
+        
         u = self.l * self.alpha * v - u
         return(self.expand_v(u))
     
@@ -333,17 +346,6 @@ class KernelOperator(SeqLinOperator):
         if not all_rows and self.known_var:
             u = self.gt2data.T.dot(u)
         return(u)
-    
-    @property
-    def linear_operator(self):
-        if not hasattr(self, '_Kop'):
-            self._Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.dot)
-        return(self._Kop)
-    
-    def inv_dot(self, v, show=False):
-        res = minres(self.linear_operator, v, tol=1e-6, show=show)
-        self.res = res[1]
-        return(res[0])
     
     def inv_quad(self, v, show=False):
         u = self.inv_dot(v, show=show)
