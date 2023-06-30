@@ -19,6 +19,8 @@ High priority
 - Merge with master branch and release new stable version to pypi
 - Clean warnings and prints from running tests
 - Remove tests dependencies on data outside the datasets. Use simulations
+- rename WMWS to WM Walk
+- fix problems in r2 calculations for r2 curves
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
@@ -32,6 +34,7 @@ Mid priority
 - Implement the 1SD rule to select hyperparameter in cv
 - Better figure out how to calculate the covariance distance using L polynomial
   and reimplement without L_powers_unique_entries_inv
+- Make SeqLinOps inherit from LinearOperator class directly
   
 Low priority
 - Add some descriptions to the datasets and reference to the original paper
