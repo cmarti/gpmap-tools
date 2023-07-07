@@ -18,14 +18,14 @@ from gpmap.src.utils import (calc_cartesian_product, check_error,
                              get_sparse_diag_matrix, inner_product, kron_dot)
 
 
-class SeqLinOperator(object):
+class SeqLinOperator(LinearOperator):
     def __init__(self, n_alleles, seq_length):
         self.alpha = n_alleles
         self.l = seq_length
         self.lp1 = seq_length + 1
         self.n = self.alpha ** self.l
         self.d = (self.alpha - 1) * self.l
-        self.shape = (self.n, self.n)
+        super().__init__(shape=(self.n, self.n), dtype=float)
     
     def contract_v(self, v):
         return(v.reshape(tuple([self.alpha]*self.l)))
@@ -41,6 +41,11 @@ class SeqLinOperator(object):
     
     def rayleigh_quotient(self, v, metric=None):
         return(self.quad(v) / inner_product(v, v, metric=metric))
+    
+    def inv_dot(self, v, show=False):
+        res = minres(self, v, tol=1e-6, show=show)
+        self.res = res[1]
+        return(res[0])
 
 
 class LaplacianOperator(SeqLinOperator):
@@ -51,7 +56,7 @@ class LaplacianOperator(SeqLinOperator):
         self.calc_lambdas_multiplicity()
         self.calc_W_kd_matrix()
     
-    def dot(self, v):
+    def _matvec(self, v):
         v = self.contract_v(v)
         u = np.zeros(v.shape)
         for i in range(self.l):
@@ -139,7 +144,7 @@ class DeltaPOperator(SeqLinOperator):
     def _L_minus_p_a_dot(self, v, p=0):
         return(self.L.dot(v) - p * self.alpha * v)
     
-    def dot(self, v):
+    def _matvec(self, v):
         dotv = v.copy()
         for p in range(self.P):
             dotv = self._L_minus_p_a_dot(dotv, p)
@@ -178,7 +183,7 @@ class VjProjectionOperator(SeqLinOperator):
         self.matrices = [self.W1 if p in positions else self.W0
                          for p in range(self.l)]
     
-    def dot(self, v):
+    def _matvec(self, v):
         return(kron_dot(self.matrices, v))
     
     def dot_square_norm(self, v):
@@ -263,7 +268,7 @@ class ProjectionOperator(SeqLinOperator):
     def calc_covariance_distance(self):
         return(self.L.W_kd.T.dot(self.lambdas))
     
-    def dot(self, v):
+    def _matvec(self, v):
         check_error(hasattr(self, 'coeffs'),
                     msg='"lambdas" must be defined for projection')
         projection = calc_matrix_polynomial_dot(self.coeffs, self.L, v)
@@ -278,14 +283,7 @@ class ProjectionOperator(SeqLinOperator):
         return(u)
 
 
-class KernelOperator(SeqLinOperator):
-    def __init__(self, n_alleles, seq_length):
-        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
-        self.W = ProjectionOperator(n_alleles=n_alleles, seq_length=seq_length)
-        self.n = self.W.n
-        self.shape = (self.n, self.n)
-        self.known_var = False
-    
+class BaseKernelOperator(SeqLinOperator):
     def set_y_var(self, y_var=None, obs_idx=None):
         
         if y_var is not None and obs_idx is not None:
@@ -303,7 +301,37 @@ class KernelOperator(SeqLinOperator):
         else:
             msg = 'y_var and obs_idx must be provided with each other'
             check_error(y_var is None and obs_idx is None, msg=msg)
+    
+    def _matvec(self, v, all_rows=False, add_y_var_diag=True, full_v=False):
+        if full_v or not self.known_var:
+            u = self._dot(v)
+        else:
+            u = self._dot(self.gt2data.dot(v))
+            if add_y_var_diag:
+                u += self.gt2data.dot(self.y_var_diag.dot(v))
 
+        if not all_rows and self.known_var:
+            u = self.gt2data.T.dot(u)
+        return(u)
+
+    def calc_gt_to_data_matrix(self, obs_idx):
+        n_obs = obs_idx.shape[0]
+        self.gt2data = csr_matrix((np.ones(n_obs), (obs_idx, np.arange(n_obs))),
+                                  shape=(self.n, n_obs))   
+    
+    def inv_quad(self, v, show=False):
+        u = self.inv_dot(v, show=show)
+        return(np.sum(u * v))
+
+
+class KernelOperator(BaseKernelOperator):
+    def __init__(self, n_alleles, seq_length):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        self.W = ProjectionOperator(n_alleles=n_alleles, seq_length=seq_length)
+        self.n = self.W.n
+        self.shape = (self.n, self.n)
+        self.known_var = False
+    
     @property
     def lambdas_multiplicity(self):
         return(self.W.L.lambdas_multiplicity)
@@ -316,38 +344,6 @@ class KernelOperator(SeqLinOperator):
     
     def _dot(self, v):
         return(self.W.dot(v))
-
-    def calc_gt_to_data_matrix(self, obs_idx):
-        n_obs = obs_idx.shape[0]
-        self.gt2data = csr_matrix((np.ones(n_obs), (obs_idx, np.arange(n_obs))),
-                                  shape=(self.n, n_obs))   
-    
-    def dot(self, v, all_rows=False, add_y_var_diag=True, full_v=False):
-        if full_v or not self.known_var:
-            u = self.W.dot(v)
-        else:
-            u = self.W.dot(self.gt2data.dot(v))
-            if add_y_var_diag:
-                u += self.gt2data.dot(self.y_var_diag.dot(v))
-
-        if not all_rows and self.known_var:
-            u = self.gt2data.T.dot(u)
-        return(u)
-    
-    @property
-    def linear_operator(self):
-        if not hasattr(self, '_Kop'):
-            self._Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.dot)
-        return(self._Kop)
-    
-    def inv_dot(self, v, show=False):
-        res = minres(self.linear_operator, v, tol=1e-6, show=show)
-        self.res = res[1]
-        return(res[0])
-    
-    def inv_quad(self, v, show=False):
-        u = self.inv_dot(v, show=show)
-        return(np.sum(u * v))
 
 #################### Skewed operators ##################################
 
