@@ -302,15 +302,28 @@ class BaseKernelOperator(SeqLinOperator):
             msg = 'y_var and obs_idx must be provided with each other'
             check_error(y_var is None and obs_idx is None, msg=msg)
     
-    def _matvec(self, v, all_rows=False, add_y_var_diag=True, full_v=False):
-        if full_v or not self.known_var:
+    def set_mode(self, all_rows=False, add_y_var_diag=True, full_v=False):
+        self.all_rows = all_rows
+        self.add_y_var_diag = add_y_var_diag
+        self.full_v = full_v
+        
+        nrows, ncols = (self.n, self.n)
+        if not self.all_rows and self.known_var:
+            nrows = self.n_obs
+        if not full_v and self.known_var:
+            ncols = self.n_obs
+            
+        self.shape = (nrows, ncols)
+    
+    def _matvec(self, v):
+        if self.full_v or not self.known_var:
             u = self._dot(v)
         else:
             u = self._dot(self.gt2data.dot(v))
-            if add_y_var_diag:
+            if self.add_y_var_diag:
                 u += self.gt2data.dot(self.y_var_diag.dot(v))
 
-        if not all_rows and self.known_var:
+        if not self.all_rows and self.known_var:
             u = self.gt2data.T.dot(u)
         return(u)
 
@@ -324,13 +337,14 @@ class BaseKernelOperator(SeqLinOperator):
         return(np.sum(u * v))
 
 
-class KernelOperator(BaseKernelOperator):
+class VarianceComponentKernelOperator(BaseKernelOperator):
     def __init__(self, n_alleles, seq_length):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.W = ProjectionOperator(n_alleles=n_alleles, seq_length=seq_length)
         self.n = self.W.n
         self.shape = (self.n, self.n)
         self.known_var = False
+        self.set_mode()
     
     @property
     def lambdas_multiplicity(self):
