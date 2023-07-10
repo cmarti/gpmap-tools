@@ -16,7 +16,12 @@ High priority
 - Merge with master branch and release new stable version to pypi
 - Clean warnings and prints from running tests
 - Remove tests dependencies on data outside the datasets. Use simulations
+<<<<<<< HEAD
 - Change ascending argument name in plot_visualization. not very intuitive
+=======
+- rename WMWS to WM Walk
+- fix problems in r2 calculations for r2 curves
+>>>>>>> 428a88513f102fe1c11cf5caae39f1a3bd78e9be
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
@@ -25,6 +30,8 @@ Mid priority
   Re-test mutational biases
 - Think whether to implement an embedding object
 - Streamline reduced alphabet
+- Compare inv_dot using minres and taking the reciprocal of the eigenvalues.
+  minres allows having different residual variances per observation though
 - Implement the 1SD rule to select hyperparameter in cv
 - Better figure out how to calculate the covariance distance using L polynomial
   and reimplement without L_powers_unique_entries_inv

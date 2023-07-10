@@ -58,9 +58,11 @@ class LaplacianOperator(SeqLinOperator):
     
     def _matvec(self, v):
         v = self.contract_v(v)
+        
         u = np.zeros(v.shape)
         for i in range(self.l):
-            u += np.stack([v.sum(i)] * self.alpha, axis=i)
+            u += np.expand_dims(v.sum(i), axis=i)
+        
         u = self.l * self.alpha * v - u
         return(self.expand_v(u))
     
@@ -358,6 +360,10 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
     
     def _dot(self, v):
         return(self.W.dot(v))
+
+    def inv_quad(self, v, show=False):
+        u = self.inv_dot(v, show=show)
+        return(np.sum(u * v))
 
 #################### Skewed operators ##################################
 
