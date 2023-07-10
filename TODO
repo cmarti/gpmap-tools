@@ -28,6 +28,10 @@ Mid priority
 - Implement the 1SD rule to select hyperparameter in cv
 - Better figure out how to calculate the covariance distance using L polynomial
   and reimplement without L_powers_unique_entries_inv
+- Implement product kernel class that uses kron_dot
+- Implement kernel alignment on the 2^k different covariances that we can fit
+  as an additive function of rho's and lambda's. The challenge is to extract 
+  those values from the data efficiently
   
 Low priority
 - Add some descriptions to the datasets and reference to the original paper
