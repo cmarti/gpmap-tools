@@ -633,7 +633,20 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
     
     def calc_variance_components(self):
         '''
+        Calculates the variance components associated to the function
+        along the SequenceSpace. It returns the squared module of the
+        projection into each of the l+1 eigenspaces of the graph Laplacian
+        representing the variance associated to epistatic interations of order k
         
+        See Zhou et al. 2021
+        https://www.pnas.org/doi/suppl/10.1073/pnas.2204233119
+        
+        Returns
+        -------
+        lambdas: array-like of shape (seq_length + 1, )
+            Vector containing the squared module of the projections into the
+            k'th eigenspaces in increasing order of k.
+         
         '''
         if not hasattr(self, 'W'):
             n_alleles = np.unique(self.n_alleles)
@@ -652,8 +665,22 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
     
     def calc_vjs_variance_components(self, k):
         '''
+        Calculates the squared module of the projection into the `Vj` subspaces
+        of order `k` defined by each individual combination of `k` sites as
+        defined by `j` 
         
+        Parameters
+        ----------
+        k : int from 0 to seq_length + 1
+            
+        
+        Returns
+        -------
+        lambdas: dict
+            Dictionary with combinations of `k` sites as keys and the associated
+            squared modules of the projection into the individual subspaces 
         '''
+        
         if not hasattr(self, 'Pj'):
             n_alleles = np.unique(self.n_alleles)
             msg = 'Variance components can only be calculated for spaces'
@@ -671,7 +698,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
     
     def get_single_mutant_matrix(self, sequence, center=False):
         '''
-        Returns the effects of single point mutantes from a focal sequences
+        Returns the effects of single point mutations from a focal sequences
         
         Parameters
         ----------
