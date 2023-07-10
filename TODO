@@ -1,6 +1,4 @@
 High priority
-- Remove dependency on specific alleles for building up SeqDEFT sequence space
-  as long as n_alleles is the same across sites. Use the guessed alphabet to do so
 - Try to implement nodes_vmin option for plotly interactive plotting to keep color scale constant
   even if we select top genotypes  
 - Make datashader optional, maybe by moving datashader plotting to another plotting module
@@ -19,6 +17,7 @@ High priority
 - Merge with master branch and release new stable version to pypi
 - Clean warnings and prints from running tests
 - Remove tests dependencies on data outside the datasets. Use simulations
+- Change ascending argument name in plot_visualization. not very intuitive
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface

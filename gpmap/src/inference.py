@@ -603,10 +603,6 @@ class SeqDEFT(DeltaPEstimator):
         Number of folds to use in the cross-validation procedure
     
     '''
-    @property
-    def count_data(self):
-        return(False)
-    
     def fill_zeros_counts(self, X, y):
         obs = pd.DataFrame({'x': X, 'y': y}).groupby(['x'])['y'].sum().reset_index()
         data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
