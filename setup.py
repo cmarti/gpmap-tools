@@ -21,7 +21,7 @@ def main():
         package_data = {'': ['datasets/*/gb1*',
                              'datasets/*/f1u*',
                              'datasets/*/smn1*',
-                             'datasets/*/dmsc*'
+                             'datasets/*/dmsc*',
                              'datasets/*/5ss*']},
         entry_points={
             'console_scripts': [
