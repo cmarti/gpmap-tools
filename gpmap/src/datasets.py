@@ -17,11 +17,12 @@ class DataSet(object):
         fpath = join(RAW_DATA_DIR, '{}.pq'.format(self.name))
         self.data = read_dataframe(fpath)
         
-        msg = '"m" column missing from data table'
-        check_error('m' in self.data.columns, msg=msg)
-        
-        msg = '"var" column missing from data table'
-        check_error('var' in self.data.columns, msg=msg)
+        if not 'X' in self.data.columns:
+            msg = '"m" column missing from data table'
+            check_error('m' in self.data.columns, msg=msg)
+            
+            msg = '"var" column missing from data table'
+            check_error('var' in self.data.columns, msg=msg)
     
     @property
     def landscape(self):
