@@ -4,7 +4,6 @@ High priority
 - Make datashader optional, maybe by moving datashader plotting to another plotting module
 - Review bounds for plots in datashader allele grid: padding option may not have
   been activated. Maybe build some default function to use across all datashader plots
-- Write docstrings for space variance components and vjs calculations and add to API reference
 - Clean up some options for plotting that we are not using that much and make everything confusing.
 - Add colorbar functionality for datashader plots
 - Add function to center the spines in the visualizations
