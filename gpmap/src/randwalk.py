@@ -113,7 +113,7 @@ class TimeReversibleRandomWalk(RandomWalk):
                            neutral_exchange_rates=None, neutral_stat_freqs=None,
                            tol=1e-12):
         '''
-        Calculates the genotype coordinates to use for visualization 
+        Calculates the state coordinates to use for visualization 
         of the provided discrete space under a given time-reversible
         random walk. The coordinates consist on the right eigenvectors 
         of the associate rate matrix `Q`, re-scaled by the corresponding
@@ -138,11 +138,11 @@ class TimeReversibleRandomWalk(RandomWalk):
         n_components: int (10)
             Number of eigenvectors or diffusion axis to calculate
         
-        neutral_stat_freqs : array-like of shape (n_genotypes,)
+        neutral_stat_freqs : array-like of shape (n_states,)
             Genotype stationary frequencies at neutrality to define the
             time reversible neutral dynamics
         
-        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_states, n_states)
             Sparse matrix containing the neutral exchange rates for the 
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
@@ -175,14 +175,14 @@ class TimeReversibleRandomWalk(RandomWalk):
         The output can consist in 2 to 3 different tables, as one of them
         may not be always necessarily stored multiple times
         
-            - nodes coordinates : contains the coordinates for each genotype and
+            - nodes coordinates : contains the coordinates for each state and
             the associated function values and stationary frequencies.
             It is stored in CSV format with suffix "nodes.csv" or parquet
             with suffix "nodes.pq"
             - decay rates : contains the decay rates and relaxation times
             associated to each component or diffusion axis. It is stored
             in CSV format with suffix "decay_rates.csv"
-            - edges : contains the adjacency relationship between genotypes.
+            - edges : contains the adjacency relationship between states.
             It is not stored by default unless `write_edges=True`, as it will 
             remain unchanged for any visualization on the same SequenceSpace.
             Therefore, so it only needs to be stored once. It can be stored in 
@@ -196,7 +196,7 @@ class TimeReversibleRandomWalk(RandomWalk):
             
         write_edges: bool (False)
             Option to write also the information about the adjacency relationships
-            between pairs for genotypes for plotting the edges
+            between pairs for states for plotting the edges
         
         nodes_format: str {'parquet', 'csv'}
             Format to store the nodes information. parquet is more efficient but
@@ -226,7 +226,7 @@ class WMWalk(TimeReversibleRandomWalk):
     '''
     Class for Weak Mutation Weak Selection Random Walk on a SequenceSpace.
     It is a time-reversible continuous time Markov Chain where the transition
-    rates depend on the differences in fitnesses between two genotypes 
+    rates depend on the differences in fitnesses between two states 
     scaled by the effective population size `Ns` . 
     
 
@@ -247,7 +247,7 @@ class WMWalk(TimeReversibleRandomWalk):
         it represents from the distribution of functions across sequence space
         
     calc_stationary_frequencies():
-        Calculates the stationary frequencies of the genotypes under the random
+        Calculates the stationary frequencies of the states under the random
         walk specified on the discrete space
     
     calc_rate_matrix():
@@ -288,7 +288,7 @@ class WMWalk(TimeReversibleRandomWalk):
             
         Returns
         -------
-        neutral_stat_freqs : array-like of shape (n_genotypes,)
+        neutral_stat_freqs : array-like of shape (n_states,)
             Genotype stationary frequencies resulting from the product of the
             site-level stationary frequencies at neutrality
         
@@ -354,7 +354,7 @@ class WMWalk(TimeReversibleRandomWalk):
         return()
     
     def calc_log_stationary_frequencies(self, Ns, neutral_stat_freqs=None):
-        '''Calculates the genotype stationary frequencies using Ns stored in 
+        '''Calculates the state stationary frequencies using Ns stored in 
         the object and stores the corresponding diagonal matrices with the
         sqrt transformation and its inverse
         
@@ -363,13 +363,13 @@ class WMWalk(TimeReversibleRandomWalk):
         Ns : real 
             Scaled effective population size for the evolutionary model
         
-        neutral_stat_freqs : array-like of shape (n_genotypes,)
+        neutral_stat_freqs : array-like of shape (n_states,)
             Genotype stationary frequencies resulting from the product of the
             site-level stationary frequencies at neutrality
         
         Returns
         -------
-        stationary_freqs : array-like of shape (n_genotypes,)
+        stationary_freqs : array-like of shape (n_states,)
             Genotype stationary frequencies in the selective regime
         
         '''
@@ -419,7 +419,7 @@ class WMWalk(TimeReversibleRandomWalk):
             raise ValueError(msg)
         
         min_mean_function = self.space.y.mean() # neutrality
-        max_mean_function = self.space.y.max() # best genotype
+        max_mean_function = self.space.y.max() # best state
         msg = 'mean_function must be between the function mean ({:.2f}) and the maximum function value (:.2f)'
         msg = msg.format(min_mean_function, max_mean_function)
         check_error(mean_function > min_mean_function and mean_function < max_mean_function, msg=msg)
@@ -471,7 +471,7 @@ class WMWalk(TimeReversibleRandomWalk):
         # Adjust with neutral rates if provided
         if neutral_stat_freqs is not None:
             log_freqs = np.log(neutral_stat_freqs)
-            values = values * np.exp(0.5 * log_freqs[i] + 0.5 * log_freqs[j] + np.log(self.space.n_genotypes))
+            values = values * np.exp(0.5 * log_freqs[i] + 0.5 * log_freqs[j] + np.log(self.space.n_states))
         
         if neutral_exchange_rates is not None:
             values = values * neutral_exchange_rates.data
@@ -489,11 +489,11 @@ class WMWalk(TimeReversibleRandomWalk):
         Ns : real 
             Scaled effective population size for the evolutionary model
 
-        neutral_stat_freqs : array-like of shape (n_genotypes,)
+        neutral_stat_freqs : array-like of shape (n_states,)
             Genotype stationary frequencies at neutrality to define the
             time reversible neutral dynamics
         
-        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_states, n_states)
             Sparse matrix containing the neutral exchange rates for the 
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
@@ -513,7 +513,7 @@ class WMWalk(TimeReversibleRandomWalk):
         # Fill diagonal entries
         log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs)
         self.set_stationary_freqs(log_freqs)
-        sqrt_freqs = np.exp(0.5 * (log_freqs + np.log(self.space.n_genotypes)))
+        sqrt_freqs = np.exp(0.5 * (log_freqs + np.log(self.space.n_states)))
         m.setdiag(-m.dot(sqrt_freqs) / sqrt_freqs)
         self.sandwich_rate_matrix = m.tocsr()
     
@@ -528,11 +528,11 @@ class WMWalk(TimeReversibleRandomWalk):
         Ns : real 
             Scaled effective population size for the evolutionary model
         
-        neutral_stat_freqs : array-like of shape (n_genotypes,)
+        neutral_stat_freqs : array-like of shape (n_states,)
             Genotype stationary frequencies at neutrality to define the
             time reversible neutral dynamics
         
-        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_states, n_states)
             Sparse matrix containing the neutral exchange rates for the 
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
@@ -567,7 +567,7 @@ class WMWalk(TimeReversibleRandomWalk):
             
         Returns
         -------
-        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_genotypes, n_genotypes)
+        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_states, n_states)
             Sparse matrix containing the neutral transition rates for the 
             whole sequence space
         
