@@ -11,7 +11,8 @@ from gpmap.src.utils import get_sparse_diag_matrix
 from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator, KernelOperator,
-                             DeltaPOperator)
+                             DeltaPOperator, ProjectionOperator2)
+from timeit import timeit
 
 
 class LinOpsTests(unittest.TestCase):
@@ -121,6 +122,65 @@ class LinOpsTests(unittest.TestCase):
                     u = W.dot(v)
                     q = np.sum(u**2)
                     assert(q >= 0)
+    
+    def test_projection_operator2(self):
+        W = ProjectionOperator2(2, 2)
+         
+        # Purely additive function
+        y = np.array([-1.5, -0.5, 0.5, 1.5])
+         
+        W.set_lambdas(k=2)
+        assert(np.allclose(W.dot(y), 0))
+         
+        W.set_lambdas(k=1)
+        assert(np.allclose(W.dot(y), y))
+         
+        W.set_lambdas(k=0)
+        assert(np.allclose(W.dot(y), 0))
+         
+        # Non-zero orthogonal projections
+        y = np.array([-1.5, -0.5, 0.5, 4])
+         
+        W.set_lambdas(k=0)
+        y0 = W.dot(y)
+        W.set_lambdas(k=1)
+        y1 = W.dot(y)
+        W.set_lambdas(k=2)
+        y2 = W.dot(y) 
+         
+        assert(not np.allclose(y0, 0))
+        assert(not np.allclose(y1, y))
+        assert(not np.allclose(y2, 0))
+         
+        # Ensure they are orthogonal to each other
+        assert(np.allclose(y0.T.dot(y1), 0))
+        assert(np.allclose(y0.T.dot(y2), 0))
+        assert(np.allclose(y1.T.dot(y2), 0))
+         
+        # Test inverse
+        W.set_lambdas(np.array([1, 10, 1.]))
+        assert(np.allclose(W.inv_dot(W.dot(y)), y))
+    
+    def test_projection_operator_times(self):
+        a, l = 4, 7
+        W1 = ProjectionOperator(seq_length=l, n_alleles=a)
+        W2 = ProjectionOperator2(seq_length=l, n_alleles=a)
+        
+        v = np.random.normal(size=W1.n)
+        
+        lambdas = 10.**(-np.arange(l+1))
+        W1.set_lambdas(lambdas=lambdas)
+        W2.set_lambdas(lambdas=lambdas)
+        
+        u1 = W1.dot(v)
+        u2 = W2.dot(v)
+        assert(np.allclose(u1, u2))
+        
+        W1.set_lambdas(k=2)
+        W2.set_lambdas(k=2)
+        
+        print(timeit(lambda : W1.dot(v), number=10))
+        print(timeit(lambda : W2.dot(v), number=10))
     
     def test_vj_projection_operator(self):
         vjp = VjProjectionOperator(2, 2)

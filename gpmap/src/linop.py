@@ -26,9 +26,11 @@ class SeqLinOperator(object):
         self.n = self.alpha ** self.l
         self.d = (self.alpha - 1) * self.l
         self.shape = (self.n, self.n)
+        self.shape_contracted = tuple([self.alpha]*self.l)
+        self.positions = np.arange(self.l)
     
     def contract_v(self, v):
-        return(v.reshape(tuple([self.alpha]*self.l)))
+        return(v.reshape(self.shape_contracted))
 
     def expand_v(self, v):
         return(v.reshape(self.n))
@@ -45,7 +47,7 @@ class SeqLinOperator(object):
     @property
     def linear_operator(self):
         if not hasattr(self, '_op'):
-            self._op = LinearOperator((self.n_obs, self.n_obs), matvec=self.dot)
+            self._op = LinearOperator(self.shape, matvec=self.dot)
         return(self._op)
     
     def inv_dot(self, v, show=False):
@@ -207,6 +209,49 @@ class VjProjectionOperator(SeqLinOperator):
             matrices = [self.W1] * self.k
             sqnorm = self.repeats * np.sum(kron_dot(matrices, u.flatten()) ** 2)
         return(sqnorm)
+
+
+class ProjectionOperator2(SeqLinOperator):
+    def __init__(self, n_alleles, seq_length):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        self.calc_b()
+        
+    def set_lambdas(self, lambdas=None, k=None):
+        msg = 'Only one "k" or "lambdas" can and must be provided'
+        check_error((lambdas is None) ^ (k is None), msg=msg)
+        
+        if lambdas is None:
+            lambdas = np.zeros(self.l + 1)
+            lambdas[k] = 1
+            
+        self.lambdas = lambdas
+        self.coeffs = self.lambdas_to_coeffs(lambdas)
+        
+    def calc_b(self):
+        b = np.zeros((self.lp1, self.lp1))
+        for i in range(self.lp1):
+            for k, j in enumerate(range(i, self.lp1)):
+                b[i, j] = (-1)**k * comb(self.l-i, k)
+        self.b = b
+    
+    def lambdas_to_coeffs(self, lambdas):
+        return(self.b.dot(lambdas))
+    
+    def dot(self, v):
+        u = self.contract_v(v)
+        r = np.zeros(self.shape_contracted)
+
+        for k in range(self.lp1):
+            c_k = self.coeffs[k]
+            
+            if c_k == 0:
+                continue
+            
+            for j in combinations(self.positions, k):
+                axis = tuple([p for p in self.positions if p not in j])
+                r += c_k * np.expand_dims(u.mean(axis=axis), axis=axis)
+                
+        return(self.expand_v(r))
 
 
 class ProjectionOperator(SeqLinOperator):
