@@ -1,8 +1,9 @@
 from os.path import join, exists
 
-from gpmap.src.utils import check_error, read_dataframe
-from gpmap.src.settings import DATASETS, RAW_DATA_DIR, LANDSCAPES_DIR
 from gpmap.src.space import SequenceSpace
+from gpmap.src.utils import check_error, read_dataframe
+from gpmap.src.settings import (DATASETS, RAW_DATA_DIR, LANDSCAPES_DIR,
+                                PROCESSED_DIR)
 
 
 class DataSet(object):
@@ -14,7 +15,7 @@ class DataSet(object):
         self.load_data()
     
     def load_data(self):
-        fpath = join(RAW_DATA_DIR, '{}.pq'.format(self.name))
+        fpath = join(PROCESSED_DIR, '{}.pq'.format(self.name))
         self.data = read_dataframe(fpath)
         
         if not 'X' in self.data.columns:
@@ -24,20 +25,28 @@ class DataSet(object):
             msg = '"var" column missing from data table'
             check_error('var' in self.data.columns, msg=msg)
     
+    def _load(self, fdir, label):
+        fpath = join(fdir, '{}.pq'.format(self.name))
+        
+        if not exists(fpath):
+            msg = '{} for dataset {} not found'.format(label, self.name)
+            raise ValueError(msg)
+        
+        return(read_dataframe(fpath))
+    
     @property
     def landscape(self):
         if not hasattr(self, '_landscape'):
-            self.load_landscape()
+            self._landscape = self._load(fdir=LANDSCAPES_DIR,
+                                         label='estimated landscape')
         return(self._landscape)
     
-    def load_landscape(self):
-        fpath = join(LANDSCAPES_DIR, '{}.pq'.format(self.name))
-        
-        if not exists(fpath):
-            msg = 'estimated landscape for dataset {} not found'.format(self.name)
-            raise ValueError(msg)
-        
-        self._landscape = read_dataframe(fpath)
+    @property
+    def raw_data(self):
+        if not hasattr(self, '_raw_data'):
+            self._raw_data = self._load(fdir=RAW_DATA_DIR,
+                                         label='estimated landscape')
+        return(self._raw_data)
     
     def to_sequence_space(self):
         space = SequenceSpace(X=self.landscape.index.values,
