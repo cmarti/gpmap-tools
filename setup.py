@@ -22,6 +22,7 @@ def main():
                              'datasets/*/f1u*',
                              'datasets/*/smn1*',
                              'datasets/*/dmsc*',
+                             'datasets/*/pard*',
                              'datasets/*/5ss*']},
         entry_points={
             'console_scripts': [
