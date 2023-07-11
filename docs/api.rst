@@ -23,7 +23,7 @@ Random walks
 .. autoclass:: gpmap.src.randwalk.TimeReversibleRandomWalk
     :members: calc_visualization, write_tables
 
-.. autoclass:: gpmap.src.randwalk.WMWSWalk
+.. autoclass:: gpmap.src.randwalk.WMWalk
     :members: calc_neutral_mixing_rates, calc_neutral_rate_matrix, 
         calc_stationary_frequencies, calc_rate_matrix, calc_model_neutral_rate_matrix
 
