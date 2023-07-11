@@ -9,13 +9,21 @@ from tempfile import NamedTemporaryFile
 from subprocess import check_call
 from scipy.stats.stats import pearsonr
 
-from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
+from gpmap.src.settings import BIN_DIR
 from gpmap.src.inference import SeqDEFT
 from gpmap.src.plot import plot_SeqDEFT_summary, savefig
-from gpmap.src.utils import write_dataframe
 
 
 class SeqDEFTTests(unittest.TestCase):
+    def test_seqdeft_init(self):
+        seqdeft = SeqDEFT(P=2)
+        X = np.array(['AAA', 'ACA', 'BAA', 'BCA',
+                      'AAD', 'ACD', 'BAD', 'BCD'])
+        seqdeft.set_data(X=X)
+        
+        assert(seqdeft.seq_length == 3)
+        assert(seqdeft.n_alleles == 2)
+        
     def test_seq_deft_simulate(self):
         seqdeft = SeqDEFT(P=2)
         seqdeft.init(seq_length=5, alphabet_type='dna')
@@ -25,7 +33,7 @@ class SeqDEFTTests(unittest.TestCase):
         a = 5e2
         phi = seqdeft.simulate_phi(a=a)
         ss = seqdeft.DP.quad(phi) / seqdeft.n_genotypes
-        ss = ss * a / seqdeft.n_p_faces
+        ss = ss * a / seqdeft.DP.n_p_faces
         assert(np.abs(ss - 1) < 0.1)
         
         # Sample sequences directly
@@ -116,22 +124,6 @@ class SeqDEFTTests(unittest.TestCase):
         r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
         assert(r > 0.6)
     
-    def xtest_weighted_inference2(self):
-        fpath = '/home/martigo/elzar/projects/tk/data/dfg.reweighted.pq'
-        data = pd.read_parquet(fpath)
-        data['counts'] = data['counts'] * 2 / 3
-        
-        # Test inference
-        seqdeft = SeqDEFT(P=2, num_reg=10)
-        out_fpath = '/home/martigo/elzar/projects/tk/data/dfg.reweighted.out.pq'
-        seq_densities = seqdeft.fit(X=data.index.values, y=data['counts'].values)
-        write_dataframe(seq_densities, out_fpath)
-        
-        out_fpath = '/home/martigo/elzar/projects/tk/data/dfg.reweighted.out'
-        fig = plot_SeqDEFT_summary(seqdeft.logL_df, seq_densities)
-        savefig(fig, out_fpath)
-        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
-        
     def test_seqdeft_missing_alleles(self):
         seqdeft = SeqDEFT(P=2)
         seqdeft.init(seq_length=5, alphabet_type='dna')
@@ -174,15 +166,16 @@ class SeqDEFTTests(unittest.TestCase):
             check_call(cmd)
     
     def test_seq_deft_cv_plot(self):
-        fpath = join(TEST_DATA_DIR, 'seqdeft_output.csv')
-        seq_densities = pd.read_csv(fpath, index_col=0)
-        
-        fpath = join(TEST_DATA_DIR, 'logL.csv')
-        log_Ls = pd.read_csv(fpath, index_col=0)
-        
-        fig = plot_SeqDEFT_summary(log_Ls, seq_densities, legend_loc=2)
-        fpath = join(TEST_DATA_DIR, 'seqdeft_output')
-        savefig(fig, fpath)
+        seqdeft = SeqDEFT(P=2)
+        seqdeft.init(seq_length=5, alphabet_type='dna')
+        X = seqdeft.simulate(N=1000, a=500)
+
+        seq_densities = seqdeft.fit(X=X)
+        log_Ls = seqdeft.logL_df
+
+        with NamedTemporaryFile(mode='w') as fhand:        
+            fig = plot_SeqDEFT_summary(log_Ls, seq_densities, legend_loc=2)
+            savefig(fig, fhand.name)
         
 
 if __name__ == '__main__':

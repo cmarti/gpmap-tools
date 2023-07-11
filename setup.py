@@ -20,7 +20,9 @@ def main():
         include_package_data=True,
         package_data = {'': ['datasets/*/gb1*',
                              'datasets/*/f1u*',
-                             'datasets/*/smn1*']},
+                             'datasets/*/smn1*',
+                             'datasets/*/dmsc*',
+                             'datasets/*/5ss*']},
         entry_points={
             'console_scripts': [
                 'fit_SeqDEFT = bin.fit_seqdeft:main',

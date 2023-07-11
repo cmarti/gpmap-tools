@@ -2,6 +2,7 @@
 import unittest
 import numpy as np
 
+from timeit import timeit
 from itertools import combinations
 from scipy.special._basic import comb
 
@@ -10,9 +11,9 @@ from gpmap.src.seq import generate_possible_sequences
 from gpmap.src.utils import get_sparse_diag_matrix
 from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             VjProjectionOperator, KernelOperator,
+                             VjProjectionOperator,
+                             VarianceComponentKernelOperator,
                              DeltaPOperator, ProjectionOperator2)
-from timeit import timeit
 
 
 class LinOpsTests(unittest.TestCase):
@@ -253,7 +254,7 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(fsqn, np.sum(f**2)))
             
     def test_kernel_opt_get_gt_to_data_matrix(self):
-        K = KernelOperator(n_alleles=2, seq_length=3)
+        K = VarianceComponentKernelOperator(n_alleles=2, seq_length=3)
         obs_idx = np.arange(K.n)
         K.calc_gt_to_data_matrix(obs_idx)
         m = K.gt2data.todense()
@@ -269,7 +270,7 @@ class LinOpsTests(unittest.TestCase):
         lambdas = np.array([0, 1, 0])
         y_var = 0.1 * np.ones(4)
         obs_idx = np.arange(4)
-        K = KernelOperator(n_alleles=2, seq_length=2)
+        K = VarianceComponentKernelOperator(n_alleles=2, seq_length=2)
         K.set_lambdas(lambdas)
         K.set_y_var(y_var=y_var, obs_idx=obs_idx)
         v = np.random.normal(size=K.n_obs)
@@ -278,7 +279,7 @@ class LinOpsTests(unittest.TestCase):
         
     def test_kernel_operator_large(self):
         l = 9
-        K = KernelOperator(n_alleles=4, seq_length=l)
+        K = VarianceComponentKernelOperator(n_alleles=4, seq_length=l)
         K.set_lambdas(lambdas=np.append([0], 2-np.arange(l)))
         K.set_y_var(y_var=0.1 * np.ones(K.n), obs_idx=np.arange(K.n))
         v = np.random.normal(size=K.n_obs)
@@ -339,7 +340,7 @@ class SkewedLinOpsTests(unittest.TestCase):
         # Define Laplacian based kernel
         L = LaplacianOperator(a, l, ps=ps)
         W = ProjectionOperator(L=L)
-        K1 = KernelOperator(W)
+        K1 = VarianceComponentKernelOperator(W)
         
         # Define full kernel function
         kernel = VarianceComponentKernel(l, a, use_p=True)
@@ -378,7 +379,7 @@ class SkewedLinOpsTests(unittest.TestCase):
         # Define Laplacian based kernel
         L = LaplacianOperator(a, l, ps=ps)
         W = ProjectionOperator(L=L)
-        K1 = KernelOperator(W)
+        K1 = VarianceComponentKernelOperator(W)
         I = np.eye(K1.shape[0])
         
         # Define full kernel function

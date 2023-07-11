@@ -1,12 +1,9 @@
 High priority
-- Remove dependency on specific alleles for building up SeqDEFT sequence space
-  as long as n_alleles is the same across sites. Use the guessed alphabet to do so
 - Try to implement nodes_vmin option for plotly interactive plotting to keep color scale constant
   even if we select top genotypes  
 - Make datashader optional, maybe by moving datashader plotting to another plotting module
 - Review bounds for plots in datashader allele grid: padding option may not have
   been activated. Maybe build some default function to use across all datashader plots
-- Write docstrings for space variance components and vjs calculations and add to API reference
 - Clean up some options for plotting that we are not using that much and make everything confusing.
 - Add colorbar functionality for datashader plots
 - Add function to center the spines in the visualizations
@@ -19,8 +16,12 @@ High priority
 - Merge with master branch and release new stable version to pypi
 - Clean warnings and prints from running tests
 - Remove tests dependencies on data outside the datasets. Use simulations
+<<<<<<< HEAD
+- Change ascending argument name in plot_visualization. not very intuitive
+=======
 - rename WMWS to WM Walk
 - fix problems in r2 calculations for r2 curves
+>>>>>>> 428a88513f102fe1c11cf5caae39f1a3bd78e9be
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
@@ -34,7 +35,10 @@ Mid priority
 - Implement the 1SD rule to select hyperparameter in cv
 - Better figure out how to calculate the covariance distance using L polynomial
   and reimplement without L_powers_unique_entries_inv
-- Make SeqLinOps inherit from LinearOperator class directly
+- Implement product kernel class that uses kron_dot
+- Implement kernel alignment on the 2^k different covariances that we can fit
+  as an additive function of rho's and lambda's. The challenge is to extract 
+  those values from the data efficiently
   
 Low priority
 - Add some descriptions to the datasets and reference to the original paper

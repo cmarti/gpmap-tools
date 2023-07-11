@@ -6,7 +6,6 @@ from time import time
 from tqdm import tqdm
 from numpy.linalg.linalg import matrix_power
 from scipy.optimize._minimize import minimize
-from scipy.special._basic import comb
 from scipy.special._logsumexp import logsumexp
 from scipy.stats.stats import pearsonr
 from scipy.stats._continuous_distns import norm
@@ -18,7 +17,7 @@ from gpmap.src.utils import (check_error,
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences)
-from gpmap.src.linop import DeltaPOperator, KernelOperator
+from gpmap.src.linop import DeltaPOperator, VarianceComponentKernelOperator
 from gpmap.src.kernel import KernelAligner
 
 
@@ -137,7 +136,7 @@ class VCregression(LandscapeEstimator):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
-        self.K = KernelOperator(self.n_alleles, self.seq_length)
+        self.K = VarianceComponentKernelOperator(self.n_alleles, self.seq_length)
         self.calc_L_powers_unique_entries_matrix() # For covariance d calculations
         
     def get_obs_idx(self, seqs):
@@ -253,12 +252,11 @@ class VCregression(LandscapeEstimator):
         # Compute rho_d and N_d
         size = self.seq_length + 1
         cov, distance_class_ns = np.zeros(size), np.zeros(size)
+        L = self.K.W.L
         for d in range(size):
             c_k = self.L_powers_unique_entries_inv[:, d]
-            distance_class_ns[d] = calc_matrix_polynomial_quad(c_k, self.K.W.L,
-                                                               observed_seqs)
-            
-            quad = calc_matrix_polynomial_quad(c_k, self.K.W.L, seq_values)
+            distance_class_ns[d] = calc_matrix_polynomial_quad(c_k, L, observed_seqs)
+            quad = calc_matrix_polynomial_quad(c_k, L, seq_values)
             cov[d] = reciprocal(quad, distance_class_ns[d])
             
         return(cov, distance_class_ns)
@@ -297,10 +295,13 @@ class VCregression(LandscapeEstimator):
                    column with the posterior variances for each genotype
         """
         t0 = time()
+        self.K.set_mode()
         a_star = self.K.inv_dot(self.y)
-        ypred = self.K.dot(a_star, all_rows=True, add_y_var_diag=False)
+        
+        self.K.set_mode(all_rows=True, add_y_var_diag=False)
+        ypred = self.K.dot(a_star)
+        
         pred = pd.DataFrame({'ypred': ypred}, index=self.genotypes)
-
         if Xpred is not None:
             pred = pred.loc[Xpred, :]
 
@@ -323,10 +324,15 @@ class VCregression(LandscapeEstimator):
         post_vars = []
         for i in tqdm(pred_idx, total=Xpred.shape[0]):
             v = self.get_indicator_function(i)
-            K_i = self.K.dot(v, full_v=True, all_rows=True)
+            self.K.set_mode(full_v=True, all_rows=True)
+            
+            K_i = self.K.dot(v)
             K_ii = K_i[i]
             K_Bi = self.K.gt2data.T.dot(K_i)
+            
+            self.K.set_mode()
             post_vars.append(K_ii - self.K.inv_quad(K_Bi))
+            
         post_vars = np.array(post_vars)
         return(post_vars)
     
@@ -597,10 +603,6 @@ class SeqDEFT(DeltaPEstimator):
         Number of folds to use in the cross-validation procedure
     
     '''
-    @property
-    def count_data(self):
-        return(False)
-    
     def fill_zeros_counts(self, X, y):
         obs = pd.DataFrame({'x': X, 'y': y}).groupby(['x'])['y'].sum().reset_index()
         data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)

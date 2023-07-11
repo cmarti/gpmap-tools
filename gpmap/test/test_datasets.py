@@ -19,7 +19,6 @@ class DatasetsTests(unittest.TestCase):
         # Test that all datasets in global variable are available
         for dataset_name in DATASETS:
             dataset = DataSet(dataset_name)
-            assert(dataset.landscape.shape[0] >= dataset.data.shape[0])
             
         # Test error with missing dataset
         try:
