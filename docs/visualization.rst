@@ -9,5 +9,3 @@ In this section the user can find several use cases in which we applied GPMAP-to
     :maxdepth: 1
     
     usage/2_GB1.ipynb
-    usage/5_Codon.ipynb
-    usage/6_mutation.ipynb
