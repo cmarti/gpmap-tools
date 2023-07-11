@@ -7,7 +7,7 @@ import pandas as pd
 
 from gpmap.src.utils import LogTrack, read_dataframe
 from gpmap.src.space import SequenceSpace
-from gpmap.src.randwalk import WMWSWalk
+from gpmap.src.randwalk import WMWalk
 from gpmap.src.seq import get_custom_codon_table
 
         
@@ -103,7 +103,7 @@ def main():
             space.remove_codon_incompatible_transitions(codon_table)
     
     # Create random walk and calculate coordinates
-    rw = WMWSWalk(space)
+    rw = WMWalk(space)
     rw.calc_visualization(Ns=Ns, mean_function=mean_function,
                           mean_function_perc=mean_function_perc,
                           n_components=n_components)

@@ -18,7 +18,7 @@ from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             plot_hyperparam_cv, figure_axis_grid,
     plot_genotypes_box)
 from gpmap.src.genotypes import select_genotypes
-from gpmap.src.randwalk import WMWSWalk
+from gpmap.src.randwalk import WMWalk
 from gpmap.src.space import CodonSpace
 from tempfile import NamedTemporaryFile
         
@@ -178,7 +178,7 @@ class PlottingTests(unittest.TestCase):
         savefig(fig, plot_fpath)
     
     def test_Ns_grid(self):
-        rw = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        rw = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         fpath = join(TEST_DATA_DIR, 'serine.Ns')
         figure_Ns_grid(rw, fpath)
     

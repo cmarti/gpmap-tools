@@ -13,12 +13,12 @@ from scipy.sparse.csr import csr_matrix
 
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace, SequenceSpace
-from gpmap.src.randwalk import WMWSWalk
+from gpmap.src.randwalk import WMWalk
 
 
 class RandomWalkTests(unittest.TestCase):
     def test_set_Ns(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
 
         freqs = mc.calc_stationary_frequencies(Ns=0)
         assert(np.unique(freqs).shape[0] == 1)
@@ -66,14 +66,14 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.isclose(mc.Ns, 0.59174))
     
     def test_calc_jump_matrix(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
         mc.calc_rate_matrix(Ns=1)
         mc.calc_jump_matrix()
         assert(np.allclose(mc.jump_matrix.sum(1), 1))
     
     def test_run_forward(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
         mc.calc_rate_matrix(Ns=1)
         mc.calc_jump_matrix()
@@ -82,7 +82,7 @@ class RandomWalkTests(unittest.TestCase):
         assert(len(path) == len(times))
         
     def test_run_forward_tree(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
         mc.calc_rate_matrix(Ns=1)
         mc.calc_jump_matrix()
@@ -91,7 +91,7 @@ class RandomWalkTests(unittest.TestCase):
         assert(len(path) == len(times))
         
     def calc_neutral_stat_freqs(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         
         sites_stat_freqs = [np.array([0.4, 0.6]), np.array([0.3, 0.7])]
         freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
@@ -102,7 +102,7 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.allclose(freqs, [0.12, 0.28, 0.18, 0.42]))
     
     def calc_neutral_exchange_rates(self):
-        rw = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        rw = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
     
         # Calculate default exchange rates matrix
         m = rw.calc_exchange_rate_matrix(exchange_rates=None)
@@ -113,7 +113,7 @@ class RandomWalkTests(unittest.TestCase):
         # Simpler space with different exchange rates
         X = np.array(['AA', 'AB', 'BA', 'BB'])
         y = np.ones(X.shape[0])
-        rw = WMWSWalk(SequenceSpace(X=X, y=y))
+        rw = WMWalk(SequenceSpace(X=X, y=y))
         m = rw.calc_exchange_rate_matrix([[1], [2]]).todense()
         expected = np.array([[0, 2, 1, 0], [2, 0, 0, 1], 
                              [1, 0, 0, 2], [0, 1, 2, 0]])
@@ -122,7 +122,7 @@ class RandomWalkTests(unittest.TestCase):
         # 3 alleles 1 site
         X = np.array(['A', 'B', 'C'])
         y = np.ones(X.shape[0])
-        rw = WMWSWalk(SequenceSpace(X=X, y=y))
+        rw = WMWalk(SequenceSpace(X=X, y=y))
         m = rw.calc_exchange_rate_matrix([[1, 2, 3]]).todense()
         expected = np.array([[0, 1, 2], [1, 0, 3], [2, 3, 0]])
         assert(np.allclose(m, expected))
@@ -130,7 +130,7 @@ class RandomWalkTests(unittest.TestCase):
         # 3 alleles 2 sites
         X = np.array(['AA', 'AB', 'AC', 'BA', 'BB', 'BC', 'CA', 'CB', 'CC'])
         y = np.ones(X.shape[0])
-        rw = WMWSWalk(SequenceSpace(X=X, y=y))
+        rw = WMWalk(SequenceSpace(X=X, y=y))
         m = rw.calc_exchange_rate_matrix([[1, 2, 3]] * 2).todense()
         assert(np.allclose(m[:3, :][:, :3], expected))
         assert(np.allclose(m[3:6, :][:, 3:6], expected))
@@ -140,7 +140,7 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.allclose(m[3:6, :][:, 6:], 3 * np.eye(3)))
     
     def test_calc_neutral_rate_matrix(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
 
         # Uniform mutation rates
         neutral_rate_matrix = mc.calc_neutral_rate_matrix()
@@ -160,7 +160,7 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.allclose(neutral_rate_matrix.sum(1), 0))
     
     def test_calc_neutral_model(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
 
         # Ensure uniform stationary frequencies for K80 model
         exchange_rates = {'a': 1, 'b': 2}        
@@ -208,7 +208,7 @@ class RandomWalkTests(unittest.TestCase):
                            [-12./64, 1./64, 2./64]))
         
     def test_stationary_frequencies(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
         codon_idxs = mc.space.get_state_idxs(codons)
         stop_codons = ['TGA', 'TAG', 'TAA']
@@ -223,7 +223,7 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.all(stat_freqs[stop_codon_idxs] < 0.01))
         
         # Check with biased neutral dynamics
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         sites_stat_freqs = [np.array([0.4, 0.2, 0.1, 0.3])] * 3
         neutral_freqs = mc.calc_neutral_stat_freqs(sites_stat_freqs)
         assert(np.allclose(neutral_freqs.sum(), 1))
@@ -244,7 +244,7 @@ class RandomWalkTests(unittest.TestCase):
         assert(freqs2[codon_idxs].sum() > codon_freqs1.sum())
     
     def test_stationary_function(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         
         # Ensure failure when stationary frequencies are not calculated
         try:
@@ -292,7 +292,7 @@ class RandomWalkTests(unittest.TestCase):
         # Simple space with neutral uniform dynamics 
         X = np.array(['AA', 'AB', 'BA', 'BB'])
         y = np.ones(X.shape[0])
-        rw = WMWSWalk(SequenceSpace(X=X, y=y))
+        rw = WMWalk(SequenceSpace(X=X, y=y))
         rw.calc_sandwich_rate_matrix(Ns=1)
         expected = np.array([[-2, 1, 1, 0], [1, -2, 0, 1], 
                              [1, 0, -2, 1], [0, 1, 1, -2]])
@@ -303,7 +303,7 @@ class RandomWalkTests(unittest.TestCase):
         
         # Introduce differences in fitness
         y = np.array([0, 1, 0, 1])
-        rw = WMWSWalk(SequenceSpace(X=X, y=y))
+        rw = WMWalk(SequenceSpace(X=X, y=y))
         rw.calc_sandwich_rate_matrix(Ns=1)
         rw.calc_rate_matrix(Ns=1)
         Q = rw.rate_matrix
@@ -317,7 +317,7 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.allclose(Q[2, 0], 1))
         
     def test_calc_visualization(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
 
         mc.calc_visualization(Ns=1, n_components=20)
         nd1 = mc.nodes_df
@@ -337,7 +337,7 @@ class RandomWalkTests(unittest.TestCase):
         assert(not np.allclose(nd2['1'], nd1['1']))
     
     def test_write_visualization(self):
-        mc = WMWSWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         mc.calc_visualization(Ns=1, n_components=20)
         
         with NamedTemporaryFile() as fhand:

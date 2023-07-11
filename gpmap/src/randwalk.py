@@ -13,7 +13,6 @@ from scipy.special._logsumexp import logsumexp
 from gpmap.src.settings import DNA_ALPHABET
 from gpmap.src.utils import (get_sparse_diag_matrix, check_error, write_log,
                              calc_cartesian_product, calc_tensor_product)
-from scipy.sparse.lil import lil_matrix
 
 
 class RandomWalk(object):
@@ -223,7 +222,7 @@ class TimeReversibleRandomWalk(RandomWalk):
             self.space.write_edges(fpath)
     
 
-class WMWSWalk(TimeReversibleRandomWalk):
+class WMWalk(TimeReversibleRandomWalk):
     '''
     Class for Weak Mutation Weak Selection Random Walk on a SequenceSpace.
     It is a time-reversible continuous time Markov Chain where the transition

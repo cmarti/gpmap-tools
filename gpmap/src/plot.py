@@ -74,7 +74,7 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
                           neutral_time=None, kwargs={}):
     '''
     Plots the relaxation times associated to each of the calculated components
-    from using ```WMWSWalk.calc_visualization`
+    from using ```WMWalk.calc_visualization`
     
     Parameters
     ----------
