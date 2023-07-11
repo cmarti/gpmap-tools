@@ -268,6 +268,10 @@ def calc_matrix_polynomial_dot(coefficients, matrix, v):
     polynomial = coefficients[0] * v
     
     for c in coefficients[1:]:
+        
+        if c == 0:
+            continue
+        
         power = matrix.dot(power)
         polynomial += c * power
     
