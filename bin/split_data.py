@@ -18,7 +18,7 @@ def main():
     # Create arguments
     parser = argparse.ArgumentParser(description=description)
     input_group = parser.add_argument_group('Input')
-    input_group.add_argument('data', help='CSV table with genotype-phenotype data')
+    input_group.add_argument('data', help='CSV or parquet table with genotype-phenotype data')
     input_group.add_argument('--counts', default=False, action='store_true',
                              help='Data consists on counts')
     input_group.add_argument('--seed', default=None, type=int,
