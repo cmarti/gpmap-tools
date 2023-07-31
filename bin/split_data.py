@@ -2,9 +2,8 @@
 import argparse
 
 import numpy as np
-import pandas as pd
 
-from gpmap.src.utils import (LogTrack, get_CV_splits,
+from gpmap.src.utils import (LogTrack, get_CV_splits, read_dataframe,
                              generate_p_training_config,
                              get_training_p_splits, write_split_data)
 
@@ -41,6 +40,8 @@ def main():
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True, help='Output file')
+    output_group.add_argument('-f', '--format', default='parquet',
+                              help='Output files format')
     output_group.add_argument('-p', '--prefix', required=True,
                               help='Prefix for sub-datasets output files')
 
@@ -59,12 +60,12 @@ def main():
 
     out_fpath = parsed_args.output
     out_prefix = parsed_args.prefix
+    out_format = parsed_args.format
     
     # Load counts data
     log = LogTrack()
     log.write('Loading data')
-    data = pd.read_csv(data_fpath, dtype=str)
-    data = data.set_index(data.columns[0])
+    data = read_dataframe(data_fpath)
     
     if seed is not None:
         np.random.seed(seed)
@@ -86,7 +87,7 @@ def main():
         splits = get_training_p_splits(config, X, y, y_var=y_var, 
                                        count_data=count_data, max_pred=max_pred)
         
-    write_split_data(out_prefix, splits)
+    write_split_data(out_prefix, splits, out_format=out_format)
     
     log.finish()
 
