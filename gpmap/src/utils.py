@@ -562,7 +562,7 @@ def write_edges(edges, fpath, triangular=True):
 
 def write_split_data(out_prefix, splits, out_format='csv'):
     for i, train, test in splits:
-        fpath = '{}.{}.train.{}'.format(out_prefix, i, out_format=out_format)
+        fpath = '{}.{}.train.{}'.format(out_prefix, i, out_format)
         train_df = data_to_df(train)
         write_dataframe(train_df, fpath)
 
