@@ -10,11 +10,11 @@ from os.path import join, dirname, abspath
 from itertools import product
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.dia import dia_matrix
-from scipy.stats.stats import pearsonr
 from scipy.sparse.extract import triu
 from scipy.sparse._matrix_io import load_npz, save_npz
 from scipy.sparse.coo import coo_matrix
-
+from scipy.stats import norm
+from scipy.stats.stats import pearsonr
 
 
 def check_error(condition, msg, error_type=ValueError):
@@ -586,17 +586,25 @@ def read_split_data(prefix, suffix=None, in_format='csv'):
             label = '.'.join(fname.split('.')[1:-2])
             test_pred = pd.read_csv(fpath, index_col=0)
             yield(label, test_pred)
-        
 
-def calc_r2_values(test_pred_sets, data):
-    r2 = []
+
+def evaluate_predictions(test_pred_sets, data, ypred_col='ypred', y_col='y',
+                         y_var_col='y_var'):
+    results = []
     for label, test_pred in test_pred_sets:
-        try:
-            seqs = np.intersect1d(test_pred.index.values, data.index.values)
-            ypred = test_pred.loc[seqs, :].iloc[:, 0].values
-            yobs = data.loc[seqs, :].iloc[:, 0].values
-            r2.append({'id': label, 'r2': pearsonr(ypred, yobs)[0] ** 2})
-        except:
-            print('problem found in {}. Skipping it'.format(label))
-            continue
-    return(pd.DataFrame(r2))
+        df = data.join(test_pred).dropna()
+
+        y = df[y_col].values
+        ypred = df[ypred_col].values
+        record = {'label': label,
+                  'mse': np.mean((y - ypred)**2)}
+        
+        if df.shape[0] > 1 and np.unique(ypred).shape[0] > 1 and np.unique(y).shape[0] > 1:
+            record['r2'] = pearsonr(ypred, y)[0] ** 2
+        
+        if y_var_col in df.columns:
+            y_var = df[y_var_col]
+            record['loglikelihood'] = norm.logpdf(ypred, loc=y, scale=np.sqrt(y_var)).mean()
+            
+        results.append(record)
+    return(pd.DataFrame(results))

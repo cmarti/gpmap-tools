@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from os.path import join
+from tempfile import NamedTemporaryFile
 
 from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.utils import (calc_cartesian_product, get_CV_splits,
@@ -13,8 +14,8 @@ from gpmap.src.utils import (calc_cartesian_product, get_CV_splits,
                              calc_tensor_product_quad, quad,
                              edges_df_to_csr_matrix, read_edges,  write_edges,
                              counts_to_seqs,
-                             calc_tensor_product_dot2, kron_dot)
-from tempfile import NamedTemporaryFile
+                             calc_tensor_product_dot2, kron_dot,
+                             evaluate_predictions)
 
 
 class UtilsTests(unittest.TestCase):
@@ -338,6 +339,28 @@ class UtilsTests(unittest.TestCase):
         
         assert(i == nfolds - 1)
     
+    def test_evaluate_predictions(self):
+        seqs = ['AGG', 'ATG', 'AGG']
+        test_pred_sets = [(1, pd.DataFrame({'ypred': [1.05]}, index=[seqs[0]])),
+                          (2, pd.DataFrame({'ypred': [2]}, index=[seqs[1]])),
+                          (3, pd.DataFrame({'ypred': [1.1, 2.2]}, index=seqs[:2]))]
+
+        # Without experimental variance
+        data = pd.DataFrame({'y': [1, 2, 1.1], 'seq': seqs}).set_index('seq')        
+        df = evaluate_predictions(test_pred_sets, data)
+        assert(np.all(df.columns == ['label', 'mse', 'r2']))
+        assert(np.allclose(df['mse'].values, [0.0025, 0, 0.05 / 3]))
+        assert(np.all(np.isnan(df['r2'].values[:2])))
+        assert(np.allclose(df['r2'].values[2], 0.991758))
+        
+        # With known variance
+        data = pd.DataFrame({'y': [1, 2, 1.1],
+                             'y_var': [0.1, 0.2, 0.1],
+                             'seq': seqs}).set_index('seq')        
+        df = evaluate_predictions(test_pred_sets, data)
+        assert(np.allclose(df['loglikelihood'].values,
+                           [0.219854, -0.114220, 0.066829]))
+
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'UtilsTests']
