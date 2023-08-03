@@ -17,7 +17,6 @@ High priority
 - Clean warnings and prints from running tests
 - Remove tests dependencies on data outside the datasets. Use simulations
 - Change ascending argument name in plot_visualization. not very intuitive
-- fix problems in r2 calculations for r2 curves
 - Fix plot tests
 - Change a parametrization to sigma or variance
 - Write about the P-epistatic coefficients in the documentation and its distribution.
