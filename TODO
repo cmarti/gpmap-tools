@@ -23,7 +23,6 @@ High priority
 - Change a parametrization to sigma or variance
 - Write about the P-epistatic coefficients in the documentation and its distribution.
 - Review and update binaries with latests features
-- Create new module to separate linalg functions from utils
 - Clean up count based functions
 
 Mid priority
