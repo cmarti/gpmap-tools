@@ -16,12 +16,15 @@ High priority
 - Merge with master branch and release new stable version to pypi
 - Clean warnings and prints from running tests
 - Remove tests dependencies on data outside the datasets. Use simulations
-<<<<<<< HEAD
 - Change ascending argument name in plot_visualization. not very intuitive
-=======
 - rename WMWS to WM Walk
 - fix problems in r2 calculations for r2 curves
->>>>>>> 428a88513f102fe1c11cf5caae39f1a3bd78e9be
+- Fix plot tests
+- Change a parametrization to sigma or variance
+- Write about the P-epistatic coefficients in the documentation and its distribution.
+- Review and update binaries with latests features
+- Create new module to separate linalg functions from utils
+- Clean up count based functions
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
