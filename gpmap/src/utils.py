@@ -6,6 +6,8 @@ import pandas as pd
 
 from os import listdir
 from os.path import join, dirname, abspath
+from tqdm import tqdm
+
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.extract import triu
 from scipy.sparse._matrix_io import load_npz, save_npz
@@ -325,12 +327,12 @@ def read_split_data(prefix, suffix=None, in_format='csv'):
 def evaluate_predictions(test_pred_sets, data,
                          ypred_col='ypred', y_col='y', y_var_col='y_var'):
     results = []
-    for label, test_pred in test_pred_sets:
+    for label, test_pred in tqdm(test_pred_sets):
         df = data.join(test_pred).dropna()
 
         y = df[y_col].values
         ypred = df[ypred_col].values
-        record = {'label': label,
+        record = {'label': label, 'n': ypred.shape[0],
                   'mse': np.mean((y - ypred)**2)}
         
         if df.shape[0] > 1 and np.unique(ypred).shape[0] > 1 and np.unique(y).shape[0] > 1:

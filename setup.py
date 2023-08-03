@@ -30,7 +30,7 @@ def main():
                 'fit_SeqDEFT = bin.fit_seqdeft:main',
                 'vc_regression = bin.vc_regression:main',
                 'split_data = bin.split_data:main',
-                'calc_split_data_r2 = bin.calc_split_data_r2:main',
+                'evaluate_split_fits = bin.evaluate_split_fits:main',
                 'calc_visualization = bin.calc_visualization:main',
                 'calc_tpt = bin.calc_tpt:main',
                 'plot_visualization = bin.plot_visualization:main',
