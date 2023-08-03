@@ -222,55 +222,25 @@ def write_edges(edges, fpath, triangular=True):
         write_dataframe(edges, fpath)
 
 
-
-def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
+def get_CV_splits(X, y, y_var=None, nfolds=10, max_pred=None):
     msg = 'X and y must have the same size'
     check_error(X.shape[0] == y.shape[0], msg=msg)
     
-    if count_data:
-        check_error(y_var is None,
-                    msg='variance in estimation not allowed for count data')
-        if y.dtype == int:
-            msg = 'Number of observations must be >= nfolds'
-            check_error(y.sum() >= nfolds, msg=msg)
-            
-            seqs = counts_to_seqs(X, y)
-            shuffle(seqs, n=3)
-            n_test = seqs.shape[0] // nfolds
-            
-            for j in range(nfolds):
-                i = j * n_test
-                test = seqs_to_counts(seqs[i:i+n_test])
-                train = seqs_to_counts(np.append(seqs[:i], seqs[i+n_test:]))
-                yield(j, train, test)
-        elif y.dtype == float:
-            idx = y > 0
-            X_new, y_new = X[idx], y[idx] 
-            foldsw = np.array([w * np.random.dirichlet([w / nfolds] * nfolds)
-                               for i, w in enumerate(y_new)])
-            for j in range(nfolds):
-                test = foldsw[:, j]
-                train = y_new - test
-                yield(j, (X_new, train), (X_new, test))
-        else:
-            msg = 'Unrecognized data type: {}'.format(y.dtype)
-            raise ValueError(msg)
-    else:
-        msg = 'Number of observations must be >= nfolds'
-        check_error(X.shape[0] >= nfolds, msg=msg)
-        
-        data = (X, y, y_var)
-        n_obs = X.shape[0]
-        order = np.arange(n_obs)
-        shuffle(order, n=3)
-        n_test = np.round(n_obs / nfolds).astype(int)
-        
-        for j in range(nfolds):
-            i = j * n_test
-            test_data = get_data_subset(data, order[i:i+n_test])
-            train_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
-            test_data = subsample_data(test_data, n=max_pred)
-            yield(j, train_data, test_data)
+    msg = 'Number of observations must be >= nfolds'
+    check_error(X.shape[0] >= nfolds, msg=msg)
+    
+    data = (X, y, y_var)
+    n_obs = X.shape[0]
+    order = np.arange(n_obs)
+    shuffle(order, n=3)
+    n_test = np.round(n_obs / nfolds).astype(int)
+    
+    for j in range(nfolds):
+        i = j * n_test
+        test_data = get_data_subset(data, order[i:i+n_test])
+        train_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
+        test_data = subsample_data(test_data, n=max_pred)
+        yield(j, train_data, test_data)
 
 
 def data_to_df(data):

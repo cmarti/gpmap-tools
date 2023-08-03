@@ -24,7 +24,6 @@ class LandscapeEstimator(object):
     def __init__(self, expand_alphabet=True, max_L_size=None):
         self.expand_alphabet = expand_alphabet
         self.max_L_size = max_L_size
-        self.count_data = False
     
     def get_regularization_constants(self):
         return(10**(np.linspace(self.min_log_reg, self.max_log_reg, self.num_reg)))
@@ -32,8 +31,7 @@ class LandscapeEstimator(object):
     def get_cv_iter(self, hyperparam_values):
         for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
                                                      y_var=self.y_var,
-                                                     nfolds=self.nfolds,
-                                                     count_data=self.count_data):
+                                                     nfolds=self.nfolds):
             for param in hyperparam_values:
                 yield(param, fold, train, validation)
     

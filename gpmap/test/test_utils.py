@@ -78,7 +78,6 @@ class UtilsTests(unittest.TestCase):
     
     def test_get_CV_splits(self):
         np.random.seed(0)
-        nfolds = 3 
         X = np.array(['A', 'B', 'C'])
         y = np.array([1, 2, 2])
         
@@ -90,81 +89,6 @@ class UtilsTests(unittest.TestCase):
             assert(x_test.shape[0] == 1)
             assert(y_test.shape[0] == 1)
              
-        # Test with integer counts
-        splits = list(get_CV_splits(X, y, nfolds=nfolds, count_data=True))
-        assert(len(splits) == nfolds)
-        for _, (x_train, y_train), (x_test, y_test) in splits:
-            # Test total numbers are preserved
-            assert(y_train.sum() + y_test.sum() == y.sum())
-             
-            # Test exact counts match total data
-            counts = {seq: c for seq, c in zip(x_train, y_train)}
-            for seq, c in zip(x_test, y_test):
-                try:
-                    counts[seq] += c
-                except KeyError:
-                    counts[seq] = c
-             
-            for seq, c in zip(X, y):
-                assert(c == counts[seq])
-                 
-        try:
-            splits = list(get_CV_splits(X, y, nfolds=10, count_data=True))
-            self.fail()
-        except ValueError:
-            pass
-    
-        # Test with re-weighted counts
-        X = np.array(['A', 'B', 'C', 'D'])
-        y = np.array([1, 2, 1.5, 0])
-        splits = list(get_CV_splits(X, y, nfolds=nfolds, count_data=True))
-        assert(len(splits) == nfolds)
-        for _, (x_train, y_train), (x_test, y_test) in splits:
-            # Test total numbers are preserved
-            assert(y_train.sum() + y_test.sum() == y.sum())
-            
-            # Test exact counts match total data
-            counts = {seq: c for seq, c in zip(x_train, y_train)}
-            for seq, c in zip(x_test, y_test):
-                try:
-                    counts[seq] += c
-                except KeyError:
-                    counts[seq] = c
-            
-            for seq, c in zip(X, y):
-                assert(c == counts.get(seq, 0))
-    
-    def test_get_CV_splits_big_dataset(self):
-        nfolds = 7
-        data = pd.read_csv(join(TEST_DATA_DIR, 'seqdeft_counts.csv'),
-                           index_col=0)
-        X, y = data.index.values, data.iloc[:, 0].values
-        splits = get_CV_splits(X, y, nfolds=nfolds, count_data=True)
-        test_counts = {}
-        for i, (x_train, y_train), (x_test, y_test) in splits:
-            assert(y_train.sum() + y_test.sum() == y.sum())
-            
-            counts = {seq: c for seq, c in zip(x_train, y_train)}
-            for seq, c in zip(x_test, y_test):
-                try:
-                    counts[seq] += c
-                except KeyError:
-                    counts[seq] = c
-                    
-                try:
-                    test_counts[seq] += c
-                except KeyError:
-                    test_counts[seq] = c
-            
-            # Test that each split has all the data
-            for seq, c in zip(X, y):
-                if seq in counts:
-                    assert(c == counts[seq])
-                else:
-                    assert(c == 0)
-        
-        assert(i == nfolds - 1)
-    
     def test_get_training_p_splits(self):
         config = pd.DataFrame({'id': [0, 1], 'p': [0.5, 1], 'rep': [1, 1]})
         
