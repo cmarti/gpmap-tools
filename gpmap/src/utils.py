@@ -392,35 +392,41 @@ def generate_p_training_config(n_ps=10, nreps=3):
     return(data)
 
 
-def sample_training_p_data(X, y, p, y_var=None, count_data=False, max_pred=None):
+def sample_training_p_data(X, y, p, y_var=None, max_pred=None):
     msg = 'X and y must have the same size'
     check_error(X.shape[0] == y.shape[0], msg=msg)
     
-    if count_data:
-        check_error(y_var is None,
-                    msg='variance in estimation not allowed for count data')
-        seqs = counts_to_seqs(X, y)
-        u = np.random.uniform(size=seqs.shape[0]) < p
-        test = np.unique(seqs[~u], return_counts=True)
-        train = np.unique(seqs[u], return_counts=True)
-        return(train, test)
+    data = (X, y, y_var)
+    u = np.random.uniform(size=X.shape[0]) < p
+    train_data = get_data_subset(data, u)
+    test_data = get_data_subset(data, ~u)
+    test_data = subsample_data(test_data, max_pred=max_pred)
+    return(train_data, test_data)
+
+
+def get_training_p_splits(config, X, y, y_var=None, max_pred=None,
+                          fixed_test=False):
+    msg = 'X and y must have the same size'
+    check_error(X.shape[0] == y.shape[0], msg=msg)
+    data = (X, y, y_var)
     
-    else:
-        data = (X, y, y_var)
-        u = np.random.uniform(size=X.shape[0]) < p
-        train_data = get_data_subset(data, u)
-        test_data = get_data_subset(data, ~u)
-        test_data = subsample_data(test_data, max_pred=max_pred)
-        return(train_data, test_data)
-
-
-def get_training_p_splits(config, X, y, y_var=None, count_data=False,
-                          max_pred=None):
-    for i, p in zip(config['id'], config['p']):
-        train, test = sample_training_p_data(X, y, p, y_var=y_var,
-                                             count_data=count_data,
-                                             max_pred=max_pred)
-        yield(i, train, test)
+    for rep, c in config.groupby(['rep']):
+        
+        
+        if fixed_test:
+            msg = 'max_pred must be provided for fixed test'
+            check_error(max_pred is not None, msg=msg)
+            
+            test_data = subsample_data(data, max_pred=max_pred)
+            training = get_data_subset(data, ~np.isin(X, test_data[0]))
+        
+            for i, p in zip(c['id'], c['p']):
+                u = np.random.uniform(size=X.shape[0]) < p
+                train_data = get_data_subset(data, u)
+                
+                
+                test_data = subsample_data(test_data, max_pred=max_pred)
+                yield(i, train, test)
 
 
 def write_seqs(seqs, fpath):
@@ -588,8 +594,8 @@ def read_split_data(prefix, suffix=None, in_format='csv'):
             yield(label, test_pred)
 
 
-def evaluate_predictions(test_pred_sets, data, ypred_col='ypred', y_col='y',
-                         y_var_col='y_var'):
+def evaluate_predictions(test_pred_sets, data,
+                         ypred_col='ypred', y_col='y', y_var_col='y_var'):
     results = []
     for label, test_pred in test_pred_sets:
         df = data.join(test_pred).dropna()
