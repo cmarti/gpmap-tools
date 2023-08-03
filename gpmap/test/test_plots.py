@@ -2,13 +2,17 @@
 import unittest
 import sys
 
-from os.path import join
-from subprocess import check_call
-
 import numpy as np
 import pandas as pd
 
+from os.path import join
+from subprocess import check_call
+from tempfile import NamedTemporaryFile
+
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
+from gpmap.src.genotypes import select_genotypes
+from gpmap.src.randwalk import WMWalk
+from gpmap.src.space import CodonSpace
 from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             figure_allele_grid_datashader, plot_nodes,
                             plot_edges, savefig, init_fig, figure_visualization,
@@ -16,11 +20,7 @@ from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
                             plot_relaxation_times, plot_interactive,
                             figure_Ns_grid, plot_SeqDEFT_summary,
                             plot_hyperparam_cv, figure_axis_grid,
-    plot_genotypes_box)
-from gpmap.src.genotypes import select_genotypes
-from gpmap.src.randwalk import WMWalk
-from gpmap.src.space import CodonSpace
-from tempfile import NamedTemporaryFile
+                            plot_genotypes_box)
         
 
 class PlottingTests(unittest.TestCase):

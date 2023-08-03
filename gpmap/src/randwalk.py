@@ -11,8 +11,9 @@ from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
 from gpmap.src.settings import DNA_ALPHABET
-from gpmap.src.utils import (get_sparse_diag_matrix, check_error, write_log,
-                             calc_cartesian_product, calc_tensor_product)
+from gpmap.src.utils import check_error, write_log
+from gpmap.src.matrix import (get_sparse_diag_matrix, calc_cartesian_product,
+                              calc_tensor_product)
 
 
 class RandomWalk(object):

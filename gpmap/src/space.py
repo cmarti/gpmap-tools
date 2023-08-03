@@ -13,7 +13,8 @@ from jellyfish import hamming_distance
 from gpmap.src.seq import (translate_seqs, guess_space_configuration,
                            guess_alphabet_type, get_seqs_from_alleles,
                            get_product_states)
-from gpmap.src.utils import check_error, calc_cartesian_product, write_edges
+from gpmap.src.utils import check_error, write_edges
+from gpmap.src.matrix import calc_cartesian_product
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)

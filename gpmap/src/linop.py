@@ -10,11 +10,12 @@ from scipy.special._basic import comb
 from scipy.sparse.linalg.isolve import minres
 from scipy.sparse.linalg.interface import LinearOperator
 
-from gpmap.src.utils import (calc_cartesian_product, check_error,
-                             calc_matrix_polynomial_dot, calc_tensor_product,
-                             calc_cartesian_product_dot,
-                             calc_tensor_product_dot, calc_tensor_product_quad, 
-                             get_sparse_diag_matrix, inner_product, kron_dot)
+from gpmap.src.utils import check_error
+from gpmap.src.matrix import (calc_cartesian_product,
+                              calc_matrix_polynomial_dot, calc_tensor_product,
+                              calc_cartesian_product_dot,
+                              calc_tensor_product_dot, calc_tensor_product_quad, 
+                              get_sparse_diag_matrix, inner_product, kron_dot)
 
 
 class SeqLinOperator(LinearOperator):

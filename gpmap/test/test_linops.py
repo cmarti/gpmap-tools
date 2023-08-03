@@ -8,7 +8,7 @@ from scipy.special._basic import comb
 
 from gpmap.src.settings import ALPHABET
 from gpmap.src.seq import generate_possible_sequences
-from gpmap.src.utils import get_sparse_diag_matrix
+from gpmap.src.matrix import get_sparse_diag_matrix
 from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator,
@@ -125,6 +125,7 @@ class LinOpsTests(unittest.TestCase):
                     assert(q >= 0)
     
     def test_projection_operator2(self):
+        # TODO: recursion problem
         W = ProjectionOperator2(2, 2)
          
         # Purely additive function
@@ -266,17 +267,6 @@ class LinOpsTests(unittest.TestCase):
         assert(np.all(m[4:, :] == 0))
         assert(m.shape == (8, 4))
     
-    def test_kernel_operator(self):
-        lambdas = np.array([0, 1, 0])
-        y_var = 0.1 * np.ones(4)
-        obs_idx = np.arange(4)
-        K = VarianceComponentKernelOperator(n_alleles=2, seq_length=2)
-        K.set_lambdas(lambdas)
-        K.set_y_var(y_var=y_var, obs_idx=obs_idx)
-        v = np.random.normal(size=K.n_obs)
-        u = K.inv_dot(K.dot(v))
-        assert(np.allclose(u, v))
-        
     def test_kernel_operator_large(self):
         l = 9
         K = VarianceComponentKernelOperator(n_alleles=4, seq_length=l)

@@ -9,7 +9,7 @@ from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
                            guess_space_configuration, get_custom_codon_table,
                            get_seqs_from_alleles, get_one_hot_from_alleles,
                            generate_freq_reduced_code, transcribe_seqs,
-    msa_to_counts)
+                           msa_to_counts)
 
 
 class SeqTests(unittest.TestCase):

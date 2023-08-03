@@ -13,7 +13,8 @@ from Bio.Data.CodonTable import CodonTable
 from jellyfish._rustyfish import hamming_distance
 
 from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT, ALPHABETS, ALPHABET
-from gpmap.src.utils import check_error, get_sparse_diag_matrix
+from gpmap.src.utils import check_error
+from gpmap.src.matrix import get_sparse_diag_matrix
 from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
 
 

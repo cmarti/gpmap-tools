@@ -3,13 +3,10 @@ import time
 from time import ctime
 import numpy as np
 import pandas as pd
-import scipy.sparse as sp
 
 from os import listdir
 from os.path import join, dirname, abspath
-from itertools import product
 from scipy.sparse.csr import csr_matrix
-from scipy.sparse.dia import dia_matrix
 from scipy.sparse.extract import triu
 from scipy.sparse._matrix_io import load_npz, save_npz
 from scipy.sparse.coo import coo_matrix
@@ -22,37 +19,12 @@ def check_error(condition, msg, error_type=ValueError):
         raise error_type(msg)
 
 
-def check_symmetric(sparse_matrix, tol=1e-6):
-    e = abs(sparse_matrix - sparse_matrix.T)
-    if not (e > tol).nnz == 0:
-        raise ValueError('Re-scaled rate matrix is not symmetric: (A - A.T).max() = {:.2}'.format(e.max()))
-
-
-def get_sparse_diag_matrix(values):
-    n_genotypes = values.shape[0]
-    m = dia_matrix((values, np.array([0])), shape=(n_genotypes, n_genotypes))
-    return(m)
-
-
 def get_length(x):
     try:
         length = x.shape[0]
     except AttributeError:
         length = len(x)
     return(length)
-
-
-def inner_product(x1, x2, metric=None):
-    if metric is None:
-        return(x1.dot(x2.T))
-    else:
-        return(x1.dot(metric.dot(x2.T)))
-
-
-def quad(matrix, v1, v2=None):
-    if v2 is None:
-        v2 = v1
-    return(np.sum(matrix.dot(v1) * v2))
 
 
 class LogTrack(object):
@@ -80,216 +52,6 @@ class LogTrack(object):
 def write_log(log, msg):
     if log is not None:
         log.write(msg)
-
-
-def check_eigendecomposition(matrix, eigenvalues, right_eigenvectors, tol=1e-3):
-    abs_error = np.abs(matrix.sum(1))
-    n_error = np.sum(abs_error > 1)
-    mean_abs_err = np.mean(abs_error)
-    msg = 'Numeric error in matrix: rows do not add to 0. (Mean error = '
-    msg += '{:2f}. number of non zero entries in Au: {})'.format(abs_error.mean(), n_error)
-    check_error(mean_abs_err <= tol, msg)
-    
-    u = np.abs(right_eigenvectors[:, 0])   
-    abs_error = np.abs(u - 1)
-    n_error = np.sum(abs_error > 1)
-    mean_abs_err = np.mean(abs_error)
-    msg = 'Numeric error in eigendecomposition: abs error = {:.5f} > {:.5f}'
-    msg += ' in the {}th component ({} sequences > 1)'.format(0, n_error)
-    check_error(mean_abs_err <= tol, msg.format(mean_abs_err, tol))
-    
-    for i, (l, u) in enumerate(zip(eigenvalues[1:], right_eigenvectors.T[1:])):
-        v1 = matrix.dot(u)
-        v2 = l * u
-        abs_error = np.abs(v1 - v2)
-        n_error = np.sum(abs_error > 1)
-        mean_abs_err = np.mean(abs_error)
-        msg = 'Numeric error in eigendecomposition: abs error = {:.5f} > {:.5f}'
-        msg += ' in the {}th component ({} sequences > 1)'.format(i, n_error)
-        check_error(mean_abs_err <= tol, msg.format(mean_abs_err, tol))
-
-
-def calc_Kn_matrix(k=None, p=None):
-    msg = 'One and only one of "k" or "p" must be provided'
-    check_error((k is None) ^ (p is None), msg=msg)
-    
-    if p is not None:
-        k = p.shape[0]
-        m = np.vstack([p] * k)
-    else:
-        m = np.ones((k, k))
-
-    np.fill_diagonal(m, np.zeros(k))
-    return(csr_matrix(m))
-
-
-def stack_prod_matrices(m_diag, m_offdiag, a):
-    rows = []
-    for j in range(a):
-        row = [m_offdiag] * j + [m_diag] + [m_offdiag] * (a - j - 1)
-        rows.append(sp.hstack(row)) 
-    m = sp.vstack(rows)
-    return(m)
-
-
-def calc_cartesian_product(matrices):
-    if len(matrices) == 0:
-        return(None)
-    
-    if len(matrices) == 1:
-        return(matrices[0])
-    
-    m1, m2 = matrices[0], calc_cartesian_product(matrices[1:])
-    i = sp.identity(m2.shape[0], dtype=m1.dtype)
-    
-    rows = []
-    for j in range(m1.shape[0]): 
-        row = [m2 if k == j else m1[j, k] * i for k in range(m1.shape[1])]
-        rows.append(sp.hstack(row)) 
-    m = sp.vstack(rows)
-    return(m)
-
-
-def calc_cartesian_product_dot(matrices, v):
-    if len(matrices) == 1:
-        return(matrices[0].dot(v))
-    a = matrices[0].shape[0]
-    s = np.prod([m.shape[0] for m in matrices]) // a
-    vs = [v[s*j:s*(j+1)] for j in range(a)]
-    
-    u = np.zeros(v.shape[0])
-    for col in range(a):
-        u_i = np.hstack([calc_cartesian_product_dot(matrices[1:], vs[col])
-                        if k == col else vs[col]
-                        for k in range(a)]) 
-        u += u_i
-    return(u)
-
-
-def calc_tensor_product(matrices):
-    if len(matrices) == 1:
-        return(matrices[0])
-    
-    m1, m2 = matrices[0], calc_tensor_product(matrices[1:])
-    rows = []
-    for j in range(m1.shape[0]):
-        row = [m2 * m1[j, k] for k in range(m1.shape[1])]
-        if len(row) > 1:
-            rows.append(np.hstack(row))
-        else: 
-            rows.append(row[0])
-    m = np.vstack(rows)
-    return(m)
-
-
-def calc_tensor_product_dot(matrices, v):
-    d1 = np.prod([m.shape[0] for m in matrices])
-    check_error(d1 == v.shape[0], 'Dimension missmatch between matrix and vector')
-    
-    if len(matrices) == 1:
-        return(matrices[0].dot(v))
-    
-    a = matrices[0].shape[0]
-    s = v.shape[0] // a
-    m = matrices[0]
-    vs = [v[s*j:s*(j+1)] for j in range(a)]
-    us = [calc_tensor_product_dot(matrices[1:], v_i) for v_i in vs]
-    
-    u = np.zeros(v.shape[0])
-    for col in range(a):
-        u_i = np.hstack([m[k, col] * us[col] for k in range(a)]) 
-        u += u_i
-    return(u)
-
-
-def calc_tensor_product_dot2(m1, m2, v):
-    m = v.reshape((m1.shape[1], m2.shape[1])).T
-    return(m1.dot(m2.dot(m).T).reshape(v.shape))
-
-def kron_dot(matrices, v):
-    shape = tuple([m_i.shape[1] for m_i in matrices])
-    if np.prod(shape) != v.shape[0]:
-        msg = 'Incorrect dimensions of matrices and `v`'
-        raise ValueError(msg)
-    
-    m = v.reshape(shape)
-    
-    for i, m_i in enumerate(matrices):
-        axes = np.arange(len(shape))
-        axes[[i, 0]] = np.array([0, i])
-        new_shape = (m_i.shape[0], int(v.shape[0] / m_i.shape[0]))
-        m = np.transpose(m_i.dot(np.transpose(m, axes=axes).reshape(new_shape)).reshape(shape), axes=axes)
-    
-    return(m.reshape(v.shape))
-
-
-def calc_tensor_product_quad(matrices, v1, v2=None):
-    if v2 is None:
-        v2 = v1.copy()
-    
-    if len(matrices) == 1:
-        return(quad(matrices[0], v1, v2))
-    
-    a = matrices[0].shape[0]
-    s = v1.shape[0] // a
-    m = matrices[0]
-    v1s = [v1[s*j:s*(j+1)] for j in range(a)]
-    v2s = [v2[s*j:s*(j+1)] for j in range(a)]
-
-    ss = np.sum([m[row, col] * calc_tensor_product_quad(matrices[1:], v1s[row], v2s[col])
-                 for row, col in product(np.arange(a), repeat=2)])
-    return(ss)
-
-
-def reciprocal(x, y):
-    """calculate reciprocal of variable, if variable=0, return 0"""
-    if y == 0:
-        return 0
-    else:
-        return x / y
-
-
-def Frob(lambdas, M, a):
-    """calculate the cost function given lambdas and a"""
-    Frob1 = np.dot(lambdas, M).dot(lambdas)
-    Frob2 = 2 * np.sum(lambdas * a)
-    return Frob1 - Frob2
-
-
-def grad_Frob(lambdas, M, a):
-    """gradient of the function Frob(lambdas, M, a)"""
-    grad_Frob1 = 2 * M.dot(lambdas)
-    grad_Frob2 = 2 * a
-    return grad_Frob1 - grad_Frob2
-
-
-def calc_matrix_polynomial_dot(coefficients, matrix, v):
-    power = v
-    polynomial = coefficients[0] * v
-    
-    for c in coefficients[1:]:
-        
-        if c == 0:
-            continue
-        
-        power = matrix.dot(power)
-        polynomial += c * power
-    
-    return(polynomial)
-
-
-def calc_matrix_polynomial_quad(coefficients, matrix, v):
-    Av = calc_matrix_polynomial_dot(coefficients, matrix, v)
-    return(np.sum(v * Av))
-
-
-def calc_cartesian_prod_freqs(site_freqs):
-    if get_length(site_freqs) == 1:
-            return(site_freqs[0])
-    site1 = site_freqs[0]
-    site2 = calc_cartesian_prod_freqs(site_freqs[1:])
-    freqs = np.hstack([f * site2 for f in site1])
-    return(freqs)
 
 
 def counts_to_seqs(X, y):
@@ -321,107 +83,6 @@ def subsample_data(data, n=None):
 def shuffle(x, n=1):
     for _ in range(n):
         np.random.shuffle(x)
-
-
-def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
-    msg = 'X and y must have the same size'
-    check_error(X.shape[0] == y.shape[0], msg=msg)
-    
-    if count_data:
-        check_error(y_var is None,
-                    msg='variance in estimation not allowed for count data')
-        if y.dtype == int:
-            msg = 'Number of observations must be >= nfolds'
-            check_error(y.sum() >= nfolds, msg=msg)
-            
-            seqs = counts_to_seqs(X, y)
-            shuffle(seqs, n=3)
-            n_test = seqs.shape[0] // nfolds
-            
-            for j in range(nfolds):
-                i = j * n_test
-                test = seqs_to_counts(seqs[i:i+n_test])
-                train = seqs_to_counts(np.append(seqs[:i], seqs[i+n_test:]))
-                yield(j, train, test)
-        elif y.dtype == float:
-            idx = y > 0
-            X_new, y_new = X[idx], y[idx] 
-            foldsw = np.array([w * np.random.dirichlet([w / nfolds] * nfolds)
-                               for i, w in enumerate(y_new)])
-            for j in range(nfolds):
-                test = foldsw[:, j]
-                train = y_new - test
-                yield(j, (X_new, train), (X_new, test))
-        else:
-            msg = 'Unrecognized data type: {}'.format(y.dtype)
-            raise ValueError(msg)
-    else:
-        msg = 'Number of observations must be >= nfolds'
-        check_error(X.shape[0] >= nfolds, msg=msg)
-        
-        data = (X, y, y_var)
-        n_obs = X.shape[0]
-        order = np.arange(n_obs)
-        shuffle(order, n=3)
-        n_test = np.round(n_obs / nfolds).astype(int)
-        
-        for j in range(nfolds):
-            i = j * n_test
-            test_data = get_data_subset(data, order[i:i+n_test])
-            train_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
-            test_data = subsample_data(test_data, n=max_pred)
-            yield(j, train_data, test_data)
-
-
-def data_to_df(data):
-    x, y = data[:2]
-
-    df = {'y': y}
-    if len(data) > 2 and data[2] is not None:
-        df['y_var'] = data[2]
-    
-    df = pd.DataFrame(df, index=x)
-    return(df)
-
-
-def generate_p_training_config(n_ps=10, nreps=3):
-    ps = np.hstack([np.linspace(0.05, 0.95, n_ps)] * nreps)
-    i = np.arange(ps.shape[0])
-    rep = np.hstack([j * np.ones(n_ps) for j in range(nreps)])
-    data = pd.DataFrame({'id': i, 'p': ps, 'rep': rep})
-    return(data)
-
-
-def get_training_p_splits(config, X, y, y_var=None, max_pred=None,
-                          fixed_test=False):
-    msg = 'X and y must have the same size'
-    check_error(X.shape[0] == y.shape[0], msg=msg)
-    data = (X, y, y_var)
-    total = X.shape[0]
-    
-    for _, c in config.groupby(['rep']):
-        
-        if fixed_test:
-            msg = 'max_pred must be provided for fixed test'
-            check_error(max_pred is not None, msg=msg)
-            
-            test_data = subsample_data(data, n=max_pred)
-            training = get_data_subset(data, ~np.isin(X, test_data[0]))
-            training_n = training[0].shape[0]
-        
-            for i, p in zip(c['id'], c['p']):
-                p = p * total / training_n  
-                u = np.random.uniform(size=X.shape[0]) < p
-                train_data = get_data_subset(data, u)
-                yield(i, train_data, test_data)
-        else:
-            
-            for i, p in zip(c['id'], c['p']):
-                u = np.random.uniform(size=total) < p
-                train_data = get_data_subset(data, u)
-                test_data = get_data_subset(data, ~u)
-                test_data = subsample_data(test_data, n=max_pred)
-                yield(i, train_data, test_data)
 
 
 def write_seqs(seqs, fpath):
@@ -559,6 +220,108 @@ def write_edges(edges, fpath, triangular=True):
         save_npz(fpath, edges)
     else:
         write_dataframe(edges, fpath)
+
+
+
+def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
+    msg = 'X and y must have the same size'
+    check_error(X.shape[0] == y.shape[0], msg=msg)
+    
+    if count_data:
+        check_error(y_var is None,
+                    msg='variance in estimation not allowed for count data')
+        if y.dtype == int:
+            msg = 'Number of observations must be >= nfolds'
+            check_error(y.sum() >= nfolds, msg=msg)
+            
+            seqs = counts_to_seqs(X, y)
+            shuffle(seqs, n=3)
+            n_test = seqs.shape[0] // nfolds
+            
+            for j in range(nfolds):
+                i = j * n_test
+                test = seqs_to_counts(seqs[i:i+n_test])
+                train = seqs_to_counts(np.append(seqs[:i], seqs[i+n_test:]))
+                yield(j, train, test)
+        elif y.dtype == float:
+            idx = y > 0
+            X_new, y_new = X[idx], y[idx] 
+            foldsw = np.array([w * np.random.dirichlet([w / nfolds] * nfolds)
+                               for i, w in enumerate(y_new)])
+            for j in range(nfolds):
+                test = foldsw[:, j]
+                train = y_new - test
+                yield(j, (X_new, train), (X_new, test))
+        else:
+            msg = 'Unrecognized data type: {}'.format(y.dtype)
+            raise ValueError(msg)
+    else:
+        msg = 'Number of observations must be >= nfolds'
+        check_error(X.shape[0] >= nfolds, msg=msg)
+        
+        data = (X, y, y_var)
+        n_obs = X.shape[0]
+        order = np.arange(n_obs)
+        shuffle(order, n=3)
+        n_test = np.round(n_obs / nfolds).astype(int)
+        
+        for j in range(nfolds):
+            i = j * n_test
+            test_data = get_data_subset(data, order[i:i+n_test])
+            train_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
+            test_data = subsample_data(test_data, n=max_pred)
+            yield(j, train_data, test_data)
+
+
+def data_to_df(data):
+    x, y = data[:2]
+
+    df = {'y': y}
+    if len(data) > 2 and data[2] is not None:
+        df['y_var'] = data[2]
+    
+    df = pd.DataFrame(df, index=x)
+    return(df)
+
+
+def generate_p_training_config(n_ps=10, nreps=3):
+    ps = np.hstack([np.linspace(0.05, 0.95, n_ps)] * nreps)
+    i = np.arange(ps.shape[0])
+    rep = np.hstack([j * np.ones(n_ps) for j in range(nreps)])
+    data = pd.DataFrame({'id': i, 'p': ps, 'rep': rep})
+    return(data)
+
+
+def get_training_p_splits(config, X, y, y_var=None, max_pred=None,
+                          fixed_test=False):
+    msg = 'X and y must have the same size'
+    check_error(X.shape[0] == y.shape[0], msg=msg)
+    data = (X, y, y_var)
+    total = X.shape[0]
+    
+    for _, c in config.groupby(['rep']):
+        
+        if fixed_test:
+            msg = 'max_pred must be provided for fixed test'
+            check_error(max_pred is not None, msg=msg)
+            
+            test_data = subsample_data(data, n=max_pred)
+            training = get_data_subset(data, ~np.isin(X, test_data[0]))
+            training_n = training[0].shape[0]
+        
+            for i, p in zip(c['id'], c['p']):
+                p = p * total / training_n  
+                u = np.random.uniform(size=X.shape[0]) < p
+                train_data = get_data_subset(data, u)
+                yield(i, train_data, test_data)
+        else:
+            
+            for i, p in zip(c['id'], c['p']):
+                u = np.random.uniform(size=total) < p
+                train_data = get_data_subset(data, u)
+                test_data = get_data_subset(data, ~u)
+                test_data = subsample_data(test_data, n=max_pred)
+                yield(i, train_data, test_data)
 
 
 def write_split_data(out_prefix, splits, out_format='csv'):

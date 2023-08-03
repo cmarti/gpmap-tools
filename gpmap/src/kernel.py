@@ -6,7 +6,8 @@ from scipy.special._logsumexp import logsumexp
 from scipy.optimize._minimize import minimize
 
 from gpmap.src.seq import seq_to_one_hot
-from gpmap.src.utils import check_error, inner_product, quad
+from gpmap.src.utils import check_error
+from gpmap.src.matrix import inner_product, quad
 
 
 class SequenceKernel(object):

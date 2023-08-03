@@ -11,9 +11,8 @@ from scipy.stats.stats import pearsonr
 from scipy.stats._continuous_distns import norm
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
-from gpmap.src.utils import (check_error,
-                             reciprocal, get_CV_splits,
-                             calc_matrix_polynomial_quad)
+from gpmap.src.utils import check_error, get_CV_splits
+from gpmap.src.matrix import reciprocal, calc_matrix_polynomial_quad
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences)
