@@ -21,6 +21,8 @@ High priority
 - Change a parametrization to sigma or variance
 - Write about the P-epistatic coefficients in the documentation and its distribution.
 - Review and update binaries with latests features
+- Try to have a common function to evaluate predictions across subsets of data: evaluating and CV fitting
+
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
