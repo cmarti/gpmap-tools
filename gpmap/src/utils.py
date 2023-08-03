@@ -309,10 +309,10 @@ def get_data_subset(data, idx):
     return(subset)
 
 
-def subsample_data(data, max_pred=None):
+def subsample_data(data, n=None):
     n_test = data[0].shape[0]
-    if max_pred is not None and n_test > max_pred:
-        test_idx = np.random.choice(np.arange(n_test), size=max_pred,
+    if n is not None and n_test > n:
+        test_idx = np.random.choice(np.arange(n_test), size=n,
                                     replace=False)
         data = get_data_subset(data, test_idx)
     return(data)
@@ -369,7 +369,7 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, count_data=False, max_pred=None):
             i = j * n_test
             test_data = get_data_subset(data, order[i:i+n_test])
             train_data = get_data_subset(data, np.append(order[:i], order[i+n_test:]))
-            test_data = subsample_data(test_data, max_pred=max_pred)
+            test_data = subsample_data(test_data, n=max_pred)
             yield(j, train_data, test_data)
 
 
@@ -392,41 +392,36 @@ def generate_p_training_config(n_ps=10, nreps=3):
     return(data)
 
 
-def sample_training_p_data(X, y, p, y_var=None, max_pred=None):
-    msg = 'X and y must have the same size'
-    check_error(X.shape[0] == y.shape[0], msg=msg)
-    
-    data = (X, y, y_var)
-    u = np.random.uniform(size=X.shape[0]) < p
-    train_data = get_data_subset(data, u)
-    test_data = get_data_subset(data, ~u)
-    test_data = subsample_data(test_data, max_pred=max_pred)
-    return(train_data, test_data)
-
-
 def get_training_p_splits(config, X, y, y_var=None, max_pred=None,
                           fixed_test=False):
     msg = 'X and y must have the same size'
     check_error(X.shape[0] == y.shape[0], msg=msg)
     data = (X, y, y_var)
+    total = X.shape[0]
     
-    for rep, c in config.groupby(['rep']):
-        
+    for _, c in config.groupby(['rep']):
         
         if fixed_test:
             msg = 'max_pred must be provided for fixed test'
             check_error(max_pred is not None, msg=msg)
             
-            test_data = subsample_data(data, max_pred=max_pred)
+            test_data = subsample_data(data, n=max_pred)
             training = get_data_subset(data, ~np.isin(X, test_data[0]))
+            training_n = training[0].shape[0]
         
             for i, p in zip(c['id'], c['p']):
+                p = p * total / training_n  
                 u = np.random.uniform(size=X.shape[0]) < p
                 train_data = get_data_subset(data, u)
-                
-                
-                test_data = subsample_data(test_data, max_pred=max_pred)
-                yield(i, train, test)
+                yield(i, train_data, test_data)
+        else:
+            
+            for i, p in zip(c['id'], c['p']):
+                u = np.random.uniform(size=total) < p
+                train_data = get_data_subset(data, u)
+                test_data = get_data_subset(data, ~u)
+                test_data = subsample_data(test_data, n=max_pred)
+                yield(i, train_data, test_data)
 
 
 def write_seqs(seqs, fpath):

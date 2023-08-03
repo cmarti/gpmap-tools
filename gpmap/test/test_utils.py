@@ -15,7 +15,7 @@ from gpmap.src.utils import (calc_cartesian_product, get_CV_splits,
                              edges_df_to_csr_matrix, read_edges,  write_edges,
                              counts_to_seqs,
                              calc_tensor_product_dot2, kron_dot,
-                             evaluate_predictions)
+                             evaluate_predictions, get_training_p_splits)
 
 
 class UtilsTests(unittest.TestCase):
@@ -338,6 +338,40 @@ class UtilsTests(unittest.TestCase):
                     assert(c == 0)
         
         assert(i == nfolds - 1)
+    
+    def test_get_training_p_splits(self):
+        config = pd.DataFrame({'id': [0, 1], 'p': [0.5, 1], 'rep': [1, 1]})
+        
+        X = np.array(['AAG', 'AGG', 'ATG'])
+        y = np.array([0, 1, 0])
+        
+        # Random sampling
+        splits = list(get_training_p_splits(config, X=X, y=y))
+        assert(len(splits) == 2)
+        
+        for _, train, test in splits:
+            seqs = np.sort(np.append(train[0], test[0]))
+            assert(np.all(X == seqs))
+            
+        # Limit amount of test data
+        splits = list(get_training_p_splits(config, X=X, y=y, max_pred=1))
+        for _, train, test in splits:
+            assert(test[0].shape[0] <= 1)
+            
+            seqs = np.append(train[0], test[0])
+            assert(np.all(np.isin(seqs, X)))
+        
+        # Fix test for the same replicate
+        tests = [s[2] for s in get_training_p_splits(config, X=X, y=y, max_pred=1,
+                                                     fixed_test=True)]
+        assert(tests[0] == tests[1])
+        
+        # Capture error in arguments
+        try:
+            splits = list(get_training_p_splits(config, X=X, y=y, fixed_test=True))
+            self.fail()
+        except ValueError:
+            pass
     
     def test_evaluate_predictions(self):
         seqs = ['AGG', 'ATG', 'AGG']
