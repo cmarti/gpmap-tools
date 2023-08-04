@@ -3,10 +3,10 @@ import unittest
 
 import numpy as np
 
+from scipy.special._basic import comb
 from gpmap.src.inference import VCregression
 from gpmap.src.kernel import (VarianceComponentKernel, SequenceKernel,
                               KernelAligner, FullKernelAligner)
-from scipy.special._basic import comb
 
 
 class KernelTest(unittest.TestCase):
