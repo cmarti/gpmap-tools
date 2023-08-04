@@ -19,7 +19,6 @@ High priority
 - Change ascending argument name in plot_visualization. not very intuitive
 - Fix plot tests
 - Change a parametrization to sigma or variance
-- Write about the P-epistatic coefficients in the documentation and its distribution.
 - Review and update binaries with latests features
 - Try to have a common function to evaluate predictions across subsets of data: evaluating and CV fitting
 
