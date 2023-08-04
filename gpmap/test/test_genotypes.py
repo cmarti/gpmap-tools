@@ -5,18 +5,18 @@ import sys
 import numpy as np
 import pandas as pd
 
+from os.path import join
+from subprocess import check_call
+from tempfile import NamedTemporaryFile
 from scipy.sparse.csr import csr_matrix
 
+from gpmap.src.settings import BIN_DIR
+from gpmap.src.utils import write_dataframe, read_dataframe
 from gpmap.src.genotypes import (select_genotypes,
                                  select_d_neighbors, select_genotypes_re,
                                  select_genotypes_ambiguous_seqs,
                                  select_closest_genotypes, select_local_optima,
                                  marginalize_landscape_positions)
-from tempfile import NamedTemporaryFile
-from gpmap.src.utils import write_dataframe, read_dataframe
-from gpmap.src.settings import BIN_DIR
-from os.path import join
-from subprocess import check_call
 
 
 class GenotypeTests(unittest.TestCase):
