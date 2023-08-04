@@ -28,6 +28,24 @@ def get_sparse_diag_matrix(values):
     return(m)
 
 
+def _diag_multiply(d, m, axis):
+    if len(m.shape) == 1:
+        return(d * m)
+    
+    if isinstance(m, csr_matrix):
+        return(m.multiply(np.expand_dims(d, axis=axis)))
+    else:
+        return(np.expand_dims(d, axis=axis) * m)
+
+
+def diag_pre_multiply(d, m):
+    return(_diag_multiply(d, m, axis=1))
+    
+
+def diag_post_multiply(d, m):
+    return(_diag_multiply(d, m, axis=0))
+
+
 def calc_Kn_matrix(k=None, p=None):
     msg = 'One and only one of "k" or "p" must be provided'
     check_error((k is None) ^ (p is None), msg=msg)

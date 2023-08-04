@@ -15,7 +15,7 @@ from gpmap.src.matrix import (calc_cartesian_product,
                               calc_matrix_polynomial_dot, calc_tensor_product,
                               calc_cartesian_product_dot,
                               calc_tensor_product_dot, calc_tensor_product_quad, 
-                              get_sparse_diag_matrix, inner_product, kron_dot)
+                              inner_product, kron_dot, diag_pre_multiply)
 
 
 class SeqLinOperator(LinearOperator):
@@ -340,7 +340,7 @@ class BaseKernelOperator(SeqLinOperator):
             self.known_var = True
             self.homoscedastic = np.unique(y_var).shape[0] == 1
             self.mean_var = y_var.mean()
-            self.y_var_diag = get_sparse_diag_matrix(y_var)
+            self.y_var = y_var
             self.n_obs = obs_idx.shape[0]
             self.calc_gt_to_data_matrix(obs_idx)
             self.shape = (self.n_obs, self.n_obs)
@@ -368,7 +368,7 @@ class BaseKernelOperator(SeqLinOperator):
         else:
             u = self._dot(self.gt2data.dot(v))
             if self.add_y_var_diag:
-                u += self.gt2data.dot(self.y_var_diag.dot(v))
+                u += self.gt2data.dot(diag_pre_multiply(self.y_var, v))
 
         if not self.all_rows and self.known_var:
             u = self.gt2data.T.dot(u)
@@ -554,8 +554,8 @@ class SkewedVjProjectionOperator(LapDepOperator):
 class SkewedKernelOperator(SeqLinOperator):
     def __init__(self, W):
         self.W = W
-        self.D_sqrt_pi_inv = get_sparse_diag_matrix(1 / np.sqrt(W.L.pi))
-        self.D_pi_inv = get_sparse_diag_matrix(1 / W.L.pi)
+        self.sqrt_pi_inv = 1 / np.sqrt(W.L.pi)
+        self.pi_inv = 1 / W.L.pi
         self.n = W.n
         self.shape = (self.n, self.n)
         self.known_var = False
@@ -569,7 +569,7 @@ class SkewedKernelOperator(SeqLinOperator):
             self.known_var = True
             self.homoscedastic = np.unique(y_var).shape[0] == 1
             self.mean_var = y_var.mean()
-            self.y_var_diag = get_sparse_diag_matrix(y_var)
+            self.y_var = y_var
             self.n_obs = obs_idx.shape[0]
             self.calc_gt_to_data_matrix(obs_idx)
             self.shape = (self.n_obs, self.n_obs)
@@ -605,7 +605,7 @@ class SkewedKernelOperator(SeqLinOperator):
         else:
             u = self._dot(self.gt2data.dot(v))
             if add_y_var_diag:
-                u += self.gt2data.dot(self.y_var_diag.dot(v))
+                u += self.gt2data.dot(diag_pre_multiply(self.y_var, v))
 
         if not all_rows and self.known_var:
             u = self.gt2data.T.dot(u)
