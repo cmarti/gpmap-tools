@@ -22,7 +22,6 @@ def quad(matrix, v1, v2=None):
 
 
 def get_sparse_diag_matrix(values):
-    # TODO: maybe implement diag_pre and post multiply using np.expand
     n_genotypes = values.shape[0]
     m = dia_matrix((values, np.array([0])), shape=(n_genotypes, n_genotypes))
     return(m)
@@ -31,9 +30,6 @@ def get_sparse_diag_matrix(values):
 def _diag_multiply(d, m, axis):
     if len(m.shape) == 1:
         return(d * m)
-    
-    if isinstance(m, csr_matrix):
-        return(m.multiply(np.expand_dims(d, axis=axis)))
     else:
         return(np.expand_dims(d, axis=axis) * m)
 

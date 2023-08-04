@@ -3,7 +3,6 @@ import unittest
 
 import numpy as np
 
-from scipy.sparse.csr import csr_matrix
 from gpmap.src.matrix import (calc_cartesian_product, calc_tensor_product,
                               calc_cartesian_product_dot, calc_tensor_product_dot,
                               calc_tensor_product_quad, quad,
@@ -24,9 +23,6 @@ class MatrixTests(unittest.TestCase):
         r = diag_pre_multiply(d, m)
         assert(np.allclose(r, np.array([[2, 4], [2, 3]])))
         
-        r = diag_pre_multiply(d, csr_matrix(m)).todense()
-        assert(np.allclose(r, np.array([[2, 4], [2, 3]])))
-    
     def test_diag_post_multiply(self):
         d = np.array([2, 1])
         m = np.array([[1, 2],
@@ -37,9 +33,6 @@ class MatrixTests(unittest.TestCase):
         assert(np.allclose(r, np.array([2, 2])))
         
         r = diag_post_multiply(d, m)
-        assert(np.allclose(r, np.array([[2, 2], [4, 3]])))
-        
-        r = diag_post_multiply(d, csr_matrix(m)).todense()
         assert(np.allclose(r, np.array([[2, 2], [4, 3]])))
         
     def test_cartesian_product(self):
