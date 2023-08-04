@@ -3,12 +3,12 @@ import unittest
 
 import numpy as np
 
+from scipy.sparse.csr import csr_matrix
 from gpmap.src.matrix import (calc_cartesian_product, calc_tensor_product,
                               calc_cartesian_product_dot, calc_tensor_product_dot,
                               calc_tensor_product_quad, quad,
                               calc_tensor_product_dot2, kron_dot,
                               diag_pre_multiply, diag_post_multiply)
-from scipy.sparse.csr import csr_matrix
 
 
 class MatrixTests(unittest.TestCase):
