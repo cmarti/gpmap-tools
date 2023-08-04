@@ -6,10 +6,42 @@ import numpy as np
 from gpmap.src.matrix import (calc_cartesian_product, calc_tensor_product,
                               calc_cartesian_product_dot, calc_tensor_product_dot,
                               calc_tensor_product_quad, quad,
-                              calc_tensor_product_dot2, kron_dot)
+                              calc_tensor_product_dot2, kron_dot,
+                              diag_pre_multiply, diag_post_multiply)
+from scipy.sparse.csr import csr_matrix
 
 
 class MatrixTests(unittest.TestCase):
+    def test_diag_pre_multiply(self):
+        d = np.array([2, 1])
+        m = np.array([[1, 2],
+                      [2, 3]])
+        v = np.array([1, 2])
+        
+        r = diag_pre_multiply(d, v)
+        assert(np.allclose(r, np.array([2, 2])))
+        
+        r = diag_pre_multiply(d, m)
+        assert(np.allclose(r, np.array([[2, 4], [2, 3]])))
+        
+        r = diag_pre_multiply(d, csr_matrix(m)).todense()
+        assert(np.allclose(r, np.array([[2, 4], [2, 3]])))
+    
+    def test_diag_post_multiply(self):
+        d = np.array([2, 1])
+        m = np.array([[1, 2],
+                      [2, 3]])
+        v = np.array([1, 2])
+        
+        r = diag_post_multiply(d, v)
+        assert(np.allclose(r, np.array([2, 2])))
+        
+        r = diag_post_multiply(d, m)
+        assert(np.allclose(r, np.array([[2, 2], [4, 3]])))
+        
+        r = diag_post_multiply(d, csr_matrix(m)).todense()
+        assert(np.allclose(r, np.array([[2, 2], [4, 3]])))
+        
     def test_cartesian_product(self):
         # With adjacency matrices
         matrix = np.array([[0, 1],
