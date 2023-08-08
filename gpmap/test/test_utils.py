@@ -4,10 +4,8 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from os.path import join
 from tempfile import NamedTemporaryFile
 
-from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.utils import (get_CV_splits, edges_df_to_csr_matrix, read_edges,
                              write_edges, counts_to_seqs,
                              evaluate_predictions, get_training_p_splits)
