@@ -10,9 +10,6 @@ High priority
 - Have default figure configurations in some global variables or configuration that can be easily changed across all plots
 - Add function to plot path using nodes_df and a list of sequences
 - Add method to sequence space to calculate best path between two sequences
-- Remove data folder from docs and use always the built-in datasets
-- Remove ParD datasets from docs
-- Add seqdeft tutorial for the 5'ss using wei-chias dataset
 - Merge with master branch and release new stable version to pypi
 - Clean warnings and prints from running tests
 - Remove tests dependencies on data outside the datasets. Use simulations
