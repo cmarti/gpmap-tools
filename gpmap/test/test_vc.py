@@ -77,6 +77,15 @@ class VCTests(unittest.TestCase):
         # Ensure anticorrelated distances
         assert(rho[3] < 0)
         assert(rho[4] < 0)
+        
+        # With missing data
+        data = vc.simulate(lambdas, sigma, p_missing=0.1).dropna()
+        vc.set_data(X=data.index.values, y=data.y.values, y_var=data.y_var)
+        rho, n = vc.calc_emp_dist_cov()
+            
+        # Ensure anticorrelated distances
+        assert(rho[3] < 0)
+        assert(rho[4] < 0)
     
     def test_vc_fit(self):
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
