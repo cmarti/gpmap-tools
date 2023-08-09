@@ -224,3 +224,7 @@ def calc_cartesian_prod_freqs(site_freqs):
     site2 = calc_cartesian_prod_freqs(site_freqs[1:])
     freqs = np.hstack([f * site2 for f in site1])
     return(freqs)
+
+
+def filter_csr_matrix(matrix, idxs):
+    return(matrix[idxs, :][:, idxs])

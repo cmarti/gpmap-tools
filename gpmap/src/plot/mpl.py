@@ -7,13 +7,9 @@ import matplotlib.patches as mpatches
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
-import plotly.graph_objects as go
-import datashader as ds
-import holoviews as hv
 
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
-from holoviews.operation.datashader import datashade
 
 from gpmap.src.settings import PLOTS_FORMAT
 from gpmap.src.utils import check_error
@@ -135,8 +131,7 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
 
 def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
                color='grey', width=0.5, cmap='binary',
-               alpha=0.1, zorder=1, avoid_dups=False,
-               max_width=1, min_width=0.1):
+               alpha=0.1, zorder=1, max_width=1, min_width=0.1):
     '''
     Plots the edges representing the connections between states that are conneted
     in the discrete space under a particular embedding
@@ -187,10 +182,6 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
         Generally, we would want this to be smaller than the ``zorder``
         used for plotting the nodes
     
-    avoid_dups : bool (False)
-        Plot edges after removing redundant lines representing connections
-        between the same genotypes in two different directions
-    
     max_width : float (1)
         Maximum linewidth for the edges when scaled by
         
@@ -204,7 +195,7 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
     '''
     # TODO: get colors and width as either fixed values or from edges_df
     edges_coords = get_edges_coords(nodes_df, edges_df, x=x, y=y, z=z,
-                                    avoid_dups=avoid_dups)
+                                    avoid_dups=True)
 
     if color in edges_df.columns:
         cmap = cm.get_cmap(cmap)
@@ -488,138 +479,6 @@ def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
                    max_width=edges_max_width, min_width=edges_min_width)
 
 
-def get_lines_from_edges_df(nodes_df, edges_df, x=1, y=2, z=None,
-                            avoid_dups=True):
-    edges = get_edges_coords(nodes_df, edges_df, x=x, y=y, z=z,
-                             avoid_dups=avoid_dups)
-    nans = np.full((edges.shape[0], 1), fill_value=np.nan)
-    line_coords = np.vstack([np.hstack([edges[:, :, i], nans]).flatten()
-                             for i in range(edges.shape[2])]).T
-    return(line_coords)
-
-
-def plot_interactive(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
-                     nodes_color='function', nodes_size=4,
-                     nodes_cmap='viridis', nodes_cmap_label='Function',
-                     edges_width=0.5, edges_color='#888', edges_alpha=0.2,
-                     text=None):
-    '''
-    Makes an interactive plot of fitness landscape with genotypes as nodes
-    and single point mutations as edges using plotly 
-    
-    Parameters
-    ----------
-    nodes_df : pd.DataFrame of shape (n_genotypes, n_components + 2)
-        ``pd.DataFrame`` containing the coordinates in every of the ``n_components``
-        in addition to the "function" and "stationary_freq" columns. Additional
-        columns are also allowed
-    
-    edges_df : pd.DataFrame of shape (n_edges, 2)
-        ``pd.DataFrame`` the connectivity information between states of the
-        discrete space to plot. It has columns "i" and "j" for the indexes
-        of the pairs of states that are connected.
-        
-    fpath : str
-        File path in which to store the interactive plot as an html file
-        
-    x : str ('1')
-        Column in ``nodes_df`` to use for plotting the genotypes on the x-axis
-    
-    y : str ('2')
-        Column in ``nodes_df`` to use for plotting the genotypes on the y-axis 
-    
-    z : str (None)
-        Column in ``nodes_df`` to use for plotting the genotypes on the z-axis.
-        If provided, then a 3D plot will be produced as long as the provided
-        ``axes`` object allows it.
-    
-    nodes_color : str  ('function')
-        Column name for the values according to which states will be colored or
-        the specific color to use for plotting the states
-    
-    nodes_size : float (2.5)
-        Size of the markers provided for plotting to ``axes.scatter``. If a
-        ``float`` is provided, that will be the size used to plot every nodes.
-        If ``str``, then node sizes will be scaled according to the
-        corresponding column in ``nodes_df``.
-        
-    nodes_cmap : colormap or str
-        Colormap to use for coloring the nodes according to column ``color``
-    
-    nodes_cmap_label : str
-        Label for colorbar
-    
-    edges_width : float or str
-        Width of the lines representing the edges. If a ``float`` is provided,
-        that will be the width used to plot every edges. If ``str``, then
-        widths will be scaled according to the corresponding column
-        in ``edges_df``.  
-    
-    edges_color : str
-        Column name for the values according to which edges will be colored or
-        the specific color to use for plotting the edges
-     
-    edges_alpha : float (0.2)
-        Transparency of lines representing the edges
-     
-    text : array-like of shape (nodes_df.shape[0]) (None)
-        Labels to show for each state when hovering over the markers representing
-        them. If not provided, rownames of the nodes_df DataFrame will be used
-    '''
-    
-    # Create figure
-    fig = go.Figure()
-
-    # Create nodes plot
-    colorbar = dict(thickness=25, title=nodes_cmap_label, xanchor='left',
-                    titleside='right', len=0.8)
-    marker = dict(showscale=True, colorscale=nodes_cmap, reversescale=False,
-                  color=nodes_df[nodes_color], size=nodes_size, colorbar=colorbar,
-                  line_width=2)
-    if text is None:
-        text = nodes_df.index
-    
-    if z is None:
-        node_trace = go.Scatter(x=nodes_df[x], y=nodes_df[y],
-                                mode='markers', hoverinfo='text',
-                                marker=marker, text=text, name='Genotypes')
-    else:
-        node_trace = go.Scatter3d(x=nodes_df[x], y=nodes_df[y], z=nodes_df[z],
-                                  mode='markers', hoverinfo='text',
-                                  marker=marker, text=text, name='Genotypes')
-    fig.add_trace(node_trace)
-
-    # Create edges        
-    if edges_df is not None:
-        edges = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=z)
-        if z is None:
-            edge_trace = go.Scatter(x=edges[:, 0], y=edges[:, 1],
-                                    line=dict(width=edges_width, color=edges_color),
-                                    hoverinfo='none', mode='lines',
-                                    opacity=edges_alpha, name='Mutations')
-        else:
-            edge_trace = go.Scatter3d(x=edges[:, 0], y=edges[:, 1], z=edges[:, 2],
-                                      line=dict(width=edges_width, color=edges_color),
-                                      hoverinfo='none', mode='lines',
-                                      opacity=edges_alpha, name='Mutations')
-        fig.add_trace(edge_trace)
-    
-    # Update layout        
-    scene = dict(xaxis_title='Diffusion axis {}'.format(x),
-                 yaxis_title='Diffusion axis {}'.format(y))
-    if z is not None:
-        scene['zaxis_title'] = 'Diffusion axis {}'.format(z)
-        
-    fig.update_layout(title="Landscape visualization", 
-                      hovermode='closest', template='simple_white',
-                      xaxis_title='Diffusion axis {}'.format(x),
-                      yaxis_title='Diffusion axis {}'.format(y),
-                      scene=scene)
-    
-    save_plotly(fig, fpath=fpath)
-    return(fig)
-
-
 def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
                          nodes_color='function', nodes_size=None, nodes_cmap='viridis',
                          nodes_alpha=1, nodes_min_size=1, nodes_max_size=40,
@@ -632,49 +491,40 @@ def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=No
                          fontsize=12, prev_nodes_df=None,
                          highlight_genotypes=None, is_prot=False,
                          highlight_size=200, palette='colorblind',
-                         figsize=None, unit_size=2, interactive=False, 
+                         figsize=None, unit_size=2, 
                          alphabet_type=None, fmt='png'):
     
     if nodes_size is None:
-        nodes_size = 15 if z is None else 4 if interactive else 50
+        nodes_size = 15 if z is None else 4
     
-    if interactive:
-        text = nodes_df['protein'] if is_prot else nodes_df.index
-        plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
-                         x=x, y=y, z=z,
-                         nodes_color=nodes_color, nodes_size=nodes_size,
-                         nodes_cmap=nodes_cmap, nodes_cmap_label=nodes_cmap_label,
-                         edges_width=edges_width, edges_color=edges_color,
-                         text=text)
-    else:
-        if figsize is None:
-            axis_lims = get_axis_lims(nodes_df, x, y, z=z)
-            axis_size = axis_lims[1] - axis_lims[0]
-            figsize = (unit_size * axis_size / 0.85, unit_size * axis_size)
-            
-        fig, axes = init_single_fig(figsize=figsize, is_3d=z is not None)
-        plot_visualization(axes, nodes_df=nodes_df, edges_df=edges_df,
-                           x=x, y=y, z=z,
-                           nodes_color=nodes_color, nodes_size=nodes_size,
-                           nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
-                           nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
-                           nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
-                           nodes_cmap_label=nodes_cmap_label, nodes_vmin=nodes_vmin,
-                           nodes_vmax=nodes_vmax,
-                           edges_color=edges_color, edges_width=edges_width,
-                           edges_cmap=edges_cmap,
-                           edges_alpha=edges_alpha, edges_max_width=edges_max_width,
-                           edges_min_width=edges_min_width, 
-                           sort_nodes=sort_nodes, sort_by=sort_by, ascending=ascending,
-                           fontsize=fontsize,
-                           prev_nodes_df=prev_nodes_df)
+    if figsize is None:
+        axis_lims = get_axis_lims(nodes_df, x, y, z=z)
+        axis_size = axis_lims[1] - axis_lims[0]
+        figsize = (unit_size * axis_size / 0.85, unit_size * axis_size)
         
-        if highlight_genotypes is not None:
-            highlight_genotype_groups(axes, nodes_df, highlight_genotypes,
-                                      is_prot=is_prot, x=x, y=y, z=z,
-                                      alphabet_type=alphabet_type,
-                                      size=highlight_size, palette=palette)
-        savefig(fig, fpath, fmt=fmt)
+    fig, axes = init_single_fig(figsize=figsize, is_3d=z is not None)
+    plot_visualization(axes, nodes_df=nodes_df, edges_df=edges_df,
+                       x=x, y=y, z=z,
+                       nodes_color=nodes_color, nodes_size=nodes_size,
+                       nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
+                       nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
+                       nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
+                       nodes_cmap_label=nodes_cmap_label, nodes_vmin=nodes_vmin,
+                       nodes_vmax=nodes_vmax,
+                       edges_color=edges_color, edges_width=edges_width,
+                       edges_cmap=edges_cmap,
+                       edges_alpha=edges_alpha, edges_max_width=edges_max_width,
+                       edges_min_width=edges_min_width, 
+                       sort_nodes=sort_nodes, sort_by=sort_by, ascending=ascending,
+                       fontsize=fontsize,
+                       prev_nodes_df=prev_nodes_df)
+    
+    if highlight_genotypes is not None:
+        highlight_genotype_groups(axes, nodes_df, highlight_genotypes,
+                                  is_prot=is_prot, x=x, y=y, z=z,
+                                  alphabet_type=alphabet_type,
+                                  size=highlight_size, palette=palette)
+    savefig(fig, fpath, fmt=fmt)
 
 
 def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
@@ -724,7 +574,6 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
                 empty_axes(axes)
     
     savefig(fig, fpath, fmt=fmt)
-
 
 
 def figure_axis_grid(nodes_df, max_axis=None, edges_df=None, fpath=None,
@@ -911,174 +760,6 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
     
     savefig(fig, fpath)
     
-
-def calc_ds_size(nodes_df, x, y, resolution, square=True):
-    if square:
-        xlim = nodes_df[x].min(), nodes_df[x].max()
-        ylim = nodes_df[y].min(), nodes_df[y].max()
-        dx, dy = xlim[1]- xlim[0], ylim[1] - ylim[0]
-        w, h = resolution, resolution * dx / dy
-    else:
-        w, h = resolution, resolution
-    return(int(w), int(h))
-
-    
-def plot_edges_datashader(nodes_df, edges_df, x='1', y='2', cmap='grey',
-                          width=0.5, alpha=0.2, color='grey',
-                          shade=True, resolution=800, square=True):
-    line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
-    dsg = hv.Curve(line_coords)
-    if shade:
-        w, h = calc_ds_size(nodes_df, x, y, resolution, square=square)
-        dsg = datashade(dsg, cmap=cmap, width=w, height=h)
-    else:
-        dsg = dsg.opts(color=color, linewidth=width, alpha=alpha)
-    aspect = 'square' if square else 'equal'
-    dsg.opts(aspect=aspect)
-    return(dsg)
-
-
-def plot_nodes_datashader(nodes_df, x='1', y='2', color='function', cmap='viridis',
-                          size=5, linewidth=0, edgecolor='black',
-                          vmin=None, vmax=None,
-                          sort_by=None, ascending=True,
-                          shade=True, resolution=800, square=True):
-    if sort_by is not None:
-        nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
-        
-    if vmin is None:
-        vmin = nodes_df[color].min()
-    if vmax is None:
-        vmax = nodes_df[color].max()
-    
-    if shade:
-        nodes = hv.Points(nodes_df, kdims=[x, y], label='Nodes')
-        w, h = calc_ds_size(nodes_df, x, y, resolution, square=square)
-        if sort_by is not None:
-            dsg = datashade(nodes, cmap=cmap, width=w, height=h,
-                            aggregator=ds.first(color))
-        else:
-            dsg = datashade(nodes, cmap=cmap, width=w, height=h,
-                            aggregator=ds.max(color))
-    else:
-        hv.extension('matplotlib')
-        colnames = [x, y]
-        if color not in colnames: # avoid adding color in case is already a selected field
-            colnames.append(color)
-        scatter = hv.Scatter(nodes_df[colnames])
-        dsg = scatter.opts(color=color, cmap=cmap, clim=(vmin, vmax),
-                           s=size, linewidth=linewidth, 
-                           edgecolor=edgecolor)
-    aspect = 'square' if square else 'equal'
-    dsg.opts(aspect=aspect)
-    return(dsg)
-
-
-def plot_holoview(nodes_df, x='1', y='2', edges_df=None,
-                  nodes_color='function', nodes_cmap='viridis',
-                  nodes_size=5, nodes_vmin=None, nodes_vmax=None,
-                  linewidth=0, edgecolor='black',
-                  sort_by=None, ascending=False,
-                  edges_width=0.5, edges_alpha=0.2, edges_color='grey',
-                  edges_cmap='grey', background_color='white',
-                  nodes_resolution=800, edges_resolution=1200,
-                  shade_nodes=True, shade_edges=True, square=True):
-    dsg = plot_nodes_datashader(nodes_df, x, y, nodes_color, nodes_cmap,
-                                linewidth=linewidth, edgecolor=edgecolor,
-                                size=nodes_size,
-                                vmin=nodes_vmin, vmax=nodes_vmax,
-                                sort_by=sort_by, ascending=ascending,
-                                resolution=nodes_resolution,
-                                shade=shade_nodes, square=square)
-    
-    if edges_df is not None:
-        edges_dsg = plot_edges_datashader(nodes_df, edges_df, x, y,
-                                          cmap=edges_cmap,
-                                          width=edges_width, 
-                                          alpha=edges_alpha,
-                                          color=edges_color,
-                                          resolution=edges_resolution,
-                                          shade=shade_edges, square=square)
-        dsg = edges_dsg * dsg
-    
-    dsg.opts(xlabel='Diffusion axis {}'.format(x),
-             ylabel='Diffusion axis {}'.format(y),
-             bgcolor=background_color, padding=0.1)
-    
-    return(dsg)
-
-
-def save_holoviews(dsg, fpath, fmt='png', figsize=None):
-    fig = hv.render(dsg)
-    if figsize is not None:
-        fig.set_size_inches(figsize[0], figsize[1])
-    savefig(fig, fpath, tight=False, fmt=fmt)
-
-
-def figure_allele_grid_datashader(nodes_df, fpath, x='1', y='2', edges_df=None,
-                                  positions=None, position_labels=None,
-                                  edges_cmap='grey', background_color='white',
-                                  nodes_resolution=800, edges_resolution=1200,
-                                  fmt='png', figsize=None, square=True):
-    if edges_df is not None:
-        edges = plot_edges_datashader(nodes_df, edges_df, x, y,
-                                      cmap=edges_cmap,
-                                      resolution=edges_resolution,
-                                      square=square)
-    else:
-        edges = None
-        
-    config = guess_space_configuration(nodes_df.index.values)
-    length, n_alleles = config['length'], np.max(config['n_alleles'])
-
-    if position_labels is None:
-        position_labels = np.arange(length) + 1
-
-    if positions is None:
-        positions = np.arange(length)
-
-    plots = None
-    
-    nc = {i: np.array([seq[i] for seq in nodes_df.index])
-          for i in range(length)}
-    
-    for i in range(n_alleles):
-        for col, j in enumerate(positions):
-            try:
-                allele  = config['alphabet'][j][i]
-                nodes_df['allele'] = (nc[col] == allele).astype(int)
-            except IndexError:
-                allele = ''
-                nodes_df['allele'] = np.nan
-                
-            nodes = plot_nodes_datashader(nodes_df.copy(),
-                                          x, y,
-                                          color='allele', cmap='viridis',
-                                          resolution=nodes_resolution,
-                                          shade=True, square=square)
-            nodes = nodes.relabel('{}{}'.format(j+1, allele))
-            dsg = nodes if edges is None else edges * nodes
-            
-            dsg.opts(xlabel='Diffusion axis {}'.format(x),
-                     ylabel='Diffusion axis {}'.format(y),
-                     bgcolor=background_color,
-                     title='{}{}'.format(position_labels[j], allele))
-            
-            if i < n_alleles - 1:
-                dsg.opts(xlabel='')
-            if col > 0:
-                dsg.opts(ylabel='')
-                
-            if plots is None:
-                plots = dsg
-            else:
-                plots += dsg
-    dsg = plots.cols(length)
-    fig = hv.render(dsg)
-    if figsize is not None:
-        fig.set_size_inches(*figsize)
-    savefig(fig, fpath, tight=False, fmt=fmt)
-
 
 def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
                        xlabel=r'$\log_{10}(a)$',

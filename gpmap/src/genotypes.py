@@ -12,20 +12,25 @@ from gpmap.src.settings import PROT_AMBIGUOUS_VALUES, AMBIGUOUS_VALUES
 from gpmap.src.utils import check_error, edges_df_to_csr_matrix
 from gpmap.src.seq import extend_ambigous_seq, translate_seqs
 from gpmap.src.space import SequenceSpace
+from gpmap.src.matrix import filter_csr_matrix
 
 
-def get_edges_coords(nodes_df, edges_df, x='1', y='2', z=None, avoid_dups=False):
+def get_edges_coords(nodes_df, edges_df, x='1', y='2', z=None, avoid_dups=True):
+    edf = edges_df
+    
     if avoid_dups:
-        s = np.where(edges_df['j'] > edges_df['i'])[0]
-        edges_df = edges_df.iloc[s, :]
+        edf = edges_df.copy()
+        idx = np.where(edf['j'] > edf['i'])[0]
+        edf.loc[idx, 'i'], edf.loc[idx, 'j'] = edf.loc[idx, 'j'], edf.loc[idx, 'i']
+        edf.drop_duplicates(inplace=True)
 
     colnames = [x, y]
     if z is not None:
         colnames.append(z)
         
     nodes_coords = nodes_df[colnames].values
-    edges_coords = np.stack([nodes_coords[edges_df['i']],
-                             nodes_coords[edges_df['j']]], axis=2).transpose((0, 2, 1))
+    edges_coords = np.stack([nodes_coords[edf['i']],
+                             nodes_coords[edf['j']]], axis=2).transpose((0, 2, 1))
     return(edges_coords)
 
 
@@ -72,10 +77,6 @@ def get_nodes_df_highlight(nodes_df, genotype_groups, is_prot=False,
     nodes_df = nodes_df.dropna()
     return(nodes_df)
 
-
-def filter_csr_matrix(matrix, idxs):
-    return(matrix[idxs, :][:, idxs])
-    
 
 def select_edges_from_genotypes(nodes_idxs, edges):
     if isinstance(edges, pd.DataFrame):
