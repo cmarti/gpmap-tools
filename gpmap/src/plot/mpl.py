@@ -37,9 +37,13 @@ def init_single_fig(figsize=None, style='ticks',
     return(fig, axes)
 
 
-def savefig(fig, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360):
+def savefig(fig, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360, figsize=None):
     if tight:
         fig.tight_layout()
+        
+    if figsize is not None:
+        fig.set_size_inches(*figsize)
+        
     if fpath is not None:
         fpath = '{}.{}'.format(fpath, fmt)
         fig.savefig(fpath, format=fmt, dpi=dpi)
@@ -130,8 +134,10 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
 
 
 def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
-               color='grey', width=0.5, cmap='binary',
-               alpha=0.1, zorder=1, max_width=1, min_width=0.1):
+               alpha=0.1, zorder=1,
+               color='grey', cbar=True, cmap='binary', cbar_axes=None,
+               cbar_label='', palette=None, legend=True, legend_loc=0,
+               width=0.5, max_width=1, min_width=0.1, fontsize=12):
     '''
     Plots the edges representing the connections between states that are conneted
     in the discrete space under a particular embedding
@@ -161,19 +167,6 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
         If provided, then a 3D plot will be produced as long as the provided
         ``axes`` object allows it.
     
-    color : str  ('grey')
-        Column name for the values according to which edges will be colored or
-        the specific color to use for plotting the edges
-    
-    width : float or str
-        Width of the lines representing the edges. If a ``float`` is provided,
-        that will be the width used to plot every edges. If ``str``, then
-        widths will be scaled according to the corresponding column
-        in ``edges_df``.  
-    
-    cmap :  colormap or str
-        Colormap to use for coloring the edges according to column ``color``
-    
     alpha : float (0.1)
         Transparency of lines representing the edges
     
@@ -182,11 +175,25 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
         Generally, we would want this to be smaller than the ``zorder``
         used for plotting the nodes
     
+    color : str  ('grey')
+        Column name for the values according to which edges will be colored or
+        the specific color to use for plotting the edges
+    
+    cmap :  colormap or str
+        Colormap to use for coloring the edges according to column ``color``
+    
+    width : float or str
+        Width of the lines representing the edges. If a ``float`` is provided,
+        that will be the width used to plot every edges. If ``str``, then
+        widths will be scaled according to the corresponding column
+        in ``edges_df``.  
+    
     max_width : float (1)
         Maximum linewidth for the edges when scaled by
         
     min_width : float (0.1)
         Maximum linewidth for the edges when scaled by
+    
     
     Returns
     -------
@@ -194,74 +201,25 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
     
     '''
     # TODO: get colors and width as either fixed values or from edges_df
-    edges_coords = get_edges_coords(nodes_df, edges_df, x=x, y=y, z=z,
-                                    avoid_dups=True)
-
-    if color in edges_df.columns:
-        cmap = cm.get_cmap(cmap)
-        color = cmap(edges_df[color])
-        
-    if width in edges_df.columns:
-        w = edges_df[width]
-        width = min_width + w * (max_width - min_width) / (w.max() - w.min())
-        
-    if z is None:
-        ln_coll = LineCollection(edges_coords, colors=color, linewidths=width,
-                                 alpha=alpha, zorder=zorder)
-    else:
-        ln_coll = Line3DCollection(edges_coords, color=color, linewidths=width,
-                                   alpha=alpha, zorder=zorder)
-    axes.add_collection(ln_coll)
-    return(ln_coll)
-
-
-def get_axis_lims(nodes_df, x, y, z=None):
-    axis_max = max(nodes_df[x].max(), nodes_df[y].max())
-    axis_min = min(nodes_df[x].min(), nodes_df[y].min())
-    if z is not None:
-        axis_max = max(axis_max, nodes_df[z].max())
-        axis_min = min(axis_min, nodes_df[z].min())
-    
-    axis_range = axis_max - axis_min
-    axis_lims = (axis_min - 0.05 * axis_range, axis_max + 0.05 * axis_range)
-    return(axis_lims)
-
-
-def plot_genotypes_box(axes, xlims, ylims, lw=1, c='black', facecolor='none',
-                       title=None, pos='top', fontsize=10):
-    
-    dx, dy = xlims[1] - xlims[0], ylims[1] - ylims[0]
-    rect = mpatches.Rectangle((xlims[0], ylims[0]), dx, dy,
-                              linewidth=lw, edgecolor=c,
-                              facecolor=facecolor)
-    axes.add_patch(rect)
-    
-    if title is not None:
-        if pos == 'top':
-            axes.text(xlims[0] + dx / 2, ylims[0] + 1.1 * dy, title, 
-                      va='bottom', ha='center', fontsize=fontsize)
-        elif pos == 'right':
-            axes.text(xlims[0] + 1.1 * dx, ylims[0] + dy / 2, title, 
-                      va='center', ha='left', fontsize=fontsize)
-        elif pos == 'left':
-            axes.text(xlims[0] - 0.1 * dx, ylims[0] + dy / 2, title, 
-                      va='center', ha='right', fontsize=fontsize)
-        elif pos == 'bottom':
-            axes.text(xlims[0] + 0.5 * dx, ylims[0] - 0.1 * dy, title, 
-                      va='top', ha='center', fontsize=fontsize)
-        else:
-            msg = 'Incorrect position for title: '
-            raise ValueError(msg + 'try {"top", "bottom", "left", "right"}')
+    edges_coords = get_edges_coords(nodes_df, edges_df, x=x, y=y, z=z, avoid_dups=True)
+    c, cbar, legend = get_element_color(edges_df, color, palette, cbar, legend)
+    widths = get_element_sizes(edges_df, width, min_width, max_width)
+    get_lines = LineCollection if z is None else Line3DCollection
+    lines = get_lines(edges_coords, colors=c, linewidths=widths,
+                      alpha=alpha, zorder=zorder, cmap=cm.get_cmap(cmap))
+    axes.add_collection(lines)
+    add_color_info(lines, axes, cbar, cbar_axes, cbar_label,
+                   legend, palette, legend_loc, fontsize)
+    return(lines)
 
 
 def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
-               color='function', size=2.5, cmap='viridis',
-               cbar=True, cbar_axes=None, palette='Set1',
-               clabel='Function',
-               alpha=1, zorder=2, max_size=40, min_size=1,
-               edgecolor='black', lw=0, label=None,
-               sort=True, sort_by=None, ascending=False, 
-               vcenter=None, vmax=None, vmin=None, fontsize=12, legendloc=0,
+               alpha=1, zorder=2,
+               color='function', cmap='viridis',
+               cbar=True, cbar_axes=None, cbar_label='Function',
+               vcenter=None, vmax=None, vmin=None, palette='Set1',
+               size=2.5, max_size=40, min_size=1,
+               lw=0, edgecolor='black', fontsize=12, legend=True, legend_loc=0,
                autoscale_axis=False):
     '''
     Plots the nodes representing the states of the discrete space on the
@@ -287,9 +245,20 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
         If provided, then a 3D plot will be produced as long as the provided
         ``axes`` object allows it.
     
+    alpha : float (1)
+        Transparency of markers representing the nodes
+    
+    zorder : int (2)
+        Order in which the nodes will be rendered relative to other elements.
+        Generally, we would want this to be bigger than the ``zorder``
+        used for plotting the edges
+    
     color : str  ('grey')
         Column name for the values according to which states will be colored or
         the specific color to use for plotting the states
+    
+    vcenter : bool (False)
+        Center the color scale around the 0 value
         
     vmax : float
         Maximum value to show in the colormap
@@ -300,11 +269,11 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
     cmap : colormap or str
         Colormap to use for coloring the nodes according to column ``color``
     
-    clabel : str
-        Label for the colorbar associated to the nodes color scale
-    
     cbar : bool
         Boolean variable representing whether to show the colorbar
+        
+    cbar_label : str
+        Label for the colorbar associated to the nodes color scale
     
     cbar_axes : matplotlib ``Axes`` 
         Axes to plot the colorbar. If not provided, it will be automatically
@@ -319,15 +288,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
         Size of the markers provided for plotting to ``axes.scatter``. If a
         ``float`` is provided, that will be the size used to plot every nodes.
         If ``str``, then node sizes will be scaled according to the
-        corresponding column in ``nodes_df``.  
-    
-    alpha : float (1)
-        Transparency of markers representing the nodes
-    
-    zorder : int (2)
-        Order in which the nodes will be rendered relative to other elements.
-        Generally, we would want this to be bigger than the ``zorder``
-        used for plotting the edges
+        corresponding column in ``nodes_df``.
     
     max_size : float (1)
         Maximum linewidth for the edges when scaled by
@@ -335,27 +296,19 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
     min_size : float (0.1)
         Maximum linewidth for the edges when scaled by
     
+    lw : float (0)
+        Width of the line edges delimiting the markers representing the nodes
+    
     edgecolor : str ('black')
         Color of the line edges delimiting the markers representing the nodes
         
-    lw : float (0)
-        Width of the line edges delimiting the markers representing the nodes
-        
-    sort : bool (True)
-        Whether to plot nodes in according to the order of values in column
-        ``sort_by``
-    
-    sort_by : str (None)
-        Column name in ``nodes_df`` to specify the order in which nodes are
-        plotted
-    
-    ascending : bool (False)
-        Use ascending order as nodes plotting order
-     
     fontsize : float (12)
         Fontsize to use for axis and legend labels
     
-    legendloc : int or tuple
+    legend: bool (True)
+        Show legend on the plot
+    
+    legend_loc : int or tuple
         Location of the legend in case of coloring according to a categoric 
         variable
         
@@ -368,67 +321,123 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
     line_collection : LineCollection or Line3DCollection
     
     '''
-    add_cbar, add_legend = False, False
-    if color in nodes_df.columns:
+    
+    s = get_element_sizes(nodes_df, size, min_size, max_size)
+    c, cbar, legend = get_element_color(nodes_df, color, palette, cbar, legend)
+    norm = None if vcenter is None else colors.CenteredNorm()
+    kwargs = {'c': c, 'linewidth': lw, 's': s, 'zorder': zorder,
+              'alpha': alpha, 'edgecolor': edgecolor, 'cmap': cm.get_cmap(cmap),
+              'vmax': vmax, 'vmin': vmin, 'norm': norm}
+    if z is not None:
+        kwargs['zs'] = nodes_df[z]
+    sc = axes.scatter(nodes_df[x], nodes_df[y], **kwargs)
+    
+    if autoscale_axis:
+        autoscale_axis(nodes_df, axes, x, y, z=z)
+    add_color_info(sc, axes, cbar, cbar_axes, cbar_label,
+                   legend, palette, legend_loc, fontsize)
         
+
+def add_axis_labels(axes, x, y, z=None, fontsize=12):
+    axes.set_xlabel('Diffusion axis {}'.format(x), fontsize=fontsize)
+    axes.set_ylabel('Diffusion axis {}'.format(y), fontsize=fontsize)
+    if hasattr(axes, 'set_zlabel'):
+        axes.set_zlabel('Diffusion axis {}'.format(z), fontsize=fontsize)
+    
+    
+def add_color_info(sc, axes, cbar, cbar_axes, cbar_label,
+                   legend, palette, legend_loc, fontsize):
+    if cbar:
+        add_cbar(sc, axes, cbar_axes=cbar_axes, label=cbar_label,
+                 fontsize=fontsize, fraction=0.1, pad=0.02)
+    if legend:
+        create_patches_legend(axes, palette, loc=legend_loc, fontsize=fontsize)
+
+
+def get_axis_lims(nodes_df, x, y, z=None):
+    axis_max = max(nodes_df[x].max(), nodes_df[y].max())
+    axis_min = min(nodes_df[x].min(), nodes_df[y].min())
+    if z is not None:
+        axis_max = max(axis_max, nodes_df[z].max())
+        axis_min = min(axis_min, nodes_df[z].min())
+    
+    axis_range = axis_max - axis_min
+    axis_lims = (axis_min - 0.05 * axis_range, axis_max + 0.05 * axis_range)
+    return(axis_lims)    
+
+
+def autoscale_axes(nodes_df, axes, x, y, z=None):
+    axis_lims = get_axis_lims(nodes_df, x, y, z=z)
+    axes.set(xlim=axis_lims, ylim=axis_lims, aspect='square')
+    if hasattr(axes, 'set_zlim'):
+        axes.set_zlim(axis_lims)
+
+
+def get_element_sizes(df, size, min_size, max_size):
+    if size in df.columns and not isinstance(size, int):
+        s = np.power(df[size], 2)
+        size = min_size + s * (max_size - min_size) / (s.max() - s.min())
+    return(size)
+
+
+def get_element_color(df, color, palette, cbar, legend):
+    if color in df.columns:
         # Categorical color map
-        if nodes_df[color].dtype == object:
+        if df[color].dtype == object:
             if isinstance(palette, str):
-                labels = np.unique(nodes_df[color])
+                labels = np.unique(df[color])
                 n_colors = labels.shape[0]
                 c = sns.color_palette(palette, n_colors)
                 palette = dict(zip(labels, c))
             elif not isinstance(palette, dict):
                 raise ValueError('palette must be a str or dict')
-            color = np.array([palette[label] for label in nodes_df[color]])
-            add_legend = True
+            color = np.array([palette[label] for label in df[color]])
+            legend, cbar = legend, False
             
         # Continuous color map
-        elif nodes_df[color].dtype in (float, int):
-            if sort:
-                if sort_by is None:
-                    sort_by = color
-                nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
-            cmap = cm.get_cmap(cmap)
-            color = nodes_df[color]
-            add_cbar = True
+        elif df[color].dtype in (float, int):
+            color = df[color]
+            legend, cbar = False, cbar
+            
         else:
-            msg = 'color dtype is not compatible: {}'.format(nodes_df[color].dtype)
+            msg = 'color dtype is not compatible: {}'.format(df[color].dtype)
             raise ValueError(msg)
     
-    if size in nodes_df.columns and not isinstance(size, int):
-        s = np.power(nodes_df[size], 2)
-        size = min_size + s * (max_size - min_size) / (s.max() - s.min())
+    return(color, cbar, legend)
 
-    axis_lims = get_axis_lims(nodes_df, x, y, z=z)
+
+def add_cbar(sc, axes, cbar_axes=None, label='Function', fontsize=12,
+              fraction=0.1, pad=0.02):
+    ax, cax = (axes, None) if cbar_axes is None else (None, cbar_axes)
+    plt.colorbar(sc, ax=ax, cax=cax, fraction=fraction,
+                 pad=pad).set_label(label=label, fontsize=fontsize)
+
+
+def plot_genotypes_box(axes, xlims, ylims, lw=1, c='black', facecolor='none',
+                       title=None, title_pos='top', fontsize=10):
     
-    norm = None if vcenter is None else colors.CenteredNorm()
-    if z is not None:
-        sc = axes.scatter(nodes_df[x], nodes_df[y], zs=nodes_df[z], c=color,
-                          linewidth=lw, s=size, zorder=zorder, alpha=alpha,
-                          edgecolor=edgecolor, cmap=cmap, label=label,
-                          vmax=vmax, vmin=vmin, norm=norm)
-        axes.set_zlabel('Diffusion axis {}'.format(z), fontsize=fontsize)
-        axes.set_zlim(axis_lims)
+    dx, dy = xlims[1] - xlims[0], ylims[1] - ylims[0]
+    rect = mpatches.Rectangle((xlims[0], ylims[0]), dx, dy,
+                              linewidth=lw, edgecolor=c,
+                              facecolor=facecolor)
+    axes.add_patch(rect)
     
-    else:
-        sc = axes.scatter(nodes_df[x], nodes_df[y], c=color,
-                          linewidth=lw, s=size, zorder=zorder, alpha=alpha,
-                          edgecolor=edgecolor, cmap=cmap, label=label,
-                          vmax=vmax, vmin=vmin, norm=norm)
-    
-    if add_cbar and cbar:
-        if cbar_axes is None:
-            plt.colorbar(sc, ax=axes, fraction=0.1, pad=0.02).set_label(label=clabel, fontsize=fontsize)
+    if title is not None:
+        if title_pos == 'top':
+            axes.text(xlims[0] + dx / 2, ylims[0] + 1.1 * dy, title, 
+                      va='bottom', ha='center', fontsize=fontsize)
+        elif title_pos == 'right':
+            axes.text(xlims[0] + 1.1 * dx, ylims[0] + dy / 2, title, 
+                      va='center', ha='left', fontsize=fontsize)
+        elif title_pos == 'left':
+            axes.text(xlims[0] - 0.1 * dx, ylims[0] + dy / 2, title, 
+                      va='center', ha='right', fontsize=fontsize)
+        elif title_pos == 'bottom':
+            axes.text(xlims[0] + 0.5 * dx, ylims[0] - 0.1 * dy, title, 
+                      va='top', ha='center', fontsize=fontsize)
         else:
-            plt.colorbar(sc, cax=cbar_axes, fraction=0.1, pad=0.02).set_label(label=clabel, fontsize=fontsize)
-    if add_legend:
-        create_patches_legend(axes, palette, loc=legendloc, fontsize=fontsize)
-        
-    axes.set_xlabel('Diffusion axis {}'.format(x), fontsize=fontsize)
-    axes.set_ylabel('Diffusion axis {}'.format(y), fontsize=fontsize)
-    if autoscale_axis:
-        axes.set(xlim=axis_lims, ylim=axis_lims)
+            msg = 'Incorrect position for title: '
+            raise ValueError(msg + 'try {"top", "bottom", "left", "right"}')
 
 
 def highlight_genotype_groups(axes, nodes_df, genotype_groups,
@@ -477,54 +486,6 @@ def plot_visualization(axes, nodes_df, edges_df=None, x='1', y='2', z=None,
                    color=edges_color, width=edges_width, cmap=edges_cmap,
                    alpha=edges_alpha, zorder=1, avoid_dups=True,
                    max_width=edges_max_width, min_width=edges_min_width)
-
-
-def figure_visualization(nodes_df, edges_df=None, fpath=None, x='1', y='2', z=None,
-                         nodes_color='function', nodes_size=None, nodes_cmap='viridis',
-                         nodes_alpha=1, nodes_min_size=1, nodes_max_size=40,
-                         nodes_edgecolor='black', nodes_lw=0, 
-                         nodes_cmap_label='Function',
-                         nodes_vmin=None, nodes_vmax=None,
-                         edges_color='grey', edges_width=0.5, edges_cmap='binary',
-                         edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
-                         sort_nodes=True, sort_by=None, ascending=True,
-                         fontsize=12, prev_nodes_df=None,
-                         highlight_genotypes=None, is_prot=False,
-                         highlight_size=200, palette='colorblind',
-                         figsize=None, unit_size=2, 
-                         alphabet_type=None, fmt='png'):
-    
-    if nodes_size is None:
-        nodes_size = 15 if z is None else 4
-    
-    if figsize is None:
-        axis_lims = get_axis_lims(nodes_df, x, y, z=z)
-        axis_size = axis_lims[1] - axis_lims[0]
-        figsize = (unit_size * axis_size / 0.85, unit_size * axis_size)
-        
-    fig, axes = init_single_fig(figsize=figsize, is_3d=z is not None)
-    plot_visualization(axes, nodes_df=nodes_df, edges_df=edges_df,
-                       x=x, y=y, z=z,
-                       nodes_color=nodes_color, nodes_size=nodes_size,
-                       nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
-                       nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
-                       nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
-                       nodes_cmap_label=nodes_cmap_label, nodes_vmin=nodes_vmin,
-                       nodes_vmax=nodes_vmax,
-                       edges_color=edges_color, edges_width=edges_width,
-                       edges_cmap=edges_cmap,
-                       edges_alpha=edges_alpha, edges_max_width=edges_max_width,
-                       edges_min_width=edges_min_width, 
-                       sort_nodes=sort_nodes, sort_by=sort_by, ascending=ascending,
-                       fontsize=fontsize,
-                       prev_nodes_df=prev_nodes_df)
-    
-    if highlight_genotypes is not None:
-        highlight_genotype_groups(axes, nodes_df, highlight_genotypes,
-                                  is_prot=is_prot, x=x, y=y, z=z,
-                                  alphabet_type=alphabet_type,
-                                  size=highlight_size, palette=palette)
-    savefig(fig, fpath, fmt=fmt)
 
 
 def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
