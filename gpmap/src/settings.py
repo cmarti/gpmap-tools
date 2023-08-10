@@ -9,6 +9,7 @@ DATASETS_DIR = join(BASE_DIR, 'datasets')
 RAW_DATA_DIR = join(DATASETS_DIR, 'raw')
 PROCESSED_DIR = join(DATASETS_DIR, 'data')
 LANDSCAPES_DIR = join(DATASETS_DIR, 'landscapes')
+VIZ_DIR = join(DATASETS_DIR, 'visualizations')
 
 # File paths
 PLOTS_FORMAT = 'png'
