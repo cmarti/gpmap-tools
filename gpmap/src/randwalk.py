@@ -401,37 +401,14 @@ class WMWalk(TimeReversibleRandomWalk):
             freqs = self.stationary_freqs
         return(np.sum(self.space.y * freqs))
     
-    def set_Ns(self, Ns=None, mean_function=None, mean_function_perc=None,
-               neutral_stat_freqs=None,
-               tol=1e-4, maxiter=100, max_attempts=10):
-        if Ns is not None:
-            if Ns < 0:
-                msg = 'Ns must be non-negative'
-                raise ValueError(msg)
-            self.Ns = Ns
-            return(Ns)
+    def calc_neutral_mean_function(self, neutral_stat_freqs=None):
+        if neutral_stat_freqs is None:
+            return(self.space.y.mean())
+        return(self.calc_stationary_mean_function(neutral_stat_freqs))
+    
+    def mean_function_to_Ns(self, mean_function, neutral_stat_freqs=None,
+                            max_attempts=10, maxiter=100, tol=1e-4):
         
-        if mean_function_perc is not None:
-            msg = 'mean_function_perc must be between 0 and 100'
-            check_error(mean_function_perc > 0 or mean_function_perc < 100, msg=msg)
-            mean_function = np.percentile(self.space.y, mean_function_perc)
-        elif mean_function is None:
-            msg = 'Either stationary_function or percentile must be provided'
-            raise ValueError(msg)
-        
-        min_mean_function = self.space.y.mean() # neutrality
-        max_mean_function = self.space.y.max() # best state
-        msg = 'mean_function must be between the function mean ({:.2f}) and the maximum function value (:.2f)'
-        msg = msg.format(min_mean_function, max_mean_function)
-        check_error(mean_function > min_mean_function and mean_function < max_mean_function, msg=msg)
-        
-        if neutral_stat_freqs is None and hasattr(self, 'neutral_stat_freqs'):
-            neutral_stat_freqs = self.neutral_stat_freqs
-            
-        msg = 'Optimizing Ns to reach a stationary state with mean(f)={}'
-        self.report(msg.format(mean_function))
-        
-        function = self.space.y
         def calc_stationary_function_error(logNs):
             Ns = np.exp(logNs)
             log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs=neutral_stat_freqs)
@@ -444,7 +421,7 @@ class WMWalk(TimeReversibleRandomWalk):
                               options={'maxiter': maxiter})
             Ns = np.exp(result.x[0])
             log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs=neutral_stat_freqs)
-            inferred_mean_function = np.sum(function * np.exp(log_freqs))
+            inferred_mean_function = np.sum(self.space.y * np.exp(log_freqs))
             if calc_stationary_function_error(result.x[0]) < tol:
                 break
         else:
@@ -452,8 +429,46 @@ class WMWalk(TimeReversibleRandomWalk):
             msg += '= {:.2f}. Best guess is {:.2f}'
             
             raise ValueError(msg.format(mean_function, inferred_mean_function))
-
-        self.Ns = Ns
+    
+        return(Ns)
+    
+    def set_Ns(self, Ns=None, mean_function=None, mean_function_perc=None,
+               neutral_stat_freqs=None, tol=1e-4, maxiter=100, max_attempts=10):
+        
+        if Ns is not None:
+            check_error(Ns >= 0, msg='Ns must be non-negative')
+            self.Ns = Ns
+        
+        else:
+            if mean_function_perc is not None:
+                msg = 'mean_function_perc must be between 0 and 100'
+                check_error(mean_function_perc > 0 or mean_function_perc < 100, msg=msg)
+                mean_function = np.percentile(self.space.y, mean_function_perc)
+                
+            elif mean_function is None:
+                msg = 'Either stationary_function or percentile must be provided'
+                raise ValueError(msg)
+            
+            if neutral_stat_freqs is None and hasattr(self, 'neutral_stat_freqs'):
+                neutral_stat_freqs = self.neutral_stat_freqs
+            
+            min_mean_function = self.calc_neutral_mean_function(neutral_stat_freqs)
+            max_mean_function = self.space.y.max()
+            
+            msg = 'mean_function must be between the function mean ({:.2f}) and the maximum function value (:.2f)'
+            msg = msg.format(min_mean_function, max_mean_function)
+            check_error(mean_function >= min_mean_function and mean_function < max_mean_function, msg=msg)
+                
+            msg = 'Optimizing Ns to reach a stationary state with mean(f)={}'
+            self.report(msg.format(mean_function))
+            
+            if np.allclose(min_mean_function, mean_function, atol=tol):
+                self.Ns = 0
+            else:
+                self.Ns = self.mean_function_to_Ns(mean_function,
+                                                   neutral_stat_freqs=neutral_stat_freqs,
+                                                   max_attempts=max_attempts,
+                                                   maxiter=maxiter, tol=tol)
     
     def _calc_sandwich_rate_vector(self, i, j, Ns,
                                    neutral_stat_freqs=None,
