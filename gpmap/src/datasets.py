@@ -1,9 +1,9 @@
 from os.path import join, exists
 
 from gpmap.src.space import SequenceSpace
-from gpmap.src.utils import check_error, read_dataframe
+from gpmap.src.utils import check_error, read_dataframe, read_edges
 from gpmap.src.settings import (DATASETS, RAW_DATA_DIR, LANDSCAPES_DIR,
-                                PROCESSED_DIR)
+                                PROCESSED_DIR, VIZ_DIR)
 
 
 class DataSet(object):
@@ -25,14 +25,20 @@ class DataSet(object):
             msg = '"var" column missing from data table'
             check_error('var' in self.data.columns, msg=msg)
     
-    def _load(self, fdir, label):
-        fpath = join(fdir, '{}.pq'.format(self.name))
+    def _load(self, fdir, label, suffix=''):
+        fpath = join(fdir, '{}.pq'.format(self.name + suffix))
         
         if not exists(fpath):
-            msg = '{} for dataset {} not found'.format(label, self.name)
-            raise ValueError(msg)
-        
-        return(read_dataframe(fpath))
+            fpath = join(fdir, '{}.npz'.format(self.name + suffix))
+            
+            if not exists(fpath):
+                msg = '{} for dataset {} not found'.format(label, self.name + suffix)
+                raise ValueError(msg)
+            else:
+                df = read_edges(fpath, return_df=True)
+        else:
+            df = read_dataframe(fpath)
+        return(df)
     
     @property
     def landscape(self):
@@ -44,9 +50,22 @@ class DataSet(object):
     @property
     def raw_data(self):
         if not hasattr(self, '_raw_data'):
-            self._raw_data = self._load(fdir=RAW_DATA_DIR,
-                                         label='estimated landscape')
+            self._raw_data = self._load(fdir=RAW_DATA_DIR, label='raw data')
         return(self._raw_data)
+    
+    @property
+    def nodes(self):
+        if not hasattr(self, '_nodes'):
+            self._nodes = self._load(fdir=VIZ_DIR, label='nodes coordinates',
+                                     suffix='.nodes')
+        return(self._nodes)
+
+    @property
+    def edges(self):
+        if not hasattr(self, '_edges'):
+            self._edges = self._load(fdir=VIZ_DIR, label='nodes coordinates',
+                                     suffix='.edges')
+        return(self._edges)
     
     def to_sequence_space(self):
         space = SequenceSpace(X=self.landscape.index.values,

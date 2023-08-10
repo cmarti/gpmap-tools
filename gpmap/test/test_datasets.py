@@ -3,7 +3,9 @@ import unittest
 import numpy as np
 
 from gpmap.src.datasets import DataSet
-from gpmap.src.settings import DATASETS
+from gpmap.src.settings import DATASETS, VIZ_DIR
+from gpmap.src.randwalk import WMWalk
+from os.path import join
 
 
 class DatasetsTests(unittest.TestCase):
@@ -44,6 +46,11 @@ class DatasetsTests(unittest.TestCase):
             self.fail()
         except ValueError:
             pass
+    
+    def test_visualization(self):
+        serine = DataSet('serine')
+        assert(serine.nodes.shape[0] == serine.data.shape[0])
+        assert(serine.edges.shape[0] > serine.data.shape[0])
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'DatasetsTests']
