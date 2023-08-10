@@ -473,16 +473,17 @@ class WMWalk(TimeReversibleRandomWalk):
     def _calc_sandwich_rate_vector(self, i, j, Ns,
                                    neutral_stat_freqs=None,
                                    neutral_exchange_rates=None):
-        df = self.space.y[j] - self.space.y[i]
-        
         # Initialize entries
-        values = np.ones(df.shape[0])
-        idxs = np.isclose(df, 0) == False
-        
-        # Calculate selection driven part
-        S = Ns * df[idxs]
-        S_half = 0.5 * S
-        values[idxs] = S / (np.exp(S_half) - np.exp(-S_half))
+        values = np.ones(i.shape[0])
+
+        if Ns > 0:
+            df = self.space.y[j] - self.space.y[i]
+            idxs = np.isclose(df, 0) == False
+            
+            # Calculate selection driven part
+            S = Ns * df[idxs]
+            S_half = 0.5 * S
+            values[idxs] = S / (np.exp(S_half) - np.exp(-S_half))
 
         # Adjust with neutral rates if provided
         if neutral_stat_freqs is not None:
