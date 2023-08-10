@@ -9,21 +9,19 @@ from os.path import join
 from subprocess import check_call
 from tempfile import NamedTemporaryFile
 
-from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
+import gpmap.src.plot.mpl as pmpl
+import gpmap.src.plot.ds as pds
+import gpmap.src.plot.ply as ply
+
+from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR, VIZ_DIR
 from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWalk
 from gpmap.src.space import CodonSpace
-from gpmap.src.plot import (plot_holoview, get_lines_from_edges_df,
-                            figure_allele_grid_datashader, plot_nodes,
-                            plot_edges, savefig, init_fig, figure_visualization,
-                            figure_allele_grid, save_holoviews,
-                            plot_relaxation_times, plot_interactive,
-                            figure_Ns_grid, plot_SeqDEFT_summary,
-                            plot_hyperparam_cv, figure_axis_grid,
-                            plot_genotypes_box)
+from gpmap.src.plot.utils import get_lines_from_edges_df
+from gpmap.src.datasets import DataSet
         
 
-class PlottingTests(unittest.TestCase):
+class MatPlotsTests(unittest.TestCase):
     def test_get_lines_from_edges_df(self):
         nodes_df = pd.DataFrame({'1': [0, 1, 2],
                                  '2': [1, 2, 3],
@@ -33,38 +31,194 @@ class PlottingTests(unittest.TestCase):
         
         # Test with two axis
         line_coords = get_lines_from_edges_df(nodes_df, edges_df, x='1', y='2')
-        exp_x = [0, 1, np.nan, 1, 2, np.nan]
-        exp_y = [1, 2, np.nan, 2, 3, np.nan]
+        exp_x = [1, 0, np.nan, 2, 1, np.nan]
+        exp_y = [2, 1, np.nan, 3, 2, np.nan]
         for a, b, c, d in zip(line_coords[:, 0], exp_x, line_coords[:, 1], exp_y):
             assert(a == b or (np.isnan(a) and np.isnan(b)))
             assert(c == d or (np.isnan(c) and np.isnan(d)))
             
         # Test with 3 axis
         line_coords = get_lines_from_edges_df(nodes_df, edges_df, x='1', y='2', z='3')
-        exp_x = [0, 1, np.nan, 1, 2, np.nan]
-        exp_y = [1, 2, np.nan, 2, 3, np.nan]
-        exp_z = [2, 3, np.nan, 3, 4, np.nan]
+        exp_x = [1, 0, np.nan, 2, 1, np.nan]
+        exp_y = [2, 1, np.nan, 3, 2, np.nan]
+        exp_z = [3, 2, np.nan, 4, 3, np.nan]
         for a, b, c, d, e, f in zip(line_coords[:, 0], exp_x, line_coords[:, 1],
                                     exp_y, line_coords[:, 2], exp_z):
             assert(a == b or (np.isnan(a) and np.isnan(b)))
             assert(c == d or (np.isnan(c) and np.isnan(d)))
             assert(e == f or (np.isnan(e) and np.isnan(f)))
+    
+    def test_plot_nodes(self):
+        ser = DataSet('serine')
+
+        fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
+        pmpl.plot_nodes(axes, ser.nodes, size='function', color='white', lw=0.2)
+        
+        with NamedTemporaryFile('w') as fhand:
+            pmpl.savefig(fig, fhand.name)
+            
+        fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
+        pmpl.plot_nodes(axes, ser.nodes, color='white', size='function',
+                        lw=0.2, vcenter=0)
+        
+        with NamedTemporaryFile('w') as fhand:
+            pmpl.savefig(fig, fhand.name)
+    
+    def test_plot_edges(self):
+        ser = DataSet('serine')
+
+        fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
+        pmpl.plot_edges(axes, ser.nodes, ser.edges)
+        
+        with NamedTemporaryFile('w') as fhand:
+            pmpl.savefig(fig, fhand.name)
+    
+    def test_plot_visualization(self):
+        ser = DataSet('serine')
+
+        fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
+        pmpl.plot_visualization(axes, ser.nodes, ser.edges)
+        
+        with NamedTemporaryFile('w') as fhand:
+            pmpl.savefig(fig, fhand.name)
         
     def test_plot_genotypes_box(self):
-        fig, axes = init_fig(1, 1)
-        plot_genotypes_box(axes, (0, 1), (0, 1), c='black', title='bigbox',
-                           pos='top')
-        plot_genotypes_box(axes, (0.2, 0.4), (0.1, 0.3), c='red',
-                           title='inner box', pos='right')
-        
-        plot_genotypes_box(axes, (-0.5, 0.3), (-0.1, 0.2), c='blue',
-                           title='other box', pos='bottom')
+        fig, axes = pmpl.init_fig(1, 1)
+        pmpl.plot_genotypes_box(axes, (0, 1), (0, 1), c='black', title='bigbox',
+                                title_pos='top')
+        pmpl.plot_genotypes_box(axes, (0.2, 0.4), (0.1, 0.3), c='red',
+                                title='inner box', title_pos='right')
+        pmpl.plot_genotypes_box(axes, (-0.5, 0.3), (-0.1, 0.2), c='blue',
+                           title='other box', title_pos='bottom')
         axes.set(xlim=(-1, 2), ylim=(-1, 2))
         
         with NamedTemporaryFile('w') as fhand:
             fig.savefig(fhand.name)
+    
+    def test_axis_grid(self):  
+        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
+        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+        edges_df = pd.read_csv(edges_fpath)
+        pmpl.figure_axis_grid(nodes_df, max_axis=5, edges_df=edges_df, fpath=plot_fpath,
+                              fmt='svg')
+    
+    def test_Ns_grid(self):
+        ser = DataSet('serine')
+        rw = WMWalk(ser.to_sequence_space())
+        
+        with NamedTemporaryFile() as fhand:
+            fpath  = fhand.name
+            pmpl.figure_Ns_grid(rw, fpath)
+    
+    def test_alleles_variable_sites(self):  
+        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'serine.plot.alleles')
+        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
+        edges_df = pd.read_csv(edges_fpath)
+
+        # Test with all alleles per site
+        figure_allele_grid(nodes_df, fpath=plot_fpath, edges_df=edges_df, x='1', y='2')
+        
+        # Test with different number of alleles per site
+        genotypes = np.array([seq[-3] != 'C' for seq in nodes_df.index])
+        nodes_df, edges_df = select_genotypes(nodes_df, genotypes, edges=edges_df)
+        figure_allele_grid(nodes_df, fpath=plot_fpath, edges_df=edges_df, x='1', y='2')
+    
+    
+    
+    def test_plot_visualization_bin_help(self):    
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        cmd = [sys.executable, bin_fpath, '-h']
+        check_call(cmd)
+        
+    def test_plot_visualization_bin(self):    
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        
+        nodes_fpath = join(VIZ_DIR, 'serine.nodes.pq')
+        edges_fpath = join(VIZ_DIR, 'serine.edges.npz')
+        
+        with NamedTemporaryFile('w') as fhand:
+            plot_fpath = fhand.name
+            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+                   '-o', plot_fpath, '-nc', 'function', '-s', 'function']
+            check_call(cmd)
+        
+        # Highlighting peaks in nucleotide sequence
+        with NamedTemporaryFile('w') as fhand:
+            plot_fpath = fhand.name
+            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+                   '-o', plot_fpath, '-g', 'TCN,AGY', '-A', 'rna',
+                   '-nc', 'function', '-s', 'function']
+            check_call(cmd)
+        
+        # Highlighting coding sequence
+        with NamedTemporaryFile('w') as fhand:
+            plot_fpath = fhand.name
+            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+                   '-o', plot_fpath,
+                   '-g', 'S,L', '--protein_seq', '-l', 'log(binding)',
+                   '-A', 'protein', '-nc', 'function', '-s', 'function']
+            check_call(cmd)
+        
+        # Interactive
+        with NamedTemporaryFile('w') as fhand:
+            plot_fpath = fhand.name
+            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+                   '-o', plot_fpath, '-nc', 'function', '-s', 'function',
+                   '--interactive']
+            check_call(cmd)
+    
+    def test_plot_visualization_bin_datashader(self):
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
+        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
+               '-er', '1800']
+        check_call(cmd)
+        
+    def test_plot_visualization_bin_alleles(self):    
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        
+        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.npz')
+        
+        plot_fpath = join(TEST_DATA_DIR, 'serine.alleles')
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-nc', 'function', '-s', 'function', '--alleles']
+        check_call(cmd)
+    
+    def test_plot_visualization_bin_datashader_alleles(self):
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
+        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
+               '-er', '1800', '--alleles']
+        check_call(cmd)
+    
+    def test_plot_relaxation_times(self):    
+        decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
+        fpath = join(TEST_DATA_DIR, 'serine.decay_rates')
+        df = pd.read_csv(decay_fpath)
+        plot_relaxation_times(df, fpath=fpath, neutral_time=1/4)
+    
+    def test_plot_relaxation_times_bin(self):    
+        bin_fpath = join(BIN_DIR, 'plot_relaxation_times.py')
+        decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
+        plot_fpath = join(TEST_DATA_DIR, 'serine.decay_rates') 
+        cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
+        check_call(cmd)
         
         
+class ExtraTests(unittest.TestCase):
     def test_datashader_small(self):
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
         edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
@@ -121,30 +275,6 @@ class PlottingTests(unittest.TestCase):
         figure_allele_grid_datashader(nodes_df, plot_fpath, edges_df=edges_df,
                                       x='1', y='2')
     
-    def test_axis_grid(self):  
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
-        figure_axis_grid(nodes_df, max_axis=5, edges_df=edges_df, fpath=plot_fpath,
-                         fmt='svg')
-    
-    def test_alleles_variable_sites(self):  
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot.alleles')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
-
-        # Test with all alleles per site
-        figure_allele_grid(nodes_df, fpath=plot_fpath, edges_df=edges_df, x='1', y='2')
-        
-        # Test with different number of alleles per site
-        genotypes = np.array([seq[-3] != 'C' for seq in nodes_df.index])
-        nodes_df, edges_df = select_genotypes(nodes_df, genotypes, edges=edges_df)
-        figure_allele_grid(nodes_df, fpath=plot_fpath, edges_df=edges_df, x='1', y='2')
-        
     def test_datashader_alleles_variable_sites(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
         edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
@@ -158,134 +288,6 @@ class PlottingTests(unittest.TestCase):
         
         figure_allele_grid_datashader(nodes_df, plot_fpath, edges_df=edges_df,
                                       x='1', y='2')
-    
-    def test_plotting(self):
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
-        
-        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
-        plot_nodes(axes, nodes_df, size='function', color='white', lw=0.2)
-        plot_edges(axes, nodes_df, edges_df)
-        savefig(fig, plot_fpath)
-        
-        # Test with centering of function in color scale
-        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
-        plot_nodes(axes, nodes_df, color='white', size='function', lw=0.2, vcenter=0)
-        plot_edges(axes, nodes_df, edges_df)
-        savefig(fig, plot_fpath)
-    
-    def test_Ns_grid(self):
-        rw = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
-        fpath = join(TEST_DATA_DIR, 'serine.Ns')
-        figure_Ns_grid(rw, fpath)
-    
-    def test_figure_visualization(self):
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
-        
-        figure_visualization(nodes_df, edges_df, nodes_color='function',
-                             fpath=plot_fpath, highlight_genotypes=['TCN', 'AGY'],
-                             palette='Set1', alphabet_type='dna')
-    
-    def test_figure_visualization_big(self):
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
-        
-        figure_visualization(nodes_df, edges_df, nodes_color='f',
-                             fpath=plot_fpath)
-        
-    def test_plot_visualization_bin_help(self):    
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        cmd = [sys.executable, bin_fpath, '-h']
-        check_call(cmd)
-        
-    def test_plot_visualization_bin(self):    
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.npz')
-        
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'function', '-s', 'function']
-        check_call(cmd)
-        
-        # Highlighting peaks in nucleotide sequence
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot.2sets')
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-g', 'TCN,AGY', '-A', 'rna',
-               '-nc', 'function', '-s', 'function']
-        check_call(cmd)
-        
-        # Highlighting coding sequence
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot.aa')
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath,
-               '-g', 'S,L', '--protein_seq', '-l', 'log(binding)',
-               '-A', 'protein', '-nc', 'function', '-s', 'function']
-        check_call(cmd)
-        
-        # Interactive
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'function', '-s', 'function',
-               '--interactive']
-        check_call(cmd)
-    
-    def test_plot_visualization_bin_datashader(self):
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
-        
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
-               '-er', '1800']
-        check_call(cmd)
-        
-    def test_plot_visualization_bin_alleles(self):    
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.npz')
-        
-        plot_fpath = join(TEST_DATA_DIR, 'serine.alleles')
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'function', '-s', 'function', '--alleles']
-        check_call(cmd)
-    
-    def test_plot_visualization_bin_datashader_alleles(self):
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
-        
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
-               '-er', '1800', '--alleles']
-        check_call(cmd)
-    
-    def test_plot_relaxation_times(self):    
-        decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
-        fpath = join(TEST_DATA_DIR, 'serine.decay_rates')
-        df = pd.read_csv(decay_fpath)
-        plot_relaxation_times(df, fpath=fpath, neutral_time=1/4)
-    
-    def test_plot_relaxation_times_bin(self):    
-        bin_fpath = join(BIN_DIR, 'plot_relaxation_times.py')
-        decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.decay_rates') 
-        cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
-        check_call(cmd)
         
     def test_interactive_plot(self):
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
@@ -303,42 +305,6 @@ class PlottingTests(unittest.TestCase):
                          nodes_color='function', nodes_size=10,
                          edges_width=1, z='3')
 
-    def test_plot_a_optimization(self):
-        fpath = join(TEST_DATA_DIR, 'logL.csv')
-        log_Ls = pd.read_csv(fpath, index_col=0)
-        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
-        plot_hyperparam_cv(log_Ls, axes, err_bars='stderr',
-                           x='log_sd', xlabel=r'$\log_{10}(\sigma_P)$')
-        fpath = join(TEST_DATA_DIR, 'seqdeft_a')
-        savefig(fig, fpath)
-    
-    def test_plot_beta_optimization(self):    
-        fpath = join(TEST_DATA_DIR, 'vc.cv_loss.csv')
-        mses = pd.read_csv(fpath, index_col=0)
-        print(mses)
-        
-        fig, subplots = init_fig(1, 3, colsize=4, rowsize=3.5)
-        plot_hyperparam_cv(mses, subplots[0], err_bars='stderr',
-                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
-                           y='mse', ylabel='MSE', highlight='min')
-        plot_hyperparam_cv(mses, subplots[1], err_bars='stderr',
-                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
-                           y='logL', ylabel='log(L)')
-        plot_hyperparam_cv(mses, subplots[2], err_bars='stderr',
-                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
-                           y='r2', ylabel=r'$R^2$')
-               
-        fpath = join(TEST_DATA_DIR, 'vc_beta')
-        savefig(fig, fpath)
-    
-    def test_plot_SeqDEFT_summary(self):
-        fpath = join(TEST_DATA_DIR, 'logL.csv')
-        logl = pd.read_csv(fpath)
-        
-        fig = plot_SeqDEFT_summary(logl)
-        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.png')
-        savefig(fig, fpath)
-        
     def xtest_visualize_reactive_paths(self):
         np.random.seed(0)
         v = CodonFitnessLandscape(add_variation=True)
@@ -440,8 +406,46 @@ class PlottingTests(unittest.TestCase):
         v.plot_ns_movie(dpath, nframes=60, fmax=1.64,
                                 n_components=20, force=True)
 
+
+class InferencePlotsTests(unittest.TestCase):
+    def test_plot_a_optimization(self):
+        fpath = join(TEST_DATA_DIR, 'logL.csv')
+        log_Ls = pd.read_csv(fpath, index_col=0)
+        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
+        plot_hyperparam_cv(log_Ls, axes, err_bars='stderr',
+                           x='log_sd', xlabel=r'$\log_{10}(\sigma_P)$')
+        fpath = join(TEST_DATA_DIR, 'seqdeft_a')
+        savefig(fig, fpath)
+    
+    def test_plot_beta_optimization(self):    
+        fpath = join(TEST_DATA_DIR, 'vc.cv_loss.csv')
+        mses = pd.read_csv(fpath, index_col=0)
+        print(mses)
+        
+        fig, subplots = init_fig(1, 3, colsize=4, rowsize=3.5)
+        plot_hyperparam_cv(mses, subplots[0], err_bars='stderr',
+                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
+                           y='mse', ylabel='MSE', highlight='min')
+        plot_hyperparam_cv(mses, subplots[1], err_bars='stderr',
+                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
+                           y='logL', ylabel='log(L)')
+        plot_hyperparam_cv(mses, subplots[2], err_bars='stderr',
+                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
+                           y='r2', ylabel=r'$R^2$')
+               
+        fpath = join(TEST_DATA_DIR, 'vc_beta')
+        savefig(fig, fpath)
+    
+    def test_plot_SeqDEFT_summary(self):
+        fpath = join(TEST_DATA_DIR, 'logL.csv')
+        logl = pd.read_csv(fpath)
+        
+        fig = plot_SeqDEFT_summary(logl)
+        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.png')
+        savefig(fig, fpath)
+
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'PlottingTests']
+    import sys;sys.argv = ['', 'MatPlotsTests.test_Ns_grid']
     unittest.main()
 
