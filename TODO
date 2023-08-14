@@ -18,7 +18,8 @@ High priority
 - Change a parametrization to sigma or variance
 - Review and update binaries with latests features
 - Try to have a common function to evaluate predictions across subsets of data: evaluating and CV fitting
-
+- Review and add the a=inf value to the table
+- Review SeqDEFT a range values. They don't flatten out at the ends as much as we would like.
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
@@ -60,4 +61,5 @@ Long term
 - Implement contrastive losses
 - Implement laplace approximation for variances in SeqDEFT
 - Try MCMC on marginal likelihood
+- Add star tree phylogenetic likelihood
 
