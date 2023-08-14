@@ -30,3 +30,16 @@ def get_axis_lims(nodes_df, x, y, z=None):
     axis_range = axis_max - axis_min
     axis_lims = (axis_min - 0.05 * axis_range, axis_max + 0.05 * axis_range)
     return(axis_lims)
+
+
+def get_allele_grid_config(sequences, positions=None, position_labels=None):
+    config = guess_space_configuration(sequences)
+    length, n_alleles = config['length'], np.max(config['n_alleles'])
+
+    if position_labels is None:
+        position_labels = np.arange(length) + 1
+
+    if positions is None:
+        positions = np.arange(length)
+    return({'seq_length': length, 'n_alleles': n_alleles,
+            'alphabet': config['alphabet']})

@@ -20,6 +20,8 @@ High priority
 - Try to have a common function to evaluate predictions across subsets of data: evaluating and CV fitting
 - Review and add the a=inf value to the table
 - Review SeqDEFT a range values. They don't flatten out at the ends as much as we would like.
+- Add some more plotting details to the tutorials e.g. edge coloring and
+  positioning of legends and colorbars in different places
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
@@ -60,6 +62,10 @@ Long term
 - Implement evidence maximization
 - Implement contrastive losses
 - Implement laplace approximation for variances in SeqDEFT
+- Re-implement HMC from Wei-Chia's code
+- Add section to docs on the practical implementation of the operators as compared with traditional
+  gaussian process approaches that use the dense Cholesky decomposition, which is intractable for 
+  large datasets.
 - Try MCMC on marginal likelihood
 - Add star tree phylogenetic likelihood
 
