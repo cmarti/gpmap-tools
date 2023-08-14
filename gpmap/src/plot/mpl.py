@@ -16,15 +16,18 @@ from gpmap.src.utils import check_error
 from gpmap.src.seq import guess_space_configuration
 from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
                                  minimize_nodes_distance)
+from itertools import product
 
 
 def init_fig(nrow=1, ncol=1, figsize=None, style='ticks',
-             colsize=3, rowsize=3, sharex=False, sharey=False):
+             colsize=3, rowsize=3, sharex=False, sharey=False,
+             hspace=0.05, wspace=0.05):
     sns.set_style(style)
     if figsize is None:
         figsize = (colsize * ncol, rowsize * nrow)
     fig, axes = plt.subplots(nrow, ncol, figsize=figsize,
-                             sharex=sharex, sharey=sharey)
+                             sharex=sharex, sharey=sharey,
+                             gridspec_kw={'wspace': wspace, 'hspace': hspace})
     return(fig, axes)
 
 
@@ -455,11 +458,17 @@ def plot_visualization(axes, nodes_df, edges_df=None,
         axis = [x, y] if z is None else [x, y, z]
         nodes_df = minimize_nodes_distance(nodes_df, prev_nodes_df, axis)
     
-    if sort_by is not None:
-        ndf = nodes_df.sort_values([sort_by], ascending=sort_ascending)
-    else:
-        ndf = nodes_df
+    if edges_df is not None:
+        plot_edges(axes, nodes_df, edges_df, x=x, y=y, z=z,
+                   alpha=edges_alpha, zorder=edges_zorder,
+                   color=edges_color, cmap=edges_cmap, cbar_axes=edges_cbar_axes,
+                   cbar=edges_cbar, palette=edges_palete,
+                   width=edges_width, max_width=edges_max_width,
+                   min_width=edges_min_width) 
     
+    if sort_by is None:
+        sort_by = nodes_color
+    ndf = nodes_df.sort_values([sort_by], ascending=sort_ascending)
     plot_nodes(axes, nodes_df=ndf, x=x, y=y, z=z,
                color=nodes_color, size=nodes_size, cmap=nodes_cmap,
                cbar=nodes_cbar, cbar_axes=nodes_cbar_axes,
@@ -470,16 +479,97 @@ def plot_visualization(axes, nodes_df, edges_df=None,
                vmax=nodes_vmax, vmin=nodes_vmin, vcenter=nodes_vcenter,
                fontsize=fontsize)
     
-    if edges_df is not None:
-        plot_edges(axes, nodes_df, edges_df, x=x, y=y, z=z,
-                   alpha=edges_alpha, zorder=edges_zorder,
-                   color=edges_color, cmap=edges_cmap, cbar_axes=edges_cbar_axes,
-                   cbar=edges_cbar, palette=edges_palete,
-                   width=edges_width, max_width=edges_max_width,
-                   min_width=edges_min_width) 
-    
     if autoscale_axis:
         autoscale_axis(nodes_df, axes, x, y, z=z)
+    
+    add_axis_labels(axes, x, y, z=z, fontsize=fontsize)
+
+
+def calc_stationary_ymeans(y, n, ymin=None, ymax=None, pmin=0.05, pmax=0.8):
+    ymean = y.mean()
+    dy = y.max() - ymean
+    
+    if ymin is None:
+        ymin = ymean + pmin * dy
+    if ymax is None:
+        ymax = ymean + pmax * dy
+        
+    ymeans = np.linspace(ymin, ymax, n)
+    return(ymeans)
+
+
+def figure_Ns_grid(rw, x='1', y='2', pmin=0, pmax=0.8, ncol=4, nrow=3,
+                   show_edges=True, fontsize=12, fpath=None, kwargs={}):
+    fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7,
+                             sharex=True, sharey=True, hspace=0.2, wspace=0.2)
+    fig.subplots_adjust(right=0.9, left=0.1)
+    cbar_axes = fig.add_axes([0.92, 0.2, 0.015, 0.6])
+    subplots = subplots.flatten()
+    ymeans = calc_stationary_ymeans(rw.space.y, n=ncol*nrow, pmin=pmin, pmax=pmax)
+    
+    prev_nodes_df = None
+    for i, (mean_function, axes) in enumerate(zip(ymeans, subplots)):
+        rw.calc_visualization(mean_function=mean_function, n_components=3)
+        is_last_plot = i == ymeans.shape[0] - 1
+        
+        ndf = rw.nodes_df
+        edf = None if not show_edges else rw.space.get_edges_df()
+        
+        plot_visualization(axes, ndf, edf, x=x, y=y, nodes_cbar=is_last_plot,
+                           nodes_cbar_axes=cbar_axes if is_last_plot else None, 
+                           fontsize=fontsize, prev_nodes_df=prev_nodes_df, 
+                           **kwargs)
+        prev_nodes_df = rw.nodes_df
+        title = r'$\bar{y}$' + ' = {:.2f}; Ns={:.2f}'.format(mean_function, rw.Ns)
+        axes.set(xlabel='', ylabel='', title=title)
+
+    fig.supxlabel('Diffusion axis {}'.format(x), fontsize=fontsize+4,
+                  y=0.05, ha='center', va='center')
+    fig.supylabel('Diffusion axis {}'.format(y), fontsize=fontsize+4, 
+                  x=0.05, ha='center', va='center')
+    savefig(fig, fpath, tight=False)
+
+
+def get_max_axis(max_axis, nodes_df):
+    if max_axis is None:
+        max_axis = 1
+        while str(max_axis) in nodes_df.columns:
+            max_axis += 1
+        max_axis -= 1
+    else:
+        msg = 'max_axis should be in nodes_df.columns'
+        check_error(str(max_axis) in nodes_df.columns, msg=msg)
+    max_axis -= 1
+    return(max_axis)
+
+
+def figure_axis_grid(nodes_df, max_axis=None, edges_df=None, fpath=None,
+                     colsize=3, rowsize=2.7, fmt='png', kwargs={}):
+    
+    max_axis = get_max_axis(max_axis, nodes_df)
+    fig, subplots = init_fig(max_axis, max_axis, colsize=colsize, rowsize=rowsize)
+    fig.subplots_adjust(right=0.87, left=0.13)
+    cbar_axes = fig.add_axes([0.9, 0.2, 0.015, 0.6])
+
+    for i, j in product(list(range(max_axis)), repeat=2):    
+        is_last_plot = (i == max_axis - 1) and (j == max_axis -1)
+        axes = subplots[i][j]
+        x, y = str(j+1), str(i+2)
+        
+        if j > i:
+            empty_axes(axes)
+        else:
+            plot_visualization(axes, nodes_df, edges_df=edges_df, x=x, y=y, 
+                               nodes_cbar=is_last_plot,
+                               nodes_cbar_axes=cbar_axes if is_last_plot else None,
+                               **kwargs)
+
+        if i < max_axis - 1:
+            axes.set(xlabel='', xticks=[])
+        if j > 0:
+            axes.set(ylabel='', yticks=[])
+                    
+    savefig(fig, fpath, fmt=fmt, tight=False)
 
 
 def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
@@ -532,131 +622,7 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
             ypos = ylims[0] + ypos_label * (ylims[1] - ylims[0])
             axes.text(xpos, ypos, '{}{}'.format(allele, position_labels[j]),
                       ha='left')
-            
-    
     savefig(fig, fpath, fmt=fmt)
-
-
-def figure_axis_grid(nodes_df, max_axis=None, edges_df=None, fpath=None,
-                     nodes_size=2.5, nodes_color='function',
-                     nodes_cmap='viridis', nodes_cmap_label='Function', 
-                     edges_color='grey', edges_width=0.5, edges_cmap='binary',
-                     edges_alpha=0.1, colsize=3, rowsize=2.7,
-                     fmt='png'):
-    
-    if max_axis is None:
-        max_axis = 1
-        while str(max_axis) in nodes_df.columns:
-            max_axis += 1
-        max_axis -= 1
-    else:
-        msg = 'max_axis should be in nodes_df.columns'
-        check_error(str(max_axis) in nodes_df.columns, msg=msg)
-    max_axis -= 1
-    
-    fig, subplots = init_fig(max_axis, max_axis,
-                             colsize=colsize, rowsize=rowsize)
-    fig.subplots_adjust(right=0.90)
-    cbar_axes = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-    plot_cbar = True
-    
-    for i in range(max_axis):
-        y = str(i+2)
-        for j in range(max_axis):
-            x = str(j+1)
-            axes = subplots[i][j]
-            
-            if j > i:
-                empty_axes(axes)
-            else:
-                plot_visualization(axes, nodes_df, edges_df=edges_df,
-                                   x=x, y=y, nodes_color=nodes_color,
-                                   nodes_size=nodes_size, nodes_cmap=nodes_cmap,
-                                   cbar=plot_cbar, cbar_axes=cbar_axes if plot_cbar else None,
-                                   nodes_cmap_label=nodes_cmap_label, 
-                                   edges_color=edges_color, edges_width=edges_width,
-                                   edges_cmap=edges_cmap, edges_alpha=edges_alpha,  
-                                   sort_nodes=True, ascending=True, sort_by=None)
-                plot_cbar = False
-                
-            if i < max_axis - 1:
-                axes.set_xlabel('')
-                axes.set_xticks([])
-            if j > 0:
-                axes.set_ylabel('')
-                axes.set_yticks([])
-                    
-    savefig(fig, fpath, fmt=fmt, tight=False)
-
-
-def calc_stationary_ymeans(y, n, ymin=None, ymax=None, pmin=0.05, pmax=0.8):
-    ymean = y.mean()
-    dy = y.max() - ymean
-    
-    if ymin is None:
-        ymin = ymean + pmin * dy
-    if ymax is None:
-        ymax = ymean + pmax * dy
-        
-    ymeans = np.linspace(ymin, ymax, n)
-    return(ymeans)
-
-
-def figure_Ns_grid(rw, fpath=None, pmin=0, pmax=0.8,
-                   ncol=4, nrow=3, show_edges=True,
-                   nodes_color='function', nodes_size=2.5,
-                   nodes_cmap='viridis', nodes_alpha=1,
-                   nodes_min_size=1, nodes_max_size=40,
-                   nodes_edgecolor='black', nodes_lw=0, 
-                   nodes_cmap_label='Function', nodes_vmin=None, nodes_vmax=None,
-                   edges_color='grey', edges_width=0.5, edges_cmap='binary',
-                   edges_alpha=0.1, edges_max_width=1, edges_min_width=0.1, 
-                   sort_by=None, sort_ascending=False,
-                   fontsize=12, x='1', y='2'):
-    
-    
-    fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7,
-                             sharex=True, sharey=True)
-    fig.subplots_adjust(right=0.9, left=0.1)
-    cbar_axes = fig.add_axes([0.92, 0.2, 0.015, 0.6])
-    subplots = subplots.flatten()
-    ymeans = calc_stationary_ymeans(rw.space.y, n=ncol*nrow, pmin=pmin, pmax=pmax)
-    
-    prev_nodes_df = None
-    for i, (mean_function, axes) in enumerate(zip(ymeans, subplots)):
-        rw.calc_visualization(mean_function=mean_function, n_components=3)
-        is_last_plot = i == ymeans.shape[0] - 1
-        
-        ndf = rw.nodes_df
-        edf = None if not show_edges else rw.space.get_edges_df()
-        
-        plot_visualization(axes, ndf, edf, x=x, y=y,
-                           sort_by=sort_by, sort_ascending=sort_ascending,
-                           nodes_color=nodes_color, nodes_size=nodes_size,
-                           nodes_cmap=nodes_cmap, nodes_alpha=nodes_alpha,
-                           nodes_cbar=is_last_plot,
-                           nodes_cbar_axes=cbar_axes if is_last_plot else None, 
-                           nodes_min_size=nodes_min_size, nodes_max_size=nodes_max_size,
-                           nodes_edgecolor=nodes_edgecolor, nodes_lw=nodes_lw, 
-                           nodes_cmap_label=nodes_cmap_label if (i+1) % ncol == 0 else None,
-                           nodes_vmin=nodes_vmin,
-                           nodes_vmax=nodes_vmax, 
-                           
-                           edges_color=edges_color, edges_width=edges_width,
-                           edges_cmap=edges_cmap,
-                           edges_alpha=edges_alpha, 
-                           edges_max_width=edges_max_width, edges_min_width=edges_min_width,
-                            
-                           fontsize=fontsize, prev_nodes_df=prev_nodes_df)
-        prev_nodes_df = rw.nodes_df
-        title = r'$\bar{y}$' + ' = {:.2f}; Ns={:.2f}'.format(mean_function, rw.Ns)
-        axes.set_title(title)
-
-    fig.supxlabel('Diffusion axis {}'.format(x), fontsize=fontsize+4,
-                  y=0.05, ha='center', va='center')
-    fig.supylabel('Diffusion axis {}'.format(y), fontsize=fontsize+4, 
-                  x=0.05, ha='center', va='center')
-    savefig(fig, fpath, tight=False)
 
 
 def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',

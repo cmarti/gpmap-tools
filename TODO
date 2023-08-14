@@ -18,6 +18,8 @@ High priority
 - Change a parametrization to sigma or variance
 - Review and update binaries with latests features
 - Try to have a common function to evaluate predictions across subsets of data: evaluating and CV fitting
+- Add some more plotting details to the tutorials e.g. edge coloring and
+  positioning of legends and colorbars in different places
 
 
 Mid priority
@@ -59,5 +61,9 @@ Long term
 - Implement evidence maximization
 - Implement contrastive losses
 - Implement laplace approximation for variances in SeqDEFT
+- Re-implement HMC from Wei-Chia's code
+- Add section to docs on the practical implementation of the operators as compared with traditional
+  gaussian process approaches that use the dense Cholesky decomposition, which is intractable for 
+  large datasets.
 - Try MCMC on marginal likelihood
 

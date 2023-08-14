@@ -95,22 +95,22 @@ class MatPlotsTests(unittest.TestCase):
         with NamedTemporaryFile('w') as fhand:
             fig.savefig(fhand.name)
     
-    def test_axis_grid(self):  
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
-        pmpl.figure_axis_grid(nodes_df, max_axis=5, edges_df=edges_df, fpath=plot_fpath,
-                              fmt='svg')
-    
     def test_Ns_grid(self):
         ser = DataSet('serine')
         rw = WMWalk(ser.to_sequence_space())
         
         with NamedTemporaryFile() as fhand:
             fpath  = fhand.name
-            pmpl.figure_Ns_grid(rw, fpath)
+            pmpl.figure_Ns_grid(rw, fpath=fpath)
+    
+    def test_axis_grid(self):
+        ser = DataSet('serine')
+
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            fpath = 'test'
+            pmpl.figure_axis_grid(ser.nodes, max_axis=4, edges_df=ser.edges,
+                                  fpath=fpath, fmt='png')
     
     def test_alleles_variable_sites(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
@@ -446,6 +446,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatPlotsTests.test_Ns_grid']
+    import sys;sys.argv = ['', 'MatPlotsTests.test_axis_grid']
     unittest.main()
 
