@@ -48,6 +48,17 @@ class MatPlotsTests(unittest.TestCase):
             assert(c == d or (np.isnan(c) and np.isnan(d)))
             assert(e == f or (np.isnan(e) and np.isnan(f)))
     
+    def test_plot_hist(self):
+        ser = DataSet('serine')
+
+        fig, axes = pmpl.init_fig(1, 1, colsize=3, rowsize=1.5)
+        pmpl.plot_color_hist(axes, ser.nodes, bins=20)
+        
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            fpath = 'test'
+            pmpl.savefig(fig, fpath)
+
     def test_plot_nodes(self):
         ser = DataSet('serine')
 
@@ -81,6 +92,14 @@ class MatPlotsTests(unittest.TestCase):
         
         with NamedTemporaryFile('w') as fhand:
             pmpl.savefig(fig, fhand.name)
+            
+        fig, axes = pmpl.init_fig(1, 1, colsize=5, rowsize=4)
+        pmpl.plot_visualization(axes, ser.nodes, ser.edges, center_spines=True,
+                                nodes_size=30, add_hist=True, inset_cbar=True)
+        
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pmpl.savefig(fig, fpath, tight=False)
         
     def test_plot_genotypes_box(self):
         fig, axes = pmpl.init_fig(1, 1)
@@ -132,9 +151,7 @@ class MatPlotsTests(unittest.TestCase):
         
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
-            fpath = 'test'
-            
-            fig, axes = init_fig(1, 1, colsize=4, rowsize=3)
+            pmpl.plot_relaxation_times(ser.relaxation_times, fpath=fpath)
             pmpl.plot_relaxation_times(ser.relaxation_times, neutral_time=1/4, 
                                        fpath=fpath)
     
@@ -199,28 +216,26 @@ class MatPlotsTests(unittest.TestCase):
         check_call(cmd)
         
         
-class ExtraTests(unittest.TestCase):
-    def test_datashader_small(self):
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
+class DatashaderTests(unittest.TestCase):
+    def test_plot_visualization(self):
+        ser = DataSet('serine')
         
-        # Test only with nodes
-        dsg =  plot_holoview(nodes_df, nodes_color='function')
-        save_holoviews(dsg, plot_fpath)
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
         
-        # Test with edges
-        dsg =  plot_holoview(nodes_df, edges_df=edges_df, nodes_color='function')
-        save_holoviews(dsg, plot_fpath)
-        
-        # Test without shading
-        dsg = plot_holoview(nodes_df, edges_df=edges_df,
-                            nodes_color='function', linewidth=0,
-                            nodes_size=20, nodes_vmin=-5,
-                            shade_nodes=False, shade_edges=False)
-        save_holoviews(dsg, plot_fpath)
+            # Shading
+            dsg =  pds.plot_visualization(ser.nodes, shade_nodes=True)
+            pds.savefig(dsg, fpath)
+            
+            # With edges
+            dsg =  pds.plot_visualization(ser.nodes, edges_df=ser.edges,
+                                          shade_nodes=True, shade_edges=True)
+            pds.savefig(dsg, fpath)
+            
+            # Test without shading
+            dsg =  pds.plot_visualization(ser.nodes, edges_df=ser.edges,
+                                          shade_nodes=False, shade_edges=False)
+            pds.savefig(dsg, fpath)
         
     def test_datashader_big(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
@@ -449,6 +464,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatPlotsTests.test_plot_relaxation_times']
+    import sys;sys.argv = ['', 'MatPlotsTests.test_plot_visualization']
     unittest.main()
 

@@ -10,18 +10,18 @@ import matplotlib.colors as colors
 
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from gpmap.src.settings import PLOTS_FORMAT
 from gpmap.src.utils import check_error
 from gpmap.src.seq import guess_space_configuration
 from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
                                  minimize_nodes_distance)
-from itertools import product
-
+from itertools import product, chain
 
 def init_fig(nrow=1, ncol=1, figsize=None, style='ticks',
              colsize=3, rowsize=3, sharex=False, sharey=False,
-             hspace=0.05, wspace=0.05):
+             hspace=None, wspace=None):
     sns.set_style(style)
     if figsize is None:
         figsize = (colsize * ncol, rowsize * nrow)
@@ -39,6 +39,56 @@ def init_single_fig(figsize=None, style='ticks',
     fig = plt.figure(figsize=figsize)
     axes = fig.add_subplot(1, 1, 1, projection='3d' if is_3d else None)
     return(fig, axes)
+
+
+def get_hist_inset_axes(axes, pos=(-0.7, -0.1)):
+    ax = inset_axes(axes, width="40%", height="20%",
+                    bbox_to_anchor=(pos[0], pos[1] + 0.2, 1, 0.95),
+                    bbox_transform=axes.transAxes, borderpad=0)
+    ax.patch.set_alpha(0)
+    return(ax)
+
+
+def get_cbar_inset_axes(axes, orientation='vertical', pos=(-0.7, -0.1)):
+    if orientation == 'horizontal':
+        cax = inset_axes(axes, width="40%", height="3%",
+                         bbox_to_anchor=(pos[0], pos[1], 1, 0.95),
+                         bbox_transform=axes.transAxes, borderpad=0)
+    elif orientation == 'vertical':
+        cax = inset_axes(axes, width="3%", height="40%",
+                         bbox_to_anchor=(-0.05, 0, 1, 0.95),
+                         bbox_transform=axes.transAxes, borderpad=0)
+    else:
+        msg = 'cbar orientation can only be {vertical, horizontal}'
+        raise ValueError(msg)
+    return(cax)
+
+
+def set_centered_spines(axes, xlabel='', ylabel='', add_grid=True, zorder=3,
+                        alpha=0.5):
+    axes.spines['left'].set(position=('data', 0), zorder=zorder,
+                            alpha=alpha)
+    axes.spines['bottom'].set(position=('data', 0), zorder=zorder,  
+                              alpha=alpha)
+    axes.tick_params(axis='both', color=(0, 0, 0, alpha))
+    for t in chain(axes.get_xticklabels(), axes.get_yticklabels()):
+        t.set_alpha(alpha)
+    
+    if add_grid:
+        axes.grid(alpha=0.2)
+
+    axes.plot((1), (0), ls="", marker=">", ms=5, color="k", alpha=alpha,
+              transform=axes.get_yaxis_transform(), clip_on=False,)
+    axes.plot((0), (1), ls="", marker="^", ms=5, color="k", alpha=alpha,
+            transform=axes.get_xaxis_transform(), clip_on=False)
+    
+    axes.annotate(xlabel, xy=(1.1, 0.1), xycoords=('axes fraction', 'data'),
+                  textcoords='offset points', fontsize=12,
+                  ha='right', va='center')
+    axes.annotate(ylabel, xy=(0.1,  0.94), xycoords=('data', 'axes fraction'),
+                  textcoords='offset points', fontsize=12,
+                  ha='left', va='bottom')
+    sns.despine(ax=axes)
 
 
 def savefig(fig, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360, figsize=None):
@@ -134,6 +184,7 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
 def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
                alpha=0.1, zorder=1,
                color='grey', cbar=True, cmap='binary', cbar_axes=None,
+               cbar_orientation='vertical',
                cbar_label='', palette=None, legend=True, legend_loc=0,
                width=0.5, max_width=1, min_width=0.1, fontsize=12):
     '''
@@ -200,14 +251,16 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
     '''
     # TODO: get colors and width as either fixed values or from edges_df
     edges_coords = get_edges_coords(nodes_df, edges_df, x=x, y=y, z=z, avoid_dups=True)
-    c, cbar, legend = get_element_color(edges_df, color, palette, cbar, legend)
+    c, cbar, legend, vmin, vmax = get_element_color(edges_df, color, palette,
+                                                    cbar, legend)
     widths = get_element_sizes(edges_df, width, min_width, max_width)
     get_lines = LineCollection if z is None else Line3DCollection
     lines = get_lines(edges_coords, colors=c, linewidths=widths,
                       alpha=alpha, zorder=zorder, cmap=cm.get_cmap(cmap))
     axes.add_collection(lines)
     add_color_info(lines, axes, cbar, cbar_axes, cbar_label,
-                   legend, palette, legend_loc, fontsize)
+                   legend, palette, legend_loc, fontsize, cbar_orientation,
+                   vmin, vmax)
     return(lines)
 
 
@@ -215,9 +268,10 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                alpha=1, zorder=2,
                color='function', cmap='viridis',
                cbar=True, cbar_axes=None, cbar_label='Function',
+               cbar_orientation='vertical',
                vcenter=None, vmax=None, vmin=None, palette='Set1',
                size=2.5, max_size=40, min_size=1,
-               lw=0, edgecolor='black', fontsize=12, legend=True, legend_loc=0):
+               lw=0, edgecolor='black', fontsize=8, legend=True, legend_loc=0):
     '''
     Plots the nodes representing the states of the discrete space on the
     provided coordinates
@@ -320,30 +374,63 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
     '''
     
     s = get_element_sizes(nodes_df, size, min_size, max_size)
-    c, cbar, legend = get_element_color(nodes_df, color, palette, cbar, legend)
-    norm = None if vcenter is None else colors.CenteredNorm()
+    c, cbar, legend, vmin, vmax = get_element_color(nodes_df, color, palette,
+                                                    cbar, legend, vmin, vmax)
     kwargs = {'c': c, 'linewidth': lw, 's': s, 'zorder': zorder,
-              'alpha': alpha, 'edgecolor': edgecolor, 'cmap': cm.get_cmap(cmap),
-              'vmax': vmax, 'vmin': vmin, 'norm': norm}
+              'alpha': alpha, 'edgecolor': edgecolor, 'cmap': cm.get_cmap(cmap)}
+    if vcenter:
+        kwargs['norm'] = colors.CenteredNorm()
+    else:
+        kwargs['vmax'] = vmax
+        kwargs['vmin'] = vmin
+        
     if z is not None:
         kwargs['zs'] = nodes_df[z]
     sc = axes.scatter(nodes_df[x], nodes_df[y], **kwargs)
     add_color_info(sc, axes, cbar, cbar_axes, cbar_label,
-                   legend, palette, legend_loc, fontsize)
-        
+                   legend, palette, legend_loc, fontsize,
+                   cbar_orientation, vmin, vmax)
 
-def add_axis_labels(axes, x, y, z=None, fontsize=12):
-    axes.set_xlabel('Diffusion axis {}'.format(x), fontsize=fontsize)
-    axes.set_ylabel('Diffusion axis {}'.format(y), fontsize=fontsize)
-    if hasattr(axes, 'set_zlabel'):
-        axes.set_zlabel('Diffusion axis {}'.format(z), fontsize=fontsize)
+
+def plot_color_hist(axes, df, color='function', cmap='viridis', bins=50,
+                    fontsize=8):
+    _, bins, patches = axes.hist(df[color], bins=bins)
+    values = 0.5 * (bins[1:] + bins[:-1])
+    values = (values - bins[0]) / (bins[-1] - bins[0])
+    
+    cmap = cm.get_cmap(cmap)
+    for value, patch in zip(values, patches):
+        patch.set_facecolor(cmap(value))
+    
+    sns.despine(ax=axes, left=True)
+    axes.set(yticks=[], xticks=[], xlim=(bins[0], bins[-1]))
+    axes.set_ylabel(ylabel='Frequency', fontsize=fontsize)
+
+
+def add_axis_labels(axes, x, y, z=None, fontsize=12, center_spines=False):
+    xlabel, ylabel = 'Diffusion axis {}'.format(x), 'Diffusion axis {}'.format(y)
+        
+    if center_spines:
+        msg = 'Centered spines option is incompatible with z axis for 3D plot'
+        check_error(z is None, msg=msg)
+        set_centered_spines(axes, xlabel, ylabel, add_grid=True)
+        axes.set(aspect='equal')
+        
+    else:
+        axes.set_xlabel(xlabel, fontsize=fontsize)
+        axes.set_ylabel(ylabel, fontsize=fontsize)
+    
+        if hasattr(axes, 'set_zlabel'):
+            axes.set_zlabel('Diffusion axis {}'.format(z), fontsize=fontsize)
     
     
 def add_color_info(sc, axes, cbar, cbar_axes, cbar_label,
-                   legend, palette, legend_loc, fontsize):
+                   legend, palette, legend_loc, fontsize, orientation,
+                   vmin, vmax):
     if cbar:
         add_cbar(sc, axes, cbar_axes=cbar_axes, label=cbar_label,
-                 fontsize=fontsize, fraction=0.1, pad=0.02)
+                 fontsize=fontsize, fraction=0.1, pad=0.02,
+                 orientation=orientation, vmin=vmin, vmax=vmax)
     if legend:
         create_patches_legend(axes, palette, loc=legend_loc, fontsize=fontsize)
 
@@ -374,7 +461,7 @@ def get_element_sizes(df, size, min_size, max_size):
     return(size)
 
 
-def get_element_color(df, color, palette, cbar, legend):
+def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
     if color in df.columns:
         
         # Categorical color map
@@ -393,6 +480,10 @@ def get_element_color(df, color, palette, cbar, legend):
         elif df[color].dtype in (float, int):
             color = df[color]
             legend, cbar = False, cbar
+            if vmin is None:
+                vmin = color.min()
+            if vmax is None:
+                vmax = color.max()
             
         else:
             msg = 'color dtype is not compatible: {}'.format(df[color].dtype)
@@ -400,14 +491,22 @@ def get_element_color(df, color, palette, cbar, legend):
     else:
         cbar, legend = False, False
     
-    return(color, cbar, legend)
+    return(color, cbar, legend, vmin, vmax)
 
 
 def add_cbar(sc, axes, cbar_axes=None, label='Function', fontsize=12,
-              fraction=0.1, pad=0.02):
+              fraction=0.1, pad=0.02, orientation='vertical', nticks=5,
+              vmin=None, vmax=None):
     ax, cax = (axes, None) if cbar_axes is None else (None, cbar_axes)
-    plt.colorbar(sc, ax=ax, cax=cax, fraction=fraction,
-                 pad=pad).set_label(label=label, fontsize=fontsize)
+    cbar = plt.colorbar(sc, ax=ax, cax=cax, fraction=fraction,
+                        pad=pad, orientation=orientation)
+    cbar.set_label(label=label, fontsize=fontsize)
+    
+    if vmin is not None and vmax is not None:
+        ticks = np.linspace(vmin, vmax, nticks)
+        cbar.set_ticks(ticks)
+        ticklabels = ['{:.1f}'.format(x) for x in ticks]
+        cbar.set_ticklabels(ticklabels, fontsize=fontsize-1)
 
 
 def plot_genotypes_box(axes, xlims, ylims, lw=1, c='black', facecolor='none',
@@ -452,7 +551,10 @@ def plot_visualization(axes, nodes_df, edges_df=None,
                        edges_width=0.5, edges_max_width=1, edges_min_width=0.1,
                        
                        sort_by=None, sort_ascending=False,
-                       fontsize=12, prev_nodes_df=None, autoscale_axis=False):
+                       center_spines=False, add_hist=False, inset_cbar=False,
+                       inset_pos=(-0.7, -0.1),
+                       axis_fontsize=12, fontsize=8, 
+                       prev_nodes_df=None, autoscale_axis=False):
     
     if prev_nodes_df is not None:
         axis = [x, y] if z is None else [x, y, z]
@@ -472,12 +574,23 @@ def plot_visualization(axes, nodes_df, edges_df=None,
     ndf = nodes_df
     if sort_by in nodes_df.columns:
         ndf = ndf.sort_values([sort_by], ascending=sort_ascending)
-        
+    
+    orientation = 'vertical'
+    if add_hist:
+        check_error(inset_cbar, msg='inset_cbar must be true for adding histogram')
+        orientation = 'horizontal'
+        nodes_hist_axes = get_hist_inset_axes(axes, pos=inset_pos)
+        if nodes_color in nodes_df.columns:
+            plot_color_hist(nodes_hist_axes, nodes_df, nodes_color, nodes_cmap,
+                            bins=20)
+    if inset_cbar:
+        nodes_cbar_axes = get_cbar_inset_axes(axes, orientation=orientation,
+                                              pos=inset_pos)
     
     plot_nodes(axes, nodes_df=ndf, x=x, y=y, z=z,
                color=nodes_color, size=nodes_size, cmap=nodes_cmap,
                cbar=nodes_cbar, cbar_axes=nodes_cbar_axes,
-               cbar_label=nodes_cmap_label,
+               cbar_label=nodes_cmap_label, cbar_orientation=orientation,
                palette=nodes_palette, alpha=nodes_alpha, zorder=nodes_zorder,
                max_size=nodes_max_size, min_size=nodes_min_size,
                edgecolor=nodes_edgecolor, lw=nodes_lw,
@@ -487,7 +600,8 @@ def plot_visualization(axes, nodes_df, edges_df=None,
     if autoscale_axis:
         autoscale_axis(nodes_df, axes, x, y, z=z)
     
-    add_axis_labels(axes, x, y, z=z, fontsize=fontsize)
+    add_axis_labels(axes, x, y, z=z, fontsize=axis_fontsize,
+                    center_spines=center_spines)
 
 
 def calc_stationary_ymeans(y, n, ymin=None, ymax=None, pmin=0.05, pmax=0.8):
