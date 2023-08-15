@@ -18,7 +18,6 @@ from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWalk
 from gpmap.src.plot.utils import get_lines_from_edges_df
 from gpmap.src.datasets import DataSet
-from gpmap.src.plot.mpl import get_cbar_inset_axes, draw_cbar
         
 
 class MatPlotsTests(unittest.TestCase):
