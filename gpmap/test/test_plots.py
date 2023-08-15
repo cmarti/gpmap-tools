@@ -16,9 +16,9 @@ import gpmap.src.plot.ply as ply
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR, VIZ_DIR
 from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWalk
-from gpmap.src.space import CodonSpace
 from gpmap.src.plot.utils import get_lines_from_edges_df
 from gpmap.src.datasets import DataSet
+from gpmap.src.plot.mpl import get_cbar_inset_axes, draw_cbar
         
 
 class MatPlotsTests(unittest.TestCase):
@@ -56,8 +56,24 @@ class MatPlotsTests(unittest.TestCase):
         
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
-            fpath = 'test'
             pmpl.savefig(fig, fpath)
+    
+    def test_draw_cbar(self):
+        fig, axes = pmpl.init_fig(1, 1, figsize=(3, 3))
+        pmpl.draw_cbar(axes, cmap='viridis', label='Function',
+                       orientation='vertical')
+        
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pmpl.savefig(fig, fpath, tight=False)
+            
+        fig, axes = pmpl.init_fig(1, 1, figsize=(3, 3))
+        pmpl.draw_cbar(axes, cmap='viridis', label='Function',
+                       orientation='horizontal')
+        
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pmpl.savefig(fig, fpath, tight=False)
 
     def test_plot_nodes(self):
         ser = DataSet('serine')
@@ -130,7 +146,7 @@ class MatPlotsTests(unittest.TestCase):
             pmpl.figure_axis_grid(ser.nodes, max_axis=4, edges_df=ser.edges,
                                   fpath=fpath, fmt='png')
     
-    def test_alleles_variable_sites(self):  
+    def test_alleles_grid(self):  
         ser = DataSet('serine')
 
         # Test with all alleles per site
@@ -223,7 +239,7 @@ class DatashaderTests(unittest.TestCase):
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
         
-            # Shading
+            # Only nodes
             dsg =  pds.plot_visualization(ser.nodes, shade_nodes=True)
             pds.savefig(dsg, fpath)
             
@@ -237,39 +253,45 @@ class DatashaderTests(unittest.TestCase):
                                           shade_nodes=False, shade_edges=False)
             pds.savefig(dsg, fpath)
         
-    def test_datashader_big(self):  
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot.ds')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
+    def test_plot_visualization_big(self):  
+        gb1 = DataSet('gb1')
         
-        dsg = plot_holoview(nodes_df, edges_df=edges_df, nodes_color='f',
-                            nodes_cmap='viridis', edges_cmap='grey',
-                            edges_resolution=1800, nodes_resolution=600)
-        save_holoviews(dsg, plot_fpath)
+        dsg =  pds.plot_visualization(gb1.nodes, edges_df=gb1.edges,
+                                      shade_nodes=True, shade_edges=True)
+        
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pds.savefig(dsg, fpath)
+        
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            fpath = 'test'
+            
+            fig = pds.dsg_to_fig(dsg)
+            axes = pmpl.get_cbar_inset_axes(fig.axes[0], pos=(0, 0),
+                                            orientation='horizontal')
+            pmpl.draw_cbar(axes, cmap='viridis', label='Function', 
+                           vmin=gb1.nodes['function'].min(),
+                           vmax=gb1.nodes['function'].max(),
+                           orientation='horizontal', fontsize=9, width=16)
+            pmpl.savefig(fig, fpath)
     
-    def test_datashader_big_vmax(self):  
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot.ds')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
+    def test_alleles_grid(self):  
+        ser = DataSet('serine')
+
+        # Test with all alleles per site
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pds.figure_allele_grid(ser.nodes, edges_df=ser.edges, 
+                                   fpath=fpath, nodes_size=40)
         
-        dsg = plot_holoview(nodes_df, edges_df=edges_df, nodes_color='f',
-                            nodes_cmap='viridis', edges_cmap='grey',
-                            edges_resolution=1800, nodes_resolution=2000)
-        save_holoviews(dsg, plot_fpath)
-    
-    def test_datashader_alleles(self):  
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot.alleles')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
+        # Test with different number of alleles per site
+        genotypes = np.array([seq[-3] != 'C' for seq in ser.nodes.index])
+        ndf, edf = select_genotypes(ser.nodes, genotypes, edges=ser.edges)
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pds.figure_allele_grid(ndf, edges_df=edf, fpath=fpath, nodes_size=40)
         
-        figure_allele_grid_datashader(nodes_df, plot_fpath, edges_df=edges_df,
-                                      x='1', y='2')
     
     def test_plot_visualization_bin_datashader(self):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
@@ -293,20 +315,8 @@ class DatashaderTests(unittest.TestCase):
                '-er', '1800', '--alleles']
         check_call(cmd)
     
-    def test_datashader_alleles_variable_sites(self):  
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot.alleles')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
-        
-        genotypes = np.array([seq.endswith('AA') and seq[-3] != 'C'
-                              for seq in nodes_df.index])
-        nodes_df, edges_df = select_genotypes(nodes_df, genotypes, edges=edges_df)
-        
-        figure_allele_grid_datashader(nodes_df, plot_fpath, edges_df=edges_df,
-                                      x='1', y='2')
-        
+
+class PlotlyTests(unittest.TestCase):
     def test_interactive_plot(self):
         nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
         edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
@@ -323,147 +333,46 @@ class DatashaderTests(unittest.TestCase):
                          nodes_color='function', nodes_size=10,
                          edges_width=1, z='3')
 
-    def xtest_visualize_reactive_paths(self):
-        np.random.seed(0)
-        v = CodonFitnessLandscape(add_variation=True)
-        Ns = v.calc_Ns(stationary_function=1.3)
-        v.calc_stationary_frequencies(Ns)
-        v.calc_visualization(Ns, n_components=5)
-        
-        gt1, gt2 = ['TCT', 'TCA', 'TCC', 'TCG'], ['AGT', 'AGC']
-        fpath = join(TEST_DATA_DIR, 'reactive_path')
-        # v.figure(fpath=fpath, size=40, cmap='coolwarm', 
-        #                  genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
-        #                  dominant_paths=False, p_reactive_paths=True)
-        
-        v.figure(fpath=fpath, size=40, cmap='coolwarm', 
-                         genotypes1=gt1, genotypes2=gt2, figsize=(8, 6),
-                         dominant_paths=True, edge_widths=2,
-                         edges_cmap='Greens', p_reactive_paths=True)
-    
-    def xtest_visualization_grid_allele(self):
-        v = CodonFitnessLandscape(add_variation=True, seed=0)
-        v.calc_visualization(Ns=1)
-        
-        fpath = join(TEST_DATA_DIR, 'codon_v.alleles')
-        figure_allele_grid(v.nodes_df, edges_df=v.edges_df, fpath=fpath)
-    
-    def xtest_visualization_grid_shifts(self):
-        v = CodonFitnessLandscape(add_variation=True, seed=0)
-        v.calc_visualization(Ns=1)
-        
-        fpath = join(TEST_DATA_DIR, 'codon_v.shifts')
-        figure_shifts_grid(v.nodes_df, seq='AU', edges_df=v.edges_df,
-                           fpath=fpath, alphabet_type='rna',
-                           labels_full_seq=True)
-    
-    def xtest_figure_Ns_grid(self):
-        log = LogTrack()
-        np.random.seed(1)
-        length = 8
-        lambdas = np.array([0, 1e6, 1e5, 1e4,
-                            1e3, 1e2, 1e1, 1e0, 0])
-    
-        log.write('Simulate data')
-        vc = VCregression(length, n_alleles=4, log=log, alphabet_type='custom')
-        v = Visualization(length, log=log)
-        v.set_function(vc.simulate(lambdas))
-        
-        fig_fpath = join(TEST_DATA_DIR, 'fgrid')
-        figure_Ns_grid(v, fig_fpath, ncol=3)
-    
-    def xtest_get_edges(self):
-        v = Visualization(length=3, n_alleles=4)
-        v.set_random_function(0)
-        v.calc_visualization(n_components=20)
-        x, y, z = v.get_nodes_coord(z=4)
-        edges = v.get_edges_coord(x, y, z)
-        assert(np.all(edges.shape == (576, 2, 3)))
-    
-    def xtest_rotate_coords(self):
-        np.random.seed(0)
-        
-        v = CodonFitnessLandscape(add_variation=True)
-        v.calc_visualization()
-        c = np.vstack([v.axis['Axis 2'],
-                       v.axis['Axis 3'],
-                       v.axis['Axis 4']])
-        c2 = v.rotate_coords(c, theta=np.pi / 2, axis='x')
-        assert(np.allclose(c[0], c2[0]))
-        assert(np.allclose(c[1], c2[2]))
-        assert(np.allclose(c[2], -c2[1]))
-        
-        c2 = v.rotate_coords(c, theta=0, axis='x')
-        assert(np.allclose(c, c2))
-        
-    def xtest_smn1_visualization(self):
-        fpath = join(DATA_DIR, 'smn1.csv')
-        data = pd.read_csv(fpath)
-        data.loc[data['phenotype'] > 100, 'phenotype'] = 100
-        v = Visualization(length=8, n_alleles=4, label='smn1',
-                                  ns=1, cache_prefix='smn1')
-        v.load_function(data['phenotype'])
-        v.calc_stationary_frequencies()
-        v.tune_ns(stationary_function=80)
-        v.calc_visualization(n_components=10, recalculate=True)
-        v.plot_visual()
-    
-    def xtest_rotation_movie(self):
-        np.random.seed(0)
-    
-        v = CodonFitnessLandscape(add_variation=True)
-        v.calc_visualization(Ns=1)
-        dpath = join(TEST_DATA_DIR, 'rotation_movie')
-        v.plot_rotation_movie(dpath=dpath, nframes=60,
-                                      lims=(-2, 2), force=True)
-    
-    def xtest_ns_movie(self):
-        np.random.seed(0)
-        v = CodonFitnessLandscape(add_variation=True)
-        dpath = join(TEST_DATA_DIR, 'ns_movie')
-        v.plot_ns_movie(dpath, nframes=60, fmax=1.64,
-                                n_components=20, force=True)
-
 
 class InferencePlotsTests(unittest.TestCase):
     def test_plot_a_optimization(self):
         fpath = join(TEST_DATA_DIR, 'logL.csv')
         log_Ls = pd.read_csv(fpath, index_col=0)
-        fig, axes = init_fig(1, 1, colsize=4, rowsize=3.5)
-        plot_hyperparam_cv(log_Ls, axes, err_bars='stderr',
+        fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
+        pmpl.plot_hyperparam_cv(log_Ls, axes, err_bars='stderr',
                            x='log_sd', xlabel=r'$\log_{10}(\sigma_P)$')
         fpath = join(TEST_DATA_DIR, 'seqdeft_a')
-        savefig(fig, fpath)
+        pmpl.savefig(fig, fpath)
     
     def test_plot_beta_optimization(self):    
         fpath = join(TEST_DATA_DIR, 'vc.cv_loss.csv')
         mses = pd.read_csv(fpath, index_col=0)
         print(mses)
         
-        fig, subplots = init_fig(1, 3, colsize=4, rowsize=3.5)
-        plot_hyperparam_cv(mses, subplots[0], err_bars='stderr',
+        fig, subplots = pmpl.init_fig(1, 3, colsize=4, rowsize=3.5)
+        pmpl.plot_hyperparam_cv(mses, subplots[0], err_bars='stderr',
                            x='log_beta', xlabel=r'$\log_{10}(\beta)$',
                            y='mse', ylabel='MSE', highlight='min')
-        plot_hyperparam_cv(mses, subplots[1], err_bars='stderr',
+        pmpl.plot_hyperparam_cv(mses, subplots[1], err_bars='stderr',
                            x='log_beta', xlabel=r'$\log_{10}(\beta)$',
                            y='logL', ylabel='log(L)')
-        plot_hyperparam_cv(mses, subplots[2], err_bars='stderr',
+        pmpl.plot_hyperparam_cv(mses, subplots[2], err_bars='stderr',
                            x='log_beta', xlabel=r'$\log_{10}(\beta)$',
                            y='r2', ylabel=r'$R^2$')
                
         fpath = join(TEST_DATA_DIR, 'vc_beta')
-        savefig(fig, fpath)
+        pmpl.savefig(fig, fpath)
     
     def test_plot_SeqDEFT_summary(self):
         fpath = join(TEST_DATA_DIR, 'logL.csv')
         logl = pd.read_csv(fpath)
         
-        fig = plot_SeqDEFT_summary(logl)
+        fig = pmpl.plot_SeqDEFT_summary(logl)
         fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.png')
-        savefig(fig, fpath)
+        pmpl.savefig(fig, fpath)
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatPlotsTests.test_plot_visualization']
+    import sys;sys.argv = ['', 'DatashaderTests.test_plot_visualization_big']
     unittest.main()
 
