@@ -468,7 +468,12 @@ def plot_visualization(axes, nodes_df, edges_df=None,
     
     if sort_by is None:
         sort_by = nodes_color
-    ndf = nodes_df.sort_values([sort_by], ascending=sort_ascending)
+    
+    ndf = nodes_df
+    if sort_by in nodes_df.columns:
+        ndf = ndf.sort_values([sort_by], ascending=sort_ascending)
+        
+    
     plot_nodes(axes, nodes_df=ndf, x=x, y=y, z=z,
                color=nodes_color, size=nodes_size, cmap=nodes_cmap,
                cbar=nodes_cbar, cbar_axes=nodes_cbar_axes,
@@ -499,7 +504,7 @@ def calc_stationary_ymeans(y, n, ymin=None, ymax=None, pmin=0.05, pmax=0.8):
 
 
 def figure_Ns_grid(rw, x='1', y='2', pmin=0, pmax=0.8, ncol=4, nrow=3,
-                   show_edges=True, fontsize=12, fpath=None, kwargs={}):
+                   show_edges=True, fontsize=12, fpath=None, **kwargs):
     fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7,
                              sharex=True, sharey=True, hspace=0.2, wspace=0.2)
     fig.subplots_adjust(right=0.9, left=0.1)
@@ -544,7 +549,7 @@ def get_max_axis(max_axis, nodes_df):
 
 
 def figure_axis_grid(nodes_df, max_axis=None, edges_df=None, fpath=None,
-                     colsize=3, rowsize=2.7, fmt='png', kwargs={}):
+                     colsize=3, rowsize=2.7, fmt='png', **kwargs):
     
     max_axis = get_max_axis(max_axis, nodes_df)
     fig, subplots = init_fig(max_axis, max_axis, colsize=colsize, rowsize=rowsize)
@@ -572,12 +577,11 @@ def figure_axis_grid(nodes_df, max_axis=None, edges_df=None, fpath=None,
     savefig(fig, fpath, fmt=fmt, tight=False)
 
 
-def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
+def figure_allele_grid(nodes_df, edges_df=None, 
                        allele_color='orange', background_color='lightgrey',
-                       nodes_size=None, edges_color='grey', edges_width=0.5,
-                       positions=None, position_labels=None, autoscale_axis=False,
+                       positions=None, position_labels=None, 
                        colsize=3, rowsize=2.7, xpos_label=0.05, ypos_label=0.92,
-                       fmt='png'):
+                       fmt='png', fpath=None, fontsize=12, **kwargs):
     
     config = guess_space_configuration(nodes_df.index.values)
     length, n_alleles = config['length'], np.max(config['n_alleles'])
@@ -601,28 +605,28 @@ def figure_allele_grid(nodes_df, edges_df=None, fpath=None, x='1', y='2',
                 empty_axes(axes)
                 continue
             
-            plot_visualization(axes, nodes_df, edges_df=edges_df, x=x, y=y,
-                               nodes_color=background_color, nodes_size=nodes_size,
-                               edges_color=edges_color, edges_width=edges_width,
-                               autoscale_axis=autoscale_axis)
+            plot_visualization(axes, nodes_df, edges_df=edges_df,
+                               nodes_color=background_color, **kwargs)
             idxs = np.array([seq[pos] == allele for seq in nodes_df.index])
-            plot_nodes(axes, nodes_df.loc[idxs, :], x=x, y=y,
-                       color=allele_color,
-                       size=nodes_size)
+            plot_visualization(axes, nodes_df.loc[idxs, :],
+                               nodes_color=allele_color, **kwargs)
             
-            if i < n_alleles - 1:
-                axes.set_xlabel('')
-                axes.set_xticks([])
-            if j > 0:
-                axes.set_ylabel('')
-                axes.set_yticks([])
-                
-            xlims, ylims = axes.get_xlim(), axes.get_ylim()
-            xpos = xlims[0] + xpos_label * (xlims[1] - xlims[0])
-            ypos = ylims[0] + ypos_label * (ylims[1] - ylims[0])
-            axes.text(xpos, ypos, '{}{}'.format(allele, position_labels[j]),
-                      ha='left')
-    savefig(fig, fpath, fmt=fmt)
+            axes.text(xpos_label, ypos_label,
+                      '{}{}'.format(allele, position_labels[j]),
+                      ha='left', transform=axes.transAxes)
+            axes.set(xlabel='', ylabel='')
+    
+    x, y = '1', '2'
+    if  'x' in kwargs:
+        x = kwargs['x']
+    if  'y' in kwargs:
+        y = kwargs['y']    
+    
+    fig.supxlabel('Diffusion axis {}'.format(x), fontsize=fontsize+4,
+                  y=0.05, ha='center', va='center')
+    fig.supylabel('Diffusion axis {}'.format(y), fontsize=fontsize+4, 
+                  x=0.05, ha='center', va='center')
+    savefig(fig, fpath, fmt=fmt, tight=False)
 
 
 def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',

@@ -20,7 +20,7 @@ def get_edges_coords(nodes_df, edges_df, x='1', y='2', z=None, avoid_dups=True):
     
     if avoid_dups:
         edf = edges_df.copy()
-        idx = np.where(edf['j'] > edf['i'])[0]
+        idx = (edf['j'] > edf['i']).values
         edf.loc[idx, 'i'], edf.loc[idx, 'j'] = edf.loc[idx, 'j'], edf.loc[idx, 'i']
         edf.drop_duplicates(inplace=True)
 

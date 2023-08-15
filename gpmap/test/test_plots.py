@@ -108,26 +108,24 @@ class MatPlotsTests(unittest.TestCase):
 
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
-            fpath = 'test'
             pmpl.figure_axis_grid(ser.nodes, max_axis=4, edges_df=ser.edges,
                                   fpath=fpath, fmt='png')
     
     def test_alleles_variable_sites(self):  
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.plot.alleles')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
+        ser = DataSet('serine')
 
         # Test with all alleles per site
-        figure_allele_grid(nodes_df, fpath=plot_fpath, edges_df=edges_df, x='1', y='2')
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pmpl.figure_allele_grid(ser.nodes, edges_df=ser.edges, 
+                                   fpath=fpath, nodes_size=40)
         
         # Test with different number of alleles per site
-        genotypes = np.array([seq[-3] != 'C' for seq in nodes_df.index])
-        nodes_df, edges_df = select_genotypes(nodes_df, genotypes, edges=edges_df)
-        figure_allele_grid(nodes_df, fpath=plot_fpath, edges_df=edges_df, x='1', y='2')
-    
-    
+        genotypes = np.array([seq[-3] != 'C' for seq in ser.nodes.index])
+        ndf, edf = select_genotypes(ser.nodes, genotypes, edges=ser.edges)
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pmpl.figure_allele_grid(ndf, edges_df=edf, fpath=fpath, nodes_size=40)
     
     def test_plot_visualization_bin_help(self):    
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
@@ -446,6 +444,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatPlotsTests.test_axis_grid']
+    import sys;sys.argv = ['', 'MatPlotsTests.test_alleles_variable_sites']
     unittest.main()
 
