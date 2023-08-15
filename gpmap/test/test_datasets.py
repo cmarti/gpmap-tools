@@ -51,6 +51,7 @@ class DatasetsTests(unittest.TestCase):
         serine = DataSet('serine')
         assert(serine.nodes.shape[0] == serine.data.shape[0])
         assert(serine.edges.shape[0] > serine.data.shape[0])
+        assert(serine.relaxation_times.shape[0] == 19)
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'DatasetsTests']

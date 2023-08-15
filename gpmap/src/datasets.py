@@ -66,6 +66,14 @@ class DataSet(object):
             self._edges = self._load(fdir=VIZ_DIR, label='nodes coordinates',
                                      suffix='.edges')
         return(self._edges)
+
+    @property
+    def relaxation_times(self):
+        if not hasattr(self, '_relaxation_times'):
+            self._relaxation_times = self._load(fdir=VIZ_DIR,
+                                                label='relaxation times',
+                                                suffix='.relaxation_times')
+        return(self._relaxation_times)
     
     def to_sequence_space(self):
         space = SequenceSpace(X=self.landscape.index.values,
