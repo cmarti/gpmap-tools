@@ -18,6 +18,7 @@ from gpmap.src.seq import guess_space_configuration
 from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
                                  minimize_nodes_distance)
 from itertools import product, chain
+from gpmap.src.plot.utils import sort_nodes
 
 def init_fig(nrow=1, ncol=1, figsize=None, style='ticks',
              colsize=3, rowsize=3, sharex=False, sharey=False,
@@ -266,6 +267,7 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
 
 def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                alpha=1, zorder=2,
+               sort_by=None, sort_ascending=False,
                color='function', cmap='viridis',
                cbar=True, cbar_axes=None, cbar_label='Function',
                cbar_orientation='vertical',
@@ -373,8 +375,9 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
     
     '''
     
-    s = get_element_sizes(nodes_df, size, min_size, max_size)
-    c, cbar, legend, vmin, vmax = get_element_color(nodes_df, color, palette,
+    ndf = sort_nodes(nodes_df, sort_by, sort_ascending, color)
+    s = get_element_sizes(ndf, size, min_size, max_size)
+    c, cbar, legend, vmin, vmax = get_element_color(ndf, color, palette,
                                                     cbar, legend, vmin, vmax)
     kwargs = {'c': c, 'linewidth': lw, 's': s, 'zorder': zorder,
               'alpha': alpha, 'edgecolor': edgecolor, 'cmap': cm.get_cmap(cmap)}
@@ -385,8 +388,8 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
         kwargs['vmin'] = vmin
         
     if z is not None:
-        kwargs['zs'] = nodes_df[z]
-    sc = axes.scatter(nodes_df[x], nodes_df[y], **kwargs)
+        kwargs['zs'] = ndf[z]
+    sc = axes.scatter(ndf[x], ndf[y], **kwargs)
     add_color_info(sc, axes, cbar, cbar_axes, cbar_label,
                    legend, palette, legend_loc, fontsize,
                    cbar_orientation, vmin, vmax)
@@ -509,6 +512,36 @@ def add_cbar(sc, axes, cbar_axes=None, label='Function', fontsize=12,
         cbar.set_ticklabels(ticklabels, fontsize=fontsize-1)
 
 
+def draw_cbar(axes, cmap, label, vmin=0, vmax=1, fontsize=12,
+              orientation='vertical', nticks=5, width=12):
+    values = np.linspace(0, 1, 256)
+    values = np.vstack([values]*width)
+    
+    ticks = np.linspace(0, 256, nticks)
+    ticklabels = ['{:.1f}'.format(x) for x in np.linspace(vmin, vmax, nticks)]
+
+    if orientation == 'vertical':
+        values = values.T
+        xlabel, ylabel = '', label
+        xticks, yticks = [], ticks
+        set_ticklabels = axes.set_yticklabels
+        xlims, ylims = (None, None), (0, 256)
+    elif orientation == 'horizontal':
+        xlabel, ylabel = label, ''
+        xticks, yticks = ticks, []
+        set_ticklabels = axes.set_xticklabels
+        xlims, ylims = (0, 256), (None, None)
+    else:
+        raise ValueError('orientation not allowed: {}'.format(orientation))
+    
+    axes.imshow(values, cmap=cmap)
+    
+    set_ticklabels(ticklabels, fontsize=fontsize-1)
+    axes.set_ylabel(ylabel, fontsize=fontsize)
+    axes.set_xlabel(xlabel, fontsize=fontsize)
+    axes.set(xticks=xticks, yticks=yticks, xlim=xlims, ylim=ylims)
+    
+
 def plot_genotypes_box(axes, xlims, ylims, lw=1, c='black', facecolor='none',
                        title=None, title_pos='top', fontsize=10):
     
@@ -568,13 +601,6 @@ def plot_visualization(axes, nodes_df, edges_df=None,
                    width=edges_width, max_width=edges_max_width,
                    min_width=edges_min_width) 
     
-    if sort_by is None:
-        sort_by = nodes_color
-    
-    ndf = nodes_df
-    if sort_by in nodes_df.columns:
-        ndf = ndf.sort_values([sort_by], ascending=sort_ascending)
-    
     orientation = 'vertical'
     if add_hist:
         check_error(inset_cbar, msg='inset_cbar must be true for adding histogram')
@@ -587,7 +613,8 @@ def plot_visualization(axes, nodes_df, edges_df=None,
         nodes_cbar_axes = get_cbar_inset_axes(axes, orientation=orientation,
                                               pos=inset_pos)
     
-    plot_nodes(axes, nodes_df=ndf, x=x, y=y, z=z,
+    plot_nodes(axes, nodes_df=nodes_df, x=x, y=y, z=z,
+               sort_by=sort_by, sort_ascending=sort_ascending, 
                color=nodes_color, size=nodes_size, cmap=nodes_cmap,
                cbar=nodes_cbar, cbar_axes=nodes_cbar_axes,
                cbar_label=nodes_cmap_label, cbar_orientation=orientation,

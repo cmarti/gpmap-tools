@@ -43,3 +43,21 @@ def get_allele_grid_config(sequences, positions=None, position_labels=None):
         positions = np.arange(length)
     return({'seq_length': length, 'n_alleles': n_alleles,
             'alphabet': config['alphabet']})
+
+
+def sort_nodes(nodes_df, sort_by, sort_ascending, color):
+    ndf = nodes_df
+    if sort_by is None:
+        sort_by = color
+    if sort_by in nodes_df.columns:
+        ndf = ndf.sort_values([sort_by], ascending=sort_ascending)
+    return(ndf)
+
+
+def get_vmin_max(nodes_df, color, vmin=None, vmax=None):
+    if vmin is None:
+        vmin = nodes_df[color].min()
+    if vmax is None:
+        vmax = nodes_df[color].max()
+    return(vmin, vmax)
+        

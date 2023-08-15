@@ -7,7 +7,8 @@ from holoviews.operation.datashader import datashade
 
 from gpmap.src.settings import PLOTS_FORMAT
 from gpmap.src.seq import guess_space_configuration
-from gpmap.src.plot.utils import get_lines_from_edges_df
+from gpmap.src.plot.utils import get_lines_from_edges_df, sort_nodes,\
+    get_vmin_max
 
 
 def calc_ds_size(nodes_df, x, y, resolution, square=True):
@@ -21,22 +22,17 @@ def calc_ds_size(nodes_df, x, y, resolution, square=True):
     return(int(w), int(h))
 
     
-def plot_nodes(nodes_df, x='1', y='2', color='function', cmap='viridis',
+def plot_nodes(nodes_df, x='1', y='2', 
+               color='function', cmap='viridis', vmin=None, vmax=None,
                size=5, linewidth=0, edgecolor='black',
-               vmin=None, vmax=None,
-               sort_by=None, ascending=True,
-               shade=True, resolution=800, square=True):
-    if sort_by is not None:
-        nodes_df = nodes_df.sort_values(sort_by, ascending=ascending)
-        
-    if vmin is None:
-        vmin = nodes_df[color].min()
-    if vmax is None:
-        vmax = nodes_df[color].max()
+               sort_by=None, sort_ascending=True,
+               shade=True, resolution=800, square=False):
+    ndf = sort_nodes(nodes_df, sort_by, sort_ascending, color)
+    vmin, vmax = get_vmin_max(ndf, color, vmin=vmin, vmax=vmax)
     
     if shade:
-        nodes = hv.Points(nodes_df, kdims=[x, y], label='Nodes')
-        w, h = calc_ds_size(nodes_df, x, y, resolution, square=square)
+        nodes = hv.Points(ndf, kdims=[x, y], label='Nodes')
+        w, h = calc_ds_size(ndf, x, y, resolution, square=square)
         if sort_by is not None:
             dsg = datashade(nodes, cmap=cmap, width=w, height=h,
                             aggregator=ds.first(color))
@@ -48,7 +44,7 @@ def plot_nodes(nodes_df, x='1', y='2', color='function', cmap='viridis',
         colnames = [x, y]
         if color not in colnames: # avoid adding color in case is already a selected field
             colnames.append(color)
-        scatter = hv.Scatter(nodes_df[colnames])
+        scatter = hv.Scatter(ndf[colnames])
         dsg = scatter.opts(color=color, cmap=cmap, clim=(vmin, vmax),
                            s=size, linewidth=linewidth, 
                            edgecolor=edgecolor)
@@ -76,7 +72,7 @@ def plot_visualization(nodes_df, x='1', y='2', edges_df=None,
                        nodes_color='function', nodes_cmap='viridis',
                        nodes_size=5, nodes_vmin=None, nodes_vmax=None,
                        linewidth=0, edgecolor='black',
-                       sort_by=None, ascending=False,
+                       sort_by=None, sort_ascending=False,
                        edges_width=0.5, edges_alpha=0.2, edges_color='grey',
                        edges_cmap='grey', background_color='white',
                        nodes_resolution=800, edges_resolution=1200,
@@ -84,7 +80,7 @@ def plot_visualization(nodes_df, x='1', y='2', edges_df=None,
     dsg = plot_nodes(nodes_df, x, y, nodes_color, nodes_cmap,
                      linewidth=linewidth, edgecolor=edgecolor,
                      size=nodes_size, vmin=nodes_vmin, vmax=nodes_vmax,
-                     sort_by=sort_by, ascending=ascending,
+                     sort_by=sort_by, sort_ascending=sort_ascending,
                      resolution=nodes_resolution, shade=shade_nodes,
                      square=square)
     
@@ -103,9 +99,13 @@ def plot_visualization(nodes_df, x='1', y='2', edges_df=None,
     return(dsg)
 
 
+def dsg_to_fig(dsg):
+    return(hv.render(dsg))
+
+
 def savefig(dsg, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360,
             figsize=None):
-    fig = hv.render(dsg)
+    fig = dsg_to_fig(dsg)
     if tight:
         fig.tight_layout()
     
@@ -121,7 +121,7 @@ def figure_allele_grid(nodes_df, fpath, x='1', y='2', edges_df=None,
                        positions=None, position_labels=None,
                        edges_cmap='grey', background_color='white',
                        nodes_resolution=800, edges_resolution=1200,
-                       fmt='png', figsize=None, square=True):
+                       fmt='png', figsize=None, square=True, **kwargs):
     if edges_df is not None:
         edges = plot_edges(nodes_df, edges_df, x, y,
                            cmap=edges_cmap, resolution=edges_resolution,
