@@ -127,6 +127,17 @@ class MatPlotsTests(unittest.TestCase):
             fpath = fhand.name
             pmpl.figure_allele_grid(ndf, edges_df=edf, fpath=fpath, nodes_size=40)
     
+    def test_plot_relaxation_times(self):    
+        ser = DataSet('serine')
+        
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            fpath = 'test'
+            
+            fig, axes = init_fig(1, 1, colsize=4, rowsize=3)
+            pmpl.plot_relaxation_times(ser.relaxation_times, neutral_time=1/4, 
+                                       fpath=fpath)
+    
     def test_plot_visualization_bin_help(self):    
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
         cmd = [sys.executable, bin_fpath, '-h']
@@ -169,17 +180,6 @@ class MatPlotsTests(unittest.TestCase):
                    '--interactive']
             check_call(cmd)
     
-    def test_plot_visualization_bin_datashader(self):
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
-        
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
-               '-er', '1800']
-        check_call(cmd)
-        
     def test_plot_visualization_bin_alleles(self):    
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
         
@@ -190,24 +190,7 @@ class MatPlotsTests(unittest.TestCase):
         cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
                '-o', plot_fpath, '-nc', 'function', '-s', 'function', '--alleles']
         check_call(cmd)
-    
-    def test_plot_visualization_bin_datashader_alleles(self):
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
         
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
-               '-er', '1800', '--alleles']
-        check_call(cmd)
-    
-    def test_plot_relaxation_times(self):    
-        decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
-        fpath = join(TEST_DATA_DIR, 'serine.decay_rates')
-        df = pd.read_csv(decay_fpath)
-        plot_relaxation_times(df, fpath=fpath, neutral_time=1/4)
-    
     def test_plot_relaxation_times_bin(self):    
         bin_fpath = join(BIN_DIR, 'plot_relaxation_times.py')
         decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
@@ -272,6 +255,28 @@ class ExtraTests(unittest.TestCase):
         
         figure_allele_grid_datashader(nodes_df, plot_fpath, edges_df=edges_df,
                                       x='1', y='2')
+    
+    def test_plot_visualization_bin_datashader(self):
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
+        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
+               '-er', '1800']
+        check_call(cmd)
+    
+    def test_plot_visualization_bin_datashader_alleles(self):
+        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
+        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
+        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
+        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        
+        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
+               '-er', '1800', '--alleles']
+        check_call(cmd)
     
     def test_datashader_alleles_variable_sites(self):  
         nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
@@ -444,6 +449,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatPlotsTests.test_alleles_variable_sites']
+    import sys;sys.argv = ['', 'MatPlotsTests.test_plot_relaxation_times']
     unittest.main()
 

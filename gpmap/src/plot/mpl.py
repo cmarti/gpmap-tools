@@ -118,11 +118,11 @@ def plot_relaxation_times(decay_df, axes=None, fpath=None, log_scale=False,
     if neutral_time is not None:
         axes.plot(xlims, (neutral_time, neutral_time), lw=0.5, c='orange',
                   linestyle='--', label='Neutral')
+        axes.legend(loc=1)
     
     if log_scale:
         axes.set(yscale='log')
     
-    axes.legend(loc=1)
     axes.set(xlabel=r'Eigenvalue order $k$', 
              ylabel=r'Relaxation time $\frac{-1}{\lambda_{k}}$',
              xticks=decay_df['k'], xlim=xlims)
