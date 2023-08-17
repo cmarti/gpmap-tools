@@ -22,6 +22,11 @@ High priority
 - Review SeqDEFT a range values. They don't flatten out at the ends as much as we would like.
 - Add some more plotting details to the tutorials e.g. edge coloring and
   positioning of legends and colorbars in different places
+- Make sure every function in the docs is in the API with docstrings as well
+- Implement expected aminoacid frequencies correction on the inferred
+  log densities
+- Update plotting binaries with new functions
+- Update plotly plotting functionalities
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
