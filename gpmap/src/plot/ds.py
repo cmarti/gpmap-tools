@@ -73,7 +73,7 @@ def plot_visualization(nodes_df, x='1', y='2', edges_df=None,
                        nodes_size=5, nodes_vmin=None, nodes_vmax=None,
                        linewidth=0, edgecolor='black',
                        sort_by=None, sort_ascending=False,
-                       edges_width=0.5, edges_alpha=0.2, edges_color='grey',
+                       edges_width=0.5, edges_alpha=1, edges_color='grey',
                        edges_cmap='grey', background_color='white',
                        nodes_resolution=800, edges_resolution=1200,
                        shade_nodes=True, shade_edges=True, square=True):
