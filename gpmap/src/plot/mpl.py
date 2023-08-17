@@ -10,7 +10,6 @@ import matplotlib.colors as colors
 
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 from gpmap.src.settings import PLOTS_FORMAT
 from gpmap.src.utils import check_error
@@ -42,36 +41,30 @@ def init_single_fig(figsize=None, style='ticks',
     return(fig, axes)
 
 
-def get_hist_inset_axes(axes, pos=(-0.7, -0.1)):
-    ax = inset_axes(axes, width="40%", height="20%",
-                    bbox_to_anchor=(pos[0], pos[1] + 0.2, 1, 0.95),
-                    bbox_transform=axes.transAxes, borderpad=0)
+def get_hist_inset_axes(axes, pos=(0.2, 0.7), width=0.4, height=0.25):
+    ax = axes.inset_axes((pos[0], pos[1], width, height))
     ax.patch.set_alpha(0)
     return(ax)
 
 
-def get_cbar_inset_axes(axes, orientation='vertical', pos=(-0.7, -0.1)):
-    if orientation == 'horizontal':
-        cax = inset_axes(axes, width="40%", height="3%",
-                         bbox_to_anchor=(pos[0], pos[1], 1, 0.95),
-                         bbox_transform=axes.transAxes, borderpad=0)
-    elif orientation == 'vertical':
-        cax = inset_axes(axes, width="3%", height="40%",
-                         bbox_to_anchor=(-0.05, 0, 1, 0.95),
-                         bbox_transform=axes.transAxes, borderpad=0)
-    else:
-        msg = 'cbar orientation can only be {vertical, horizontal}'
-        raise ValueError(msg)
-    return(cax)
+def get_cbar_inset_axes(axes, horizontal=False, pos=(0.2, 0.6),
+                        width=0.1, height=0.4):
+    if horizontal:
+        width, height = height, width
+    ax = axes.inset_axes((pos[0], pos[1], width, height))
+    return(ax)
 
 
-def set_centered_spines(axes, xlabel='', ylabel='', add_grid=True, zorder=3,
-                        alpha=0.5):
+def set_centered_spines(axes, xlabel='', ylabel='',
+                        xlabel_pos=(1.1, 0.1), ylabel_pos=(0.1,  0.94), 
+                        add_grid=True, zorder=3, alpha=0.5,):
     axes.spines['left'].set(position=('data', 0), zorder=zorder,
                             alpha=alpha)
     axes.spines['bottom'].set(position=('data', 0), zorder=zorder,  
                               alpha=alpha)
     axes.tick_params(axis='both', color=(0, 0, 0, alpha))
+    axes.set(xlabel='', ylabel='')
+    
     for t in chain(axes.get_xticklabels(), axes.get_yticklabels()):
         t.set_alpha(alpha)
     
@@ -83,10 +76,10 @@ def set_centered_spines(axes, xlabel='', ylabel='', add_grid=True, zorder=3,
     axes.plot((0), (1), ls="", marker="^", ms=5, color="k", alpha=alpha,
             transform=axes.get_xaxis_transform(), clip_on=False)
     
-    axes.annotate(xlabel, xy=(1.1, 0.1), xycoords=('axes fraction', 'data'),
+    axes.annotate(xlabel, xy=xlabel_pos, xycoords=('axes fraction', 'data'),
                   textcoords='offset points', fontsize=12,
                   ha='right', va='center')
-    axes.annotate(ylabel, xy=(0.1,  0.94), xycoords=('data', 'axes fraction'),
+    axes.annotate(ylabel, xy=ylabel_pos, xycoords=('data', 'axes fraction'),
                   textcoords='offset points', fontsize=12,
                   ha='left', va='bottom')
     sns.despine(ax=axes)
@@ -395,9 +388,8 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                    cbar_orientation, vmin, vmax)
 
 
-def plot_color_hist(axes, df, color='function', cmap='viridis', bins=50,
-                    fontsize=8):
-    _, bins, patches = axes.hist(df[color], bins=bins)
+def plot_color_hist(axes, values, cmap='viridis', bins=50, fontsize=8):
+    _, bins, patches = axes.hist(values, bins=bins)
     values = 0.5 * (bins[1:] + bins[:-1])
     values = (values - bins[0]) / (bins[-1] - bins[0])
     
@@ -405,7 +397,7 @@ def plot_color_hist(axes, df, color='function', cmap='viridis', bins=50,
     for value, patch in zip(values, patches):
         patch.set_facecolor(cmap(value))
     
-    sns.despine(ax=axes, left=True)
+    sns.despine(ax=axes)
     axes.set(yticks=[], xticks=[], xlim=(bins[0], bins[-1]))
     axes.set_ylabel(ylabel='Frequency', fontsize=fontsize)
 
@@ -540,6 +532,22 @@ def draw_cbar(axes, cmap, label, vmin=0, vmax=1, fontsize=12,
     axes.set_ylabel(ylabel, fontsize=fontsize)
     axes.set_xlabel(xlabel, fontsize=fontsize)
     axes.set(xticks=xticks, yticks=yticks, xlim=xlims, ylim=ylims)
+
+
+def add_cbar_hist_inset(axes, values, cmap='viridis',
+                        label='Function', fontsize=9, pos=(0.6, 0.5),
+                        width=0.4, height=0.2, bins=50):
+
+    vmin, vmax = values.min(), values.max()    
+    ax1 = get_cbar_inset_axes(axes, pos=(pos[0], pos[1]),
+                              horizontal=True, height=width)
+    draw_cbar(ax1, cmap=cmap, label=label, vmin=vmin, vmax=vmax, width=16,
+              orientation='horizontal', fontsize=fontsize)
+    
+    # TODO: fix problems when setting different heights
+    ax2 = get_hist_inset_axes(axes, pos=(pos[0], pos[1] + height-0.12),
+                              width=width, height=height)
+    plot_color_hist(ax2, values, cmap=cmap, bins=bins, fontsize=fontsize)
     
 
 def plot_genotypes_box(axes, xlims, ylims, lw=1, c='black', facecolor='none',
@@ -585,7 +593,7 @@ def plot_visualization(axes, nodes_df, edges_df=None,
                        
                        sort_by=None, sort_ascending=False,
                        center_spines=False, add_hist=False, inset_cbar=False,
-                       inset_pos=(-0.7, -0.1),
+                       inset_pos=(0.7, 0.7),
                        axis_fontsize=12, fontsize=8, 
                        prev_nodes_df=None, autoscale_axis=False):
     
@@ -607,7 +615,7 @@ def plot_visualization(axes, nodes_df, edges_df=None,
         orientation = 'horizontal'
         nodes_hist_axes = get_hist_inset_axes(axes, pos=inset_pos)
         if nodes_color in nodes_df.columns:
-            plot_color_hist(nodes_hist_axes, nodes_df, nodes_color, nodes_cmap,
+            plot_color_hist(nodes_hist_axes, nodes_df[nodes_color], nodes_cmap,
                             bins=20)
     if inset_cbar:
         nodes_cbar_axes = get_cbar_inset_axes(axes, orientation=orientation,

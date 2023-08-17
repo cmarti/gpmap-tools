@@ -73,6 +73,17 @@ class MatPlotsTests(unittest.TestCase):
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
             pmpl.savefig(fig, fpath, tight=False)
+    
+    def test_add_cbar_hist_inset(self):
+        fig, axes = pmpl.init_fig(1, 1, figsize=(5, 4))
+        values = np.random.normal(0, 1, size=1000)
+        pmpl.add_cbar_hist_inset(axes, values,
+                                 pos=(0.6, 0.1), fontsize=8,
+                                 width=0.4, height=0.2, bins=20)
+        
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pmpl.savefig(fig, fpath, tight=False)
 
     def test_plot_nodes(self):
         ser = DataSet('serine')
@@ -254,7 +265,6 @@ class DatashaderTests(unittest.TestCase):
         
     def test_plot_visualization_big(self):  
         gb1 = DataSet('gb1')
-        
         dsg =  pds.plot_visualization(gb1.nodes, edges_df=gb1.edges,
                                       shade_nodes=True, shade_edges=True)
         
@@ -262,19 +272,6 @@ class DatashaderTests(unittest.TestCase):
             fpath = fhand.name
             pds.savefig(dsg, fpath)
         
-        with NamedTemporaryFile('w') as fhand:
-            fpath = fhand.name
-            fpath = 'test'
-            
-            fig = pds.dsg_to_fig(dsg)
-            axes = pmpl.get_cbar_inset_axes(fig.axes[0], pos=(0, 0),
-                                            orientation='horizontal')
-            pmpl.draw_cbar(axes, cmap='viridis', label='Function', 
-                           vmin=gb1.nodes['function'].min(),
-                           vmax=gb1.nodes['function'].max(),
-                           orientation='horizontal', fontsize=9, width=16)
-            pmpl.savefig(fig, fpath)
-    
     def test_alleles_grid(self):  
         ser = DataSet('serine')
 
@@ -372,6 +369,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'DatashaderTests.test_plot_visualization_big']
+    import sys;sys.argv = ['', 'MatPlotsTests']
     unittest.main()
 
