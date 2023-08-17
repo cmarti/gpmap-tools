@@ -272,21 +272,20 @@ class DatashaderTests(unittest.TestCase):
             fpath = fhand.name
             pds.savefig(dsg, fpath)
         
-    def test_alleles_grid(self):  
+    def test_figure_allele_grid(self):  
         ser = DataSet('serine')
 
-        # Test with all alleles per site
+#         Test with all alleles per site
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
-            pds.figure_allele_grid(ser.nodes, edges_df=ser.edges, 
-                                   fpath=fpath, nodes_size=40)
+            pds.figure_allele_grid(ser.nodes, edges_df=ser.edges, fpath=fpath)
         
         # Test with different number of alleles per site
         genotypes = np.array([seq[-3] != 'C' for seq in ser.nodes.index])
         ndf, edf = select_genotypes(ser.nodes, genotypes, edges=ser.edges)
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
-            pds.figure_allele_grid(ndf, edges_df=edf, fpath=fpath, nodes_size=40)
+            pds.figure_allele_grid(ndf.copy(), edges_df=edf.copy(), fpath=fpath)
         
     
     def test_plot_visualization_bin_datashader(self):
@@ -369,6 +368,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatPlotsTests']
+    import sys;sys.argv = ['', 'DatashaderTests']
     unittest.main()
 

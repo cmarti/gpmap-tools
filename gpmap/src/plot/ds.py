@@ -7,8 +7,8 @@ from holoviews.operation.datashader import datashade
 
 from gpmap.src.settings import PLOTS_FORMAT
 from gpmap.src.seq import guess_space_configuration
-from gpmap.src.plot.utils import get_lines_from_edges_df, sort_nodes,\
-    get_vmin_max
+from gpmap.src.plot.utils import (get_lines_from_edges_df, sort_nodes,
+                                  get_vmin_max)
 
 
 def calc_ds_size(nodes_df, x, y, resolution, square=True):
@@ -117,19 +117,48 @@ def savefig(dsg, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360,
         fig.savefig(fpath, format=fmt, dpi=dpi)
 
 
+def _get_allele_panel(nodes_df, x, y, edges_dsg,
+                      nc, alphabet, i, j, col, position_labels,
+                      nodes_resolution, square, background_color):
+    try:
+        allele  = alphabet[j][i]
+        nodes_df['allele'] = (nc[col] == allele).astype(int)
+    except IndexError:
+        allele = ''
+        nodes_df['allele'] = np.nan
+        
+    nodes = plot_nodes(nodes_df.copy(), x, y,  color='allele',
+                       cmap='viridis', resolution=nodes_resolution, 
+                       shade=True, square=square)
+    nodes = nodes.relabel('{}{}'.format(j+1, allele))
+    dsg = nodes if edges_dsg is None else edges_dsg * nodes
+    dsg.opts(xlabel='Diffusion axis {}'.format(x),
+             ylabel='Diffusion axis {}'.format(y),
+             bgcolor=background_color, padding=0.1,
+             title='{}{}'.format(position_labels[j], allele))
+    return(dsg)
+
+
+def _get_edges_dsg(nodes_df, edges_df, x, y, cmap, resolution, square):
+    if edges_df is not None:
+        edges_dsg = plot_edges(nodes_df, edges_df, x, y,
+                               cmap=cmap, resolution=resolution,
+                               square=square)
+    else:
+        edges_dsg = None
+    return(edges_dsg)
+
+
 def figure_allele_grid(nodes_df, fpath, x='1', y='2', edges_df=None,
                        positions=None, position_labels=None,
                        edges_cmap='grey', background_color='white',
                        nodes_resolution=800, edges_resolution=1200,
                        fmt='png', figsize=None, square=True, **kwargs):
-    if edges_df is not None:
-        edges = plot_edges(nodes_df, edges_df, x, y,
-                           cmap=edges_cmap, resolution=edges_resolution,
-                           square=square)
-    else:
-        edges = None
-        
+    
+    edges_dsg = _get_edges_dsg(nodes_df, edges_df, x, y, edges_cmap,
+                               edges_resolution, square)
     config = guess_space_configuration(nodes_df.index.values)
+    alphabet = config['alphabet']
     length, n_alleles = config['length'], np.max(config['n_alleles'])
 
     if position_labels is None:
@@ -138,39 +167,20 @@ def figure_allele_grid(nodes_df, fpath, x='1', y='2', edges_df=None,
     if positions is None:
         positions = np.arange(length)
 
-    plots = None
-    
     nc = {i: np.array([seq[i] for seq in nodes_df.index])
           for i in range(length)}
-    
+    plots = None
     for i in range(n_alleles):
         for col, j in enumerate(positions):
-            try:
-                allele  = config['alphabet'][j][i]
-                nodes_df['allele'] = (nc[col] == allele).astype(int)
-            except IndexError:
-                allele = ''
-                nodes_df['allele'] = np.nan
-                
-            nodes = plot_nodes(nodes_df.copy(), x, y,  color='allele',
-                               cmap='viridis', resolution=nodes_resolution, 
-                               shade=True, square=square)
-            nodes = nodes.relabel('{}{}'.format(j+1, allele))
-            dsg = nodes if edges is None else edges * nodes
-            
-            dsg.opts(xlabel='Diffusion axis {}'.format(x),
-                     ylabel='Diffusion axis {}'.format(y),
-                     bgcolor=background_color,
-                     title='{}{}'.format(position_labels[j], allele))
+            dsg = _get_allele_panel(nodes_df, x, y, edges_dsg,
+                                    nc, alphabet, i, j, col, position_labels,
+                                    nodes_resolution, square, background_color)
             
             if i < n_alleles - 1:
                 dsg.opts(xlabel='')
             if col > 0:
                 dsg.opts(ylabel='')
-                
-            if plots is None:
-                plots = dsg
-            else:
-                plots += dsg
-    dsg = plots.cols(length)
+            plots = dsg if plots is None else plots + dsg
+            
+    dsg = hv.Layout(plots).cols(length)
     savefig(dsg, fpath, tight=False, fmt=fmt, figsize=figsize)
