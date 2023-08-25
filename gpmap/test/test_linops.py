@@ -14,7 +14,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator,
                              VarianceComponentKernelOperator,
                              DeltaPOperator, ProjectionOperator2,
-    RhoProjectionOperator, ConnectednessKernelOperator)
+                             RhoProjectionOperator, ConnectednessKernelOperator)
 
 
 class LinOpsTests(unittest.TestCase):
