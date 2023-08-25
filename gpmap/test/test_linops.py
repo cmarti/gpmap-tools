@@ -14,7 +14,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator,
                              VarianceComponentKernelOperator,
                              DeltaPOperator, ProjectionOperator2,
-    RhoProjectionOperator)
+    RhoProjectionOperator, ConnectednessKernelOperator)
 
 
 class LinOpsTests(unittest.TestCase):
@@ -295,10 +295,19 @@ class LinOpsTests(unittest.TestCase):
         assert(np.all(m[4:, :] == 0))
         assert(m.shape == (8, 4))
     
-    def test_kernel_operator_large(self):
+    def test_vc_kernel_operator_large(self):
         l = 9
         K = VarianceComponentKernelOperator(n_alleles=4, seq_length=l)
         K.set_lambdas(lambdas=np.append([0], 2-np.arange(l)))
+        K.set_y_var(y_var=0.1 * np.ones(K.n), obs_idx=np.arange(K.n))
+        v = np.random.normal(size=K.n_obs)
+        u = K.inv_dot(K.dot(v))
+        assert(np.allclose(u, v))
+    
+    def test_rho_kernel_operator(self):
+        l = 8
+        K = ConnectednessKernelOperator(n_alleles=4, seq_length=l)
+        K.set_rho(0.8)
         K.set_y_var(y_var=0.1 * np.ones(K.n), obs_idx=np.arange(K.n))
         v = np.random.normal(size=K.n_obs)
         u = K.inv_dot(K.dot(v))

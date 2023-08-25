@@ -44,8 +44,8 @@ class SeqLinOperator(LinearOperator):
     def rayleigh_quotient(self, v, metric=None):
         return(self.quad(v) / inner_product(v, v, metric=metric))
     
-    def inv_dot(self, v, show=False):
-        res = minres(self, v, tol=1e-6, show=show)
+    def inv_dot(self, v, show=False, tol=1e-16):
+        res = minres(self, v, tol=tol, show=show)
         self.res = res[1]
         return(res[0])
 
@@ -221,6 +221,13 @@ class RhoProjectionOperator(_KronOperator):
         
         self.rho = rho
         self.matrices = [self.W0 + r * self.W1 for r in rho]
+    
+    def inv_dot(self, v):
+        rho = self.rho.copy()
+        self.set_rho(1 / rho)
+        u = self.dot(v)
+        self.set_rho(rho)
+        return(u)
 
 
 class ProjectionOperator2(SeqLinOperator):
@@ -424,9 +431,25 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
     def _dot(self, v):
         return(self.W.dot(v))
 
-    def inv_quad(self, v, show=False):
-        u = self.inv_dot(v, show=show)
-        return(np.sum(u * v))
+
+class ConnectednessKernelOperator(BaseKernelOperator):
+    def __init__(self, n_alleles, seq_length):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        self.P = RhoProjectionOperator(n_alleles=n_alleles, seq_length=seq_length)
+        self.n = self.P.n
+        self.shape = (self.n, self.n)
+        self.known_var = False
+        self.set_mode()
+    
+    def set_rho(self, rho):
+        self.P.set_rho(rho)
+    
+    def get_rho(self):
+        return(self.P.rho)
+    
+    def _dot(self, v):
+        return(self.P.dot(v))
+    
 
 #################### Skewed operators ##################################
 
