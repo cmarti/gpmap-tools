@@ -6,7 +6,8 @@ import numpy as np
 from scipy.special._basic import comb
 from gpmap.src.inference import VCregression
 from gpmap.src.kernel import (VarianceComponentKernel, SequenceKernel,
-                              KernelAligner, FullKernelAligner)
+                              KernelAligner, FullKernelAligner,
+    SkewedVarianceComponentKernel, ConnectednessKernel)
 
 
 class KernelTest(unittest.TestCase):
@@ -59,8 +60,16 @@ class KernelTest(unittest.TestCase):
                         [ 1., -1., -1.,  1.]])
         assert(np.allclose(cov, add))
     
+    def test_rho_kernel(self):
+        kernel = ConnectednessKernel(2, 2)
+        X = np.array(['AA', 'AB', 'BA', 'BB'])
+        kernel.set_data(X, alleles=['A', 'B'])
+        
+        cov = kernel(rho=[0.5, 0.2])
+        assert(np.allclose(cov[0], [1.8, 1.2, 0.6, 0.4]))
+    
     def test_vc_kernel_ps(self):
-        kernel = VarianceComponentKernel(2, 2, use_p=True)
+        kernel = SkewedVarianceComponentKernel(2, 2, use_p=True)
         X = np.array(['AA', 'AB', 'BA', 'BB'])
         kernel.set_data(X, alleles=['A', 'B'])
         
@@ -189,6 +198,25 @@ class KernelTest(unittest.TestCase):
         aligner.set_data(X=X, y=y, alleles=alleles)
         lambdas_star = aligner.fit()
         assert(np.allclose(lambdas_star, [0, 0, 1], atol=0.01))
+    
+    def test_full_kernel_alignment_small_rho(self):
+        X = np.array(['AA', 'AB', 'BA', 'BB'])
+        alleles = ['A', 'B']
+        
+        kernel = ConnectednessKernel(2, 2)
+        aligner = FullKernelAligner(kernel=kernel)
+        y = np.array([1, 1, 1, 1])
+        aligner.set_data(X=X, y=y, alleles=alleles)
+        
+        # Set target covariance to one that can be
+        # perfectly represented by a combination of rho
+        aligner.target = np.array([[1.8, 1.2, 0.6, 0.4],
+                                   [1.2, 1.8, 0.4, 0.6],
+                                   [0.6, 0.4, 1.8, 1.2],
+                                   [0.4, 0.6, 1.2, 1.8]])
+        
+        rho_star = aligner.fit()
+        assert(np.allclose(rho_star, [0.5, 0.2]))
         
     def test_full_kernel_alignment_medium(self):
         np.random.seed(0)

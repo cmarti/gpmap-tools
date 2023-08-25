@@ -7,7 +7,7 @@ from scipy.optimize._minimize import minimize
 
 from gpmap.src.seq import seq_to_one_hot
 from gpmap.src.utils import check_error
-from gpmap.src.matrix import inner_product, quad
+from gpmap.src.matrix import inner_product, quad, get_sparse_diag_matrix
 
 
 class SequenceKernel(object):
@@ -36,6 +36,99 @@ class SequenceKernel(object):
 
 
 class VarianceComponentKernel(SequenceKernel):
+    def __init__(self, seq_length, n_alleles):
+        super().__init__(seq_length=seq_length, n_alleles=n_alleles)
+        self.calc_krawchouk_matrix()
+        self.n_params = self.lp1
+    
+    def set_extra_data(self):
+        self.same_seq = self.x1.dot(self.x2.T) == self.l
+        
+    def calc_w_kd(self, k, d):
+        ss = 0
+        for q in range(self.lp1):
+            ss += (-1.)**q * (self.alpha-1.)**(k-q) * comb(d,q) * comb(self.l-d,k-q)
+        return(ss)
+    
+    def calc_krawchouk_matrix(self):
+        w_kd = np.zeros((self.lp1, self.lp1))
+        for k in range(self.lp1):
+            for d in range(self.lp1):
+                w_kd[d, k] = self.calc_w_kd(k, d)
+        self.W_kd = w_kd
+    
+    def forward(self, lambdas):
+        hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
+        cov = self.W_kd.dot(lambdas)[hamming_distance]
+        return(cov)
+    
+    def backward(self, lambdas):
+        hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
+        for k, lambda_k in enumerate(lambdas):
+            yield(lambda_k * self.W_kd[k, :][hamming_distance])
+
+    def get_params0(self):
+        params = np.append([-10], 2-np.arange(self.l))
+        return(params)
+    
+    def transform_params(self, params):
+        return(np.exp(params))
+    
+    def split_params(self, params):
+        params_dict = {'lambdas': self.transform_params(params)}
+        return(params_dict)
+
+
+class ConnectednessKernel(SequenceKernel):
+    def __init__(self, seq_length, n_alleles):
+        super().__init__(seq_length=seq_length, n_alleles=n_alleles)
+        self.n_params = self.lp1
+    
+    def set_extra_data(self):
+        self.same_seq = self.x1.dot(self.x2.T) == self.l
+    
+    def calc_factor(self, rho):
+        return(np.log((1 + (self.alpha - 1)*rho) /(1 - rho)))
+        
+    def get_rho(self, rho):
+        rho = np.array(rho)
+        if rho.shape[0] == 1:
+            rho = np.full(self.l, rho[0])
+        elif rho.shape[0] != self.l:
+            msg = 'Incorrect dimension of rho'
+            raise ValueError(msg)
+        return(rho)
+          
+    def calc_metric(self, rho):
+        values = np.hstack([[self.calc_factor(r)] * self.alpha for r in rho])
+        m = get_sparse_diag_matrix(values)
+        return(m)
+        
+    def forward(self, rho):
+        rho = self.get_rho(rho)
+        metric = self.calc_metric(rho)
+        c = np.prod(1-rho)
+        cov = c * np.exp(inner_product(self.x1, self.x2, metric=metric))
+        return(cov)
+    
+    def backward(self):
+        hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
+        for w_k in self.W_kd:
+            yield(w_k[hamming_distance])
+
+    def get_params0(self):
+        params = np.random.normal(size=self.l)
+        return(params)
+    
+    def transform_params(self, params):
+        return(np.exp(params) / (1 + np.exp(params)))
+    
+    def split_params(self, params):
+        params_dict = {'rho': self.transform_params(params)}
+        return(params_dict)
+
+
+class SkewedVarianceComponentKernel(SequenceKernel):
     def __init__(self, seq_length, n_alleles, q=None, use_p=False):
         super().__init__(seq_length=seq_length, n_alleles=n_alleles)
         self.use_p = use_p
@@ -145,17 +238,13 @@ class VarianceComponentKernel(SequenceKernel):
             params_dict['lambdas'] = np.exp(params)
         return(params_dict) 
 
+ 
 class FullKernelAligner(object):
-    def __init__(self, kernel, beta=0, optimizer='powell'):
+    def __init__(self, kernel, optimizer='powell'):
         self.kernel = kernel
         self.seq_length = kernel.l
         self.n_alleles = kernel.alpha
-        self.set_beta(beta)
         self.optimizer = optimizer
-    
-    def set_beta(self, beta):
-        check_error(beta >=0, msg='beta must be >= 0')
-        self.beta = beta
     
     def set_data(self, X, y, y_var=None, alleles=None):
         self.X = X
@@ -167,50 +256,39 @@ class FullKernelAligner(object):
         y_res = y.reshape((self.n, 1))
         self.target = y_res.dot(y_res.T) - np.diag(self.y_var)
     
-    def mse(self, **kwargs):
+    def _mse(self, **kwargs):
         cov = self.predict(**kwargs)
         mse = (np.power(cov - self.target,  2).mean())
         return(mse)
     
-    def mse_grad(self, **kwargs):
+    def _mse_grad(self, **kwargs):
         cov = self.predict(**kwargs)
         diff2 = 2*(cov - self.target)
         grad = np.array([np.sum(diff2 * grad_k) for grad_k in self.kernel.grad(**kwargs)])
         return(grad)
     
-    def calc_reg_lambdas(self, log_lambdas):
-        if self.beta == 0:
-            reg = 0
-        else:
-            reg = 0
-        return(reg)
-    
-    def calc_reg_ps(self, ps):
-        return(0)
-    
     def loss(self, params):
         params_dict = self.kernel.split_params(params)
-        frob = self.mse(**params_dict)
-        
-        # reg_lambdas = self.calc_reg_lambdas(params_dict['log_lambdas'])
-        # reg_ps = self.calc_reg_ps(params_dict['log_ps'])
-        
+        frob = self._mse(**params_dict)
         return(frob)
     
     def grad(self, params):
         params_dict = self.kernel.split_params(params)
-        grad = self.mse_grad(**params_dict)
+        grad = self._mse_grad(**params_dict)
         return(grad)
     
     def fit(self, params0=None):
         if params0 is None:
             params0 = self.kernel.get_params0()
-        res = minimize(fun=self.loss, jac=self.grad,
-                       x0=params0, method=self.optimizer,
-                       options={'ftol': 1e-4, 'maxiter': 1e5}) # 'xtol': 1e-8, 
+        jac = self.grad = None if self.optimizer == 'powell' else self.grad
+        res = minimize(fun=self.loss, jac=jac,
+                       x0=params0,
+                       method=self.optimizer,
+#                        options={'ftol': 1e-4, 'maxiter': 1e5}
+                       ) # 'xtol': 1e-8, 
         self.res = res
-        lambdas = np.exp(res.x)
-        return(lambdas)
+        params = self.kernel.transform_params(res.x)
+        return(params)
     
     def predict(self, **kwargs):
         return(self.kernel(**kwargs))
