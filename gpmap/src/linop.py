@@ -169,7 +169,7 @@ class DeltaPOperator(SeqLinOperator):
         self.lambdas = np.array(lambdas)
 
 
-class VjProjectionOperator(SeqLinOperator):
+class _KronOperator(SeqLinOperator):
     def __init__(self, n_alleles, seq_length):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.calc_elementary_W()
@@ -180,15 +180,17 @@ class VjProjectionOperator(SeqLinOperator):
         self.W0 = np.outer(b, b) / np.sum(b ** 2)
         self.W1 = np.eye(self.alpha) - self.W0
         
+    def _matvec(self, v):
+        return(kron_dot(self.matrices, v))
+    
+
+class VjProjectionOperator(_KronOperator):
     def set_j(self, positions):
         self.positions = positions
         self.k = len(positions) 
         self.repeats = self.alpha ** (self.l - self.k)
         self.matrices = [self.W1 if p in positions else self.W0
                          for p in range(self.l)]
-    
-    def _matvec(self, v):
-        return(kron_dot(self.matrices, v))
     
     def dot_square_norm(self, v):
         axis = tuple([p for p in range(self.l) if p not in self.positions])
@@ -203,6 +205,22 @@ class VjProjectionOperator(SeqLinOperator):
             matrices = [self.W1] * self.k
             sqnorm = self.repeats * np.sum(kron_dot(matrices, u.flatten()) ** 2)
         return(sqnorm)
+
+
+class RhoProjectionOperator(_KronOperator):
+    def set_rho(self, rho):
+        if isinstance(rho, float):
+            rho  = np.full(self.l, rho)
+        else:
+            rho = np.array(rho)
+            msg = 'rho vector size must be equal to sequence length'
+            check_error(rho.shape[0] == self.l, msg=msg)
+        
+        msg = 'rho must be between 0 and 1'
+        check_error(np.all((rho > 0) & (rho < 1)), msg=msg)
+        
+        self.rho = rho
+        self.matrices = [self.W0 + r * self.W1 for r in rho]
 
 
 class ProjectionOperator2(SeqLinOperator):

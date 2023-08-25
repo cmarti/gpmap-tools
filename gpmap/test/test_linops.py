@@ -13,7 +13,8 @@ from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator,
                              VarianceComponentKernelOperator,
-                             DeltaPOperator, ProjectionOperator2)
+                             DeltaPOperator, ProjectionOperator2,
+    RhoProjectionOperator)
 
 
 class LinOpsTests(unittest.TestCase):
@@ -253,7 +254,34 @@ class LinOpsTests(unittest.TestCase):
         f = vjp.dot(y)
         fsqn = vjp.dot_square_norm(y)
         assert(np.allclose(fsqn, np.sum(f**2)))
-            
+    
+    def test_rho_projection_operator(self):
+        # Small landscape
+        P = RhoProjectionOperator(2, 2)
+        P.set_rho(0.5)
+        
+        np.random.seed(0)
+        v = np.random.normal(size=P.n)
+        u1 = P.dot(v)
+        
+        W = ProjectionOperator(2, 2)
+        W.set_lambdas(np.array([1, 0.5, 0.25]))
+        u2 = W.dot(v)
+        assert(np.allclose(u1, u2))
+        
+        # Larger landscape
+        P = RhoProjectionOperator(4, 6)
+        P.set_rho(0.5)
+        
+        np.random.seed(0)
+        v = np.random.normal(size=P.n)
+        u1 = P.dot(v)
+        
+        W = ProjectionOperator(4, 6)
+        W.set_lambdas(np.array([2**-(i) for i in range(W.lp1)]))
+        u2 = W.dot(v)
+        assert(np.allclose(u1, u2))
+        
     def test_kernel_opt_get_gt_to_data_matrix(self):
         K = VarianceComponentKernelOperator(n_alleles=2, seq_length=3)
         obs_idx = np.arange(K.n)
