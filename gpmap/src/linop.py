@@ -48,6 +48,11 @@ class SeqLinOperator(LinearOperator):
         res = minres(self, v, tol=tol, show=show)
         self.res = res[1]
         return(res[0])
+    
+    def get_column(self, i):
+        vec = np.zeros(self.shape[1])
+        vec[i] = 1
+        return(self.dot(vec))
 
 
 class LaplacianOperator(SeqLinOperator):
@@ -208,23 +213,29 @@ class VjProjectionOperator(_KronOperator):
 
 
 class RhoProjectionOperator(_KronOperator):
-    def set_rho(self, rho):
+    def check_rho(self, rho, ignore_bound=False):
+        checked = rho > 0
+        msg = 'rho larger than 0'
+        if not ignore_bound:
+            checked = checked & (rho < 1)
+            msg = 'rho must be between 0 and 1' 
+        check_error(np.all(checked), msg=msg)
+    
+    def set_rho(self, rho, ignore_bound=False):
         if isinstance(rho, float):
             rho  = np.full(self.l, rho)
         else:
             rho = np.array(rho)
             msg = 'rho vector size must be equal to sequence length'
             check_error(rho.shape[0] == self.l, msg=msg)
-        
-        msg = 'rho must be between 0 and 1'
-        check_error(np.all((rho > 0) & (rho < 1)), msg=msg)
-        
+            
+        self.check_rho(rho, ignore_bound=ignore_bound)
         self.rho = rho
         self.matrices = [self.W0 + r * self.W1 for r in rho]
     
     def inv_dot(self, v):
         rho = self.rho.copy()
-        self.set_rho(1 / rho)
+        self.set_rho(1 / rho, ignore_bound=True)
         u = self.dot(v)
         self.set_rho(rho)
         return(u)
@@ -417,6 +428,8 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
         self.shape = (self.n, self.n)
         self.known_var = False
         self.set_mode()
+        self.set_params = self.set_lambdas
+        self.get_params = self.get_lambdas
     
     @property
     def lambdas_multiplicity(self):
@@ -430,6 +443,13 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
     
     def _dot(self, v):
         return(self.W.dot(v))
+    
+    def transform(self, v):
+        lambdas = self.get_lambdas()
+        self.set_lambdas(np.sqrt(lambdas))
+        u = self.W.dot(v)
+        self.set_lambdas(lambdas)
+        return(u)
 
 
 class ConnectednessKernelOperator(BaseKernelOperator):
@@ -440,6 +460,8 @@ class ConnectednessKernelOperator(BaseKernelOperator):
         self.shape = (self.n, self.n)
         self.known_var = False
         self.set_mode()
+        self.set_params = self.set_rho
+        self.get_params = self.get_rho
     
     def set_rho(self, rho):
         self.P.set_rho(rho)
@@ -449,6 +471,13 @@ class ConnectednessKernelOperator(BaseKernelOperator):
     
     def _dot(self, v):
         return(self.P.dot(v))
+    
+    def transform(self, v):
+        rho = self.get_rho()
+        self.set_rho(np.sqrt(rho))
+        u = self.P.dot(v)
+        self.set_rho(rho)
+        return(u)
     
 
 #################### Skewed operators ##################################
