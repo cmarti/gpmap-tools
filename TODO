@@ -27,6 +27,7 @@ High priority
   log densities
 - Update plotting binaries with new functions
 - Update plotly plotting functionalities
+- Review Kernel alignment loss function in the paper, code and docs to match
 
 Mid priority
 - Reimplement datashader plotting functions using v0.12 native mpl interface
