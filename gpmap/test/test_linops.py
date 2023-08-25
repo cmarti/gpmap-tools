@@ -282,6 +282,30 @@ class LinOpsTests(unittest.TestCase):
         u2 = W.dot(v)
         assert(np.allclose(u1, u2))
         
+        # Different rho per site
+        P = RhoProjectionOperator(2, 2)
+        P.set_rho([0.5, 0.8])
+        
+        np.random.seed(0)
+        v = np.random.normal(size=P.n)
+        u1 = P.dot(v)
+        
+        W = VjProjectionOperator(2, 2)
+        u2 = np.zeros(v.shape)
+        
+        W.set_j([])
+        u2 += 1 * 1 * W.dot(v)
+        
+        W.set_j([1])
+        u2 += 1 * 0.8 * W.dot(v)
+        
+        W.set_j([0])
+        u2 += 0.5 * 1 * W.dot(v)
+        
+        W.set_j([0, 1])
+        u2 += 0.5 * 0.8 * W.dot(v)
+        assert(np.allclose(u1, u2))
+        
     def test_kernel_opt_get_gt_to_data_matrix(self):
         K = VarianceComponentKernelOperator(n_alleles=2, seq_length=3)
         obs_idx = np.arange(K.n)
