@@ -57,7 +57,7 @@ def get_cbar_inset_axes(axes, horizontal=False, pos=(0.2, 0.6),
 
 def set_centered_spines(axes, xlabel='', ylabel='',
                         xlabel_pos=(1.1, 0.1), ylabel_pos=(0.1,  0.94), 
-                        add_grid=True, zorder=3, alpha=0.5,):
+                        add_grid=True, zorder=3, alpha=0.5, fontsize=12):
     axes.spines['left'].set(position=('data', 0), zorder=zorder,
                             alpha=alpha)
     axes.spines['bottom'].set(position=('data', 0), zorder=zorder,  
@@ -77,10 +77,10 @@ def set_centered_spines(axes, xlabel='', ylabel='',
             transform=axes.get_xaxis_transform(), clip_on=False)
     
     axes.annotate(xlabel, xy=xlabel_pos, xycoords=('axes fraction', 'data'),
-                  textcoords='offset points', fontsize=12,
+                  textcoords='offset points', fontsize=fontsize,
                   ha='right', va='center')
     axes.annotate(ylabel, xy=ylabel_pos, xycoords=('data', 'axes fraction'),
-                  textcoords='offset points', fontsize=12,
+                  textcoords='offset points', fontsize=fontsize,
                   ha='left', va='bottom')
     sns.despine(ax=axes)
 
