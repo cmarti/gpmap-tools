@@ -4,12 +4,13 @@ import unittest
 import numpy as np
 
 from scipy.special._basic import comb
+
 from gpmap.src.inference import VCregression, GaussianProcessRegressor
 from gpmap.src.kernel import (VarianceComponentKernel, SequenceKernel,
                               KernelAligner, FullKernelAligner,
                               SkewedVarianceComponentKernel, ConnectednessKernel)
-from gpmap.src.linop import ConnectednessKernelOperator,\
-    VarianceComponentKernelOperator
+from gpmap.src.linop import (ConnectednessKernelOperator,
+                             VarianceComponentKernelOperator)
 from gpmap.src.seq import generate_possible_sequences
 
 
