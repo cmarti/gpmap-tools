@@ -21,9 +21,8 @@ from gpmap.src.kernel import KernelAligner
 
 
 class LandscapeEstimator(object):
-    def __init__(self, expand_alphabet=True, max_L_size=None):
+    def __init__(self, expand_alphabet=True):
         self.expand_alphabet = expand_alphabet
-        self.max_L_size = max_L_size
     
     def get_regularization_constants(self):
         return(10**(np.linspace(self.min_log_reg, self.max_log_reg, self.num_reg)))
@@ -64,6 +63,84 @@ class LandscapeEstimator(object):
         self.genotypes = np.array(list(get_seqs_from_alleles(alphabet)))
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
                                        index=self.genotypes)
+        
+
+class GaussianProcessRegressor(object):
+    def __init__(self, kernel, progress=False):
+        self.K = kernel
+        self.n = kernel.n
+        self.progress = progress
+    
+    def predict(self):
+        self.K.set_mode(all_rows=False, add_y_var_diag=True, full_v=False)
+        a_star = self.K.inv_dot(self.y)
+        
+        self.K.set_mode(all_rows=True, add_y_var_diag=False)
+        y_pred = self.K.dot(a_star)
+        return(y_pred)
+    
+    def calc_posterior_variance_i(self, i):
+        self.K.set_mode(full_v=True, all_rows=True)
+        K_i = self.K.get_column(i)
+        K_ii = K_i[i]
+        K_Bi = self.K.gt2data.T.dot(K_i)
+        
+        self.K.set_mode(all_rows=False, add_y_var_diag=True, full_v=False)
+        post_var = K_ii - self.K.inv_quad(K_Bi)
+        return(post_var)
+    
+    def calc_posterior_variance(self, X_pred=None):
+        pred_idx = np.arange(self.n) if X_pred is None else self.get_obs_idx(X_pred)
+        if self.progress:
+            pred_idx = tqdm(pred_idx, total=X_pred.shape[0])
+
+        post_vars = np.array([self.calc_posterior_variance_i(i) for i in pred_idx])        
+        return(post_vars)
+    
+    def sample(self):
+        a = np.random.normal(size=self.n)
+        self.K.set_mode(full_v=True, all_rows=True)
+        y = self.K.transform(a)
+        return(y)
+    
+    def simulate(self, sigma=0):
+        yhat = self.sample()
+        y = np.random.normal(yhat, sigma) if sigma > 0 else yhat
+        y_var = np.full(self.n, sigma**2, dtype=float)
+        return(yhat, y, y_var)
+    
+
+class VCregression(LandscapeEstimator):
+    '''
+        Variance Component regression model that allows inference and prediction
+        of a scalar function in sequence spaces under a Gaussian Process prior
+        parametrized by the contribution of the different orders of interaction
+        to the observed genetic variability of a continuous phenotype
+        
+        It requires the use of the same number of alleles per sites
+            
+    '''
+    def __init__(self, beta=0, cross_validation=False, 
+                 num_beta=20, nfolds=5, min_log_beta=-2,
+                 max_log_beta=7, cv_loss_function='frobenius_norm'):
+        super().__init__()
+        self.beta = beta
+        self.nfolds = nfolds
+        self.num_reg = num_beta
+        self.total_folds = self.nfolds * self.num_reg
+        
+        self.min_log_reg = min_log_beta
+        self.max_log_reg = max_log_beta
+        self.run_cv = cross_validation
+        self.cv_loss_function = cv_loss_function
+        
+    def init(self, seq_length=None, n_alleles=None, genotypes=None,
+             alphabet_type='custom'):
+        self.define_space(seq_length=seq_length, n_alleles=n_alleles,
+                          genotypes=genotypes, alphabet_type=alphabet_type)
+        self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
+        self.K = VarianceComponentKernelOperator(self.n_alleles, self.seq_length)
+        self.calc_L_powers_unique_entries_matrix() # For covariance d calculations
     
     def calc_L_powers_unique_entries_matrix(self):
         """Construct entries of powers of L. 
@@ -102,40 +179,7 @@ class LandscapeEstimator(object):
         # Invert MAT
         self.L_powers_unique_entries_inv = np.linalg.inv(MAT)
         self.L_powers_unique_entries = MAT
-        
-
-class VCregression(LandscapeEstimator):
-    '''
-        Variance Component regression model that allows inference and prediction
-        of a scalar function in sequence spaces under a Gaussian Process prior
-        parametrized by the contribution of the different orders of interaction
-        to the observed genetic variability of a continuous phenotype
-        
-        It requires the use of the same number of alleles per sites
-            
-    '''
-    def __init__(self, beta=0, cross_validation=False, 
-                 num_beta=20, nfolds=5, min_log_beta=-2,
-                 max_log_beta=7, cv_loss_function='frobenius_norm'):
-        super().__init__()
-        self.beta = beta
-        self.nfolds = nfolds
-        self.num_reg = num_beta
-        self.total_folds = self.nfolds * self.num_reg
-        
-        self.min_log_reg = min_log_beta
-        self.max_log_reg = max_log_beta
-        self.run_cv = cross_validation
-        self.cv_loss_function = cv_loss_function
-        
-    def init(self, seq_length=None, n_alleles=None, genotypes=None,
-             alphabet_type='custom'):
-        self.define_space(seq_length=seq_length, n_alleles=n_alleles,
-                          genotypes=genotypes, alphabet_type=alphabet_type)
-        self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
-        self.K = VarianceComponentKernelOperator(self.n_alleles, self.seq_length)
-        self.calc_L_powers_unique_entries_matrix() # For covariance d calculations
-        
+    
     def get_obs_idx(self, seqs):
         obs_idx = self.genotype_idxs[seqs]
         return(obs_idx)

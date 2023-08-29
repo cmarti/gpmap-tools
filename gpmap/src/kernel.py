@@ -15,18 +15,26 @@ class SequenceKernel(object):
         self.alpha = n_alleles
         self.l = seq_length
         self.lp1 = self.l + 1
+        self.n = self.alpha ** self.l
 
     def calc_hamming_distance(self, x1, x2):
         return(self.l - inner_product(x1, x2))
     
+    def get_hamming_distance(self):
+        if self._hamming is None: # this happens when data is re-set
+            self._hamming = self.calc_hamming_distance(self.x1, self.x2)
+        return(self._hamming)
+    
     def set_data(self, x1, x2=None, alleles=None, **kwargs):
         self.x1 = seq_to_one_hot(x1, alleles=alleles).astype(int)
         if x2 is None:
-            x2 = x1
-        self.x2 = seq_to_one_hot(x2, alleles=alleles).astype(int)
+            self.x2 = self.x1
+        else:
+            self.x2 = seq_to_one_hot(x2, alleles=alleles).astype(int)
         
         if hasattr(self, 'set_extra_data'):
             self.set_extra_data(**kwargs)
+        self._hamming = None
     
     def __call__(self, **kwargs):
         return(self.forward(**kwargs))
@@ -48,7 +56,7 @@ class VarianceComponentKernel(SequenceKernel):
         ss = 0
         for q in range(self.lp1):
             ss += (-1.)**q * (self.alpha-1.)**(k-q) * comb(d,q) * comb(self.l-d,k-q)
-        return(ss)
+        return(ss / self.n)
     
     def calc_krawchouk_matrix(self):
         w_kd = np.zeros((self.lp1, self.lp1))
@@ -56,23 +64,26 @@ class VarianceComponentKernel(SequenceKernel):
             for d in range(self.lp1):
                 w_kd[d, k] = self.calc_w_kd(k, d)
         self.W_kd = w_kd
-    
+        
     def forward(self, lambdas):
         hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
         cov = self.W_kd.dot(lambdas)[hamming_distance]
         return(cov)
     
     def backward(self, lambdas):
-        hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
+        hamming_distance = self.get_hamming_distance()
         for k, lambda_k in enumerate(lambdas):
-            yield(lambda_k * self.W_kd[k, :][hamming_distance])
+            yield(self.transform_params_grad(lambda_k) * self.W_kd[:, k][hamming_distance])
 
     def get_params0(self):
-        params = np.append([-10], 2-np.arange(self.l))
+        params = np.append([-5], 2-np.arange(self.l))
         return(params)
     
     def transform_params(self, params):
         return(np.exp(params))
+    
+    def transform_params_grad(self, f_params):
+        return(f_params)
     
     def split_params(self, params):
         params_dict = {'lambdas': self.transform_params(params)}
@@ -80,9 +91,10 @@ class VarianceComponentKernel(SequenceKernel):
 
 
 class ConnectednessKernel(SequenceKernel):
-    def __init__(self, seq_length, n_alleles):
+    def __init__(self, seq_length, n_alleles, sites_equal=False):
         super().__init__(seq_length=seq_length, n_alleles=n_alleles)
         self.n_params = self.lp1
+        self.sites_equal = sites_equal
     
     def set_extra_data(self):
         self.same_seq = self.x1.dot(self.x2.T) == self.l
@@ -103,30 +115,212 @@ class ConnectednessKernel(SequenceKernel):
         values = np.hstack([[self.calc_factor(r)] * self.alpha for r in rho])
         m = get_sparse_diag_matrix(values)
         return(m)
-        
+    
     def forward(self, rho):
         rho = self.get_rho(rho)
-        metric = self.calc_metric(rho)
-        c = np.prod(1-rho)
-        cov = c * np.exp(inner_product(self.x1, self.x2, metric=metric))
-        return(cov)
+        if self.sites_equal:
+            d = self.get_hamming_distance()
+            s = np.log((1 + (self.alpha -1) * rho[0]))
+            cov = np.exp(d * (np.log(1 - rho[0]) - s) + self.l * s - np.log(self.n))
+        else:
+            metric = self.calc_metric(rho)
+            c = np.prod(1-rho)
+            cov = c * np.exp(inner_product(self.x1, self.x2, metric=metric) - np.log(self.n))
+            
+        self.cov = cov 
+        self.rho = rho
+        return(self.cov)
     
-    def backward(self):
-        hamming_distance = self.calc_hamming_distance(self.x1, self.x2)
-        for w_k in self.W_kd:
-            yield(w_k[hamming_distance])
+    def backward(self, **kwargs):
+        rho = self.rho
+        if self.sites_equal:
+            rho = rho[0]
+            d = self.get_hamming_distance()
+            n = (self.alpha - 1) / (1 + (self.alpha -1) * rho) * self.l
+            m = -self.alpha / ((1 - rho) * (1 + (self.alpha-1) * rho))
+            factor = m * d + n
+            yield(factor * self.cov * self.transform_params_grad(rho))
+        
+        else:
+            for p, rho_p in enumerate(rho):
+                idx = np.arange(p * self.alpha, (p + 1) * self.alpha)
+                s = inner_product(self.x1[:, idx], self.x2[:, idx])
+                different_factor = -1 / (1-rho_p)
+                equal_factor = (self.alpha - 1) / (1 + (self.alpha - 1) * rho_p)
+                factor = equal_factor * s + (1 - s) * different_factor
+                yield(factor * self.cov * self.transform_params_grad(rho_p))
 
     def get_params0(self):
-        params = np.random.normal(size=self.l)
+        s = 1 if self.sites_equal else self.l
+        params = np.random.normal(size=s)
         return(params)
     
     def transform_params(self, params):
         return(np.exp(params) / (1 + np.exp(params)))
     
+    def inv_transform_params(self, params):
+        return(np.log(params / (1 - params)))
+    
+    def transform_params_grad(self, f_params):
+        params = self.inv_transform_params(f_params)
+        return(np.exp(params) / (1 + np.exp(params)) ** 2)
+    
     def split_params(self, params):
         params_dict = {'rho': self.transform_params(params)}
         return(params_dict)
 
+
+class FullKernelAligner(object):
+    def __init__(self, kernel, optimizer='BFGS'):
+        self.kernel = kernel
+        self.seq_length = kernel.l
+        self.n_alleles = kernel.alpha
+        self.optimizer = optimizer
+    
+    def set_data(self, X, y, y_var=None, alleles=None):
+        self.X = X
+        self.y = y
+        self.y_var = y_var if y_var is not None else np.zeros(y.shape)
+        self.n = y.shape[0]
+        
+        self.kernel.set_data(X, alleles=alleles)
+        y_res = y.reshape((self.n, 1))
+        self.target = y_res.dot(y_res.T)
+    
+    def frob2(self, **kwargs):
+        cov = self.predict(**kwargs) + np.diag(self.y_var)
+        self.residuals = cov - self.target
+        return(np.power(self.residuals,  2).sum())
+    
+    def loss(self, params):
+        params_dict = self.kernel.split_params(params)
+        frob = self.frob2(**params_dict)
+        return(frob)
+    
+    def frob2_grad(self, **kwargs):
+        grad = np.array([np.sum(2 * self.residuals * grad_k)
+                         for grad_k in self.kernel.grad(**kwargs)])
+        return(grad)
+    
+    def loss_grad(self, params):
+        params_dict = self.kernel.split_params(params)
+        grad = self.frob2_grad(**params_dict)
+        return(grad)
+    
+    def fit(self, params0=None):
+        if params0 is None:
+            params0 = self.kernel.get_params0()
+        jac = self.grad = None if self.optimizer.lower() == 'powell' else self.loss_grad
+        res = minimize(fun=self.loss, jac=jac, x0=params0,
+                       method=self.optimizer,
+                       options={'gtol': 1e-12, 'maxiter': 1e5})
+        self.res = res
+        params = self.kernel.transform_params(res.x)
+        return(params)
+    
+    def predict(self, **kwargs):
+        return(self.kernel(**kwargs))
+
+
+class KernelAligner(object):
+    def __init__(self, seq_length, n_alleles, beta=0):
+        self.seq_length = seq_length
+        self.n_alleles = n_alleles
+        self.set_beta(beta)
+        self.calc_W_kd_matrix()
+        self.calc_second_order_diff_matrix()
+    
+    def set_data(self, covs, distances_n):
+        self.covs = covs
+        self.distances_n = distances_n
+        self.construct_a(covs, distances_n)
+        self.construct_M(distances_n)
+        self.M_inv = np.linalg.inv(self.M)
+    
+    def set_beta(self, beta):
+        check_error(beta >=0, msg='beta must be >= 0')
+        self.beta = beta
+    
+    def calc_second_order_diff_matrix(self):
+        """Construct second order difference matrix for regularization"""
+        Diff2 = np.zeros((self.seq_length - 2, self.seq_length))
+        for i in range(Diff2.shape[0]):
+            Diff2[i, i:i + 3] = [-1, 2, -1]
+        self.second_order_diff_matrix = Diff2.T.dot(Diff2)
+    
+    def frobenius_norm(self, log_lambdas):
+        """cost function for regularized least square method for inferring 
+        lambdas"""
+        lambdas = np.exp(log_lambdas)
+        Frob1 = lambdas.dot(self.M).dot(lambdas)
+        Frob2 = 2 * lambdas.dot(self.a)
+        Frob = Frob1 - Frob2
+        if self.beta > 0:
+            Frob += self.beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
+        return(Frob)
+    
+    def frobenius_norm_grad(self, log_lambdas):
+        msg = 'gradient calculation only implemented for beta=0'
+        check_error(self.beta == 0, msg=msg)
+        lambdas = np.exp(log_lambdas)
+        grad_Frob = (2 * self.M.dot(lambdas) - 2 * self.a)
+        return(grad_Frob * lambdas)
+    
+    def construct_M(self, N_d):
+        size = self.seq_length + 1
+        M = np.zeros([size, size])
+        for i in range(size):
+            for j in range(size):
+                for d in range(size):
+                    M[i, j] += N_d[d] * self.W_kd[i, d] * self.W_kd[j, d]
+        self.M = M
+    
+    def construct_a(self, rho_d, N_d):
+        size = self.seq_length + 1
+        a = np.zeros(size)
+        for i in range(size):
+            for d in range(size):
+                a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
+        self.a = a
+    
+    def calc_w(self, k, d):
+        """return value of the Krawtchouk polynomial for k, d"""
+        l, a = self.seq_length, self.n_alleles
+        s = 0
+        for q in range(l + 1):
+            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
+        return(s / a**l)
+    
+    def calc_W_kd_matrix(self):
+        """return full matrix l+1 by l+1 Krawtchouk matrix"""
+        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
+        for k in range(self.seq_length + 1):
+            for d in range(self.seq_length + 1):
+                self.W_kd[k, d] = self.calc_w(k, d)
+    
+    def fit(self):
+        lambdas0 = np.dot(self.M_inv, self.a).flatten()
+        lambdas0[lambdas0<0] = 1e-10
+        log_lambda0 = np.log(lambdas0)
+        if self.beta == 0:
+            res = minimize(fun=self.frobenius_norm,
+                           jac=self.frobenius_norm_grad,
+                           x0=log_lambda0, method='L-BFGS-B')
+        elif self.beta > 0:
+            res = minimize(fun=self.frobenius_norm,
+                           x0=log_lambda0, method='Powell',
+                           options={'xtol': 1e-8, 'ftol': 1e-8})
+        lambdas = np.exp(res.x)
+        return(lambdas)
+    
+    def predict(self, lambdas):
+        return(self.W_kd.T.dot(lambdas))
+    
+    def calc_mse(self, lambdas):
+        ss = (self.predict(lambdas) - self.covs) ** 2
+        return(np.sum(ss * (1 / np.sum(self.distances_n)) * self.distances_n))
+
+###### Skewed Kernel ######
 
 class SkewedVarianceComponentKernel(SequenceKernel):
     def __init__(self, seq_length, n_alleles, q=None, use_p=False):
@@ -237,158 +431,3 @@ class SkewedVarianceComponentKernel(SequenceKernel):
         else:
             params_dict['lambdas'] = np.exp(params)
         return(params_dict) 
-
- 
-class FullKernelAligner(object):
-    def __init__(self, kernel, optimizer='powell'):
-        self.kernel = kernel
-        self.seq_length = kernel.l
-        self.n_alleles = kernel.alpha
-        self.optimizer = optimizer
-    
-    def set_data(self, X, y, y_var=None, alleles=None):
-        self.X = X
-        self.y = y
-        self.y_var = y_var if y_var is not None else np.zeros(y.shape)
-        self.n = y.shape[0]
-        
-        self.kernel.set_data(X, alleles=alleles)
-        y_res = y.reshape((self.n, 1))
-        self.target = y_res.dot(y_res.T) - np.diag(self.y_var)
-    
-    def _mse(self, **kwargs):
-        cov = self.predict(**kwargs)
-        mse = (np.power(cov - self.target,  2).mean())
-        return(mse)
-    
-    def _mse_grad(self, **kwargs):
-        cov = self.predict(**kwargs)
-        diff2 = 2*(cov - self.target)
-        grad = np.array([np.sum(diff2 * grad_k) for grad_k in self.kernel.grad(**kwargs)])
-        return(grad)
-    
-    def loss(self, params):
-        params_dict = self.kernel.split_params(params)
-        frob = self._mse(**params_dict)
-        return(frob)
-    
-    def grad(self, params):
-        params_dict = self.kernel.split_params(params)
-        grad = self._mse_grad(**params_dict)
-        return(grad)
-    
-    def fit(self, params0=None):
-        if params0 is None:
-            params0 = self.kernel.get_params0()
-        jac = self.grad = None if self.optimizer == 'powell' else self.grad
-        res = minimize(fun=self.loss, jac=jac,
-                       x0=params0,
-                       method=self.optimizer,
-#                        options={'ftol': 1e-4, 'maxiter': 1e5}
-                       ) # 'xtol': 1e-8, 
-        self.res = res
-        params = self.kernel.transform_params(res.x)
-        return(params)
-    
-    def predict(self, **kwargs):
-        return(self.kernel(**kwargs))
-
-
-class KernelAligner(object):
-    def __init__(self, seq_length, n_alleles, beta=0):
-        self.seq_length = seq_length
-        self.n_alleles = n_alleles
-        self.set_beta(beta)
-        self.calc_W_kd_matrix()
-        self.calc_second_order_diff_matrix()
-    
-    def set_data(self, covs, distances_n):
-        self.covs = covs
-        self.distances_n = distances_n
-        self.construct_a(covs, distances_n)
-        self.construct_M(distances_n)
-        self.M_inv = np.linalg.inv(self.M)
-    
-    def set_beta(self, beta):
-        check_error(beta >=0, msg='beta must be >= 0')
-        self.beta = beta
-    
-    def calc_second_order_diff_matrix(self):
-        """Construct second order difference matrix for regularization"""
-        Diff2 = np.zeros((self.seq_length - 2, self.seq_length))
-        for i in range(Diff2.shape[0]):
-            Diff2[i, i:i + 3] = [-1, 2, -1]
-        self.second_order_diff_matrix = Diff2.T.dot(Diff2)
-    
-    def frobenius_norm(self, log_lambdas):
-        """cost function for regularized least square method for inferring 
-        lambdas"""
-        lambdas = np.exp(log_lambdas)
-        Frob1 = lambdas.dot(self.M).dot(lambdas)
-        Frob2 = 2 * lambdas.dot(self.a)
-        Frob = Frob1 - Frob2
-        if self.beta > 0:
-            Frob += self.beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
-        return(Frob)
-    
-    def frobenius_norm_grad(self, log_lambdas):
-        msg = 'gradient calculation only implemented for beta=0'
-        check_error(self.beta == 0, msg=msg)
-        lambdas = np.exp(log_lambdas)
-        grad_Frob = (2 * self.M.dot(lambdas) - 2 * self.a)
-        return(grad_Frob * lambdas)
-    
-    def construct_M(self, N_d):
-        size = self.seq_length + 1
-        M = np.zeros([size, size])
-        for i in range(size):
-            for j in range(size):
-                for d in range(size):
-                    M[i, j] += N_d[d] * self.W_kd[i, d] * self.W_kd[j, d]
-        self.M = M
-    
-    def construct_a(self, rho_d, N_d):
-        size = self.seq_length + 1
-        a = np.zeros(size)
-        for i in range(size):
-            for d in range(size):
-                a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
-        self.a = a
-    
-    def calc_w(self, k, d):
-        """return value of the Krawtchouk polynomial for k, d"""
-        l, a = self.seq_length, self.n_alleles
-        s = 0
-        for q in range(l + 1):
-            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
-        return(s / a**l)
-    
-    def calc_W_kd_matrix(self):
-        """return full matrix l+1 by l+1 Krawtchouk matrix"""
-        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
-        for k in range(self.seq_length + 1):
-            for d in range(self.seq_length + 1):
-                self.W_kd[k, d] = self.calc_w(k, d)
-    
-    def fit(self):
-        lambdas0 = np.dot(self.M_inv, self.a).flatten()
-        lambdas0[lambdas0<0] = 1e-10
-        log_lambda0 = np.log(lambdas0)
-        if self.beta == 0:
-            res = minimize(fun=self.frobenius_norm,
-                           jac=self.frobenius_norm_grad,
-                           x0=log_lambda0, method='L-BFGS-B')
-        elif self.beta > 0:
-            res = minimize(fun=self.frobenius_norm,
-                           x0=log_lambda0, method='Powell',
-                           options={'xtol': 1e-8, 'ftol': 1e-8})
-        lambdas = np.exp(res.x)
-        return(lambdas)
-    
-    def predict(self, lambdas):
-        return(self.W_kd.T.dot(lambdas))
-    
-    def calc_mse(self, lambdas):
-        ss = (self.predict(lambdas) - self.covs) ** 2
-        return(np.sum(ss * (1 / np.sum(self.distances_n)) * self.distances_n))
-              

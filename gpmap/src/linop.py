@@ -421,7 +421,7 @@ class BaseKernelOperator(SeqLinOperator):
 
 
 class VarianceComponentKernelOperator(BaseKernelOperator):
-    def __init__(self, n_alleles, seq_length):
+    def __init__(self, n_alleles, seq_length, lambdas=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.W = ProjectionOperator(n_alleles=n_alleles, seq_length=seq_length)
         self.n = self.W.n
@@ -430,6 +430,9 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
         self.set_mode()
         self.set_params = self.set_lambdas
         self.get_params = self.get_lambdas
+        
+        if lambdas is not None:
+            self.set_lambdas(lambdas)
     
     @property
     def lambdas_multiplicity(self):
@@ -453,7 +456,7 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
 
 
 class ConnectednessKernelOperator(BaseKernelOperator):
-    def __init__(self, n_alleles, seq_length):
+    def __init__(self, n_alleles, seq_length, rho=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.P = RhoProjectionOperator(n_alleles=n_alleles, seq_length=seq_length)
         self.n = self.P.n
@@ -462,6 +465,9 @@ class ConnectednessKernelOperator(BaseKernelOperator):
         self.set_mode()
         self.set_params = self.set_rho
         self.get_params = self.get_rho
+        
+        if rho is not None:
+            self.set_rho(rho)
     
     def set_rho(self, rho):
         self.P.set_rho(rho)
