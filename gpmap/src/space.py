@@ -660,8 +660,8 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         lambdas = []
         for k in np.arange(self.seq_length + 1):
             self.W.set_lambdas(k=k)
-            ss = np.sum(self.W.dot(self.y) ** 2) / self.W.L.lambdas_multiplicity[k]
-            lambdas.append(ss)
+            dimensionality = self.W.L.lambdas_multiplicity[k]
+            lambdas.append(np.sum(self.W.dot(self.y) ** 2) / dimensionality)
         return(np.array(lambdas))
     
     def calc_vjs_variance_components(self, k):
@@ -691,10 +691,11 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
             self.Pj = VjProjectionOperator(n_alleles, self.seq_length)
             
         positions = np.arange(self.seq_length)
+        dimension = (self.Pj.alpha - 1) ** float(k)
         variances = {}
         for j in combinations(positions, k):
             self.Pj.set_j(np.array(j))
-            variances[j] = np.sum(self.Pj.dot(self.y) ** 2)
+            variances[j] = np.sum(self.Pj.dot(self.y) ** 2) / dimension 
         return(variances)
     
     def get_single_mutant_matrix(self, sequence, center=False):
