@@ -380,7 +380,50 @@ class LinOpsTests(unittest.TestCase):
         u = np.dot(basis, basis.T).dot(basis)
         error = (basis - u).mean()
         assert(np.allclose(error, 0))
-
+    
+    def test_calc_trace(self):
+        P = RhoProjectionOperator(4, 5)
+        P.set_rho(0.5)
+        trace = P.calc_trace(exact=True)
+        assert(np.allclose(trace, P.trace))
+        
+        L = LaplacianOperator(4, 5)
+        trace = L.calc_trace(exact=True)
+        assert(np.allclose(trace, L.trace))
+        
+        W = ProjectionOperator(4, 5)
+        W.set_lambdas(lambdas=[1, 0.5, 0.4, 0.1, 0.02, 0.001])
+        trace = W.calc_trace(exact=True)
+        assert(np.allclose(trace, W.trace))
+    
+    def test_calc_trace_approx(self):
+        P = RhoProjectionOperator(4, 5)
+        P.set_rho(0.5)
+        trace = P.calc_trace(exact=False, n_vectors=100)
+        assert(np.allclose(trace, P.trace, rtol=0.01))
+        
+        L = LaplacianOperator(4, 5)
+        trace = L.calc_trace(exact=False, n_vectors=100)
+        assert(np.allclose(trace, L.trace, rtol=0.01))
+        
+        W = ProjectionOperator(4, 5)
+        W.set_lambdas(lambdas=[1, 0.5, 0.4, 0.1, 0.02, 0.001])
+        trace = W.calc_trace(exact=False, n_vectors=100)
+        assert(np.allclose(trace, W.trace, rtol=0.01))
+    
+    def calc_projection_log_det(self):
+        W = ProjectionOperator(2, 2)
+        
+        # zero determinant
+        W.set_lambdas(lambdas=np.array([0, 1, 0]))
+        log_det = W.calc_log_det()
+        assert(np.allclose(log_det, -np.inf))
+        
+        # Non-zero determinant
+        W.set_lambdas(lambdas=np.array([1, 0.5, 0.1]))
+        log_det = W.calc_log_det()
+        assert(np.allclose(log_det, 0 + 2 * np.log(0.5) + np.log(0.1)))
+        
 
 class SkewedLinOpsTests(unittest.TestCase):
     def test_skewed_kernel_operator(self):
