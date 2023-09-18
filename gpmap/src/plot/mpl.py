@@ -77,11 +77,9 @@ def set_centered_spines(axes, xlabel='', ylabel='',
             transform=axes.get_xaxis_transform(), clip_on=False)
     
     axes.annotate(xlabel, xy=xlabel_pos, xycoords=('axes fraction', 'data'),
-                  textcoords='offset points', fontsize=fontsize,
-                  ha='right', va='center')
+                  fontsize=fontsize, ha='right', va='center')
     axes.annotate(ylabel, xy=ylabel_pos, xycoords=('data', 'axes fraction'),
-                  textcoords='offset points', fontsize=fontsize,
-                  ha='left', va='bottom')
+                  fontsize=fontsize, ha='left', va='bottom')
     sns.despine(ax=axes)
 
 
