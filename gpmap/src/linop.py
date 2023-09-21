@@ -45,16 +45,24 @@ class ExtendedLinearOperator(LinearOperator):
     def get_diag(self):
         return(np.array([self.get_column(i)[i] for i in range(self.shape[0])]))
     
+    def calc_trace_hutchinson(self, n_vectors):
+        '''
+        Stochastic trace estimator from 
+        
+        Hutchinson, M. F. (1990). A stochastic estimator of the trace of
+        the influence matrix for laplacian smoothing splines. Communications
+        in Statistics - Simulation and Computation, 19(2), 433–450.
+        '''
+        trace = np.mean([self.quad(np.random.normal(size=self.shape[1]))
+                         for _ in range(n_vectors)])
+        return(trace)
+    
     def calc_trace(self, exact=True, n_vectors=10):
         if exact or n_vectors > self.shape[1]:
             trace = self.get_diag().sum()
         else:
-            # Hutchinson approximation
-            # Hutchinson, M. F. (1990). A stochastic estimator of the trace of
-            # the influence matrix for laplacian smoothing splines. Communications
-            # in Statistics - Simulation and Computation, 19(2), 433–450.
-            trace = np.mean([self.quad(np.random.normal(size=self.shape[1]))
-                             for _ in range(n_vectors)])
+            trace = self.calc_trace_hutchinson(n_vectors)
+            
         return(trace)
     
     def calc_eigenvalue_upper_bound(self):
@@ -81,6 +89,55 @@ class ExtendedLinearOperator(LinearOperator):
                 vs.append(v_i)
             return(np.mean(vs))
                 
+
+class MatrixPolynomial(ExtendedLinearOperator):
+    def __init__(self, linop, coeffs=None):
+        self.linop = linop
+        if coeffs is not None:
+            self.set_coeffs(coeffs)
+
+    def set_coeffs(self, coeffs):
+        self.coeffs = np.array(coeffs)
+        self.degree = self.coeffs.shape[0]
+        
+    def _matvec(self, v):
+        power = v
+        u = self.coeffs[0] * v
+        for c in self.coeffs[1:]:
+            if c == 0:
+                continue
+            power = self.linop.dot(power)
+            u += c * power
+        return(u)
+
+    def calc_trace_hutchinson(self, n_vectors):
+        trace = 0
+        for _ in range(n_vectors):
+            v = np.random.normal(size=self.shape[1])
+            power = v
+            for c in self.coeffs[1:]:
+                if c == 0:
+                    continue
+                power = self.linop.dot(power)
+                trace += c * np.sum(v * power)
+        trace = trace / n_vectors
+        return(trace )
+    
+
+class TruncatedMatrixExp(MatrixPolynomial):
+    def __init__(self, linop, m):
+        coeffs = np.array([1/factorial(i) for i in range(m+1)])
+        super().__init__(linop, coeffs)
+
+
+class TruncatedMatrixLog(MatrixPolynomial):
+    def __init__(self, linop, m, alpha=1):
+        j = np.arange(m)
+        coeffs = -alpha ** j / j
+        A = ExtendedLinearOperator(matvec=lambda v: v - alpha * linop.dot(v))
+        
+        super().__init__(A, coeffs)
+        self.alpha = alpha
 
 
 class SeqLinOperator(ExtendedLinearOperator):
