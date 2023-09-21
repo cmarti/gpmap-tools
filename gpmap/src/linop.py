@@ -59,7 +59,10 @@ class ExtendedLinearOperator(LinearOperator):
     
     def calc_trace(self, exact=True, n_vectors=10):
         if exact or n_vectors > self.shape[1]:
-            trace = self.get_diag().sum()
+            if hasattr(self, '_calc_trace'):
+                trace = self._calc_trace()
+            else:
+                trace = self.get_diag().sum()
         else:
             trace = self.calc_trace_hutchinson(n_vectors)
             
@@ -156,9 +159,17 @@ class SeqLinOperator(ExtendedLinearOperator):
 
     def expand_v(self, v):
         return(v.reshape(self.n))
+
+
+class ConstantDiagOperator(SeqLinOperator):
+    def get_diag(self):
+        return(np.full(self.n, self.d))
+        
+    def _calc_trace(self):
+        return(self.n * self.d)
     
 
-class LaplacianOperator(SeqLinOperator):
+class LaplacianOperator(ConstantDiagOperator):
     def __init__(self, n_alleles, seq_length):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
             
@@ -223,23 +234,21 @@ class LaplacianOperator(SeqLinOperator):
         for k in range(self.lp1):
             for d in range(self.lp1):
                 self.W_kd[k, d] = self.calc_w(k, d)
-        
-    @property    
-    def trace(self):
-        return(self.n * (self.alpha - 1) * self.l)
     
 
-class DeltaPOperator(SeqLinOperator):
+class DeltaPOperator(ConstantDiagOperator):
     def __init__(self, P, n_alleles=None, seq_length=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.L = LaplacianOperator(n_alleles=n_alleles, seq_length=seq_length)
+        self.m_k = self.L.lambdas_multiplicity
         self.set_P(P)
+        self.d = comb(self.l, self.P) * (self.alpha - 1) ** self.P
         self.calc_kernel_dimension()
         self.calc_n_p_faces()
         self.calc_lambdas()
 
     def calc_kernel_dimension(self):
-        self.kernel_dimension = np.sum(self.L.lambdas_multiplicity[:self.P])
+        self.kernel_dimension = np.sum(self.m_k[:self.P])
     
     def calc_n_p_faces(self):
         n_p_sites = comb(self.l, self.P)
@@ -279,7 +288,10 @@ class DeltaPOperator(SeqLinOperator):
                 lambda_k *= L_lambda_k - p * self.alpha
             lambdas.append(lambda_k / self.Pfactorial)
         self.lambdas = np.array(lambdas)
-
+    
+    def calc_log_det(self):
+        return(self.m_k[self.P:] * np.log(self.lambdas[self.P:]))
+    
 
 class _KronOperator(SeqLinOperator):
     def __init__(self, n_alleles, seq_length):
@@ -319,7 +331,7 @@ class VjProjectionOperator(_KronOperator):
         return(sqnorm)
 
 
-class RhoProjectionOperator(_KronOperator):
+class RhoProjectionOperator(_KronOperator,ConstantDiagOperator):
     def check_rho(self, rho, ignore_bound=False):
         checked = rho > 0
         msg = 'rho larger than 0'
@@ -339,6 +351,7 @@ class RhoProjectionOperator(_KronOperator):
         self.check_rho(rho, ignore_bound=ignore_bound)
         self.rho = rho
         self.matrices = [self.W0 + r * self.W1 for r in rho]
+        self.d = np.prod([1 + (self.alpha - 1) * r for r in rho]) / self.n
     
     def inv_dot(self, v):
         rho = self.rho.copy()
@@ -347,10 +360,10 @@ class RhoProjectionOperator(_KronOperator):
         self.set_rho(rho)
         return(u)
     
-    @property
-    def trace(self):
-        factors = [1 + (self.alpha-1) * r for r in self.rho]
-        return(np.prod(factors))
+    def calc_log_det(self):
+        log_rho = np.log(self.rho)
+        k = np.sum([comb(self.l, i-1) for i in range(self.l)])
+        return(k * np.sum(log_rho))
 
 
 class ProjectionOperator2(SeqLinOperator):
@@ -396,10 +409,11 @@ class ProjectionOperator2(SeqLinOperator):
         return(self.expand_v(r))
 
 
-class ProjectionOperator(SeqLinOperator):
+class ProjectionOperator(ConstantDiagOperator):
     def __init__(self, n_alleles=None, seq_length=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.L = LaplacianOperator(n_alleles=n_alleles, seq_length=seq_length)
+        self.m_k = self.L.lambdas_multiplicity
         self.calc_eig_vandermonde_matrix()
         self.calc_polynomial_coeffs(numeric=False)
     
@@ -459,6 +473,7 @@ class ProjectionOperator(SeqLinOperator):
             
         self.lambdas = lambdas
         self.coeffs = self.lambdas_to_coeffs(lambdas)
+        self.d = self.calc_covariance_distance()[0]
     
     def calc_covariance_distance(self):
         return(self.L.W_kd.T.dot(self.lambdas))
@@ -477,14 +492,10 @@ class ProjectionOperator(SeqLinOperator):
         self.set_lambdas(lambdas)
         return(u)
     
-    @property
-    def trace(self):
-        return(self.n * self.calc_covariance_distance()[0])
-    
     def calc_log_det(self):
         if np.any(self.lambdas == 0.):
             return(-np.inf)
-        return(np.sum(np.log(self.lambdas) * self.L.lambdas_multiplicity)) 
+        return(np.sum(np.log(self.lambdas) * self.m_k)) 
 
 
 class BaseKernelOperator(SeqLinOperator):
@@ -539,12 +550,13 @@ class BaseKernelOperator(SeqLinOperator):
     def inv_quad(self, v, show=False):
         u = self.inv_dot(v, show=show)
         return(np.sum(u * v))
-
-
+    
+    
 class VarianceComponentKernelOperator(BaseKernelOperator):
     def __init__(self, n_alleles, seq_length, lambdas=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.W = ProjectionOperator(n_alleles=n_alleles, seq_length=seq_length)
+        self.m_k = self.W.L.lambdas_multiplicity
         self.n = self.W.n
         self.shape = (self.n, self.n)
         self.known_var = False
@@ -555,10 +567,6 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
         if lambdas is not None:
             self.set_lambdas(lambdas)
     
-    @property
-    def lambdas_multiplicity(self):
-        return(self.W.L.lambdas_multiplicity)
-        
     def set_lambdas(self, lambdas):
         self.W.set_lambdas(lambdas)
     
@@ -568,12 +576,28 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
     def _dot(self, v):
         return(self.W.dot(v))
     
-    def transform(self, v):
+    def one_half_power_dot(self, v):
         lambdas = self.get_lambdas()
         self.set_lambdas(np.sqrt(lambdas))
         u = self.W.dot(v)
         self.set_lambdas(lambdas)
         return(u)
+    
+    def _get_diag(self):
+        msg = 'lambdas need to be set to get diagonal'
+        check_error(hasattr(self, 'lambdas'), msg=msg)
+        if hasattr(self, 'n_obs'):
+            return(self.W.d + self.y_var)
+        else:
+            return(np.full(self.W.d, self.n))
+    
+    def _calc_trace(self):
+        msg = 'lambdas need to be set to calculate trace'
+        check_error(hasattr(self.W, 'lambdas'), msg=msg)
+        if hasattr(self, 'n_obs'):
+            return(self.n_obs * self.W.d + np.sum(self.y_var))
+        else:
+            return(self.n * self.W.d)
 
 
 class ConnectednessKernelOperator(BaseKernelOperator):
@@ -599,12 +623,28 @@ class ConnectednessKernelOperator(BaseKernelOperator):
     def _dot(self, v):
         return(self.P.dot(v))
     
-    def transform(self, v):
+    def one_half_power_dot(self, v):
         rho = self.get_rho()
         self.set_rho(np.sqrt(rho))
         u = self.P.dot(v)
         self.set_rho(rho)
         return(u)
+    
+    def _get_diag(self):
+        msg = 'rho need to be set to get diagonal'
+        check_error(hasattr(self, 'rho'), msg=msg)
+        if hasattr(self, 'n_obs'):
+            return(self.P.d + self.y_var)
+        else:
+            return(np.full(self.P.d, self.n))
+    
+    def _calc_trace(self):
+        msg = 'rho need to be set to calculate trace'
+        check_error(hasattr(self.P, 'rho'), msg=msg)
+        if hasattr(self, 'n_obs'):
+            return(self.n_obs * self.P.d + np.sum(self.y_var))
+        else:
+            return(self.n * self.P.d)
     
 
 #################### Skewed operators ##################################
