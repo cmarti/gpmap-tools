@@ -19,6 +19,10 @@ from gpmap.src.matrix import (calc_cartesian_product,
 
 
 class ExtendedLinearOperator(LinearOperator):
+    def rowsum(self):
+        v = np.ones(self.shape[0])
+        return(self.dot(v))
+    
     def todense(self):
         return(self.dot(np.eye(self.shape[0])))
     
@@ -55,6 +59,31 @@ class ExtendedLinearOperator(LinearOperator):
             trace = np.mean([self.quad(np.random.normal(size=self.shape[1]))
                              for _ in range(n_vectors)])
         return(trace)
+    
+    def calc_eigenvalue_upper_bound(self):
+        return(self.rowsum().max())
+    
+    def calc_log_det(self, method='barry_pace', n_vectors=10, degree=10):
+        if method == 'naive':
+            return(np.log(np.linalg.det(self.todense())))
+        elif method == 'barry_pace':
+            alpha = 1/self.calc_eigenvalue_upper_bound()
+            D = ExtendedLinearOperator(matvec=lambda x: x-self.dot(x) / alpha)
+            vs = []
+            n = self.shape[0]
+            for _ in range(n_vectors):
+                x = np.random.normal(size=self.shape[0])
+                Dk_x = x
+                
+                k = 1
+                v_i = -n * np.sum(x * Dk_x) / np.sum(x * x) / k # *alpha^k?
+                for k in range(2, degree):
+                    Dk_x = D.dot(Dk_x)
+                    v_i += -n * np.sum(x * Dk_x) / np.sum(x * x) / k # *alpha^k?
+                    
+                vs.append(v_i)
+            return(np.mean(vs))
+                
 
 
 class SeqLinOperator(ExtendedLinearOperator):
