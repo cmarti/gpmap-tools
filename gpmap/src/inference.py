@@ -100,7 +100,7 @@ class GaussianProcessRegressor(object):
     def sample(self):
         a = np.random.normal(size=self.n)
         self.K.set_mode(full_v=True, all_rows=True)
-        y = self.K.transform(a)
+        y = self.K.one_half_power_dot(a)
         return(y)
     
     def simulate(self, sigma=0):
@@ -303,7 +303,7 @@ class VCregression(LandscapeEstimator):
         return(cov, distance_class_ns)
     
     def lambdas_to_variance(self, lambdas):
-        variance_components = (lambdas * self.K.lambdas_multiplicity)[1:]
+        variance_components = (lambdas * self.K.m_k)[1:]
         variance_components = variance_components / variance_components.sum()
         return(variance_components)
     
