@@ -14,7 +14,8 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator,
                              VarianceComponentKernelOperator,
                              DeltaPOperator, ProjectionOperator2,
-                             RhoProjectionOperator, ConnectednessKernelOperator)
+                             RhoProjectionOperator, ConnectednessKernelOperator,
+    ExtendedLinearOperator)
 
 
 class LinOpsTests(unittest.TestCase):
@@ -411,7 +412,7 @@ class LinOpsTests(unittest.TestCase):
         trace = W.calc_trace(exact=False, n_vectors=100)
         assert(np.allclose(trace, W.trace, rtol=0.01))
     
-    def calc_projection_log_det(self):
+    def test_calc_projection_log_det(self):
         W = ProjectionOperator(2, 2)
         
         # zero determinant
@@ -423,6 +424,17 @@ class LinOpsTests(unittest.TestCase):
         W.set_lambdas(lambdas=np.array([1, 0.5, 0.1]))
         log_det = W.calc_log_det()
         assert(np.allclose(log_det, 0 + 2 * np.log(0.5) + np.log(0.1)))
+    
+    def test_calc_log_det_approx(self):
+        m = np.array([[0.5, 0.1, 0.2, 0.2],
+                      [0.1, 0.5, 0.2, 0.2],
+                      [0.1, 0.2, 0.5, 0.2],
+                      [0.2, 0.1, 0.2, 0.5]])
+        logdet = np.linalg.slogdet(m)[1]
+        print(logdet)
+        
+        linop = ExtendedLinearOperator(shape=(4, 4), matvec=m.dot)
+        print(linop.calc_log_det(degree=10, n_vectors=100))
         
 
 class SkewedLinOpsTests(unittest.TestCase):
@@ -492,5 +504,5 @@ class SkewedLinOpsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests']
+    import sys;sys.argv = ['', 'LinOpsTests.test_calc_log_det_approx']
     unittest.main()
