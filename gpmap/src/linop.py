@@ -71,6 +71,42 @@ class ExtendedLinearOperator(_CustomLinearOperator):
     def calc_eigenvalue_upper_bound(self):
         return(self.rowsum().max())
     
+    def lanczos(self, v0, n_vectors):
+        T = np.zeros((n_vectors, n_vectors))
+        
+        v0 = v0 / np.sqrt(np.sum(v0 ** 2))
+        w0_raw = self.dot(v0)
+        a0 = np.sum(w0_raw * v0)
+        w0 = w0_raw - a0 * v0
+        T[0, 0] = a0
+        prev_w = w0
+        vs = [v0]
+        
+        for j in range(1, n_vectors):
+            b = np.sqrt(np.sum(prev_w ** 2))
+            T[j, j-1], T[j-1, j] = b, b
+            if b != 0:
+                v = prev_w / b
+            else:
+                # Get new orthonormal vector
+                v = np.random.normal(size=self.shape[1])
+                Q = np.vstack(vs).T
+                if Q.shape[1] == 1:
+                    v = v - Q.dot(Q.T.dot(v)) / np.sum(vs[-1]**2)
+                else:
+                    v = v - Q.dot(minres(Q.T.dot(Q), Q.T.dot(v)))
+                v = v / np.sqrt(np.sum(v ** 2))
+            
+            w_raw = self.dot(v)
+            a = np.sum(w_raw * v)
+            w = w_raw - a * v - b * vs[-1]
+            T[j, j] = a
+            vs.append(v)
+            prev_w = w
+        
+        return(np.vstack(vs).T, T)
+            
+    
     def calc_log_det(self, method='barry_pace99', n_vectors=10, degree=None):
         if method == 'naive':
             sign, log_det = np.log(np.linalg.slogdet(self.todense()))
