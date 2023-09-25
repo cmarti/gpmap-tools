@@ -72,21 +72,20 @@ class ExtendedLinearOperator(_CustomLinearOperator):
         return(self.rowsum().max())
     
     def lanczos(self, v0, n_vectors):
-        T = np.zeros((n_vectors, n_vectors))
-        
-        v0 = v0 / np.sqrt(np.sum(v0 ** 2))
+        v0 = v0 / np.linalg.norm(v0)
         w0_raw = self.dot(v0)
-        a0 = np.sum(w0_raw * v0)
-        w0 = w0_raw - a0 * v0
-        T[0, 0] = a0
+        alpha0 = np.sum(w0_raw * v0)
+        alphas = [alpha0]
+        betas = []
+        w0 = w0_raw - alpha0 * v0
         prev_w = w0
         vs = [v0]
         
-        for j in range(1, n_vectors):
-            b = np.sqrt(np.sum(prev_w ** 2))
-            T[j, j-1], T[j-1, j] = b, b
-            if b != 0:
-                v = prev_w / b
+        for _ in range(1, n_vectors):
+            beta = np.linalg.norm(prev_w)
+            betas.append(beta)
+            if beta != 0:
+                v = prev_w / beta
             else:
                 # Get new orthonormal vector
                 v = np.random.normal(size=self.shape[1])
@@ -95,15 +94,16 @@ class ExtendedLinearOperator(_CustomLinearOperator):
                     v = v - Q.dot(Q.T.dot(v)) / np.sum(vs[-1]**2)
                 else:
                     v = v - Q.dot(minres(Q.T.dot(Q), Q.T.dot(v)))
-                v = v / np.sqrt(np.sum(v ** 2))
-            
+                v = v / np.linalg.norm(v)
+        
             w_raw = self.dot(v)
-            a = np.sum(w_raw * v)
-            w = w_raw - a * v - b * vs[-1]
-            T[j, j] = a
+            alpha = np.sum(w_raw * v)
+            alphas.append(alpha)
+            w = w_raw - alpha * v - beta * vs[-1]
             vs.append(v)
             prev_w = w
-        
+
+        T = np.diag(alphas) + np.diag(betas, 1) + np.diag(betas, -1)
         return(np.vstack(vs).T, T)
             
     

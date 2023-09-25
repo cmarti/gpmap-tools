@@ -435,6 +435,17 @@ class LinOpsTests(unittest.TestCase):
         
         linop = ExtendedLinearOperator(shape=(4, 4), matvec=m.dot)
         print(linop.calc_log_det(degree=10, n_vectors=100))
+    
+    def test_lanczos(self):
+        m = np.array([[0.5, 0.1, 0.2, 0.2],
+                      [0.1, 0.5, 0.2, 0.2],
+                      [0.1, 0.2, 0.5, 0.2],
+                      [0.2, 0.1, 0.2, 0.5]])
+        linop = ExtendedLinearOperator(shape=(4, 4), matvec=m.dot)
+        v0 = np.random.normal(size=4)
+        V, T = linop.lanczos(v0, n_vectors=4)
+        A = V.T @ m @ V
+        assert(np.allclose(np.diag(A), np.diag(T)))
         
 
 class SkewedLinOpsTests(unittest.TestCase):
@@ -504,5 +515,5 @@ class SkewedLinOpsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests.test_calc_log_det_approx']
+    import sys;sys.argv = ['', 'LinOpsTests']
     unittest.main()
