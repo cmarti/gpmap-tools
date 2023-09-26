@@ -73,6 +73,11 @@ class ExtendedLinearOperator(_CustomLinearOperator):
         return(self.rowsum().max())
     
     def arnoldi(self, r, n_vectors):
+        '''
+        Arnoldi algorithm based on 
+        https://people.inf.ethz.ch/arbenz/ewp/Lnotes/chapter10.pdf
+        '''
+        n_vectors = min(n_vectors, self.shape[1])
         Q = np.expand_dims(r / norm(r), 1)
         H = np.zeros((n_vectors+1, n_vectors)) 
         
@@ -94,35 +99,50 @@ class ExtendedLinearOperator(_CustomLinearOperator):
             
         return(Q[:, :-1], H[:-1, :])
     
-    def lanczos(self, r, n_vectors, full_orth=True):
-        q = r / norm(r)
-        Q = q.reshape((q.shape[0], 1))
-        r = self.dot(q)
-        alphas = [np.dot(q, r)]
-        r = r - alphas[-1] * q
-        betas = [norm(r)]
+    def lanczos(self, r, n_vectors, full_orth=False, return_Q=True):
+        '''
+        Lanczos tridiagonalization algorithm based on 
+        https://people.inf.ethz.ch/arbenz/ewp/Lnotes/chapter10.pdf
+        '''
+        n_vectors = min(n_vectors, self.shape[1])
+        q_j = r / norm(r)
+        T = np.zeros((n_vectors+1, n_vectors+1))
+        Q = None
+        beta = None
+        q_j_1 = None
         
-        for _ in range(1, n_vectors):
-            v = q.copy()
-            q = r / betas[-1]
-            print('r,q', r, q)
-            Q = np.append(Q, np.expand_dims(q, 1), 1)
-            r = self.dot(q) - betas[-1] * v
-            alphas.append(np.dot(q, r))
+        for j in range(n_vectors):
+            if return_Q or full_orth:
+                if Q is None:
+                    Q = np.expand_dims(q_j, 1)
+                else:
+                    Q = np.append(Q, np.expand_dims(q_j, 1), 1)
+                    
+            r_j = self.dot(q_j)
             
-            r = r - alphas[-1] * q
+            # Substract projection into previous vector 
+            alpha = np.dot(q_j, r_j)
+            r_j -= alpha * q_j
+            T[j, j] = alpha
+            
+            # Substract projection into previous vector
+            if q_j_1 is not None:
+                r_j -= beta * q_j_1
+                T[j, j-1], T[j-1, j] = beta, beta
+            
+            # Substract projection all other q's
             if full_orth:
-                projection = Q.dot(Q.T.dot(r))
-                print('projection', projection)
-                r = r - projection
+                r_j -= Q[:, :-1].dot(Q[:, :-1].T.dot(r_j))
             
-            betas.append(np.linalg.norm(r))
-            if betas[-1] == 0:
-                break
-
-        T = np.diag(alphas) + np.diag(betas[:-1], 1) + np.diag(betas[:-1], -1)
-        return(Q, T)
+            q_j_1 = q_j
+            r_norm = norm(r_j)
+            q_j = r_j / r_norm
+            beta = r_norm
             
+            if np.allclose(r_norm, 0, atol=np.finfo(q_j.dtype).eps):
+                return(Q, T[:j+1, :][:, :j+1])
+            
+        return(Q, T[:, :-1][:-1, :])
     
     def calc_log_det(self, method='barry_pace99', n_vectors=10, degree=None):
         if method == 'naive':

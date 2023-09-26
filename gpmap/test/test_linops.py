@@ -483,21 +483,17 @@ class LinOpsTests(unittest.TestCase):
                       [0.2, 0.05, 0.15, 0.5]])
         linop = ExtendedLinearOperator(shape=(4, 4), matvec=A.dot)
         v0 = np.array([1, 0, 0, 0])
-        Q, T = linop.lanczos(v0, n_vectors=4, full_orth=True)
-        M = Q.T @ A @ Q
-        print(Q)
         
+        Q, T = linop.lanczos(v0, n_vectors=4, full_orth=False)
         assert(np.allclose(Q.T @ Q, np.eye(Q.shape[1])))
-        assert(np.allclose(np.diag(A), np.diag(T)))
+        assert(np.allclose(A.dot(Q), Q.dot(T)))
         
-#         lambdas1, vs1 = eigh_tridiagonal(np.diag(T), np.diag(T, 1))
-#         print(lambdas1, vs1)
-#         
-#         
-#         lambdas2, vs2 = np.linalg.eigh(m)
-#         print(lambdas2, vs2)
+        Q, T = linop.lanczos(v0, n_vectors=4, full_orth=True)
+        assert(np.allclose(Q.T @ Q, np.eye(Q.shape[1])))
+        assert(np.allclose(A.dot(Q), Q.dot(T)))
         
-        
+        T2 = linop.lanczos(v0, n_vectors=4, return_Q=False)[1]
+        assert(np.allclose(T, T2))
         
 
 class SkewedLinOpsTests(unittest.TestCase):
@@ -567,5 +563,5 @@ class SkewedLinOpsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests.test_arnoldi']
+    import sys;sys.argv = ['', 'LinOpsTests']
     unittest.main()
