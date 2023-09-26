@@ -8,7 +8,7 @@ from scipy.sparse.csr import csr_matrix
 from scipy.linalg.decomp_svd import orth
 from scipy.special._basic import comb
 from scipy.sparse.linalg.isolve import minres
-from scipy.sparse.linalg.interface import LinearOperator
+from scipy.sparse.linalg.interface import _CustomLinearOperator
 
 from gpmap.src.utils import check_error
 from gpmap.src.matrix import (calc_cartesian_product,
@@ -18,7 +18,7 @@ from gpmap.src.matrix import (calc_cartesian_product,
                               inner_product, kron_dot, diag_pre_multiply)
 
 
-class ExtendedLinearOperator(LinearOperator):
+class ExtendedLinearOperator(_CustomLinearOperator):
     def rowsum(self):
         v = np.ones(self.shape[0])
         return(self.dot(v))
@@ -45,6 +45,18 @@ class ExtendedLinearOperator(LinearOperator):
     def get_diag(self):
         return(np.array([self.get_column(i)[i] for i in range(self.shape[0])]))
     
+    def calc_trace_hutchinson(self, n_vectors):
+        '''
+        Stochastic trace estimator from 
+        
+        Hutchinson, M. F. (1990). A stochastic estimator of the trace of
+        the influence matrix for laplacian smoothing splines. Communications
+        in Statistics - Simulation and Computation, 19(2), 433–450.
+        '''
+        trace = np.array([self.quad(np.random.normal(size=self.shape[1]))
+                          for _ in range(n_vectors)])
+        return(trace)
+    
     def calc_trace(self, exact=True, n_vectors=10):
         if exact or n_vectors > self.shape[1]:
             if hasattr(self, '_calc_trace'):
@@ -52,38 +64,126 @@ class ExtendedLinearOperator(LinearOperator):
             else:
                 trace = self.get_diag().sum()
         else:
-            # Hutchinson approximation
-            # Hutchinson, M. F. (1990). A stochastic estimator of the trace of
-            # the influence matrix for laplacian smoothing splines. Communications
-            # in Statistics - Simulation and Computation, 19(2), 433–450.
-            trace = np.mean([self.quad(np.random.normal(size=self.shape[1]))
-                             for _ in range(n_vectors)])
+            trace = self.calc_trace_hutchinson(n_vectors).mean()
+            
         return(trace)
     
     def calc_eigenvalue_upper_bound(self):
         return(self.rowsum().max())
     
-    def calc_log_det(self, method='barry_pace', n_vectors=10, degree=10):
+    def lanczos(self, v0, n_vectors):
+        v0 = v0 / np.linalg.norm(v0)
+        w0_raw = self.dot(v0)
+        alpha0 = np.sum(w0_raw * v0)
+        alphas = [alpha0]
+        betas = []
+        w0 = w0_raw - alpha0 * v0
+        prev_w = w0
+        vs = [v0]
+        
+        for _ in range(1, n_vectors):
+            beta = np.linalg.norm(prev_w)
+            betas.append(beta)
+            if beta != 0:
+                v = prev_w / beta
+            else:
+                # Get new orthonormal vector
+                v = np.random.normal(size=self.shape[1])
+                Q = np.vstack(vs).T
+                if Q.shape[1] == 1:
+                    v = v - Q.dot(Q.T.dot(v)) / np.sum(vs[-1]**2)
+                else:
+                    v = v - Q.dot(minres(Q.T.dot(Q), Q.T.dot(v)))
+                v = v / np.linalg.norm(v)
+        
+            w_raw = self.dot(v)
+            alpha = np.sum(w_raw * v)
+            alphas.append(alpha)
+            w = w_raw - alpha * v - beta * vs[-1]
+            vs.append(v)
+            prev_w = w
+
+        T = np.diag(alphas) + np.diag(betas, 1) + np.diag(betas, -1)
+        return(np.vstack(vs).T, T)
+            
+    
+    def calc_log_det(self, method='barry_pace99', n_vectors=10, degree=None):
         if method == 'naive':
-            return(np.log(np.linalg.det(self.todense())))
-        elif method == 'barry_pace':
-            alpha = 1/self.calc_eigenvalue_upper_bound()
-            D = ExtendedLinearOperator(matvec=lambda x: x-self.dot(x) / alpha)
-            vs = []
-            n = self.shape[0]
-            for _ in range(n_vectors):
-                x = np.random.normal(size=self.shape[0])
-                Dk_x = x
+            sign, log_det = np.log(np.linalg.slogdet(self.todense()))
+            msg = 'Negative determinant found. Ensure LinearOperator has positive eigenvalues'
+            check_error(sign > 0, msg=msg)
+            return(log_det)
+        else:
+            upper = self.calc_eigenvalue_upper_bound()
+            alpha = 1 / upper
+            if degree is None:
+                degree = np.log(self.shape[0])
+            mat_log = TruncatedMatrixLog(self, degree, alpha)
+            if method == 'barry_pace99':
+                v_i = mat_log.calc_trace_hutchinson(n_vectors)
+                log_det = v_i.mean()
+                err = self.shape[0] * alpha ** (degree - 1) / (degree + 1) /(1 - alpha)
+                print(err, degree, alpha)
+                err += 1.96 * np.std(v_i) / np.sqrt(n_vectors)
+                bounds = (log_det - err, log_det + err)
+                return(log_det, bounds)
+            
+            elif method == 'martin93':
+                return(mat_log.calc_trace(exact=True))
                 
-                k = 1
-                v_i = -n * np.sum(x * Dk_x) / np.sum(x * x) / k # *alpha^k?
-                for k in range(2, degree):
-                    Dk_x = D.dot(Dk_x)
-                    v_i += -n * np.sum(x * Dk_x) / np.sum(x * x) / k # *alpha^k?
-                    
-                vs.append(v_i)
-            return(np.mean(vs))
-                
+
+class MatrixPolynomial(ExtendedLinearOperator):
+    def __init__(self, linop, coeffs=None):
+        self.linop = linop
+        if coeffs is not None:
+            self.set_coeffs(coeffs)
+
+    def set_coeffs(self, coeffs):
+        self.coeffs = np.array(coeffs)
+        self.degree = self.coeffs.shape[0]
+        
+    def _matvec(self, v):
+        power = v
+        u = self.coeffs[0] * v
+        for c in self.coeffs[1:]:
+            if c == 0:
+                continue
+            power = self.linop.dot(power)
+            u += c * power
+        return(u)
+
+    def calc_trace_hutchinson(self, n_vectors):
+        trace = []
+        for _ in range(n_vectors):
+            v = np.random.normal(size=self.shape[1])
+            power = v
+            trace_i = 0
+            for c in self.coeffs[1:]:
+                if c == 0:
+                    continue
+                power = self.linop.dot(power)
+                trace_i += c * np.sum(v * power)
+            trace.append(trace_i)
+        return(np.array(trace))
+    
+
+class TruncatedMatrixExp(MatrixPolynomial):
+    def __init__(self, linop, m):
+        coeffs = np.array([1/factorial(i) for i in range(m+1)])
+        super().__init__(linop, coeffs)
+
+
+class TruncatedMatrixLog(MatrixPolynomial):
+    def __init__(self, linop, m, alpha=1):
+        self.shape = linop.shape
+        j = np.arange(1, m)
+        coeffs = -alpha ** j / j
+        coeffs = np.append([0], coeffs)
+        A = ExtendedLinearOperator(shape=self.shape, dtype=float, 
+                                   matvec=lambda v: v - alpha * linop.dot(v))
+        
+        super().__init__(A, coeffs)
+        self.alpha = alpha
 
 
 class SeqLinOperator(ExtendedLinearOperator):
