@@ -451,15 +451,29 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(log_det, 0 + 2 * np.log(0.5) + np.log(0.1)))
     
     def test_calc_log_det_approx(self):
-        m = np.array([[0.5, 0.1, 0.2, 0.2],
-                      [0.1, 0.5, 0.2, 0.2],
-                      [0.1, 0.2, 0.5, 0.2],
-                      [0.2, 0.1, 0.2, 0.5]])
-        logdet = np.linalg.slogdet(m)[1]
-        print(logdet)
+        A = np.array([[0.5, 0.15, 0.05, 0.3],
+                      [0.15, 0.5, 0.3, 0.05],
+                      [0.05, 0.3, 0.5, 0.15],
+                      [0.3, 0.05, 0.15, 0.5]])
+        linop = ExtendedLinearOperator(shape=(4, 4), matvec=A.dot)
+        true_logdet = linop.calc_log_det(degree=10, n_vectors=100, method='naive')
         
-        linop = ExtendedLinearOperator(shape=(4, 4), matvec=m.dot)
-        print(linop.calc_log_det(degree=10, n_vectors=100))
+#         log_det = linop.calc_log_det(degree=20, method='taylor')
+#         assert(np.allclose(log_det, true_logdet, rtol=0.1))
+#         
+#         log_det = linop.calc_log_det(degree=20, n_vectors=100, method='barry_pace99')
+#         assert(np.allclose(log_det, true_logdet, rtol=0.1))
+
+        log_det = linop.calc_log_det(degree=20, n_vectors=100, method='SLQ')        
+        assert(np.allclose(log_det, true_logdet, rtol=0.1))
+    
+    def test_calc_log_det_large_operator(self):
+        lambdas = np.array([100, 50, 25, 12, 5, 2.5, 1, 0.5, 0.25])
+        K = VarianceComponentKernelOperator(4, 8, lambdas=lambdas)
+        K.set_y_var(y_var=np.ones(K.n), obs_idx=np.arange(K.n))
+        true_logdet = np.sum(K.m_k * np.log(1 + lambdas))
+        log_det = K.calc_log_det(degree=10, n_vectors=1, method='SLQ')
+        assert(np.allclose(log_det, true_logdet, rtol=0.1))
     
     def test_arnoldi(self):
         A = np.array([[0.5, 0.15, 0.05, 0.2],
@@ -563,5 +577,5 @@ class SkewedLinOpsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests']
+    import sys;sys.argv = ['', 'LinOpsTests.test_calc_log_det_large_operator']
     unittest.main()

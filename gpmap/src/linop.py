@@ -169,7 +169,6 @@ class ExtendedLinearOperator(_CustomLinearOperator):
             for _ in range(n_vectors):
                 u = 0.5 - (np.random.uniform(size=self.shape[0]) > 0.5).astype(float)
                 T = self.lanczos(u, degree, return_Q=False)[1]
-#                 print(np.diag(T), np.diag(T, 1))
                 Theta, Y = eigh_tridiagonal(np.diag(T), np.diag(T, 1))
                 tau = Y[0, :]
                 log_det += np.sum([np.log(theta_k) * tau_k ** 2
@@ -178,6 +177,8 @@ class ExtendedLinearOperator(_CustomLinearOperator):
             return(log_det)
         
         else:
+            msg = 'Method not properly working or implemented yet'
+            raise ValueError(msg)
             upper = self.calc_eigenvalue_upper_bound()
             alpha = 1 / upper
             if degree is None:
@@ -192,7 +193,7 @@ class ExtendedLinearOperator(_CustomLinearOperator):
 #                 bounds = (log_det - err, log_det + err)
                 return(log_det)
             
-            elif method == 'martin93':
+            elif method == 'taylor':
                 return(mat_log.calc_trace(exact=True))
             
             else:
@@ -263,7 +264,7 @@ class SeqLinOperator(ExtendedLinearOperator):
         self.d = (self.alpha - 1) * self.l
         self.shape_contracted = tuple([self.alpha]*self.l)
         self.positions = np.arange(self.l)
-        super().__init__(shape=(self.n, self.n), dtype=float)
+        super().__init__(matvec=self.dot, shape=(self.n, self.n), dtype=float)
     
     def contract_v(self, v):
         return(v.reshape(self.shape_contracted))
