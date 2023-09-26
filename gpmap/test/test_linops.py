@@ -470,6 +470,8 @@ class LinOpsTests(unittest.TestCase):
         v0 = np.array([1, 0, 0, 0])
         Q, H = linop.arnoldi(v0, n_vectors=4)
         assert(np.allclose(Q.T @ Q, np.eye(Q.shape[1])))
+        assert(np.allclose(A.dot(Q), Q.dot(H)))
+        
         assert(np.allclose(np.diag(H, 1), np.diag(H, -1)))
         assert(np.allclose(np.diag(H, 2), 0))
         assert(np.allclose(np.diag(H, 3), 0))
