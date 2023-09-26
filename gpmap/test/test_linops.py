@@ -16,6 +16,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              DeltaPOperator, ProjectionOperator2,
                              RhoProjectionOperator, ConnectednessKernelOperator,
     ExtendedLinearOperator)
+from scipy.linalg.decomp import eigh_tridiagonal
 
 
 class LinOpsTests(unittest.TestCase):
@@ -460,16 +461,41 @@ class LinOpsTests(unittest.TestCase):
         linop = ExtendedLinearOperator(shape=(4, 4), matvec=m.dot)
         print(linop.calc_log_det(degree=10, n_vectors=100))
     
+    def test_arnoldi(self):
+        A = np.array([[0.5, 0.15, 0.05, 0.2],
+                      [0.15, 0.5, 0.2, 0.05],
+                      [0.05, 0.2, 0.5, 0.15],
+                      [0.2, 0.05, 0.15, 0.5]])
+        linop = ExtendedLinearOperator(shape=(4, 4), matvec=A.dot)
+        v0 = np.array([1, 0, 0, 0])
+        Q, H = linop.arnoldi(v0, n_vectors=4)
+        assert(np.allclose(Q.T @ Q, np.eye(Q.shape[1])))
+        assert(np.allclose(np.diag(H, 1), np.diag(H, -1)))
+        assert(np.allclose(np.diag(H, 2), 0))
+        assert(np.allclose(np.diag(H, 3), 0))
+    
     def test_lanczos(self):
-        m = np.array([[0.5, 0.1, 0.2, 0.2],
-                      [0.1, 0.5, 0.2, 0.2],
-                      [0.1, 0.2, 0.5, 0.2],
-                      [0.2, 0.1, 0.2, 0.5]])
-        linop = ExtendedLinearOperator(shape=(4, 4), matvec=m.dot)
-        v0 = np.random.normal(size=4)
-        V, T = linop.lanczos(v0, n_vectors=4)
-        A = V.T @ m @ V
+        A = np.array([[0.5, 0.15, 0.05, 0.2],
+                      [0.15, 0.5, 0.2, 0.05],
+                      [0.05, 0.2, 0.5, 0.15],
+                      [0.2, 0.05, 0.15, 0.5]])
+        linop = ExtendedLinearOperator(shape=(4, 4), matvec=A.dot)
+        v0 = np.array([1, 0, 0, 0])
+        Q, T = linop.lanczos(v0, n_vectors=4, full_orth=True)
+        M = Q.T @ A @ Q
+        print(Q)
+        
+        assert(np.allclose(Q.T @ Q, np.eye(Q.shape[1])))
         assert(np.allclose(np.diag(A), np.diag(T)))
+        
+#         lambdas1, vs1 = eigh_tridiagonal(np.diag(T), np.diag(T, 1))
+#         print(lambdas1, vs1)
+#         
+#         
+#         lambdas2, vs2 = np.linalg.eigh(m)
+#         print(lambdas2, vs2)
+        
+        
         
 
 class SkewedLinOpsTests(unittest.TestCase):
@@ -539,5 +565,5 @@ class SkewedLinOpsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests.test_calc_trace']
+    import sys;sys.argv = ['', 'LinOpsTests.test_arnoldi']
     unittest.main()

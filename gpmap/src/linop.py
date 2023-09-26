@@ -16,6 +16,7 @@ from gpmap.src.matrix import (calc_cartesian_product,
                               calc_cartesian_product_dot,
                               calc_tensor_product_dot, calc_tensor_product_quad, 
                               inner_product, kron_dot, diag_pre_multiply)
+from numpy.linalg.linalg import norm
 
 
 class ExtendedLinearOperator(_CustomLinearOperator):
@@ -71,40 +72,56 @@ class ExtendedLinearOperator(_CustomLinearOperator):
     def calc_eigenvalue_upper_bound(self):
         return(self.rowsum().max())
     
-    def lanczos(self, v0, n_vectors):
-        v0 = v0 / np.linalg.norm(v0)
-        w0_raw = self.dot(v0)
-        alpha0 = np.sum(w0_raw * v0)
-        alphas = [alpha0]
-        betas = []
-        w0 = w0_raw - alpha0 * v0
-        prev_w = w0
-        vs = [v0]
+    def arnoldi(self, r, n_vectors):
+        Q = np.expand_dims(r / norm(r), 1)
+        H = np.zeros((n_vectors+1, n_vectors)) 
+        
+        for j in range(n_vectors):
+            q_j = Q[:, -1]
+            r = self.dot(q_j)
+            for i in range(j+1):
+                q_i = Q[:, i]
+                p = np.dot(q_i, r)
+                r -= p * q_i
+                H[i, j] = p
+            r_norm = norm(r)
+            q = r / r_norm 
+            H[j+1, j] = r_norm
+            Q = np.append(Q, np.expand_dims(q, 1), 1)
+            
+            if np.allclose(r_norm, 0, atol=np.finfo(q.dtype).eps):
+                return(Q, H[:j, :][:, :j])
+            
+        return(Q[:, :-1], H[:-1, :])
+    
+    def lanczos(self, r, n_vectors, full_orth=True):
+        q = r / norm(r)
+        Q = q.reshape((q.shape[0], 1))
+        r = self.dot(q)
+        alphas = [np.dot(q, r)]
+        r = r - alphas[-1] * q
+        betas = [norm(r)]
         
         for _ in range(1, n_vectors):
-            beta = np.linalg.norm(prev_w)
-            betas.append(beta)
-            if beta != 0:
-                v = prev_w / beta
-            else:
-                # Get new orthonormal vector
-                v = np.random.normal(size=self.shape[1])
-                Q = np.vstack(vs).T
-                if Q.shape[1] == 1:
-                    v = v - Q.dot(Q.T.dot(v)) / np.sum(vs[-1]**2)
-                else:
-                    v = v - Q.dot(minres(Q.T.dot(Q), Q.T.dot(v)))
-                v = v / np.linalg.norm(v)
-        
-            w_raw = self.dot(v)
-            alpha = np.sum(w_raw * v)
-            alphas.append(alpha)
-            w = w_raw - alpha * v - beta * vs[-1]
-            vs.append(v)
-            prev_w = w
+            v = q.copy()
+            q = r / betas[-1]
+            print('r,q', r, q)
+            Q = np.append(Q, np.expand_dims(q, 1), 1)
+            r = self.dot(q) - betas[-1] * v
+            alphas.append(np.dot(q, r))
+            
+            r = r - alphas[-1] * q
+            if full_orth:
+                projection = Q.dot(Q.T.dot(r))
+                print('projection', projection)
+                r = r - projection
+            
+            betas.append(np.linalg.norm(r))
+            if betas[-1] == 0:
+                break
 
-        T = np.diag(alphas) + np.diag(betas, 1) + np.diag(betas, -1)
-        return(np.vstack(vs).T, T)
+        T = np.diag(alphas) + np.diag(betas[:-1], 1) + np.diag(betas[:-1], -1)
+        return(Q, T)
             
     
     def calc_log_det(self, method='barry_pace99', n_vectors=10, degree=None):
