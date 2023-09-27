@@ -5,8 +5,8 @@ import pandas as pd
 from itertools import combinations
 from scipy.special._basic import comb
 from scipy.sparse import identity
+from scipy.sparse.linalg import eigsh
 from scipy.sparse.csr import csr_matrix
-from scipy.sparse.linalg.eigen.arpack.arpack import eigsh
 from scipy.optimize._minimize import minimize
 from scipy.special._logsumexp import logsumexp
 
