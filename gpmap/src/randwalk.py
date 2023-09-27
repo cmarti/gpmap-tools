@@ -3,12 +3,11 @@ import numpy as np
 import pandas as pd
 
 from itertools import combinations
-from scipy.special._basic import comb
 from scipy.sparse import identity
-from scipy.sparse.linalg import eigsh
 from scipy.sparse.csr import csr_matrix
-from scipy.optimize._minimize import minimize
-from scipy.special import logsumexp
+from scipy.sparse.linalg import eigsh
+from scipy.optimize import minimize
+from scipy.special import logsumexp, comb
 
 from gpmap.src.settings import DNA_ALPHABET
 from gpmap.src.utils import check_error, write_log
