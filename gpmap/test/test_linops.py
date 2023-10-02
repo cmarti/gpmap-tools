@@ -386,31 +386,55 @@ class LinOpsTests(unittest.TestCase):
         P = RhoProjectionOperator(4, 5)
         P.set_rho(0.5)
         trace = P.calc_trace(exact=True)
-        assert(np.allclose(trace, P.trace))
+        assert(np.allclose(trace, P.get_diag().sum()))
         
         L = LaplacianOperator(4, 5)
         trace = L.calc_trace(exact=True)
-        assert(np.allclose(trace, L.trace))
+        assert(np.allclose(trace, L.get_diag().sum()))
         
         W = ProjectionOperator(4, 5)
         W.set_lambdas(lambdas=[1, 0.5, 0.4, 0.1, 0.02, 0.001])
         trace = W.calc_trace(exact=True)
-        assert(np.allclose(trace, W.trace))
+        assert(np.allclose(trace, W.get_diag().sum()))
+        
+        K = VarianceComponentKernelOperator(4, 5)
+        K.set_lambdas(lambdas=[1, 0.5, 0.4, 0.1, 0.02, 0.001])
+        trace = K.calc_trace(exact=True)
+        assert(np.allclose(trace, W.get_diag().sum()))
+        
+        obs_idx = np.arange(200)
+        y_var = np.exp(np.random.normal(scale=0.1, size=200))
+        K.set_y_var(y_var, obs_idx)
+        trace = K.calc_trace(exact=True)
+        assert(trace - y_var.sum() < W.calc_trace())
+        assert(np.allclose(trace, K.get_diag().sum()))
+        
+        K = ConnectednessKernelOperator(4, 5)
+        K.set_rho(0.5)
+        trace = K.calc_trace(exact=True)
+        assert(np.allclose(trace, P.get_diag().sum()))
+        
+        obs_idx = np.arange(200)
+        y_var = np.exp(np.random.normal(scale=0.1, size=200))
+        K.set_y_var(y_var, obs_idx)
+        trace = K.calc_trace(exact=True)
+        assert(trace - y_var.sum() < P.calc_trace())
+        assert(np.allclose(trace, K.get_diag().sum()))
     
     def test_calc_trace_approx(self):
         P = RhoProjectionOperator(4, 5)
         P.set_rho(0.5)
         trace = P.calc_trace(exact=False, n_vectors=100)
-        assert(np.allclose(trace, P.trace, rtol=0.01))
+        assert(np.allclose(trace, P.get_diag().sum(), rtol=0.01))
         
         L = LaplacianOperator(4, 5)
         trace = L.calc_trace(exact=False, n_vectors=100)
-        assert(np.allclose(trace, L.trace, rtol=0.01))
+        assert(np.allclose(trace, L.get_diag().sum(), rtol=0.01))
         
         W = ProjectionOperator(4, 5)
         W.set_lambdas(lambdas=[1, 0.5, 0.4, 0.1, 0.02, 0.001])
         trace = W.calc_trace(exact=False, n_vectors=100)
-        assert(np.allclose(trace, W.trace, rtol=0.01))
+        assert(np.allclose(trace, W.get_diag().sum(), rtol=0.01))
     
     def test_calc_projection_log_det(self):
         W = ProjectionOperator(2, 2)
@@ -515,5 +539,5 @@ class SkewedLinOpsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests']
+    import sys;sys.argv = ['', 'LinOpsTests.test_calc_trace']
     unittest.main()
