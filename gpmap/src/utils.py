@@ -271,7 +271,7 @@ def get_training_p_splits(config, X, y, y_var=None, max_pred=None,
     data = (X, y, y_var)
     total = X.shape[0]
     
-    for _, c in config.groupby(['rep']):
+    for _, c in config.groupby('rep'):
         
         if fixed_test:
             msg = 'max_pred must be provided for fixed test'
