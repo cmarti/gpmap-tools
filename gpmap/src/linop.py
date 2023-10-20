@@ -16,6 +16,8 @@ from gpmap.src.matrix import (calc_cartesian_product,
                               calc_cartesian_product_dot,
                               calc_tensor_product_dot, calc_tensor_product_quad, 
                               inner_product, kron_dot, diag_pre_multiply)
+from numpy.linalg.linalg import norm
+from scipy.linalg.decomp import eigh_tridiagonal
 
 
 class ExtendedLinearOperator(_CustomLinearOperator):
@@ -71,66 +73,133 @@ class ExtendedLinearOperator(_CustomLinearOperator):
     def calc_eigenvalue_upper_bound(self):
         return(self.rowsum().max())
     
-    def lanczos(self, v0, n_vectors):
-        v0 = v0 / np.linalg.norm(v0)
-        w0_raw = self.dot(v0)
-        alpha0 = np.sum(w0_raw * v0)
-        alphas = [alpha0]
-        betas = []
-        w0 = w0_raw - alpha0 * v0
-        prev_w = w0
-        vs = [v0]
+    def arnoldi(self, r, n_vectors):
+        '''
+        Arnoldi algorithm based on 
+        https://people.inf.ethz.ch/arbenz/ewp/Lnotes/chapter10.pdf
+        '''
+        n_vectors = min(n_vectors, self.shape[1])
+        Q = np.expand_dims(r / norm(r), 1)
+        H = np.zeros((n_vectors+1, n_vectors)) 
         
-        for _ in range(1, n_vectors):
-            beta = np.linalg.norm(prev_w)
-            betas.append(beta)
-            if beta != 0:
-                v = prev_w / beta
-            else:
-                # Get new orthonormal vector
-                v = np.random.normal(size=self.shape[1])
-                Q = np.vstack(vs).T
-                if Q.shape[1] == 1:
-                    v = v - Q.dot(Q.T.dot(v)) / np.sum(vs[-1]**2)
-                else:
-                    v = v - Q.dot(minres(Q.T.dot(Q), Q.T.dot(v)))
-                v = v / np.linalg.norm(v)
-        
-            w_raw = self.dot(v)
-            alpha = np.sum(w_raw * v)
-            alphas.append(alpha)
-            w = w_raw - alpha * v - beta * vs[-1]
-            vs.append(v)
-            prev_w = w
-
-        T = np.diag(alphas) + np.diag(betas, 1) + np.diag(betas, -1)
-        return(np.vstack(vs).T, T)
+        for j in range(n_vectors):
+            q_j = Q[:, -1]
+            r = self.dot(q_j)
+            for i in range(j+1):
+                q_i = Q[:, i]
+                p = np.dot(q_i, r)
+                r -= p * q_i
+                H[i, j] = p
+            r_norm = norm(r)
+            q = r / r_norm 
+            H[j+1, j] = r_norm
+            Q = np.append(Q, np.expand_dims(q, 1), 1)
             
+            if np.allclose(r_norm, 0, atol=np.finfo(q.dtype).eps):
+                return(Q, H[:j, :][:, :j])
+            
+        return(Q[:, :-1], H[:-1, :])
     
-    def calc_log_det(self, method='barry_pace99', n_vectors=10, degree=None):
+    def lanczos(self, r, n_vectors, full_orth=False, return_Q=True):
+        '''
+        Lanczos tridiagonalization algorithm based on 
+        https://people.inf.ethz.ch/arbenz/ewp/Lnotes/chapter10.pdf
+        '''
+        n_vectors = min(n_vectors, self.shape[1])
+        q_j = r / norm(r)
+        T = np.zeros((n_vectors+1, n_vectors+1))
+        Q = None
+        beta = None
+        q_j_1 = None
+        
+        for j in range(n_vectors):
+            if return_Q or full_orth:
+                if Q is None:
+                    Q = np.expand_dims(q_j, 1)
+                else:
+                    Q = np.append(Q, np.expand_dims(q_j, 1), 1)
+                    
+            r_j = self.dot(q_j)
+            
+            # Substract projection into previous vector 
+            alpha = np.dot(q_j, r_j)
+            r_j -= alpha * q_j
+            T[j, j] = alpha
+            
+            # Substract projection into previous vector
+            if q_j_1 is not None:
+                r_j -= beta * q_j_1
+                T[j, j-1], T[j-1, j] = beta, beta
+            
+            # Substract projection all other q's
+            if full_orth:
+                r_j -= Q[:, :-1].dot(Q[:, :-1].T.dot(r_j))
+            
+            r_norm = norm(r_j)
+            if np.allclose(r_norm, 0, atol=np.finfo(q_j.dtype).eps):
+                return(Q, T[:j+1, :][:, :j+1])
+            
+            q_j_1 = q_j
+            q_j = r_j / r_norm
+            beta = r_norm
+            
+        return(Q, T[:, :-1][:-1, :])
+    
+    def get_slq_config(self, lambda_min, lambda_max, epsilon=0.01, eta=0.05):
+        kappa = lambda_max / lambda_min
+        k1 = lambda_max * np.sqrt(kappa) * np.log(lambda_min + lambda_max)
+        degree = np.int(np.sqrt(kappa) / 4 * np.log(k1 / epsilon))
+        n_vectors = int(24 / epsilon ** 2 * np.log(1 + kappa) ** 2 * np.log(2 / eta))
+        return(n_vectors, degree)
+    
+    def calc_log_det(self, method='SLQ', n_vectors=10, degree=None,
+                     epsilon=0.01, eta=0.05, lambda_min=None, lambda_max=None):
         if method == 'naive':
-            sign, log_det = np.log(np.linalg.slogdet(self.todense()))
+            sign, log_det = np.linalg.slogdet(self.todense())
             msg = 'Negative determinant found. Ensure LinearOperator has positive eigenvalues'
             check_error(sign > 0, msg=msg)
             return(log_det)
+        
+        elif method == 'SLQ':
+            log_det = 0
+            if lambda_min is not None and lambda_max is not None:
+                n_vectors, degree = self.get_slq_config(lambda_min, lambda_max,
+                                                        epsilon=epsilon, eta=eta)
+            
+            for _ in range(n_vectors):
+                u = 0.5 - (np.random.uniform(size=self.shape[0]) > 0.5).astype(float)
+                T = self.lanczos(u, degree, return_Q=False)[1]
+                Theta, Y = eigh_tridiagonal(np.diag(T), np.diag(T, 1))
+                tau = Y[0, :]
+                log_det += np.sum([np.log(theta_k) * tau_k ** 2
+                                   for tau_k, theta_k in zip(tau, Theta)])
+            log_det = log_det * self.shape[0] / n_vectors
+            return(log_det)
+        
         else:
+            msg = 'Method not properly working or implemented yet'
+            raise ValueError(msg)
             upper = self.calc_eigenvalue_upper_bound()
             alpha = 1 / upper
             if degree is None:
                 degree = np.log(self.shape[0])
+            
             mat_log = TruncatedMatrixLog(self, degree, alpha)
             if method == 'barry_pace99':
                 v_i = mat_log.calc_trace_hutchinson(n_vectors)
-                log_det = v_i.mean()
-                err = self.shape[0] * alpha ** (degree - 1) / (degree + 1) /(1 - alpha)
-                print(err, degree, alpha)
-                err += 1.96 * np.std(v_i) / np.sqrt(n_vectors)
-                bounds = (log_det - err, log_det + err)
-                return(log_det, bounds)
+                log_det = self.shape[0] * v_i.mean()
+#                 err = self.shape[0] * alpha ** (degree - 1) / (degree + 1) /(1 - alpha)
+#                 err += 1.96 * np.std(v_i) / np.sqrt(n_vectors)
+#                 bounds = (log_det - err, log_det + err)
+                return(log_det)
             
-            elif method == 'martin93':
+            elif method == 'taylor':
                 return(mat_log.calc_trace(exact=True))
-                
+            
+            else:
+                msg = 'Unknown method for log_det estimation: {}'.format(method)
+                raise ValueError(msg)
+            
 
 class MatrixPolynomial(ExtendedLinearOperator):
     def __init__(self, linop, coeffs=None):
@@ -155,7 +224,7 @@ class MatrixPolynomial(ExtendedLinearOperator):
     def calc_trace_hutchinson(self, n_vectors):
         trace = []
         for _ in range(n_vectors):
-            v = np.random.normal(size=self.shape[1])
+            v = 0.5 - (np.random.uniform(size=self.shape[1]) > 0.5).astype(float)
             power = v
             trace_i = 0
             for c in self.coeffs[1:]:
@@ -195,7 +264,7 @@ class SeqLinOperator(ExtendedLinearOperator):
         self.d = (self.alpha - 1) * self.l
         self.shape_contracted = tuple([self.alpha]*self.l)
         self.positions = np.arange(self.l)
-        super().__init__(shape=(self.n, self.n), dtype=float)
+        super().__init__(matvec=self.dot, shape=(self.n, self.n), dtype=float)
     
     def contract_v(self, v):
         return(v.reshape(self.shape_contracted))

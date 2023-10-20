@@ -19,8 +19,6 @@ def main():
     parser = argparse.ArgumentParser(description=description)
     input_group = parser.add_argument_group('Input')
     input_group.add_argument('data', help='CSV or parquet table with genotype-phenotype data')
-    input_group.add_argument('--counts', default=False, action='store_true',
-                             help='Data consists on counts')
     input_group.add_argument('--seed', default=None, type=int,
                              help='Random seed')
 
@@ -37,6 +35,8 @@ def main():
                               help='Number of different training proportions (10)')
     trainp_group.add_argument('-m', '--max_pred', default=None, type=int,
                               help='Max number of test sequences to generate')
+    trainp_group.add_argument('--fixed_test', default=False, action='store_true',
+                              help='Keep a constant test set across splits')
 
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True, help='Output file')
@@ -48,7 +48,6 @@ def main():
     # Parse arguments
     parsed_args = parser.parse_args()
     data_fpath = parsed_args.data
-    count_data = parsed_args.counts
     seed = parsed_args.seed
     
     run_cv = parsed_args.cv
@@ -57,6 +56,7 @@ def main():
     nreps = parsed_args.nreps
     n_ps = parsed_args.n_ps
     max_pred = parsed_args.max_pred
+    fixed_test = parsed_args.fixed_test
 
     out_fpath = parsed_args.output
     out_prefix = parsed_args.prefix
@@ -78,14 +78,14 @@ def main():
     if run_cv:
         log.write('Generating {}-fold Cross-valiation sets'.format(nfolds))
         splits = get_CV_splits(X, y, y_var=y_var, nfolds=nfolds,
-                               count_data=count_data, max_pred=max_pred)
+                               max_pred=max_pred)
     else:
         log.write('Generating training and test sets with variable proportions')
         config = generate_p_training_config(n_ps=n_ps, nreps=nreps)
         config.to_csv(out_fpath)
         
         splits = get_training_p_splits(config, X, y, y_var=y_var, 
-                                       count_data=count_data, max_pred=max_pred)
+                                       max_pred=max_pred, fixed_test=fixed_test)
         
     write_split_data(out_prefix, splits, out_format=out_format)
     

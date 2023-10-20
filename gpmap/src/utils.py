@@ -257,7 +257,7 @@ def data_to_df(data):
 
 
 def generate_p_training_config(n_ps=10, nreps=3):
-    ps = np.hstack([np.linspace(0.05, 0.95, n_ps)] * nreps)
+    ps = np.vstack([np.linspace(0.05, 0.95, n_ps)] * nreps).T.flatten()
     i = np.arange(ps.shape[0])
     rep = np.hstack([j * np.ones(n_ps) for j in range(nreps)])
     data = pd.DataFrame({'id': i, 'p': ps, 'rep': rep})

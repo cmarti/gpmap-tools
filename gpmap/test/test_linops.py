@@ -16,6 +16,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              DeltaPOperator, ProjectionOperator2,
                              RhoProjectionOperator, ConnectednessKernelOperator,
     ExtendedLinearOperator)
+from scipy.linalg.decomp import eigh_tridiagonal
 
 
 class LinOpsTests(unittest.TestCase):
@@ -450,26 +451,63 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(log_det, 0 + 2 * np.log(0.5) + np.log(0.1)))
     
     def test_calc_log_det_approx(self):
-        m = np.array([[0.5, 0.1, 0.2, 0.2],
-                      [0.1, 0.5, 0.2, 0.2],
-                      [0.1, 0.2, 0.5, 0.2],
-                      [0.2, 0.1, 0.2, 0.5]])
-        logdet = np.linalg.slogdet(m)[1]
-        print(logdet)
+        A = np.array([[0.5, 0.15, 0.05, 0.3],
+                      [0.15, 0.5, 0.3, 0.05],
+                      [0.05, 0.3, 0.5, 0.15],
+                      [0.3, 0.05, 0.15, 0.5]])
+        linop = ExtendedLinearOperator(shape=(4, 4), matvec=A.dot)
+        true_logdet = linop.calc_log_det(degree=10, n_vectors=100, method='naive')
         
-        linop = ExtendedLinearOperator(shape=(4, 4), matvec=m.dot)
-        print(linop.calc_log_det(degree=10, n_vectors=100))
+#         log_det = linop.calc_log_det(degree=20, method='taylor')
+#         assert(np.allclose(log_det, true_logdet, rtol=0.1))
+#         
+#         log_det = linop.calc_log_det(degree=20, n_vectors=100, method='barry_pace99')
+#         assert(np.allclose(log_det, true_logdet, rtol=0.1))
+
+        log_det = linop.calc_log_det(degree=20, n_vectors=100, method='SLQ')        
+        assert(np.allclose(log_det, true_logdet, rtol=0.1))
+    
+    def test_calc_log_det_large_operator(self):
+        lambdas = np.array([100, 50, 25, 12, 5, 2.5, 1, 0.5, 0.25])
+        K = VarianceComponentKernelOperator(4, 8, lambdas=lambdas)
+        K.set_y_var(y_var=np.ones(K.n), obs_idx=np.arange(K.n))
+        true_logdet = np.sum(K.m_k * np.log(1 + lambdas))
+        log_det = K.calc_log_det(degree=10, n_vectors=1, method='SLQ')
+        assert(np.allclose(log_det, true_logdet, rtol=0.1))
+    
+    def test_arnoldi(self):
+        A = np.array([[0.5, 0.15, 0.05, 0.2],
+                      [0.15, 0.5, 0.2, 0.05],
+                      [0.05, 0.2, 0.5, 0.15],
+                      [0.2, 0.05, 0.15, 0.5]])
+        linop = ExtendedLinearOperator(shape=(4, 4), matvec=A.dot)
+        v0 = np.array([1, 0, 0, 0])
+        Q, H = linop.arnoldi(v0, n_vectors=4)
+        assert(np.allclose(Q.T @ Q, np.eye(Q.shape[1])))
+        assert(np.allclose(A.dot(Q), Q.dot(H)))
+        
+        assert(np.allclose(np.diag(H, 1), np.diag(H, -1)))
+        assert(np.allclose(np.diag(H, 2), 0))
+        assert(np.allclose(np.diag(H, 3), 0))
     
     def test_lanczos(self):
-        m = np.array([[0.5, 0.1, 0.2, 0.2],
-                      [0.1, 0.5, 0.2, 0.2],
-                      [0.1, 0.2, 0.5, 0.2],
-                      [0.2, 0.1, 0.2, 0.5]])
-        linop = ExtendedLinearOperator(shape=(4, 4), matvec=m.dot)
-        v0 = np.random.normal(size=4)
-        V, T = linop.lanczos(v0, n_vectors=4)
-        A = V.T @ m @ V
-        assert(np.allclose(np.diag(A), np.diag(T)))
+        A = np.array([[0.5, 0.15, 0.05, 0.2],
+                      [0.15, 0.5, 0.2, 0.05],
+                      [0.05, 0.2, 0.5, 0.15],
+                      [0.2, 0.05, 0.15, 0.5]])
+        linop = ExtendedLinearOperator(shape=(4, 4), matvec=A.dot)
+        v0 = np.array([1, 0, 0, 0])
+        
+        Q, T = linop.lanczos(v0, n_vectors=4, full_orth=False)
+        assert(np.allclose(Q.T @ Q, np.eye(Q.shape[1])))
+        assert(np.allclose(A.dot(Q), Q.dot(T)))
+        
+        Q, T = linop.lanczos(v0, n_vectors=4, full_orth=True)
+        assert(np.allclose(Q.T @ Q, np.eye(Q.shape[1])))
+        assert(np.allclose(A.dot(Q), Q.dot(T)))
+        
+        T2 = linop.lanczos(v0, n_vectors=4, return_Q=False)[1]
+        assert(np.allclose(T, T2))
         
 
 class SkewedLinOpsTests(unittest.TestCase):
@@ -539,5 +577,5 @@ class SkewedLinOpsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests.test_calc_trace']
+    import sys;sys.argv = ['', 'LinOpsTests.test_calc_log_det_large_operator']
     unittest.main()
