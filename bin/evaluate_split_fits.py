@@ -20,7 +20,8 @@ def main():
                              help='Files suffix')
     help_msg = 'CSV or parquet table containing annotations to add to metrics table'
     input_group.add_argument('-c', '--config', default=None, help=help_msg)
-
+    help_msg = 'Column name with y predictions (ypred_col)'
+    input_group.add_argument('-f', '--ypred_col', default='y_pred', help=help_msg)
     output_group = parser.add_argument_group('Output')
     output_group.add_argument('-o', '--output', required=True, help='Output file')
 
@@ -30,6 +31,7 @@ def main():
     prefix = parsed_args.prefix
     suffix = parsed_args.suffix
     config_fpath = parsed_args.config
+    ypred_col = parsed_args.ypred_col
     out_fpath = parsed_args.output
     
     # Load data
@@ -42,7 +44,7 @@ def main():
     splits = read_split_data(prefix, suffix=suffix, log=log)
     
     log.write('Evaluating predictions')
-    results = evaluate_predictions(splits, data)
+    results = evaluate_predictions(splits, data, ypred_col=ypred_col)
     
     if config_fpath is not None:
         log.write('Merging with datasets information')
