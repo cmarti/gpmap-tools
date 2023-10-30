@@ -39,7 +39,7 @@ def main():
     data = read_dataframe(data_fpath)
     
     log.write('Reading split data from {}*{}'.format(prefix, suffix))
-    splits = read_split_data(prefix, suffix=suffix)
+    splits = read_split_data(prefix, suffix=suffix, log=log)
     
     log.write('Evaluating predictions')
     results = evaluate_predictions(splits, data)

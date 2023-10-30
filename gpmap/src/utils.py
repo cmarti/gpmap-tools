@@ -306,7 +306,7 @@ def write_split_data(out_prefix, splits, out_format='csv'):
         write_seqs(test_x, fpath='{}.{}.test.txt'.format(out_prefix, i))
         
 
-def read_split_data(prefix, suffix=None, in_format='csv'):
+def read_split_data(prefix, suffix=None, in_format='csv', log=None):
     fdir = abspath(dirname(prefix))
     prefix = prefix.split('/')[-1]
     
@@ -320,6 +320,9 @@ def read_split_data(prefix, suffix=None, in_format='csv'):
         fpath = join(fdir, fname)
         if fname.startswith(prefix) and fname.endswith(suffix):
             label = '.'.join(fname.split('.')[1:-2])
+            if log is not None:
+                msg = '\tReading {} file: {}'.format(label, fpath)
+                log.write(msg)
             test_pred = pd.read_csv(fpath, index_col=0)
             yield(label, test_pred)
 
