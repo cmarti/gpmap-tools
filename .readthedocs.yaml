@@ -6,10 +6,8 @@ build:
     python: "3.7"
 
 python:
-    install:
-        path: .
-        requirements: docs/requirements.txt
-        method: pip
+  install:
+  - requirements: docs/requirements.txt
 
 # Build documentation in the docs/ directory with Sphinx
 sphinx:
