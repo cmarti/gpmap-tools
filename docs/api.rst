@@ -10,13 +10,18 @@ Discrete spaces
     :members: get_neighbors, get_edges_df, write_edges_npz, write_edges_csv,
         get_state_idxs, get_neighbors, get_neighbor_pairs
 
+.. autoclass:: gpmap.src.space.ProductSpace
+
+.. autoclass:: gpmap.src.space.GridSpace
+    :members: set_peaks
+
 .. autoclass:: gpmap.src.space.SequenceSpace
    :members: to_nucleotide_space, remove_codon_incompatible_transitions,
         get_single_mutant_matrix, calc_variance_components,
         calc_vjs_variance_components
 
 .. autoclass:: gpmap.src.space.HammingBallSpace
-            
+
 Random walks
 ------------
 
