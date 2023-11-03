@@ -29,7 +29,16 @@ to contact us with any questions or suggestions for improvements.
 
 ## Installation
 
-### From PyPI
+### Create a new environment and activate it
+
+The library has only been tested with specific versions of the dependent libraries, so we recommend the same to be used to avoid potential incompatibilities.
+
+```
+conda create -n gpmap python=3.8.13
+conda activate gpmap
+```
+
+### From PyPI (old version only)
 
 ```
 pip install gpmap-tools
@@ -40,7 +49,7 @@ pip install gpmap-tools
 Download the repository using git and cd into it
 
 ```bash
-git clone git@github.com:cmarti/gpmap-tools.git
+git clone https://github.com/cmarti/gpmap-tools.git
 ```
 
 Install using setuptools
