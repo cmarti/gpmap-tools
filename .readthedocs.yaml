@@ -7,9 +7,9 @@ build:
 
 python:
     install:
-      - method: pip
-      - path: .
-      - requirements: docs/requirements.txt
+        path: .
+        requirements: docs/requirements.txt
+        method: pip
 
 # Build documentation in the docs/ directory with Sphinx
 sphinx:
