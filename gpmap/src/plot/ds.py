@@ -119,7 +119,8 @@ def savefig(dsg, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360,
 
 def _get_allele_panel(nodes_df, x, y, edges_dsg,
                       nc, alphabet, i, j, col, position_labels,
-                      nodes_resolution, square, background_color):
+                      nodes_resolution, square, background_color,
+                      sort_by='function', sort_ascending=True):
     try:
         allele  = alphabet[j][i]
         nodes_df['allele'] = (nc[col] == allele).astype(int)
@@ -129,7 +130,8 @@ def _get_allele_panel(nodes_df, x, y, edges_dsg,
         
     nodes = plot_nodes(nodes_df.copy(), x, y,  color='allele',
                        cmap='viridis', resolution=nodes_resolution, 
-                       shade=True, square=square)
+                       shade=True, square=square,
+                       sort_by=sort_by, sort_ascending=sort_ascending)
     nodes = nodes.relabel('{}{}'.format(j+1, allele))
     dsg = nodes if edges_dsg is None else edges_dsg * nodes
     dsg.opts(xlabel='Diffusion axis {}'.format(x),
@@ -153,6 +155,7 @@ def figure_allele_grid(nodes_df, fpath, x='1', y='2', edges_df=None,
                        positions=None, position_labels=None,
                        edges_cmap='grey', background_color='white',
                        nodes_resolution=800, edges_resolution=1200,
+                       sort_by=None, sort_ascending=False,
                        fmt='png', figsize=None, square=True, **kwargs):
     
     edges_dsg = _get_edges_dsg(nodes_df, edges_df, x, y, edges_cmap,
@@ -174,7 +177,8 @@ def figure_allele_grid(nodes_df, fpath, x='1', y='2', edges_df=None,
         for col, j in enumerate(positions):
             dsg = _get_allele_panel(nodes_df, x, y, edges_dsg,
                                     nc, alphabet, i, j, col, position_labels,
-                                    nodes_resolution, square, background_color)
+                                    nodes_resolution, square, background_color,
+                                    sort_by=sort_by, sort_ascending=sort_ascending)
             
             if i < n_alleles - 1:
                 dsg.opts(xlabel='')

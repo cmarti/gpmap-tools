@@ -266,7 +266,9 @@ class DatashaderTests(unittest.TestCase):
     def test_plot_visualization_big(self):  
         gb1 = DataSet('gb1')
         dsg =  pds.plot_visualization(gb1.nodes, edges_df=gb1.edges,
-                                      shade_nodes=True, shade_edges=True)
+                                      shade_nodes=True, shade_edges=True,
+                                      sort_by='3', sort_ascending=True,
+                                      nodes_resolution=200)
         
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
@@ -275,10 +277,16 @@ class DatashaderTests(unittest.TestCase):
     def test_figure_allele_grid(self):  
         ser = DataSet('serine')
 
-#         Test with all alleles per site
+        # Test with all alleles per site
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
             pds.figure_allele_grid(ser.nodes, edges_df=ser.edges, fpath=fpath)
+            
+        # Sorting by function value
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pds.figure_allele_grid(ser.nodes, edges_df=ser.edges, fpath=fpath,
+                                   sort_by='function', sort_ascending=True)
         
         # Test with different number of alleles per site
         genotypes = np.array([seq[-3] != 'C' for seq in ser.nodes.index])
