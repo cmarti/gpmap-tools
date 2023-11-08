@@ -451,6 +451,27 @@ class HammingBallSpace(GeneralSequenceSpace):
     
     
 class ProductSpace(DiscreteSpace):
+    '''
+    General class for spaces that can be built as cartesian products
+    of smaller subspaces characterized by a set of elementary graphs
+    
+    Parameters
+    ----------
+    elementary_graphs: csr_matrices
+        List csr_matrices for the adjacency matrices from which to build the
+        product space
+    
+    y: None or array-like of shape (n,)
+        np.array containing the phenotypic values associated to each combination
+        of states in the resulting space. If `y=None`, no phenotypic values will
+        be stored
+        
+    state_labels: None or list
+        List with the labels associated to each of the possible states
+        `a` in each of the `l` elements of the product space. If 
+        `state_labels=None`, numeric labels will be given by default.
+    
+    '''
     def __init__(self, elementary_graphs, y=None, state_labels=None):
         self.set_dim_sizes(elementary_graphs)
         adjacency_matrix = self.calc_adjacency_matrix(elementary_graphs)
@@ -482,19 +503,29 @@ class GridSpace(ProductSpace):
     
     Parameters
     ----------
-    length: int
-        Number of states across each dimension of the grid
+    length: int or array-like
+        Number of states across each dimension of the grid. If an integer is 
+        provided, all dimensions of the grid will have the same length. If 
+        a series of lengths is provided, they will be used to form a grid of 
+        dimensions with the specified lengths and the `ndim` argument will be
+        ignored
     
     ndim: int
-        Number of dimensions in the grid
+        Number of dimensions in the grid with a single `length` value.
+        
+    y: array-like of shape (length ** ndim,) or None
+        Phenotypic values associated to each possible state
     
     """
-    def __init__(self, length, ndim=2):
+    def __init__(self, length, y=None, ndim=2):
         self.length = length
         self.ndim = ndim
         
-        elementary_graphs = [self.calc_elementary_graph(length)] * ndim
-        super().__init__(elementary_graphs)
+        if np.array(length).shape[0] > 1:
+            elementary_graphs = [self.calc_elementary_graph(l) for l in length]
+        else:
+            elementary_graphs = [self.calc_elementary_graph(length)] * ndim
+        super().__init__(elementary_graphs, y=y)
     
     def calc_elementary_graph(self, length):
         states = np.arange(length)

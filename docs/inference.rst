@@ -12,7 +12,7 @@ In the previous section we illustrate a couple of examples of how to visualize a
     usage/4_SeqDEFT.ipynb
 
 Read more
-=========
+---------
 .. [#Zhou2022] Zhou J, Wong MS, Chen WC, Krainer AR, Kinney JB, McCandlsih DM.
     Higher order epistasis and phenotypic prediction.
     Biorxiv (2022) <https://www.biorxiv.org/content/10.1101/2020.10.14.339804v3>_

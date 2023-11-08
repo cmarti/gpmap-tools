@@ -12,7 +12,7 @@ Alternatively, you can clone GPMAP-tools from
 `BitBucket <https://bitbucket.org/cmartiga/gpmap_tools/src/master/>`_ by doing
 this at the command line: ::
 
-    $ git clone git@bitbucket.org:cmartiga/gpmap_tools.git
+    $ git clone https://cmartiga@bitbucket.org/cmartiga/gpmap_tools.git
 
 and install it in the current python environment: ::
     
@@ -23,3 +23,8 @@ and their own dependencies. We are still trying to figure out incompatibilities
 in the dependencies but generally we find that installing it first seems to work: ::
     
     $ pip install datashader==0.13
+
+For using the last version of the library install from bitbucket or git and switch to the `dev` branch. To test installation is working properly you can run all tests or a subset of them. Running all of them may take some time. ::
+
+    $ python -m unittest gpmap/test/*py
+
