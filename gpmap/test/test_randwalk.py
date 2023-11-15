@@ -13,7 +13,7 @@ from scipy.sparse.csr import csr_matrix
 
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace, SequenceSpace
-from gpmap.src.randwalk import WMWalk
+from gpmap.src.randwalk import WMWalk, ReactivePaths
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -426,8 +426,47 @@ class RandomWalkTests(unittest.TestCase):
             nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
             assert('protein' in nodes.columns)
             assert(nodes.shape[0] == 64)
+
+
+class ReactivePathsTests(unittest.TestCase):
+    def test_calc_committors(self):
+        Q = csr_matrix([[-2, 1, 1, 0, 0, 0],
+                        [1, -2, 0, 1, 0, 0],
+                        [1, 0, -2, 0, 1, 0],
+                        [0, 1, 0, -2, 0, 1],
+                        [0, 0, 1, 0, -2, 1],
+                        [0, 0, 0, 1, 1, -2]])
+        n = Q.shape[0]
+        stat_freqs = np.ones(n) / n
+        start, end = np.array([0]), np.array([5])
+        paths = ReactivePaths(Q, stat_freqs, start, end)
+        q = paths.calc_forward_p()
+        assert(np.allclose(q[0], 0))
+        assert(np.allclose(q[1], 1./3))
+        assert(np.allclose(q[-2], 2./3))
+        assert(np.allclose(q[-1], 1))
+        
+        p = paths.calc_backwards_p()
+        assert(np.allclose(q,  1 - p))
+        
+    def test_calc_flows(self):
+        Q = csr_matrix([[-2, 1, 1, 0, 0, 0],
+                        [1, -2, 0, 1, 0, 0],
+                        [1, 0, -2, 0, 1, 0],
+                        [0, 1, 0, -2, 0, 1],
+                        [0, 0, 1, 0, -2, 1],
+                        [0, 0, 0, 1, 1, -2]])
+        n = Q.shape[0]
+        stat_freqs = np.ones(n) / n
+        start, end = np.array([0]), np.array([5])
+        paths = ReactivePaths(Q, stat_freqs, start, end)
+        flow = paths.calc_flow()
+        assert(np.allclose(flow[0], 1/18))
+        
+        rate = paths.calc_reactive_rate(flow)
+        assert(np.allclose(rate, 2/18))
         
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests']
+    sys.argv = ['', 'ReactivePathsTests']
     unittest.main()

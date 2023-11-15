@@ -13,6 +13,7 @@ from gpmap.src.settings import DNA_ALPHABET
 from gpmap.src.utils import check_error, write_log
 from gpmap.src.matrix import (get_sparse_diag_matrix, calc_cartesian_product,
                               calc_tensor_product)
+from scipy.sparse.linalg.isolve import minres
 
 
 class RandomWalk(object):
@@ -644,3 +645,125 @@ class WMWalk(TimeReversibleRandomWalk):
         
         exchange_rates = [np.array(exchange_rates)] * self.space.seq_length
         self.neutral_exchange_rates = self.calc_exchange_rate_matrix(exchange_rates)
+
+
+class ReactivePaths(object):
+    '''
+    Class for calculation of transition path theory objects and quantities
+    
+    Parameters
+    ----------
+    rate_matrix: csr_matrix
+        csr_matrix containing the instantaneous rates between pairs of states
+        
+    start: array-like
+        array-like object of indexes at which reactive paths start
+        
+    end: array-like
+        array-like object of indexes at which reactive paths end
+    '''
+    
+    def __init__(self, rate_matrix, stat_freqs, start, end, time_reversible=False):
+        Q = rate_matrix.tocoo()
+        Q.setdiag(0)
+        self.i = Q.row
+        self.j = Q.col
+        self.Q_ij = Q.data
+        self.time_reversible = time_reversible
+        
+        self.rate_matrix = rate_matrix
+        self.n = rate_matrix.shape[0]
+        self.stat_freqs = stat_freqs
+        self.set_start_end(start, end)
+        self.q_forward = self.calc_forward_p()
+        self.q_backward = 1 - self.q_forward if time_reversible else self.calc_backwards_p()
+    
+    def get_backwards_rate_matrix(self):
+        D = get_sparse_diag_matrix(self.stat_freqs)
+        D_inv = get_sparse_diag_matrix(1/self.stat_freqs)
+        Q = D_inv @ self.rate_matrix.T @ D
+        return(Q)
+    
+    def calc_jump_transition_matrix(self, a, b):
+        Q = self.rate_matrix
+        Q.setdiag(0)
+        P = Q / Q.sum(1).A1
+        P[self.end] = 0
+        D_q = get_sparse_diag_matrix(self.q_forward[self.not_start])
+        P[self.not_start] = P[self.not_start] 
+                
+        not_start_at_a = np.array([x not in a for x in i])
+        start_at_b = np.array([x in b for x in i])
+        p_ij[start_at_b] = 0
+        p_ij[not_start_at_a] = p_ij[not_start_at_a] * q[j][not_start_at_a] / q[i][not_start_at_a]
+        
+        # Add absorbing probabilities at b
+        i = np.append(i, b)
+        j = np.append(j, b)
+        p_ij = np.append(p_ij, np.ones(b.shape[0]))
+        
+        # Make sparse jump matrix
+        jump_matrix = csr_matrix((p_ij, (i, j)), shape=size)
+        return(jump_matrix)
+        
+    def set_start_end(self, start, end):
+        msg = 'The two sets of start and end states cannot overlap'
+        check_error(np.intersect1d(start, end).shape[0] == 0, msg)
+        
+        self.start = np.array(start)
+        self.not_start = np.full(self.n, True)
+        self.not_start[self.start] = False
+        self.start_n = self.start.shape[0]
+        self.end = np.array(end)
+        self.end_n = self.end.shape[0]
+        self.other = self.get_other_idxs(np.append(start, end))
+    
+    def get_other_idxs(self, idxs_rm):
+        idx = np.full(self.n, True)
+        idx[idxs_rm] = False
+        return(np.where(idx)[0])
+    
+    def calc_forward_p(self):
+        Q = self.rate_matrix
+        partial_rate_matrix = Q[self.other, :]
+        U = partial_rate_matrix[:, self.other]
+        v = -partial_rate_matrix[:, self.end].sum(1)
+        q_partial = minres(U, v, tol=1e-16)[0]
+        q = np.zeros(self.n)
+        q[self.other] = q_partial
+        q[self.end] = 1
+        return(q)
+    
+    def calc_backwards_p(self):
+        Q = self.get_backwards_rate_matrix()
+        partial_rate_matrix = Q[self.other, :]
+        U = partial_rate_matrix[:, self.other]
+        v = -partial_rate_matrix[:, self.start].sum(1)
+        q_partial = minres(U, v, tol=1e-16)[0]
+        q = np.zeros(self.n)
+        q[self.other] = q_partial
+        q[self.start] = 1
+        return(q)
+    
+    def calc_reactive_p(self):
+        return(self.q_forward * self.q_backwards * self.stat_freqs)
+    
+    def calc_reactive_log_enrichment(self):
+        return(np.log10(self.q_backward * self.q_forward))
+    
+    def calc_flow(self):
+        flow = self.stat_freqs[self.i]
+        flow *= self.q_backward[self.i] * self.Q_ij * self.q_forward[self.j]
+        return(flow)
+    
+    def flow_to_eff_flow(self, flow):
+        eff_flow = flow[self.i] - flow[self.j]
+        eff_flow[eff_flow < 0] = 0
+        return(eff_flow)
+    
+    def calc_reactive_rate(self, flow):
+        if self.start_n < self.end_n:
+            sel_idxs = np.isin(self.i, self.start)
+        else:
+            sel_idxs = np.isin(self.j, self.end)
+        return(flow[sel_idxs].sum())
