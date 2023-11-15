@@ -3,12 +3,12 @@ import numpy as np
 
 from math import factorial
 from itertools import combinations
+from numpy.linalg.linalg import norm
 from scipy.linalg import lu_factor, lu_solve
+from scipy.linalg import eigh_tridiagonal, orth
 from scipy.sparse.csr import csr_matrix
-from scipy.linalg.decomp_svd import orth
 from scipy.special._basic import comb
-from scipy.sparse.linalg.isolve import minres
-from scipy.sparse.linalg.interface import _CustomLinearOperator
+from scipy.sparse.linalg import LinearOperator, minres
 
 from gpmap.src.utils import check_error
 from gpmap.src.matrix import (calc_cartesian_product,
@@ -16,11 +16,9 @@ from gpmap.src.matrix import (calc_cartesian_product,
                               calc_cartesian_product_dot,
                               calc_tensor_product_dot, calc_tensor_product_quad, 
                               inner_product, kron_dot, diag_pre_multiply)
-from numpy.linalg.linalg import norm
-from scipy.linalg.decomp import eigh_tridiagonal
 
 
-class ExtendedLinearOperator(_CustomLinearOperator):
+class ExtendedLinearOperator(LinearOperator):
     def rowsum(self):
         v = np.ones(self.shape[0])
         return(self.dot(v))
@@ -264,7 +262,7 @@ class SeqLinOperator(ExtendedLinearOperator):
         self.d = (self.alpha - 1) * self.l
         self.shape_contracted = tuple([self.alpha]*self.l)
         self.positions = np.arange(self.l)
-        super().__init__(matvec=self.dot, shape=(self.n, self.n), dtype=float)
+        super().__init__(shape=(self.n, self.n), matvec=self.dot, dtype=float)
     
     def contract_v(self, v):
         return(v.reshape(self.shape_contracted))
