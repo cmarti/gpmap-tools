@@ -375,8 +375,21 @@ class SpaceTests(unittest.TestCase):
         s = SequenceSpace(X=X, y=y)
         path = s.calc_max_min_path('AAA', 'BBB', allow_bypasses=False)
         assert(np.all(path == ['AAA', 'BAA', 'BBA', 'BBB']))
-
         
+        X = np.array(['AA', 'AB', 'AC',
+                      'BA', 'BB', 'BC',
+                      'CA', 'CB', 'CC'])
+        y = np.array([3, 2, 2,
+                      3, 1, 3,
+                      2, 3, 3])
+        s = SequenceSpace(X=X, y=y)
+        path = s.calc_max_min_path('AA', 'CC', allow_bypasses=False)
+        assert(np.all(path == ['AA', 'AC', 'CC']))
+        
+        path = s.calc_max_min_path('AA', 'CC', allow_bypasses=True)
+        assert(np.all(path == ['AA', 'BA', 'BC', 'CC']))
+        
+
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'SpaceTests']
     unittest.main()
