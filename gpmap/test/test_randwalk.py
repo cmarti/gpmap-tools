@@ -466,6 +466,41 @@ class ReactivePathsTests(unittest.TestCase):
         rate = paths.calc_reactive_rate(flow)
         assert(np.allclose(rate, 2/18))
         
+        eff_flow = paths.flow_to_eff_flow(flow)
+        nonzero = eff_flow[eff_flow > 0]
+        assert(np.allclose(eff_flow[0], flow[0])) 
+        assert(np.allclose(nonzero, nonzero[0]))
+        
+    def test_calc_bottleneck(self):
+        Q = csr_matrix([[-1.5, 1, 0.5, 0, 0, 0],
+                        [1, -2, 0, 1, 0, 0],
+                        [1, 0, -2, 0, 1, 0],
+                        [0, 1, 0, -2, 0, 1],
+                        [0, 0, 1, 0, -2, 1],
+                        [0, 0, 0, 1, 1, -2]])
+        n = Q.shape[0]
+        stat_freqs = np.ones(n) / n
+        start, end = np.array([0]), np.array([5])
+        paths = ReactivePaths(Q, stat_freqs, start, end)
+        bottleneck, min_flow, _ = paths.calc_bottleneck()
+        assert(np.allclose(min_flow, 0.05555556))
+        assert(np.allclose(bottleneck, [0, 1]))
+    
+    def test_calc_pathway(self):
+        Q = csr_matrix([[-1.5, 1, 0.5, 0, 0, 0],
+                        [1, -2, 0, 1, 0, 0],
+                        [1, 0, -2, 0, 1, 0],
+                        [0, 1, 0, -2, 0, 1],
+                        [0, 0, 1, 0, -2, 1],
+                        [0, 0, 0, 1, 1, -2]])
+        n = Q.shape[0]
+        stat_freqs = np.ones(n) / n
+        start, end = np.array([0]), np.array([5])
+        paths = ReactivePaths(Q, stat_freqs, start, end)
+        path, min_flow = paths.calc_pathway()
+        assert(np.allclose(min_flow, 0.05555556))
+        assert(np.allclose(path, [0, 1, 3, 5]))
+        
         
 if __name__ == '__main__':
     sys.argv = ['', 'ReactivePathsTests']
