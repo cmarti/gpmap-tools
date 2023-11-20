@@ -673,11 +673,15 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
         self.shape = (self.n, self.n)
         self.known_var = False
         self.set_mode()
-        self.set_params = self.set_lambdas
-        self.get_params = self.get_lambdas
         
         if lambdas is not None:
             self.set_lambdas(lambdas)
+    
+    def set_params(self, params):
+        self.set_lambdas(lambdas=np.exp(params))
+    
+    def get_params(self):
+        return(np.log(self.get_lambdas()))
     
     def set_lambdas(self, lambdas):
         self.W.set_lambdas(lambdas)
@@ -710,6 +714,17 @@ class VarianceComponentKernelOperator(BaseKernelOperator):
             return(self.n_obs * self.W.d + np.sum(self.y_var))
         else:
             return(self.n * self.W.d)
+    
+    def get_params0(self):
+        return(np.random.normal(size=self.lp1))
+        return(-np.arange(self.lp1))
+    
+    def grad(self):
+        for k, lambda_k in enumerate(self.get_lambdas()):
+            K_grad = ProjectionOperator(n_alleles=self.alpha,
+                                        seq_length=self.l)
+            K_grad.set_lambdas(k=k)
+            yield(K_grad * lambda_k)
 
 
 class ConnectednessKernelOperator(BaseKernelOperator):
