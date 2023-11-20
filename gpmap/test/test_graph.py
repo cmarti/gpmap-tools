@@ -22,6 +22,13 @@ class GraphTests(unittest.TestCase):
         assert(np.all(path == [0, 1, 2, 3]))
         assert(np.allclose(w, 2))
         
+        ws = [3, 1, 1, 5, 3, 3]
+        nx.set_node_attributes(graph, {node: {'weight': w}
+                                       for node, w in zip(nodes, ws)})
+        path, w = calc_max_min_path(graph, [0], [3])
+        assert(np.all(path == [0, 4, 5, 3]))
+        assert(np.allclose(w, 3))
+        
         
 if __name__ == '__main__':
     sys.argv = ['', 'GraphTests']

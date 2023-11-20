@@ -7,7 +7,8 @@ from gpmap.src.matrix import (calc_cartesian_product, calc_tensor_product,
                               calc_cartesian_product_dot, calc_tensor_product_dot,
                               calc_tensor_product_quad, quad,
                               calc_tensor_product_dot2, kron_dot,
-                              diag_pre_multiply, diag_post_multiply)
+                              diag_pre_multiply, diag_post_multiply,
+    lanczos_conjugate_gradient)
 
 
 class MatrixTests(unittest.TestCase):
@@ -204,7 +205,20 @@ class MatrixTests(unittest.TestCase):
         u2 = calc_tensor_product_quad(ms, v)
         assert(np.allclose(u1, u2))
     
+    def test_lanczos_conjugate_gradient(self):
+        A = np.ones((4, 4)) + np.diag(np.ones(4))
+        x_true = np.random.normal(size=4)
+        b = A.dot(x_true)
+        print(A)
+        print(x_true)
+        print(b)
+        
+        tol = 1e-6
+        x = lanczos_conjugate_gradient(A, b, tol=tol)
+        print(x)
+        assert(np.allclose(x, x_true, atol=tol))
+        
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatrixTests']
+    import sys;sys.argv = ['', 'MatrixTests.test_lanczos_conjugate_gradient']
     unittest.main()
