@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 import numpy as np
 import pandas as pd
+import networkx as nx
 
 from itertools import combinations
 from scipy.sparse import identity
 from scipy.sparse.csr import csr_matrix
+from scipy.sparse.coo import coo_matrix
 from scipy.sparse.linalg import eigsh
+from scipy.sparse.linalg.isolve import minres
 from scipy.optimize import minimize
 from scipy.special import logsumexp, comb
 
@@ -13,7 +16,7 @@ from gpmap.src.settings import DNA_ALPHABET
 from gpmap.src.utils import check_error, write_log
 from gpmap.src.matrix import (get_sparse_diag_matrix, calc_cartesian_product,
                               calc_tensor_product)
-from scipy.sparse.linalg.isolve import minres
+from gpmap.src.graph import calc_bottleneck, calc_pathway
 
 
 class RandomWalk(object):
@@ -666,6 +669,7 @@ class ReactivePaths(object):
     def __init__(self, rate_matrix, stat_freqs, start, end, time_reversible=False):
         Q = rate_matrix.tocoo()
         Q.setdiag(0)
+        Q.eliminate_zeros()
         self.i = Q.row
         self.j = Q.col
         self.Q_ij = Q.data
@@ -677,6 +681,9 @@ class ReactivePaths(object):
         self.set_start_end(start, end)
         self.q_forward = self.calc_forward_p()
         self.q_backward = 1 - self.q_forward if time_reversible else self.calc_backwards_p()
+        
+        self.start_id = self.n + 1
+        self.end_id = self.n + 2
     
     def get_backwards_rate_matrix(self):
         D = get_sparse_diag_matrix(self.stat_freqs)
@@ -757,7 +764,8 @@ class ReactivePaths(object):
         return(flow)
     
     def flow_to_eff_flow(self, flow):
-        eff_flow = flow[self.i] - flow[self.j]
+        m = coo_matrix((flow, (self.i, self.j)), shape=(self.n, self.n))
+        eff_flow = (m - m.T).data
         eff_flow[eff_flow < 0] = 0
         return(eff_flow)
     
@@ -767,3 +775,44 @@ class ReactivePaths(object):
         else:
             sel_idxs = np.isin(self.j, self.end)
         return(flow[sel_idxs].sum())
+    
+    def sorted_ij_eff_flow(self, ij, eff_flow):
+        positive = eff_flow > 0
+        eff_flow, ij = eff_flow[positive], ij[positive, :]
+        sorted_idx = np.argsort(eff_flow)
+        sorted_eff_flow, sorted_ij = eff_flow[sorted_idx], ij[sorted_idx]
+        return(sorted_ij, sorted_eff_flow)
+
+    def get_sorted_ij_eff_flow(self, eff_flow=None, ij=None, is_sorted=False):
+        ij = ij if ij is not None else np.vstack([self.i, self.j]).T
+        if eff_flow is None:
+            eff_flow = self.flow_to_eff_flow(self.calc_flow())
+        msg = 'Ensure the shape of `eff_flow` is the same as that of `ij`'
+        n_edges = eff_flow.shape[0]
+        check_error(ij.shape[0] == n_edges, msg)
+        if is_sorted:
+            sorted_ij, sorted_eff_flow = ij, eff_flow
+        else:
+            sorted_ij, sorted_eff_flow = self.sorted_ij_eff_flow(ij, eff_flow)
+        return(sorted_ij, sorted_eff_flow)
+    
+    def calc_graph(self, ij, eff_flow=None):
+        graph = nx.DiGraph()
+        if eff_flow is None:
+            graph.add_edges_from(ij)
+        else:
+            graph.add_weighted_edges_from([(i, j, f) for (i, j), f in zip(ij, eff_flow)])
+        graph.edgelist = list(graph.edges.data('weight'))
+        return(graph)
+    
+    def calc_bottleneck(self, eff_flow=None, ij=None, is_sorted=False):
+        sorted_ij, sorted_eff_flow = self.get_sorted_ij_eff_flow(eff_flow, ij, is_sorted)
+        graph = self.calc_graph(sorted_ij, sorted_eff_flow)
+        bottleneck = calc_bottleneck(graph, self.start, self.end)
+        return(bottleneck)
+    
+    def calc_pathway(self, eff_flow=None, ij=None, is_sorted=False):
+        sorted_ij, sorted_eff_flow = self.get_sorted_ij_eff_flow(eff_flow, ij, is_sorted)
+        graph = self.calc_graph(sorted_ij, sorted_eff_flow)
+        path, eff_flow = calc_pathway(graph, self.start, self.end)
+        return(path, eff_flow)
