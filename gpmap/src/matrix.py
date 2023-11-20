@@ -6,6 +6,7 @@ from scipy.sparse.csr import csr_matrix
 from scipy.sparse.dia import dia_matrix
 
 from gpmap.src.utils import check_error, get_length
+from numpy.linalg.linalg import norm
 
 
 def inner_product(x1, x2, metric=None):
@@ -228,3 +229,38 @@ def calc_cartesian_prod_freqs(site_freqs):
 
 def filter_csr_matrix(matrix, idxs):
     return(matrix[idxs, :][:, idxs])
+
+
+def lanczos_conjugate_gradient(A, b, tol=1e-6, max_iter=100):
+    x = np.zeros(b.shape)
+    p = b
+    r = b
+    w = 0
+    gamma = 1
+    prev_u = 0
+    
+#     u = np.zeros(b.shape)
+#     r = A.dot(u) - b
+#     r_norm = norm(r)
+#     d = r
+#     
+#     for _ in range(max_iter):
+#         print(r)
+#         v = A.dot(r)
+#         alpha = r_norm / np.dot(d, v)
+#         u = u + alpha * r
+#         r = r - alpha * v
+#         r_norm_prev = r_norm
+#         r_norm = norm(r)
+#         
+#         if r_norm < tol:
+#             break
+#         
+#         beta = r_norm / r_norm_prev
+#         d = r - beta * d
+#     
+#     return(u)
+    
+    
+    
+    

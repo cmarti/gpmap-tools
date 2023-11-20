@@ -16,7 +16,8 @@ from gpmap.src.matrix import reciprocal, calc_matrix_polynomial_quad
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences)
-from gpmap.src.linop import DeltaPOperator, VarianceComponentKernelOperator
+from gpmap.src.linop import DeltaPOperator, VarianceComponentKernelOperator,\
+    ExtendedLinearOperator
 from gpmap.src.kernel import KernelAligner
 
 
@@ -55,6 +56,10 @@ class LandscapeEstimator(object):
         
         self.set_config(seq_length, n_alleles, alphabet)
     
+    def get_obs_idx(self, seqs):
+        obs_idx = self.genotype_idxs[seqs]
+        return(obs_idx)
+    
     def set_config(self, seq_length, n_alleles, alphabet):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
@@ -65,11 +70,26 @@ class LandscapeEstimator(object):
                                        index=self.genotypes)
         
 
-class GaussianProcessRegressor(object):
-    def __init__(self, kernel, progress=False):
-        self.K = kernel
-        self.n = kernel.n
-        self.progress = progress
+class GaussianProcessRegressor(LandscapeEstimator):
+    def __init__(self, kernel_class):
+        self.kernel_class = kernel_class
+    
+    def set_data(self, X, y, y_var=None):
+        self.define_space(genotypes=X)
+        self.define_kernel(n_alleles=self.n_alleles, seq_length=self.seq_length)
+        self.X = X
+        self.y = y
+        self.n_obs = y.shape[0]
+
+        if y_var is None:
+            y_var = np.zeros(y.shape[0])    
+                
+        self.y_var = y_var
+        self.K.set_y_var(y_var=y_var, obs_idx=self.get_obs_idx(X))
+    
+    def define_kernel(self, n_alleles, seq_length):
+        self.K = self.kernel_class(n_alleles=n_alleles, seq_length=seq_length)
+        self.n = self.K.n
     
     def predict(self):
         self.K.set_mode(all_rows=False, add_y_var_diag=True, full_v=False)
@@ -108,6 +128,46 @@ class GaussianProcessRegressor(object):
         y = np.random.normal(yhat, sigma) if sigma > 0 else yhat
         y_var = np.full(self.n, sigma**2, dtype=float)
         return(yhat, y, y_var)
+    
+    def neg_marginal_log_likelihood(self, params):
+        self.K.set_params(params)
+        self.K_inv_y = self.K.inv_dot(self.y)
+        mll1 = np.dot(self.y, self.K_inv_y) / 2
+        mll2 = self.K.calc_log_det(method='SLQ', n_vectors=5, degree=10) / 2
+#         mll3 = self.n / 2 * np.log(2 * np.pi)
+        mll = mll1 + mll2 
+        print(params, mll1, mll2)
+        return(mll)
+    
+    def neg_marginal_log_likelihood_grad(self, params):
+        if np.any(params != self.K.get_params()):
+            self.K.set_params(params)
+            self.K_inv_y = self.K.inv_dot(self.y)
+            
+        grad = []
+        for K_grad in self.K.grad():
+            
+            def matvec(x):
+                v = K_grad.dot(x)
+                return(np.dot(self.K_inv_y, v) * self.K_inv_y - self.K.inv_dot(v))
+            
+            op = ExtendedLinearOperator(matvec=matvec,
+                                        shape=self.K.shape, dtype=self.K.dtype)
+            grad.append(op.calc_trace(exact=False, n_vectors=10))
+        return(-np.array(grad))
+    
+    def fit(self, X, y, y_var=None):
+        self.set_data(X, y, y_var=y_var)
+        
+        x0 = self.K.get_params0()
+        f = self.neg_marginal_log_likelihood
+        f_grad = self.neg_marginal_log_likelihood_grad
+        res = minimize(fun=f, x0=x0,
+                        jac=f_grad, method='L-BFGS-B'
+                       )
+        params = res.x
+        self.K.set_params(params)
+        return(params)
     
 
 class VCregression(LandscapeEstimator):
@@ -179,10 +239,6 @@ class VCregression(LandscapeEstimator):
         # Invert MAT
         self.L_powers_unique_entries_inv = np.linalg.inv(MAT)
         self.L_powers_unique_entries = MAT
-    
-    def get_obs_idx(self, seqs):
-        obs_idx = self.genotype_idxs[seqs]
-        return(obs_idx)
     
     def set_data(self, X, y, y_var=None):
         self.init(genotypes=X)
