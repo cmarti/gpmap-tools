@@ -362,6 +362,19 @@ class SpaceTests(unittest.TestCase):
         with NamedTemporaryFile('w') as fhand:
             s.write_edges(fhand.name + '.npz')
             s.write_edges(fhand.name + '.csv')
+            
+    def test_calc_path(self):
+        X = np.array(['AAA', 'AAB', 'ABA', 'ABB',
+                      'BAA', 'BAB', 'BBA', 'BBB'])
+        y = np.array([3, 2, 1, 2, 1, 1, 1, 3])
+        s = SequenceSpace(X=X, y=y)
+        path = s.calc_max_min_path('AAA', 'BBB', allow_bypasses=False)
+        assert(np.all(path == ['AAA', 'AAB', 'ABB', 'BBB']))
+        
+        y = np.array([3, 2, 1, 2, 3, 1, 3, 3])
+        s = SequenceSpace(X=X, y=y)
+        path = s.calc_max_min_path('AAA', 'BBB', allow_bypasses=False)
+        assert(np.all(path == ['AAA', 'BAA', 'BBA', 'BBB']))
 
         
 if __name__ == '__main__':

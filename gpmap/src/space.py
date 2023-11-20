@@ -2,6 +2,7 @@
 import warnings
 import numpy as np
 import pandas as pd
+import networkx as nx
 
 from itertools import product, combinations
 from _collections import defaultdict
@@ -19,6 +20,7 @@ from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
 from gpmap.src.linop import ProjectionOperator, VjProjectionOperator
+from gpmap.src.graph import calc_max_min_path
 
 
 class DiscreteSpace(object):
@@ -329,6 +331,34 @@ class GeneralSequenceSpace(DiscreteSpace):
         adjacency_matrix = csr_matrix((data, (gts1, gts2)),
                                       shape=(n_genotypes, n_genotypes)) 
         return(adjacency_matrix)
+    
+    def _get_edges(self, start, end, allow_bypasses):
+        i, j = self.get_neighbor_pairs()
+        states_i, states_j = self.state_labels[i], self.state_labels[j]
+        for node1, node2 in zip(states_i, states_j):
+            d11 = hamming_distance(node1, start)
+            d21 = hamming_distance(node2, start)
+            
+            d12 = hamming_distance(node1, end)
+            d22 = hamming_distance(node2, end)
+            
+            if allow_bypasses and d21 >= d11 and d22 <= d12:
+                yield(node1, node2)
+            elif d21 > d11 and d22 < d12:
+                yield(node1, node2)
+    
+    def calc_graph(self, start, end, allow_bypasses):
+        graph = nx.DiGraph()
+        graph.add_edges_from(self._get_edges(start, end, allow_bypasses))
+        nx.set_node_attributes(graph, {node: {'weight': w}
+                                       for node, w in zip(self.state_labels,
+                                                          self.y)})
+        return(graph)
+    
+    def calc_max_min_path(self, start, end, allow_bypasses=True):
+        graph = self.calc_graph(start, end, allow_bypasses)
+        path = calc_max_min_path(graph, [start], [end])[0]
+        return(path)
         
 
 class HammingBallSpace(GeneralSequenceSpace):
