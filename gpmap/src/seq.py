@@ -10,7 +10,7 @@ from itertools import chain
 from scipy.sparse.csr import csr_matrix
 from Bio.Seq import Seq 
 from Bio.Data.CodonTable import CodonTable
-from jellyfish._rustyfish import hamming_distance
+from jellyfish import hamming_distance
 
 from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT, ALPHABETS, ALPHABET
 from gpmap.src.utils import check_error
