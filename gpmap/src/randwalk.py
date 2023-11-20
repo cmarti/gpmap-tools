@@ -20,8 +20,13 @@ from gpmap.src.graph import calc_bottleneck, calc_pathway
 
 
 class RandomWalk(object):
-    def __init__(self):
-        return()
+    def __init__(self, space, log=None):
+        self.space = space
+        self.log = log
+    
+    @property
+    def is_time_reversible(self):
+        return(False)
     
     @property
     def shape(self):
@@ -54,14 +59,21 @@ class RandomWalk(object):
                 remaining_time = remaining_time - t
         return(times, path)
     
+    def get_reactive_paths(self, start_labels, end_labels):
+        start = self.space.get_state_idxs(start_labels)
+        end = self.space.get_state_idxs(end_labels)
+        paths = ReactivePaths(self.rate_matrix, self.stationary_freqs,
+                              start, end, self.is_time_reversible)
+        return(paths)
+    
     def report(self, msg):
         write_log(self.log, msg)
 
 
 class TimeReversibleRandomWalk(RandomWalk):
-    def __init__(self, space, log=None):
-        self.space = space
-        self.log = log
+    @property
+    def is_time_reversible(self):
+        return(True)
     
     def set_stationary_freqs(self, log_freqs):
         self.stationary_freqs = np.exp(log_freqs)
