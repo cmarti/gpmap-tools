@@ -97,13 +97,18 @@ def calc_pathway(graph, start, end):
     return(left + right, eff_flow)
 
 
-def _calc_max_min_path(graph, start, end, attribute):
+def _calc_max_min_path(graph, start, end, attribute, cache={}):
     if start == end:
         return([], np.inf)
     else:
         best_w = -np.inf
         for node in graph.predecessors(end):
-            path, w = _calc_max_min_path(graph, start, node, attribute)
+            path, w = cache.get(node, (None,  None))
+            
+            if path is None:
+                path, w = _calc_max_min_path(graph, start, node, attribute, cache=cache)
+                cache[node] = path, w
+                
             w = min(w, graph.nodes[end].get(attribute, np.inf))
             if w > best_w:
                 best_path = path + [node]
@@ -115,5 +120,7 @@ def calc_max_min_path(graph, start, end, attribute='weight'):
     if not has_path(graph, start, end, start_id='start', end_id='end', rm_aux=False):
         msg = 'There is no path'
         raise ValueError(msg)
-    path, w = _calc_max_min_path(graph, 'start', 'end', attribute=attribute)
+    cache = {}
+    path, w = _calc_max_min_path(graph, 'start', 'end', attribute=attribute,
+                                 cache=cache)
     return(path[1:], w)
