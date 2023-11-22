@@ -97,11 +97,29 @@ def calc_pathway(graph, start, end):
     return(left + right, eff_flow)
 
 
+def is_better_path(w1, w2, is_sorted=False):
+    if not w1:
+        if not w2:
+            return(False)
+        else:
+            return(True)
+    elif not w2:
+        return(False)
+    
+    if not is_sorted:
+        w1, w2 = sorted(w1), sorted(w2)
+        
+    if w1[0] > w2[0]:
+        return(True)
+    else:
+        return(is_better_path(w1[1:], w2[1:], is_sorted=True))
+
+
 def _calc_max_min_path(graph, start, end, attribute, cache={}):
     if start == end:
-        return([], np.inf)
+        return([], [np.inf])
     else:
-        best_w = -np.inf
+        best_w = [-np.inf]
         for node in graph.predecessors(end):
             path, w = cache.get(node, (None,  None))
             
@@ -109,8 +127,8 @@ def _calc_max_min_path(graph, start, end, attribute, cache={}):
                 path, w = _calc_max_min_path(graph, start, node, attribute, cache=cache)
                 cache[node] = path, w
                 
-            w = min(w, graph.nodes[end].get(attribute, np.inf))
-            if w > best_w:
+            w = w + [graph.nodes[end].get(attribute, np.inf)]
+            if is_better_path(w, best_w):
                 best_path = path + [node]
                 best_w = w
         return(best_path, best_w)
