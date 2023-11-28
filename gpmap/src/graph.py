@@ -97,48 +97,61 @@ def calc_pathway(graph, start, end):
     return(left + right, eff_flow)
 
 
-def is_better_path(w1, w2, is_sorted=False):
+def is_better_path(w1, w2, is_sorted=False, only_min=False):
     if not w1:
         if not w2:
-            return(False)
+            is_better = False
         else:
-            return(True)
+            is_better = True
     elif not w2:
-        return(False)
-    
-    if not is_sorted:
-        w1, w2 = sorted(w1), sorted(w2)
+        is_better = False
+    else:
         
-    if w1[0] > w2[0]:
-        return(True)
-    else:
-        return(is_better_path(w1[1:], w2[1:], is_sorted=True))
+        if only_min:
+            return(w1 > w2)
+         
+        else:
+            if not is_sorted:
+                w1, w2 = sorted(w1), sorted(w2)
+            if w1[0] > w2[0]:
+                is_better = True
+            elif w1[0] < w2[0]:
+                is_better = False
+            else:
+                is_better = is_better_path(w1[1:], w2[1:], is_sorted=True)
+    return(is_better)
 
 
-def _calc_max_min_path(graph, start, end, attribute, cache={}):
+def _calc_max_min_path(graph, start, end, attribute, cache={}, only_min=False):
     if start == end:
-        return([], [np.inf])
+        return([], np.inf if only_min else [np.inf])
     else:
-        best_w = [-np.inf]
+        best_w = -np.inf if only_min else [-np.inf]
         for node in graph.predecessors(end):
             path, w = cache.get(node, (None,  None))
             
             if path is None:
-                path, w = _calc_max_min_path(graph, start, node, attribute, cache=cache)
+                path, w = _calc_max_min_path(graph, start, node, attribute,
+                                             cache=cache, only_min=only_min)
                 cache[node] = path, w
                 
-            w = w + [graph.nodes[end].get(attribute, np.inf)]
-            if is_better_path(w, best_w):
+            prev_w = graph.nodes[end].get(attribute, np.inf)
+            if only_min:
+                w = min(w, prev_w)
+            else:
+                w = w + [prev_w]
+                
+            if is_better_path(w, best_w, only_min=only_min):
                 best_path = path + [node]
                 best_w = w
         return(best_path, best_w)
             
 
-def calc_max_min_path(graph, start, end, attribute='weight'):
+def calc_max_min_path(graph, start, end, attribute='weight', only_min=False):
     if not has_path(graph, start, end, start_id='start', end_id='end', rm_aux=False):
         msg = 'There is no path'
         raise ValueError(msg)
     cache = {}
     path, w = _calc_max_min_path(graph, 'start', 'end', attribute=attribute,
-                                 cache=cache)
+                                 cache=cache, only_min=only_min)
     return(path[1:], w)
