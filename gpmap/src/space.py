@@ -332,8 +332,14 @@ class GeneralSequenceSpace(DiscreteSpace):
                                       shape=(n_genotypes, n_genotypes)) 
         return(adjacency_matrix)
     
-    def _get_edges(self, start, end, allow_bypasses):
+    def _get_edges(self, start, end, allow_bypasses, monotonic=False):
         i, j = self.get_neighbor_pairs()
+        
+        if monotonic:
+            df = self.y[j] - self.y[i]
+            idxs = df >= 0
+            i, j = i[idxs], j[idxs]
+        
         states_i, states_j = self.state_labels[i], self.state_labels[j]
         for node1, node2 in zip(states_i, states_j):
             d11 = hamming_distance(node1, start)
@@ -347,18 +353,27 @@ class GeneralSequenceSpace(DiscreteSpace):
             elif d21 > d11 and d22 < d12:
                 yield(node1, node2)
     
-    def calc_graph(self, start, end, allow_bypasses):
+    def calc_graph(self, start, end, allow_bypasses, monotonic=False):
         graph = nx.DiGraph()
-        graph.add_edges_from(self._get_edges(start, end, allow_bypasses))
+        graph.add_edges_from(self._get_edges(start, end, allow_bypasses,
+                                             monotonic=monotonic))
         nx.set_node_attributes(graph, {node: {'weight': w}
                                        for node, w in zip(self.state_labels,
                                                           self.y)})
         return(graph)
     
-    def calc_max_min_path(self, start, end, allow_bypasses=True):
-        graph = self.calc_graph(start, end, allow_bypasses)
+    def calc_max_min_path(self, start, end, allow_bypasses=True, monotonic=False):
+        graph = self.calc_graph(start, end, allow_bypasses, monotonic)
         path = calc_max_min_path(graph, [start], [end])[0]
         return(path)
+    
+    def calc_n_paths(self, start, end, allow_bypasses=True, monotonic=False,
+                     max_length=None):
+        n = 0
+        graph = self.calc_graph(start, end, allow_bypasses, monotonic) 
+        for _ in nx.all_simple_paths(graph, start, end, cutoff=max_length):
+            n += 1
+        return(n)
         
 
 class HammingBallSpace(GeneralSequenceSpace):
