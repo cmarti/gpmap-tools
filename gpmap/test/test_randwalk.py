@@ -14,6 +14,7 @@ from scipy.sparse.csr import csr_matrix
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace, SequenceSpace
 from gpmap.src.randwalk import WMWalk, ReactivePaths
+from gpmap.src.seq import get_seqs_from_alleles
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -484,7 +485,7 @@ class ReactivePathsTests(unittest.TestCase):
         paths = ReactivePaths(Q, stat_freqs, start, end)
         bottleneck, min_flow, _ = paths.calc_bottleneck()
         assert(np.allclose(min_flow, 0.05555556))
-        assert(np.allclose(bottleneck, [0, 1]))
+        assert(bottleneck in [(0, 1), (1, 3), (3, 5)])
     
     def test_calc_pathway(self):
         Q = csr_matrix([[-1.5, 1, 0.5, 0, 0, 0],
@@ -500,6 +501,33 @@ class ReactivePathsTests(unittest.TestCase):
         path, min_flow = paths.calc_pathway()
         assert(np.allclose(min_flow, 0.05555556))
         assert(np.allclose(path, [0, 1, 3, 5]))
+        
+    def test_randomwalk_calc_bottleneck(self):
+        X = np.array(list(get_seqs_from_alleles([['A', 'B']] * 3)))
+        y = np.array([2, 0, 2, 2,
+                      2, 2, 0, 2])
+        space = SequenceSpace(X=X, y=y)
+        Ns = 0.628
+        rw = WMWalk(space)
+        rw.calc_rate_matrix(Ns=Ns)
+        paths = rw.get_reactive_paths(['BBB'], ['AAA'])
+        bottleneck, eff_flow, _ = paths.calc_bottleneck()
+        assert(bottleneck in [(3, 2), (5, 4)])
+        assert(np.allclose(eff_flow, 0.0388668))
+    
+    def test_randomwalk_calc_pathway(self):
+        X = np.array(list(get_seqs_from_alleles([['A', 'B']] * 3)))
+        y = np.array([2, 0, 2, 2,
+                      2, 2, 0, 2])
+        space = SequenceSpace(X=X, y=y)
+        Ns = 0.628
+        rw = WMWalk(space)
+        rw.calc_rate_matrix(Ns=Ns)
+        paths = rw.get_reactive_paths(['BBB'], ['AAA'])
+        path, min_flow = paths.calc_pathway()
+        assert(1 not in path)
+        assert(6 not in path)
+        assert(np.allclose(min_flow, 0.03886679647))
         
         
 if __name__ == '__main__':

@@ -20,13 +20,14 @@ def has_path(graph, start, end, start_id='start', end_id='end', rm_aux=True):
         graph.remove_nodes_from([start_id, end_id])
     return(has_path)
     
-def bipartition_edge_cut_search(graph, start, end):
+    
+def bipartition_edge_cut_search(graph, start, end, edges):
     '''
     This function assumes that edges in the graph are sorted and finds the 
     edge with the largest value that disconnects start from end nodes
     '''
     left, right = 0, graph.number_of_edges()
-    edges = list(graph.edges)    
+        
     while right - left > 1:
         m = int((right + left) / 2)
         subgraph = graph.edge_subgraph(edges[m:]).copy()
@@ -45,15 +46,14 @@ def bipartition_edge_cut_search(graph, start, end):
 
     
 def calc_bottleneck(graph, start, end):
-    edges = list(graph.edges)
-    
+    edges = sorted(graph.edges, key=lambda x: graph.edges[x]['weight'])
     best_edge_i, best_edge_j = edges[-1]
+    
     if best_edge_i in start and best_edge_j in end:
         bottleneck = (best_edge_i, best_edge_j)
         subgraph = nx.DiGraph()
-        
     else:
-        left, subgraph = bipartition_edge_cut_search(graph, start, end)
+        left, subgraph = bipartition_edge_cut_search(graph, start, end, edges)
         bottleneck = edges[left]
         
     min_flow = graph.edges[bottleneck]['weight']
@@ -87,12 +87,12 @@ def calc_pathway(graph, start, end):
     if b1 in start:
         left = [b1]
     else:
-        left, _ = calc_pathway(subgraph, start, [b1])
+        left, _ = calc_pathway(left, start, [b1])
     
     if b2 in end:
         right = [b2]
     else:
-        right, _ = calc_pathway(subgraph, [b2], end)
+        right, _ = calc_pathway(right, [b2], end)
         
     return(left + right, eff_flow)
 

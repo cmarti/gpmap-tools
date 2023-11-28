@@ -60,10 +60,10 @@ class RandomWalk(object):
         return(times, path)
     
     def get_reactive_paths(self, start_labels, end_labels):
-        start = self.space.get_state_idxs(start_labels)
-        end = self.space.get_state_idxs(end_labels)
+        start = self.space.get_state_idxs(start_labels).values
+        end = self.space.get_state_idxs(end_labels).values
         paths = ReactivePaths(self.rate_matrix, self.stationary_freqs,
-                              start, end, self.is_time_reversible)
+                              start, end)
         return(paths)
     
     def report(self, msg):
@@ -788,25 +788,17 @@ class ReactivePaths(object):
             sel_idxs = np.isin(self.j, self.end)
         return(flow[sel_idxs].sum())
     
-    def sorted_ij_eff_flow(self, ij, eff_flow):
-        positive = eff_flow > 0
-        eff_flow, ij = eff_flow[positive], ij[positive, :]
-        sorted_idx = np.argsort(eff_flow)
-        sorted_eff_flow, sorted_ij = eff_flow[sorted_idx], ij[sorted_idx]
-        return(sorted_ij, sorted_eff_flow)
-
-    def get_sorted_ij_eff_flow(self, eff_flow=None, ij=None, is_sorted=False):
+    def get_ij_eff_flow(self, eff_flow=None, ij=None, is_sorted=False):
         ij = ij if ij is not None else np.vstack([self.i, self.j]).T
         if eff_flow is None:
             eff_flow = self.flow_to_eff_flow(self.calc_flow())
+        
         msg = 'Ensure the shape of `eff_flow` is the same as that of `ij`'
         n_edges = eff_flow.shape[0]
         check_error(ij.shape[0] == n_edges, msg)
-        if is_sorted:
-            sorted_ij, sorted_eff_flow = ij, eff_flow
-        else:
-            sorted_ij, sorted_eff_flow = self.sorted_ij_eff_flow(ij, eff_flow)
-        return(sorted_ij, sorted_eff_flow)
+        positive = eff_flow > 0
+        eff_flow, ij = eff_flow[positive], ij[positive, :]
+        return(ij, eff_flow)
     
     def calc_graph(self, ij, eff_flow=None):
         graph = nx.DiGraph()
@@ -814,17 +806,16 @@ class ReactivePaths(object):
             graph.add_edges_from(ij)
         else:
             graph.add_weighted_edges_from([(i, j, f) for (i, j), f in zip(ij, eff_flow)])
-        graph.edgelist = list(graph.edges.data('weight'))
         return(graph)
     
     def calc_bottleneck(self, eff_flow=None, ij=None, is_sorted=False):
-        sorted_ij, sorted_eff_flow = self.get_sorted_ij_eff_flow(eff_flow, ij, is_sorted)
-        graph = self.calc_graph(sorted_ij, sorted_eff_flow)
+        ij, eff_flow = self.get_ij_eff_flow(eff_flow, ij, is_sorted)
+        graph = self.calc_graph(ij, eff_flow)
         bottleneck = calc_bottleneck(graph, self.start, self.end)
         return(bottleneck)
     
     def calc_pathway(self, eff_flow=None, ij=None, is_sorted=False):
-        sorted_ij, sorted_eff_flow = self.get_sorted_ij_eff_flow(eff_flow, ij, is_sorted)
-        graph = self.calc_graph(sorted_ij, sorted_eff_flow)
+        ij, eff_flow = self.get_ij_eff_flow(eff_flow, ij, is_sorted)
+        graph = self.calc_graph(ij, eff_flow)
         path, eff_flow = calc_pathway(graph, self.start, self.end)
         return(path, eff_flow)
