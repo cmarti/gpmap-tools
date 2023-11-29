@@ -39,7 +39,7 @@ def bipartition_edge_cut_search(graph, start, end, edges):
             
     # Check in case of ties with adjacent edge
     if has_path(subgraph, start, end):
-        subgraph.remove_edge(edges[left]) 
+        subgraph.remove_edge(*edges[left]) 
         if has_path(subgraph, start, end):
             left += 1
     return(left, subgraph)
