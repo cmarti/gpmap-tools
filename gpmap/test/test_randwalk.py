@@ -465,10 +465,10 @@ class ReactivePathsTests(unittest.TestCase):
         flow = paths.calc_flow()
         assert(np.allclose(flow[0], 1/18))
         
-        rate = paths.calc_reactive_rate(flow)
+        rate = paths.calc_reactive_rate()
         assert(np.allclose(rate, 2/18))
         
-        eff_flow = paths.flow_to_eff_flow(flow)
+        _, eff_flow = paths.flow_to_eff_flow(flow)
         nonzero = eff_flow[eff_flow > 0]
         assert(np.allclose(eff_flow[0], flow[0])) 
         assert(np.allclose(nonzero, nonzero[0]))
@@ -540,9 +540,63 @@ class ReactivePathsTests(unittest.TestCase):
         rw.calc_rate_matrix(Ns=Ns)
         paths = rw.get_reactive_paths(['BBB'], ['AAA'])
         
-        rate = paths.calc_reactive_rate(paths.calc_flow())
+        rate = paths.calc_reactive_rate()
         total_flows = np.sum([x[1] for x in paths.calc_pathways()])
         assert(np.allclose(total_flows, rate))
+        
+        pathways = paths.calc_pathways()
+        df = paths.pathways_to_df(pathways)
+        assert(df.shape[0] == 18)
+    
+    def test_calc_jump_matrix(self):
+        X = np.array(list(get_seqs_from_alleles([['A', 'B']] * 2)))
+        y = np.array([2, 0, 2, 2])
+        space = SequenceSpace(X=X, y=y)
+        rw = WMWalk(space)
+        rw.calc_rate_matrix(Ns=0.628)
+        paths = rw.get_reactive_paths(['AA'], ['BB'])
+        P = paths.calc_jump_matrix().todense()
+        
+        # Ensure valid transition matrix
+        assert(np.allclose(P.sum(1), 1))
+        
+        # Ensure absorbing state
+        assert(np.allclose(P[-1, -1], 1))
+        
+        # Ensure starting transition probabilities are unchanged
+        row1 = np.array(rw.rate_matrix.todense())[0, :]
+        row1[0] = 0
+        row1 = row1 / row1.sum()
+        assert(np.allclose(P[0, :], row1))
+        
+        ##### Test on a larger space #####
+        space = CodonSpace(['S'], add_variation=True, seed=0)
+        rw = WMWalk(space)
+        rw.calc_rate_matrix(Ns=0.628)
+        paths = rw.get_reactive_paths(['AAA'], ['TTT'])
+        P = paths.calc_jump_matrix().todense()
+        assert(np.allclose(P.sum(1), 1))
+        assert(np.allclose(P[-1, -1], 1))
+    
+    def test_sample_reactive_paths(self):
+        X = np.array(list(get_seqs_from_alleles([['A', 'B']] * 2)))
+        y = np.array([2, 0, 2, 2])
+        space = SequenceSpace(X=X, y=y)
+        rw = WMWalk(space)
+        rw.calc_rate_matrix(Ns=0.628)
+        paths = rw.get_reactive_paths(['AA'], ['BB'])
+        p = np.mean([p[1] == 1 for p in paths.sample(n=1000)])
+        assert(np.abs(p - 1/3) < 0.05)
+        
+        ##### Test on a larger space #####
+        space = CodonSpace(['S'], add_variation=True, seed=0)
+        rw = WMWalk(space)
+        rw.calc_rate_matrix(Ns=0.1)
+        paths = rw.get_reactive_paths(['AGT', 'AGC'],
+                                      ['TCT', 'TCC', 'TCA', 'TCG'])
+        lengths = [len(p) for p in paths.sample(n=100)]
+        assert(np.mean(lengths) == 24.7)
+        assert(len(lengths) == 100)
     
         
 if __name__ == '__main__':

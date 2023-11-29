@@ -2,13 +2,14 @@
 import unittest
 
 import numpy as np
+from scipy.sparse import csr_matrix
 
 from gpmap.src.matrix import (calc_cartesian_product, calc_tensor_product,
                               calc_cartesian_product_dot, calc_tensor_product_dot,
                               calc_tensor_product_quad, quad,
                               calc_tensor_product_dot2, kron_dot,
                               diag_pre_multiply, diag_post_multiply,
-    lanczos_conjugate_gradient)
+                              lanczos_conjugate_gradient, rate_to_jump_matrix)
 
 
 class MatrixTests(unittest.TestCase):
@@ -217,8 +218,35 @@ class MatrixTests(unittest.TestCase):
         x = lanczos_conjugate_gradient(A, b, tol=tol)
         print(x)
         assert(np.allclose(x, x_true, atol=tol))
+    
+    def test_rate_to_jump_matrix(self):
+        # Test easy matrix
+        Q = np.array([[-2, 1, 1],
+                      [1, -2, 1],
+                      [1, 1, -2]])
+        P = rate_to_jump_matrix(Q)
+        assert(np.allclose(np.diag(P), 0))
+        assert(np.allclose(P.sum(1), 1))
+        assert(np.allclose(P[0, 1], 0.5))
+        assert(np.allclose(P[1, 0], 0.5))
+        assert(np.allclose(P[2, 0], 0.5))
+        
+        # Test matrix with absorbing state
+        Q = np.array([[-2, 1, 1],
+                      [1, -2, 1],
+                      [0, 0, 0]])
+        P1 = rate_to_jump_matrix(Q)
+        assert(np.allclose(np.diag(P1[:-1, :-1]), 0))
+        assert(np.allclose(P1.sum(1), 1))
+        assert(np.allclose(P1[-1, -1], 1))
+        assert(np.allclose(P1[0, 1], 0.5))
+        assert(np.allclose(P1[1, 0], 0.5))
+        
+        # Ensure it works with csr_matrix as well
+        P2 = rate_to_jump_matrix(csr_matrix(Q)).todense()
+        assert(np.allclose(P1, P2))
         
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatrixTests.test_lanczos_conjugate_gradient']
+    import sys;sys.argv = ['', 'MatrixTests']
     unittest.main()

@@ -231,6 +231,26 @@ def filter_csr_matrix(matrix, idxs):
     return(matrix[idxs, :][:, idxs])
 
 
+def rate_to_jump_matrix(rate_matrix):
+    try:
+        rate_matrix.setdiag(0)
+        rate_matrix = rate_matrix.tolil()
+    except AttributeError:
+        np.fill_diagonal(rate_matrix, 0)
+        
+    leaving_rates = np.array(rate_matrix.sum(1)).flatten()
+    zero_idxs = leaving_rates == 0
+    leaving_rates[zero_idxs] = 1
+    diag = 1 / leaving_rates
+    jump_matrix = get_sparse_diag_matrix(diag) @ rate_matrix
+    
+    if hasattr(jump_matrix, 'tolil'):
+        jump_matrix = jump_matrix.tolil()
+        
+    jump_matrix[zero_idxs, zero_idxs] = 1
+    return(jump_matrix)
+
+
 def lanczos_conjugate_gradient(A, b, tol=1e-6, max_iter=100):
     x = np.zeros(b.shape)
     p = b
@@ -260,7 +280,4 @@ def lanczos_conjugate_gradient(A, b, tol=1e-6, max_iter=100):
 #         d = r - beta * d
 #     
 #     return(u)
-    
-    
-    
     

@@ -12,7 +12,7 @@ from scipy.special import logsumexp, comb
 from gpmap.src.settings import DNA_ALPHABET
 from gpmap.src.utils import check_error, write_log
 from gpmap.src.matrix import (get_sparse_diag_matrix, calc_cartesian_product,
-                              calc_tensor_product)
+                              calc_tensor_product, rate_to_jump_matrix)
 from gpmap.src.graph import calc_bottleneck, calc_pathway, has_path
 
 
@@ -31,8 +31,7 @@ class RandomWalk(object):
     
     def calc_jump_matrix(self):
         self.leaving_rates = -self.rate_matrix.diagonal()
-        self.jump_matrix = get_sparse_diag_matrix(1/self.leaving_rates).dot(self.rate_matrix)
-        self.jump_matrix.setdiag(0)
+        self.jump_matrix = rate_to_jump_matrix(self.rate_matrix)
     
     def run_forward(self, time, state_idx=None):
         if state_idx is None:
@@ -700,28 +699,6 @@ class ReactivePaths(object):
         Q = D_inv @ self.rate_matrix.T @ D
         return(Q)
     
-    def calc_jump_transition_matrix(self, a, b):
-        Q = self.rate_matrix
-        Q.setdiag(0)
-        P = Q / Q.sum(1).A1
-        P[self.end] = 0
-        D_q = get_sparse_diag_matrix(self.q_forward[self.not_start])
-        P[self.not_start] = P[self.not_start] 
-                
-        not_start_at_a = np.array([x not in a for x in i])
-        start_at_b = np.array([x in b for x in i])
-        p_ij[start_at_b] = 0
-        p_ij[not_start_at_a] = p_ij[not_start_at_a] * q[j][not_start_at_a] / q[i][not_start_at_a]
-        
-        # Add absorbing probabilities at b
-        i = np.append(i, b)
-        j = np.append(j, b)
-        p_ij = np.append(p_ij, np.ones(b.shape[0]))
-        
-        # Make sparse jump matrix
-        jump_matrix = csr_matrix((p_ij, (i, j)), shape=size)
-        return(jump_matrix)
-        
     def set_start_end(self, start, end):
         msg = 'The two sets of start and end states cannot overlap'
         check_error(np.intersect1d(start, end).shape[0] == 0, msg)
@@ -787,6 +764,27 @@ class ReactivePaths(object):
         q[self.other] = q_partial
         q[self.end] = 1
         return(q)
+    
+    def calc_reactive_rate_matrix(self):
+        Q = self.rate_matrix.copy()
+        D_q = get_sparse_diag_matrix(self.q_forward[self.not_start])
+        D_q_inv = get_sparse_diag_matrix(1 / self.q_forward[self.not_start])
+        Q[self.not_start, :][:, self.not_start] = D_q_inv @ Q[self.not_start, :][:, self.not_start] @ D_q
+        
+        Q = Q.tolil()
+        Q[self.end] = 0
+        Q[:, self.start] = 0 
+        return(Q)
+    
+    def calc_jump_matrix(self):
+        Q = self.calc_reactive_rate_matrix()
+        P = rate_to_jump_matrix(Q)
+        return(P)
+
+    def get_jump_matrix(self):
+        if not hasattr(self, 'jump_matrix'):
+            self.jump_matrix = self.calc_jump_matrix()
+        return(self.jump_matrix)
 
     def calc_reactive_p(self):
         return(self.q_forward * self.q_backwards * self.stat_freqs)
@@ -799,22 +797,39 @@ class ReactivePaths(object):
         flow *= self.q_backward[self.i] * self.Q_ij * self.q_forward[self.j]
         return(flow)
     
-    def flow_to_eff_flow(self, flow):
-        m = coo_matrix((flow, (self.i, self.j)), shape=(self.n, self.n))
-        eff_flow = (m - m.T).data
-        return(eff_flow)
-    
-    def calc_reactive_rate(self, flow):
+    def get_flow(self):
+        if not hasattr(self, 'flow'):
+            self.flow = self.calc_flow()
+        return(self.flow)
+
+    def calc_reactive_rate(self):
+        flow = self.get_flow()
         if self.start_n < self.end_n:
             sel_idxs = np.isin(self.i, self.start)
         else:
             sel_idxs = np.isin(self.j, self.end)
         return(flow[sel_idxs].sum())
     
-    def get_ij_eff_flow(self, eff_flow=None, ij=None, is_sorted=False):
-        ij = ij if ij is not None else np.vstack([self.i, self.j]).T
-        if eff_flow is None:
-            eff_flow = self.flow_to_eff_flow(self.calc_flow())
+    def get_reactive_rate(self):
+        if not hasattr(self, 'reactive_rate'):
+            self.reactive_rate = self.calc_reactive_rate()
+        return(self.reactive_rate)
+    
+    def flow_to_eff_flow(self, flow):
+        m = coo_matrix((flow, (self.i, self.j)), shape=(self.n, self.n))
+        m = (m - m.T).tocoo()
+        eff_flow = m.data
+        ij = np.vstack([m.row, m.col]).T
+        return(ij, eff_flow)
+    
+    def get_eff_flow(self):
+        if not hasattr(self, 'eff_flow'):
+            flow = self.get_flow()
+            self.eff_ij, self.eff_flow = self.flow_to_eff_flow(flow)
+        return(self.eff_ij, self.eff_flow)
+    
+    def get_ij_eff_flow(self):
+        ij, eff_flow = self.get_eff_flow()
         
         msg = 'Ensure the shape of `eff_flow` is the same as that of `ij`'
         n_edges = eff_flow.shape[0]
@@ -823,30 +838,35 @@ class ReactivePaths(object):
         eff_flow, ij = eff_flow[positive], ij[positive, :]
         return(ij, eff_flow)
     
-    def calc_graph(self, ij, eff_flow=None):
+    def get_eff_flow_df(self):
+        ij, eff_flow = self.get_ij_eff_flow()
+        return(pd.DataFrame({'i': ij[:, 0],
+                             'j': ij[:, 1], 
+                             'eff_flow': eff_flow}))
+    
+    def calc_graph(self):
         graph = nx.DiGraph()
-        if eff_flow is None:
-            graph.add_edges_from(ij)
-        else:
-            graph.add_weighted_edges_from([(i, j, f) for (i, j), f in zip(ij, eff_flow)])
+        ij, eff_flow = self.get_ij_eff_flow()
+        graph.add_weighted_edges_from([(i, j, f) for (i, j), f in zip(ij, eff_flow)])
         return(graph)
     
-    def calc_bottleneck(self, eff_flow=None, ij=None, is_sorted=False):
-        ij, eff_flow = self.get_ij_eff_flow(eff_flow, ij, is_sorted)
-        graph = self.calc_graph(ij, eff_flow)
+    def get_graph(self):
+        if not hasattr(self, 'graph'):
+            self.graph = self.calc_graph()
+        return(self.graph)
+    
+    def calc_bottleneck(self):
+        graph = self.get_graph()
         bottleneck = calc_bottleneck(graph, self.start, self.end)
         return(bottleneck)
     
-    def calc_pathway(self, eff_flow=None, ij=None, is_sorted=False):
-        ij, eff_flow = self.get_ij_eff_flow(eff_flow, ij, is_sorted)
-        graph = self.calc_graph(ij, eff_flow)
+    def calc_pathway(self):
+        graph = self.get_graph()
         path, eff_flow = calc_pathway(graph, self.start, self.end)
         return(path, eff_flow)
     
-    def calc_pathways(self, n=20, eff_flow=None, ij=None, is_sorted=False):
-        ij, eff_flow = self.get_ij_eff_flow(eff_flow, ij, is_sorted)
-        graph = self.calc_graph(ij, eff_flow)
-        
+    def calc_pathways(self, n=20):
+        graph = self.get_graph().copy()
         for _ in range(n):
             path, max_min_flow = calc_pathway(graph, self.start, self.end)
             yield(path, max_min_flow)
@@ -858,3 +878,30 @@ class ReactivePaths(object):
             
             if not has_path(graph, self.start, self.end):
                 break
+    
+    def pathways_to_df(self, pathways):
+        steps = []
+        for k, (path, w) in enumerate(pathways):
+            p = w / self.get_reactive_rate()
+            for i, j in zip(path, path[1:]):
+                steps.append({'i': i, 'j': j, 'path': k, 
+                              'eff_flow': w, 'eff_flow_p': p})
+        df = pd.DataFrame(steps)
+        return(df)
+    
+    def _sample_path(self, p0, P):
+        state = np.random.choice(self.start, p=p0)
+        path = [state]
+        
+        while state not in self.end:
+            p = P[state]
+            state = np.random.choice(p.rows[0], p=p.data[0])
+            path.append(state)
+        return(path)
+    
+    def sample(self, n):
+        P = self.get_jump_matrix()
+        p0 = self.stat_freqs[self.start]
+        p0 = p0 / p0.sum()
+        for _ in range(n):
+            yield(self._sample_path(p0, P))
