@@ -8,7 +8,7 @@ from scipy.sparse import identity
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.coo import coo_matrix
 from scipy.sparse.linalg import eigsh
-from scipy.sparse.linalg.isolve import minres
+from scipy.sparse.linalg.isolve import minres, bicgstab, cg
 from scipy.optimize import minimize
 from scipy.special import logsumexp, comb
 
@@ -16,7 +16,7 @@ from gpmap.src.settings import DNA_ALPHABET
 from gpmap.src.utils import check_error, write_log
 from gpmap.src.matrix import (get_sparse_diag_matrix, calc_cartesian_product,
                               calc_tensor_product)
-from gpmap.src.graph import calc_bottleneck, calc_pathway
+from gpmap.src.graph import calc_bottleneck, calc_pathway, has_path
 
 
 class RandomWalk(object):
@@ -63,7 +63,7 @@ class RandomWalk(object):
         start = self.space.get_state_idxs(start_labels).values
         end = self.space.get_state_idxs(end_labels).values
         paths = ReactivePaths(self.rate_matrix, self.stationary_freqs,
-                              start, end)
+                              start, end, time_reversible=self.is_time_reversible)
         return(paths)
     
     def report(self, msg):
@@ -691,7 +691,7 @@ class ReactivePaths(object):
         self.n = rate_matrix.shape[0]
         self.stat_freqs = stat_freqs
         self.set_start_end(start, end)
-        self.q_forward = self.calc_forward_p()
+        self.q_forward = self.calc_forward_p_time_reversible() if time_reversible else self.calc_forward_p()
         self.q_backward = 1 - self.q_forward if time_reversible else self.calc_backwards_p()
         
         self.start_id = self.n + 1
@@ -747,7 +747,12 @@ class ReactivePaths(object):
         partial_rate_matrix = Q[self.other, :]
         U = partial_rate_matrix[:, self.other]
         v = -partial_rate_matrix[:, self.end].sum(1)
-        q_partial = minres(U, v, tol=1e-16)[0]
+        q_partial, res = bicgstab(U, v, atol=1e-16)
+        
+        if res != 0:
+            mse = np.mean((U @ q_partial - v) ** 2)
+            print('Warning: BICGSTAB exitCode: {}. MSE={}'.format(res, mse))
+            
         q = np.zeros(self.n)
         q[self.other] = q_partial
         q[self.end] = 1
@@ -758,12 +763,34 @@ class ReactivePaths(object):
         partial_rate_matrix = Q[self.other, :]
         U = partial_rate_matrix[:, self.other]
         v = -partial_rate_matrix[:, self.start].sum(1)
-        q_partial = minres(U, v, tol=1e-16)[0]
+        q_partial, res = bicgstab(U, v, atol=1e-16)
+
+        if res != 0:
+            mse = np.mean((U @ q_partial - v) ** 2)
+            print('Warning: BICGSTAB exitCode: {}. MSE={}'.format(res, mse))
+            
         q = np.zeros(self.n)
         q[self.other] = q_partial
         q[self.start] = 1
         return(q)
     
+    def calc_forward_p_time_reversible(self):
+        D = get_sparse_diag_matrix(self.stat_freqs)
+        DQ = D @ self.rate_matrix
+        partial_rate_matrix = DQ[self.other, :]
+        U = partial_rate_matrix[:, self.other]
+        v = -partial_rate_matrix[:, self.end].sum(1)
+        q_partial, res = cg(U, v, atol=1e-16)
+        
+        if res != 0:
+            mse = np.mean((U @ q_partial - v) ** 2)
+            print('Warning: CG exitCode: {}. MSE={}'.format(res, mse))
+            
+        q = np.zeros(self.n)
+        q[self.other] = q_partial
+        q[self.end] = 1
+        return(q)
+
     def calc_reactive_p(self):
         return(self.q_forward * self.q_backwards * self.stat_freqs)
     
@@ -819,3 +846,19 @@ class ReactivePaths(object):
         graph = self.calc_graph(ij, eff_flow)
         path, eff_flow = calc_pathway(graph, self.start, self.end)
         return(path, eff_flow)
+    
+    def calc_pathways(self, n=20, eff_flow=None, ij=None, is_sorted=False):
+        ij, eff_flow = self.get_ij_eff_flow(eff_flow, ij, is_sorted)
+        graph = self.calc_graph(ij, eff_flow)
+        
+        for _ in range(n):
+            path, max_min_flow = calc_pathway(graph, self.start, self.end)
+            yield(path, max_min_flow)
+            
+            for edge in zip(path, path[1:]):
+                graph.edges[edge]['weight'] -= max_min_flow
+                if graph.edges[edge]['weight'] == 0:
+                    graph.remove_edge(*edge)
+            
+            if not has_path(graph, self.start, self.end):
+                break
