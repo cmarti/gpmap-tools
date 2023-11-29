@@ -4,11 +4,8 @@ import pandas as pd
 import networkx as nx
 
 from itertools import combinations
-from scipy.sparse import identity
-from scipy.sparse.csr import csr_matrix
-from scipy.sparse.coo import coo_matrix
-from scipy.sparse.linalg import eigsh
-from scipy.sparse.linalg.isolve import minres, bicgstab, cg
+from scipy.sparse import csr_matrix, coo_matrix, identity
+from scipy.sparse.linalg import bicgstab, cg, eigsh
 from scipy.optimize import minimize
 from scipy.special import logsumexp, comb
 
