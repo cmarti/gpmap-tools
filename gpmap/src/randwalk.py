@@ -802,7 +802,6 @@ class ReactivePaths(object):
     def flow_to_eff_flow(self, flow):
         m = coo_matrix((flow, (self.i, self.j)), shape=(self.n, self.n))
         eff_flow = (m - m.T).data
-        eff_flow[eff_flow < 0] = 0
         return(eff_flow)
     
     def calc_reactive_rate(self, flow):
