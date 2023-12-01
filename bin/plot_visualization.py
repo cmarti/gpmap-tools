@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 import argparse
 
+import matplotlib.pyplot as plt
+import gpmap.src.plot.mpl as mplot
+import gpmap.src.plot.ds as dplot
+import gpmap.src.plot.ply as pplot
+
 from gpmap.src.utils import LogTrack, read_dataframe, read_edges
-from gpmap.src.plot import (plot_holoview, figure_allele_grid_datashader,
-                            figure_allele_grid, save_holoviews,
-                            figure_visualization)
 
         
 def main():
@@ -59,16 +61,6 @@ def main():
     fig_group.add_argument('-f', '--format', default='png',
                            help='Figure format (png)')
     
-    highlight_group = parser.add_argument_group('Highlight genotypes options')    
-    help_msg = 'Comma separated list of IUPAC codes to highlight genotypes'
-    highlight_group.add_argument('-g', '--genotypes', default=None, 
-                           help=help_msg)
-    highlight_group.add_argument('-A', '--alphabet_type', default='dna',
-                                 help='Alphabet type [dna, rna, protein, custom] (dna)')
-    help_msg = 'Sequences to highlight are the encoded protein sequences'
-    highlight_group.add_argument('--protein_seq', default=False, action='store_true', 
-                                 help=help_msg)
-    
     layouts_group = parser.add_argument_group('Special layouts')
     help_msg = 'Layout with panels highlighting alleles at each position'
     layouts_group.add_argument('--alleles', default=False, action='store_true',
@@ -105,10 +97,6 @@ def main():
     nodes_resolution = parsed_args.nodes_resolution
     edges_resolution = parsed_args.edges_resolution 
     
-    genotypes = parsed_args.genotypes
-    alphabet_type = parsed_args.alphabet_type
-    is_prot = parsed_args.protein_seq
-
     alleles_grid = parsed_args.alleles
     
     fmt = parsed_args.format
@@ -122,47 +110,51 @@ def main():
     nodes_df = read_dataframe(nodes_fpath)
     edges_df = read_edges(edges_fpath)
     
-    if genotypes is not None:
-        genotypes = str(genotypes).split(',')
-    
     log.write('Plot visualization')
     figsize = (width, height)
+    
     if use_datashader:
         if alleles_grid:
-            figure_allele_grid_datashader(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
+            dplot.figure_allele_grid(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
                                           edges_cmap='grey', background_color='white',
                                           nodes_resolution=nodes_resolution,
                                           edges_resolution=edges_resolution,
                                           fmt=fmt, figsize=figsize)
+            
         else:
-            dsg = plot_holoview(nodes_df, x=x, y=y, edges_df=edges_df,
-                                nodes_color=nodes_color, nodes_cmap=nodes_cmap,
-                                edges_cmap='grey', background_color='white',
-                                nodes_resolution=nodes_resolution,
-                                edges_resolution=edges_resolution)
+            dsg = dplot.plot_visualization(nodes_df, x=x, y=y, edges_df=edges_df,
+                                           nodes_color=nodes_color, nodes_cmap=nodes_cmap,
+                                           edges_cmap='grey', background_color='white',
+                                           nodes_resolution=nodes_resolution,
+                                           edges_resolution=edges_resolution)
             log.write('Setting figure size to {}'.format(figsize))
-            save_holoviews(dsg, out_fpath, fmt=fmt, figsize=figsize)
+            dplot.savefig(dsg, out_fpath, fmt=fmt, figsize=figsize)
+            
     else:
         if alleles_grid:
-            figure_allele_grid(nodes_df, edges_df=edges_df, fpath=out_fpath, x=x, y=y,
-                               allele_color='orange', background_color='lightgrey',
-                               nodes_size=nodes_size, edges_color=edges_color,
-                               edges_width=edges_width,
-                               autoscale_axis=False,
-                               colsize=3, rowsize=2.7,
-                               xpos_label=0.05, ypos_label=0.92,
-                               fmt=fmt)
+            mplot.figure_allele_grid(nodes_df, edges_df=edges_df, fpath=out_fpath, x=x, y=y,
+                                     allele_color='orange',background_color='lightgrey',
+                                     nodes_size=nodes_size, edges_color=edges_color,
+                                     edges_width=edges_width,
+                                     colsize=3, rowsize=2.7,
+                                     xpos_label=0.05, ypos_label=0.92, fmt=fmt)
         else:
-            figure_visualization(nodes_df, edges_df=edges_df,
-                                 fpath=out_fpath, x=x, y=y, z=z, 
-                                 nodes_color=nodes_color, nodes_cmap=nodes_cmap, 
-                                 nodes_size=nodes_size, nodes_cmap_label=label,
-                                 edges_color=edges_color,
-                                 edges_width=edges_width, edges_alpha=edges_alpha,
-                                 sort_by=sort_by, ascending=ascending, sort_nodes=True,
-                                 highlight_genotypes=genotypes,
-                                 is_prot=is_prot, interactive=interactive,
-                                 alphabet_type=alphabet_type, fmt=fmt)
+            if interactive:
+                pplot.plot_visualization(nodes_df, edges_df, x, y, z,
+                                         nodes_color, nodes_size,
+                                         nodes_cmap=nodes_cmap, nodes_cmap_label=label,
+                                         edges_width=edges_width, edges_color=edges_color,
+                                         edges_alpha=edges_alpha, fpath=out_fpath)
+            else:
+                fig, axes = plt.subplots(1, 1, figsize=figsize)
+                mplot.plot_visualization(axes, nodes_df, edges_df=edges_df,
+                                         x=x, y=y, z=z, 
+                                         nodes_color=nodes_color, nodes_cmap=nodes_cmap, 
+                                         nodes_size=nodes_size, nodes_cmap_label=label,
+                                         edges_color=edges_color,
+                                         edges_width=edges_width, edges_alpha=edges_alpha,
+                                         sort_by=sort_by, sort_ascending=ascending)
+                mplot.savefig(fig, out_fpath, fmt=fmt, figsize=figsize)
     
     log.finish()
 

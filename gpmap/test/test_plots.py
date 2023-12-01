@@ -198,23 +198,6 @@ class MatPlotsTests(unittest.TestCase):
                    '-o', plot_fpath, '-nc', 'function', '-s', 'function']
             check_call(cmd)
         
-        # Highlighting peaks in nucleotide sequence
-        with NamedTemporaryFile('w') as fhand:
-            plot_fpath = fhand.name
-            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-                   '-o', plot_fpath, '-g', 'TCN,AGY', '-A', 'rna',
-                   '-nc', 'function', '-s', 'function']
-            check_call(cmd)
-        
-        # Highlighting coding sequence
-        with NamedTemporaryFile('w') as fhand:
-            plot_fpath = fhand.name
-            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-                   '-o', plot_fpath,
-                   '-g', 'S,L', '--protein_seq', '-l', 'log(binding)',
-                   '-A', 'protein', '-nc', 'function', '-s', 'function']
-            check_call(cmd)
-        
         # Interactive
         with NamedTemporaryFile('w') as fhand:
             plot_fpath = fhand.name
@@ -222,18 +205,15 @@ class MatPlotsTests(unittest.TestCase):
                    '-o', plot_fpath, '-nc', 'function', '-s', 'function',
                    '--interactive']
             check_call(cmd)
+            
+        # Alleles
+        with NamedTemporaryFile('w') as fhand:
+            plot_fpath = fhand.name
+            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+                   '-o', plot_fpath, '-nc', 'function', '-s', 'function',
+                   '--alleles']
+            check_call(cmd)
     
-    def test_plot_visualization_bin_alleles(self):    
-        bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.npz')
-        
-        plot_fpath = join(TEST_DATA_DIR, 'serine.alleles')
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'function', '-s', 'function', '--alleles']
-        check_call(cmd)
-        
     def test_plot_relaxation_times_bin(self):    
         bin_fpath = join(BIN_DIR, 'plot_relaxation_times.py')
         decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
@@ -376,6 +356,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'DatashaderTests']
+    import sys;sys.argv = ['', 'DatashaderTests.test_plot_visualization_big']
     unittest.main()
 
