@@ -55,11 +55,18 @@ class RandomWalk(object):
                 remaining_time = remaining_time - t
         return(times, path)
     
-    def get_reactive_paths(self, start_labels, end_labels):
+    def get_reactive_paths(self, start_labels, end_labels, avoid_labels=None):
         start = self.space.get_state_idxs(start_labels).values
         end = self.space.get_state_idxs(end_labels).values
-        paths = ReactivePaths(self.rate_matrix, self.stationary_freqs,
-                              start, end, time_reversible=self.is_time_reversible)
+        avoid = None if avoid_labels is None else self.space.get_state_idxs(avoid_labels).values
+        
+        if self.is_time_reversible:
+            paths = TimeReversibleReactivePaths(self.rate_matrix,
+                                                self.stationary_freqs,
+                                                start, end, avoid)
+        else:
+            paths = ReactivePaths(self.rate_matrix, self.stationary_freqs,
+                                  start, end, avoid)
         return(paths)
     
     def report(self, msg):
@@ -667,187 +674,136 @@ class ReactivePaths(object):
     rate_matrix: csr_matrix
         csr_matrix containing the instantaneous rates between pairs of states
         
+    stat_freqs: array-like
+        array-like object containing the unique stationary frequencies
+        of the Markov chain for every possible state
+        
     start: array-like
         array-like object of indexes at which reactive paths start
         
     end: array-like
         array-like object of indexes at which reactive paths end
+        
+    avoid: array-like
+        array-like object of indexes to avoid during reactive paths
     '''
     
-    def __init__(self, rate_matrix, stat_freqs, start, end, time_reversible=False):
-        Q = rate_matrix.tocoo()
-        Q.setdiag(0)
-        Q.eliminate_zeros()
-        self.i = Q.row
-        self.j = Q.col
-        self.Q_ij = Q.data
-        self.time_reversible = time_reversible
-        
+    def __init__(self, rate_matrix, stat_freqs, start, end,
+                 avoid=None):
         self.rate_matrix = rate_matrix
-        self.n = rate_matrix.shape[0]
         self.stat_freqs = stat_freqs
-        self.set_start_end(start, end)
-        self.q_forward = self.calc_forward_p_time_reversible() if time_reversible else self.calc_forward_p()
-        self.q_backward = 1 - self.q_forward if time_reversible else self.calc_backwards_p()
+        self.n = rate_matrix.shape[0]
         
-        self.start_id = self.n + 1
-        self.end_id = self.n + 2
+        self.set_idxs(start, end, avoid)
+        self.calc_committors()
+        self.calc_reactive_p()
+        self.calc_flow_matrix()
+        self.calc_reactive_rate()
     
-    def get_backwards_rate_matrix(self):
-        D = get_sparse_diag_matrix(self.stat_freqs)
-        D_inv = get_sparse_diag_matrix(1/self.stat_freqs)
-        Q = D_inv @ self.rate_matrix.T @ D
-        return(Q)
-    
-    def set_start_end(self, start, end):
-        msg = 'The two sets of start and end states cannot overlap'
-        check_error(np.intersect1d(start, end).shape[0] == 0, msg)
-        
-        self.start = np.array(start)
-        self.not_start = np.full(self.n, True)
-        self.not_start[self.start] = False
-        self.start_n = self.start.shape[0]
-        self.end = np.array(end)
-        self.end_n = self.end.shape[0]
-        self.other = self.get_other_idxs(np.append(start, end))
-    
-    def get_other_idxs(self, idxs_rm):
+    def get_idxs_complement(self, idxs_rm):
         idx = np.full(self.n, True)
         idx[idxs_rm] = False
         return(np.where(idx)[0])
     
-    def calc_forward_p(self):
-        Q = self.rate_matrix
-        partial_rate_matrix = Q[self.other, :]
-        U = partial_rate_matrix[:, self.other]
-        v = -partial_rate_matrix[:, self.end].sum(1)
+    def set_idxs(self, start, end, avoid=None):
+        msg = 'The two sets of start and end states cannot overlap'
+        check_error(np.intersect1d(start, end).shape[0] == 0, msg)
+        
+        if avoid is None:
+            avoid = np.array([], dtype=int)
+        
+        self.avoid = avoid
+        self.avoid_n = self.avoid.shape[0]
+        
+        self.start = np.array(start)
+        self.start_n = self.start.shape[0]
+        a_c = np.append(start, avoid)
+        self.not_start = self.get_idxs_complement(a_c)
+        
+        self.end = np.array(end)
+        self.end_n = self.end.shape[0]
+        self.other = self.get_idxs_complement(np.append(a_c, end))
+    
+    def _solve_committor(self, Q, other, end):
+        partial_rate_matrix = Q[other, :]
+        U = partial_rate_matrix[:, other]
+        v = -partial_rate_matrix[:, end].sum(1)
         q_partial, res = bicgstab(U, v, atol=1e-16)
+        mae = np.mean(np.abs(U.dot(q_partial) - v))
         
         if res != 0:
-            mse = np.mean((U @ q_partial - v) ** 2)
-            print('Warning: BICGSTAB exitCode: {}. MSE={}'.format(res, mse))
-            
+            print('Warning: BICGSTAB exitCode: {}. MAE={}'.format(res, mae))
+        
+        return(q_partial, mae)
+        
+    def calc_forward_p(self):
+        q_partial, mae = self._solve_committor(self.rate_matrix, self.other, self.end)
         q = np.zeros(self.n)
         q[self.other] = q_partial
         q[self.end] = 1
-        return(q)
-    
-    def calc_backwards_p(self):
-        Q = self.get_backwards_rate_matrix()
-        partial_rate_matrix = Q[self.other, :]
-        U = partial_rate_matrix[:, self.other]
-        v = -partial_rate_matrix[:, self.start].sum(1)
-        q_partial, res = bicgstab(U, v, atol=1e-16)
+        self.q_forward_mae = mae
+        self.q_forward = q
 
-        if res != 0:
-            mse = np.mean((U @ q_partial - v) ** 2)
-            print('Warning: BICGSTAB exitCode: {}. MSE={}'.format(res, mse))
-            
+    def calc_backward_rate_matrix(self):
+        D = get_sparse_diag_matrix(self.stat_freqs)
+        D_inv = get_sparse_diag_matrix(1/self.stat_freqs)
+        Q_tilde = D_inv @ self.rate_matrix.T @ D
+        return(Q_tilde)
+
+    def get_backward_rate_matrix(self):
+        if not hasattr(self, 'backward_rate_matrix'):
+            self.backward_rate_matrix = self.calc_backward_rate_matrix()
+        return(self.backward_rate_matrix)
+    
+    def calc_backward_p(self):
+        q_partial, mae = self._solve_committor(self.get_backward_rate_matrix(),
+                                                self.other, self.start)
         q = np.zeros(self.n)
         q[self.other] = q_partial
         q[self.start] = 1
-        return(q)
+        self.q_backward_mae = mae
+        self.q_backward = q
     
-    def calc_forward_p_time_reversible(self):
-        D = get_sparse_diag_matrix(self.stat_freqs)
-        DQ = D @ self.rate_matrix
-        partial_rate_matrix = DQ[self.other, :]
-        U = partial_rate_matrix[:, self.other]
-        v = -partial_rate_matrix[:, self.end].sum(1)
-        q_partial, res = cg(U, v, atol=1e-16)
-        
-        if res != 0:
-            mse = np.mean((U @ q_partial - v) ** 2)
-            print('Warning: CG exitCode: {}. MSE={}'.format(res, mse))
-            
-        q = np.zeros(self.n)
-        q[self.other] = q_partial
-        q[self.end] = 1
-        return(q)
+    def calc_committors(self):
+        self.calc_forward_p()
+        self.calc_backward_p()
     
-    def calc_reactive_rate_matrix(self):
-        Q = self.rate_matrix.copy()
-        D_q = get_sparse_diag_matrix(self.q_forward[self.not_start])
-        D_q_inv = get_sparse_diag_matrix(1 / self.q_forward[self.not_start])
-        Q[self.not_start, :][:, self.not_start] = D_q_inv @ Q[self.not_start, :][:, self.not_start] @ D_q
-        
-        Q = Q.tolil()
-        Q[self.end] = 0
-        Q[:, self.start] = 0 
-        return(Q)
-    
-    def calc_jump_matrix(self):
-        Q = self.calc_reactive_rate_matrix()
-        P = rate_to_jump_matrix(Q)
-        return(P)
-
-    def get_jump_matrix(self):
-        if not hasattr(self, 'jump_matrix'):
-            self.jump_matrix = self.calc_jump_matrix()
-        return(self.jump_matrix)
-
     def calc_reactive_p(self):
-        return(self.q_forward * self.q_backwards * self.stat_freqs)
-    
-    def calc_reactive_log_enrichment(self):
-        return(np.log10(self.q_backward * self.q_forward))
-    
-    def calc_flow(self):
-        flow = self.stat_freqs[self.i]
-        flow *= self.q_backward[self.i] * self.Q_ij * self.q_forward[self.j]
-        return(flow)
-    
-    def get_flow(self):
-        if not hasattr(self, 'flow'):
-            self.flow = self.calc_flow()
-        return(self.flow)
+        self.joint_reactive_p = self.q_forward * self.q_backward * self.stat_freqs
+        self.total_reactive_p = self.joint_reactive_p.sum()
+        self.conditional_reactive_p = self.joint_reactive_p / self.total_reactive_p  
+
+    def flow_to_eff_flow(self, flow_matrix):
+        eff_flow_matrix = flow_matrix - flow_matrix.T
+        eff_flow_matrix[eff_flow_matrix < 0] = 0
+        eff_flow_matrix.eliminate_zeros()
+        return(eff_flow_matrix)
+        
+    def calc_flow_matrix(self):
+        D_pi = get_sparse_diag_matrix(self.stat_freqs)
+        D_q_forward = get_sparse_diag_matrix(self.q_forward)
+        D_q_backward = get_sparse_diag_matrix(self.q_backward)
+        flow_matrix = (D_pi @  D_q_backward @ self.rate_matrix @ D_q_forward).tocoo()
+        flow_matrix.setdiag(0)
+        flow_matrix.eliminate_zeros()
+        self.eff_flow_matrix = self.flow_to_eff_flow(flow_matrix)
 
     def calc_reactive_rate(self):
-        flow = self.get_flow()
         if self.start_n < self.end_n:
-            sel_idxs = np.isin(self.i, self.start)
+            self.reactive_rate = self.eff_flow_matrix[self.start, :].sum() 
         else:
-            sel_idxs = np.isin(self.j, self.end)
-        return(flow[sel_idxs].sum())
-    
-    def get_reactive_rate(self):
-        if not hasattr(self, 'reactive_rate'):
-            self.reactive_rate = self.calc_reactive_rate()
-        return(self.reactive_rate)
-    
-    def flow_to_eff_flow(self, flow):
-        m = coo_matrix((flow, (self.i, self.j)), shape=(self.n, self.n))
-        m = (m - m.T).tocoo()
-        eff_flow = m.data
-        ij = np.vstack([m.row, m.col]).T
-        return(ij, eff_flow)
-    
-    def get_eff_flow(self):
-        if not hasattr(self, 'eff_flow'):
-            flow = self.get_flow()
-            self.eff_ij, self.eff_flow = self.flow_to_eff_flow(flow)
-        return(self.eff_ij, self.eff_flow)
-    
-    def get_ij_eff_flow(self):
-        ij, eff_flow = self.get_eff_flow()
-        
-        msg = 'Ensure the shape of `eff_flow` is the same as that of `ij`'
-        n_edges = eff_flow.shape[0]
-        check_error(ij.shape[0] == n_edges, msg)
-        positive = eff_flow > 0
-        eff_flow, ij = eff_flow[positive], ij[positive, :]
-        return(ij, eff_flow)
+            self.reactive_rate = self.eff_flow_matrix[:, self.end].sum()
     
     def get_eff_flow_df(self):
-        ij, eff_flow = self.get_ij_eff_flow()
-        return(pd.DataFrame({'i': ij[:, 0],
-                             'j': ij[:, 1], 
-                             'eff_flow': eff_flow}))
+        m = self.eff_flow_matrix.tocoo()
+        return(pd.DataFrame({'i': m.row, 'j': m.col, 
+                             'eff_flow': m.data}))
     
+    ### Methods for bottlenecks and pathways ###    
     def calc_graph(self):
         graph = nx.DiGraph()
-        ij, eff_flow = self.get_ij_eff_flow()
-        graph.add_weighted_edges_from([(i, j, f) for (i, j), f in zip(ij, eff_flow)])
+        m = self.eff_flow_matrix.tocoo()
+        graph.add_weighted_edges_from(zip(m.row, m.col, m.data))
         return(graph)
     
     def get_graph(self):
@@ -882,21 +838,42 @@ class ReactivePaths(object):
     def pathways_to_df(self, pathways):
         steps = []
         for k, (path, w) in enumerate(pathways):
-            p = w / self.get_reactive_rate()
+            p = w / self.reactive_rate
             for i, j in zip(path, path[1:]):
                 steps.append({'i': i, 'j': j, 'path': k, 
                               'eff_flow': w, 'eff_flow_p': p})
         df = pd.DataFrame(steps)
         return(df)
+
+    ### Methods for simulation ###
+    def calc_reactive_rate_matrix(self):
+        Q = self.rate_matrix.copy()
+        D_q = get_sparse_diag_matrix(self.q_forward[self.not_start])
+        D_q_inv = get_sparse_diag_matrix(1 / self.q_forward[self.not_start])
+        Q[self.not_start, :][:, self.not_start] = D_q_inv @ Q[self.not_start, :][:, self.not_start] @ D_q
+        
+        Q = Q.tolil()
+        Q[self.end] = 0
+        Q[:, self.start] = 0 
+        return(Q)
+        
+    def calc_jump_matrix(self):
+        Q = self.calc_reactive_rate_matrix()
+        P = rate_to_jump_matrix(Q)
+        return(P)
+
+    def get_jump_matrix(self):
+        if not hasattr(self, 'jump_matrix'):
+            self.jump_matrix = self.calc_jump_matrix()
+        return(self.jump_matrix)
     
     def _sample_path(self, p0, P):
         state = np.random.choice(self.start, p=p0)
         path = [state]
         
         while state not in self.end:
-            p = P[state]
-            state = np.random.choice(p.rows[0], p=p.data[0])
-            path.append(state)
+            p_state = P[state]
+            path.append(np.random.choice(p_state.rows[0], p=p_state.data[0]))
         return(path)
     
     def sample(self, n):
@@ -905,3 +882,36 @@ class ReactivePaths(object):
         p0 = p0 / p0.sum()
         for _ in range(n):
             yield(self._sample_path(p0, P))
+
+
+class TimeReversibleReactivePaths(ReactivePaths):
+    def _solve_committor_tr(self, DQ, other, end):
+        partial_rate_matrix = DQ[other, :]
+        U = partial_rate_matrix[:, other]
+        v = -partial_rate_matrix[:, end].sum(1)
+        q_partial, res = cg(U, v, atol=1e-16)
+        mae = np.mean(np.abs(U.dot(q_partial) - v))
+        
+        if res != 0:
+            print('Warning: ConjugateGradient exitCode: {}. MAE={}'.format(res, mae))
+        
+        return(q_partial, mae)
+
+    def _calc_forward_p_tr(self):
+        D = get_sparse_diag_matrix(self.stat_freqs)
+        DQ = D @ self.rate_matrix
+        q_partial, mae = self._solve_committor_tr(DQ, self.other, self.end)
+            
+        q = np.zeros(self.n)
+        q[self.other] = q_partial
+        q[self.end] = 1
+        self.q_forward_mae = mae
+        self.q_forward = q
+    
+    def calc_committors(self):
+        if self.avoid is None:
+            self._calc_forward_p_tr()
+            self.q_backward = 1 - self.q_forward
+        else:
+            self.calc_forward_p()
+            self.calc_backward_p()
