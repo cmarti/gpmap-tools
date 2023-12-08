@@ -48,6 +48,8 @@ class RandomWalk(object):
                 times[-1] += remaining_time
                 break
             else:
+                # Re-code using common function to sample path
+                # with the method form ReactivePath
                 p = self.jump_matrix[path[-1], :].todense().A1.flatten()
                 new_state_idx = np.random.choice(self.space.state_idxs, p=p)
                 path.append(new_state_idx)
@@ -727,21 +729,21 @@ class ReactivePaths(object):
     def _solve_committor(self, Q, other, end):
         partial_rate_matrix = Q[other, :]
         U = partial_rate_matrix[:, other]
-        v = -partial_rate_matrix[:, end].sum(1)
+        v = -partial_rate_matrix[:, end].sum(1).A1
         q_partial, res = bicgstab(U, v, atol=1e-16)
-        mae = np.mean(np.abs(U.dot(q_partial) - v))
+        rmse = np.sqrt(np.mean((U.dot(q_partial) - v) ** 2))
         
         if res != 0:
-            print('Warning: BICGSTAB exitCode: {}. MAE={}'.format(res, mae))
+            print('Warning: BICGSTAB exitCode: {}. RMSE={}'.format(res, rmse))
         
-        return(q_partial, mae)
+        return(q_partial, rmse)
         
     def calc_forward_p(self):
-        q_partial, mae = self._solve_committor(self.rate_matrix, self.other, self.end)
+        q_partial, rmse = self._solve_committor(self.rate_matrix, self.other, self.end)
         q = np.zeros(self.n)
         q[self.other] = q_partial
         q[self.end] = 1
-        self.q_forward_mae = mae
+        self.q_forward_rmse = rmse
         self.q_forward = q
 
     def calc_backward_rate_matrix(self):
@@ -756,12 +758,12 @@ class ReactivePaths(object):
         return(self.backward_rate_matrix)
     
     def calc_backward_p(self):
-        q_partial, mae = self._solve_committor(self.get_backward_rate_matrix(),
+        q_partial, rmse = self._solve_committor(self.get_backward_rate_matrix(),
                                                 self.other, self.start)
         q = np.zeros(self.n)
         q[self.other] = q_partial
         q[self.start] = 1
-        self.q_backward_mae = mae
+        self.q_backward_rmse = rmse
         self.q_backward = q
     
     def calc_committors(self):
@@ -888,24 +890,24 @@ class TimeReversibleReactivePaths(ReactivePaths):
     def _solve_committor_tr(self, DQ, other, end):
         partial_rate_matrix = DQ[other, :]
         U = partial_rate_matrix[:, other]
-        v = -partial_rate_matrix[:, end].sum(1)
+        v = -partial_rate_matrix[:, end].sum(1).A1
         q_partial, res = cg(U, v, atol=1e-16)
-        mae = np.mean(np.abs(U.dot(q_partial) - v))
+        rmse = np.sqrt(np.mean((U.dot(q_partial) - v) ** 2))
         
         if res != 0:
-            print('Warning: ConjugateGradient exitCode: {}. MAE={}'.format(res, mae))
+            print('Warning: ConjugateGradient exitCode: {}. RMSE={}'.format(res, rmse))
         
-        return(q_partial, mae)
+        return(q_partial, rmse)
 
     def _calc_forward_p_tr(self):
         D = get_sparse_diag_matrix(self.stat_freqs)
         DQ = D @ self.rate_matrix
-        q_partial, mae = self._solve_committor_tr(DQ, self.other, self.end)
+        q_partial, rmse = self._solve_committor_tr(DQ, self.other, self.end)
             
         q = np.zeros(self.n)
         q[self.other] = q_partial
         q[self.end] = 1
-        self.q_forward_mae = mae
+        self.q_forward_rmse = rmse
         self.q_forward = q
     
     def calc_committors(self):
