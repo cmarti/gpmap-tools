@@ -57,6 +57,24 @@ class RandomWalk(object):
                 remaining_time = remaining_time - t
         return(times, path)
     
+    def calc_hitting_prob_through(self, state_labels, through_labels):
+        states_idxs = self.space.get_state_idxs(state_labels).values
+        through_idxs = self.space.get_state_idxs(through_labels).values
+        Q = self.rate_matrix
+        
+        idx = np.full(Q.shape[0], True)
+        idx[states_idxs] = False
+        
+        Q_red = Q[idx, :]
+        U = Q_red[:, idx]
+        v = -Q[:, states_idxs].sum(1).A1
+        v[through_idxs] = 0
+        v = np.delete(v, states_idxs)
+        q_red = bicgstab(U, v)[0]
+        q = np.ones(Q.shape[0])
+        q[idx] = q_red
+        return(1-q)
+    
     def get_reactive_paths(self, start_labels, end_labels, avoid_labels=None):
         start = self.space.get_state_idxs(start_labels).values
         end = self.space.get_state_idxs(end_labels).values

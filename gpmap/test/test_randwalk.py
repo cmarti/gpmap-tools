@@ -73,6 +73,17 @@ class RandomWalkTests(unittest.TestCase):
         mc.calc_jump_matrix()
         assert(np.allclose(mc.jump_matrix.sum(1), 1))
     
+    def test_calc_hitting_prob_through(self):
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
+        mc.calc_rate_matrix(Ns=1)
+        q = mc.calc_hitting_prob_through(['AGT', 'AGC'],
+                                         ['ACT', 'ACC',
+                                          'TGT', 'TGC'])
+        q = pd.Series(q, index=mc.space.genotypes)
+        ser4 = ['TCT', 'TCC', 'TCA', 'TCG']
+        assert(np.allclose(q.loc[ser4].mean(), 0.294839135549))
+    
     def test_run_forward(self):
         mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
@@ -605,5 +616,5 @@ class ReactivePathsTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    sys.argv = ['', 'ReactivePathsTests']
+    sys.argv = ['', 'RandomWalkTests.test_calc_hitting_prob_through']
     unittest.main()
