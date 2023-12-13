@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 import numpy as np
 
-from math import factorial
 from itertools import combinations
 from numpy.linalg.linalg import norm
 from scipy.linalg import lu_factor, lu_solve
 from scipy.linalg import eigh_tridiagonal, orth
-from scipy.sparse.csr import csr_matrix
-from scipy.special import comb
+from scipy.sparse import csr_matrix
+from scipy.special import comb, factorial
 from scipy.sparse.linalg import minres
 from scipy.sparse.linalg._interface import _CustomLinearOperator
 
