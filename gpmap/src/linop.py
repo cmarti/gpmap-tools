@@ -7,8 +7,9 @@ from numpy.linalg.linalg import norm
 from scipy.linalg import lu_factor, lu_solve
 from scipy.linalg import eigh_tridiagonal, orth
 from scipy.sparse.csr import csr_matrix
-from scipy.special._basic import comb
-from scipy.sparse.linalg import LinearOperator, minres
+from scipy.special import comb
+from scipy.sparse.linalg import minres
+from scipy.sparse.linalg._interface import _CustomLinearOperator
 
 from gpmap.src.utils import check_error
 from gpmap.src.matrix import (calc_cartesian_product,
@@ -18,7 +19,8 @@ from gpmap.src.matrix import (calc_cartesian_product,
                               inner_product, kron_dot, diag_pre_multiply)
 
 
-class ExtendedLinearOperator(LinearOperator):
+
+class ExtendedLinearOperator(_CustomLinearOperator):
     def rowsum(self):
         v = np.ones(self.shape[0])
         return(self.dot(v))
@@ -262,7 +264,7 @@ class SeqLinOperator(ExtendedLinearOperator):
         self.d = (self.alpha - 1) * self.l
         self.shape_contracted = tuple([self.alpha]*self.l)
         self.positions = np.arange(self.l)
-        super().__init__(shape=(self.n, self.n), matvec=self.dot, dtype=float)
+        super().__init__(shape=(self.n, self.n), matvec=self._matvec, dtype=float)
     
     def contract_v(self, v):
         return(v.reshape(self.shape_contracted))
@@ -502,7 +504,7 @@ class ProjectionOperator2(SeqLinOperator):
     def lambdas_to_coeffs(self, lambdas):
         return(self.b.dot(lambdas))
     
-    def dot(self, v):
+    def _matvec(self, v):
         u = self.contract_v(v)
         r = np.zeros(self.shape_contracted)
 
@@ -785,9 +787,9 @@ class SkewedLaplacianOperator(SeqLinOperator):
         self.max_size = max_size
         if max_size is None:
             self.calc_L()
-            self.dot = self.dot1
+            self._matvec = self.dot1
         else:
-            self.dot = self.dot2
+            self._matvec = self.dot2
     
     def guess_n_products(self):
         if self.max_size is None:
@@ -902,7 +904,7 @@ class SkewedVjProjectionOperator(LapDepOperator):
             self.matrices = [self.Ws[p+m][j] for p, j in enumerate(js[:m])]
             self.matrices.append(self.get_Vj_matrix(js[m:]))
     
-    def dot(self, v):
+    def _matvec(self, v):
         return(calc_tensor_product_dot(self.matrices, v))
     
     def dot_square_norm(self, v):
@@ -961,7 +963,7 @@ class SkewedKernelOperator(SeqLinOperator):
         self.gt2data = csr_matrix((np.ones(n_obs), (obs_idx, np.arange(n_obs))),
                                   shape=(self.n, n_obs))   
     
-    def dot(self, v, all_rows=False, add_y_var_diag=True, full_v=False):
+    def _matvec(self, v, all_rows=False, add_y_var_diag=True, full_v=False):
         if full_v or not self.known_var:
             u = self._dot(v)
         else:

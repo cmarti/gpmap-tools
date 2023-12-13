@@ -7,11 +7,11 @@ import pandas as pd
 from os.path import join
 from tempfile import NamedTemporaryFile
 from subprocess import check_call
-from scipy.stats.stats import pearsonr
+from scipy.stats import pearsonr
 
 from gpmap.src.settings import BIN_DIR
 from gpmap.src.inference import SeqDEFT
-from gpmap.src.plot import plot_SeqDEFT_summary, savefig
+from gpmap.src.plot.mpl import plot_SeqDEFT_summary, savefig
 
 
 class SeqDEFTTests(unittest.TestCase):
