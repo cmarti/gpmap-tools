@@ -8,8 +8,7 @@ import pandas as pd
 from os.path import join
 from subprocess import check_call
 from tempfile import NamedTemporaryFile
-from scipy.sparse._matrix_io import load_npz
-from scipy.sparse.csr import csr_matrix
+from scipy.sparse import load_npz, csr_matrix
 
 from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace, SequenceSpace
@@ -586,9 +585,8 @@ class ReactivePathsTests(unittest.TestCase):
         y = np.array([2, 0, 2, 2,
                       2, 2, 0, 2])
         space = SequenceSpace(X=X, y=y)
-        Ns = 0.628
         rw = WMWalk(space)
-        rw.calc_rate_matrix(Ns=Ns)
+        rw.calc_rate_matrix(Ns=0.628)
         paths = rw.get_reactive_paths(['BBB'], ['AAA'])
         
         total_flows = np.sum([x[1] for x in paths.calc_pathways()])
@@ -597,6 +595,22 @@ class ReactivePathsTests(unittest.TestCase):
         pathways = paths.calc_pathways()
         df = paths.pathways_to_df(pathways)
         assert(df.shape[0] == 18)
+        
+        y = np.array([2, 0, 0, 0,
+                      2, 2, 0, 2])
+        space = SequenceSpace(X=X, y=y)
+        rw = WMWalk(space)
+        rw.calc_rate_matrix(Ns=0.628)
+        paths = rw.get_reactive_paths(['BBB'], ['AAA'])
+        
+        rate = paths.reactive_rate
+        total_flows = np.sum([x[1] for x in paths.calc_pathways()])
+        assert(np.allclose(total_flows, rate))
+        
+        pathways = paths.calc_pathways()
+        df = paths.pathways_to_df(pathways)
+        assert(df.shape[0] == 18)
+        
     
     def test_calc_jump_matrix(self):
         X = np.array(list(get_seqs_from_alleles([['A', 'B']] * 2)))

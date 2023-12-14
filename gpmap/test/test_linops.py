@@ -4,7 +4,8 @@ import numpy as np
 
 from timeit import timeit
 from itertools import combinations
-from scipy.special._basic import comb
+from scipy.special import comb
+from scipy.sparse.linalg import LinearOperator
 
 from gpmap.src.settings import ALPHABET
 from gpmap.src.seq import generate_possible_sequences
@@ -15,8 +16,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VarianceComponentKernelOperator,
                              DeltaPOperator, ProjectionOperator2,
                              RhoProjectionOperator, ConnectednessKernelOperator,
-    ExtendedLinearOperator)
-from scipy.linalg.decomp import eigh_tridiagonal
+                             ExtendedLinearOperator)
 
 
 class LinOpsTests(unittest.TestCase):
@@ -577,5 +577,5 @@ class SkewedLinOpsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'LinOpsTests.test_calc_log_det_large_operator']
+    import sys;sys.argv = ['', 'LinOpsTests']
     unittest.main()

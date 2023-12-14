@@ -16,8 +16,8 @@ from gpmap.src.matrix import reciprocal, calc_matrix_polynomial_quad
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences)
-from gpmap.src.linop import DeltaPOperator, VarianceComponentKernelOperator,\
-    ExtendedLinearOperator
+from gpmap.src.linop import (DeltaPOperator, VarianceComponentKernelOperator,
+                             ExtendedLinearOperator)
 from gpmap.src.kernel import KernelAligner
 
 

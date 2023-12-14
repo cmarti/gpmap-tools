@@ -4,7 +4,7 @@ import numpy as np
 
 from gpmap.src.utils import LogTrack, write_dataframe
 from gpmap.src.inference import SeqDEFT
-from gpmap.src.plot import plot_SeqDEFT_summary, savefig
+from gpmap.src.plot.mpl import plot_SeqDEFT_summary, savefig
 
         
 def main():
