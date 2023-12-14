@@ -83,9 +83,8 @@ class RandomWalkTests(unittest.TestCase):
                         [0, 1, 1, 0]])
         y = np.array([1, 1, 1, 1])
         space = DiscreteSpace(A, y=y, state_labels=['A', 'B', 'C', 'D'])
-        mc = WMWalk(space)
-        mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
-        mc.calc_rate_matrix(Ns=1)
+        mc = WMWalk(space, Ns=1)
+        mc.calc_rate_matrix()
         q = mc.calc_hitting_prob_through(['D'], ['C'])
         assert(np.allclose(q[0], 0.5))
         
@@ -97,9 +96,8 @@ class RandomWalkTests(unittest.TestCase):
                         [1, 0, 0, 1, 0]])
         y = np.array([1, 1, 1, 1, 1])
         space = DiscreteSpace(A, y=y, state_labels=['A', 'B', 'C', 'D', 'E'])
-        mc = WMWalk(space)
-        mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
-        mc.calc_rate_matrix(Ns=1)
+        mc = WMWalk(space, Ns=1)
+        mc.calc_rate_matrix()
         q = mc.calc_hitting_prob_through(['D'], ['C'])
         assert(np.allclose(q[0], 1/3.))
         
@@ -107,9 +105,8 @@ class RandomWalkTests(unittest.TestCase):
         ser2 = ['AGT', 'AGC']
         ser4 = ['TCT', 'TCC', 'TCA', 'TCG']
         intermediates = ['ACT', 'ACC', 'TGT', 'TGC']
-        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
-        mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
-        mc.calc_rate_matrix(Ns=1)
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0), Ns=1)
+        mc.calc_rate_matrix()
         q = mc.calc_hitting_prob_through(ser2, intermediates)
         q = pd.Series(q, index=mc.space.genotypes)
         assert(np.allclose(q.loc[ser4].mean(), 0.29483, atol=1e-4))
