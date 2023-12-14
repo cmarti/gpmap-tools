@@ -838,7 +838,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
             
         
         
-        nc_space = SequenceSpace(seq_length=3*self.seq_length,
+        nc_space = SequenceSpace(seq_length=3 * self.seq_length,
                                  alphabet_type=alphabet_type)
         prot = pd.Series(translate_seqs(nc_space.genotypes, codon_table),
                          index=nc_space.genotypes)

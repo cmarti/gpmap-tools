@@ -15,6 +15,7 @@ from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
 from gpmap.src.space import CodonSpace, SequenceSpace
 from gpmap.src.randwalk import WMWalk, ReactivePaths
 from gpmap.src.seq import get_seqs_from_alleles
+from build.lib.gpmap.src.space import DiscreteSpace
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -74,15 +75,51 @@ class RandomWalkTests(unittest.TestCase):
         assert(np.allclose(mc.jump_matrix.sum(1), 1))
     
     def test_calc_hitting_prob_through(self):
+        # Ensure right results when the probability is clearly 0.5 in a small
+        # case with only 2 possible paths with the same probability
+        A = csr_matrix([[0, 1, 1, 0],
+                        [1, 0, 0, 1],
+                        [1, 0, 0, 1],
+                        [0, 1, 1, 0]])
+        y = np.array([1, 1, 1, 1])
+        space = DiscreteSpace(A, y=y, state_labels=['A', 'B', 'C', 'D'])
+        mc = WMWalk(space)
+        mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
+        mc.calc_rate_matrix(Ns=1)
+        q = mc.calc_hitting_prob_through(['D'], ['C'])
+        assert(np.allclose(q[0], 0.5))
+        
+        # With an additional neutral path
+        A = csr_matrix([[0, 1, 1, 0, 1],
+                        [1, 0, 0, 1, 0],
+                        [1, 0, 0, 1, 0],
+                        [0, 1, 1, 0, 1],
+                        [1, 0, 0, 1, 0]])
+        y = np.array([1, 1, 1, 1, 1])
+        space = DiscreteSpace(A, y=y, state_labels=['A', 'B', 'C', 'D', 'E'])
+        mc = WMWalk(space)
+        mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
+        mc.calc_rate_matrix(Ns=1)
+        q = mc.calc_hitting_prob_through(['D'], ['C'])
+        assert(np.allclose(q[0], 1/3.))
+        
+        # With the Ser codon landscape
+        ser2 = ['AGT', 'AGC']
+        ser4 = ['TCT', 'TCC', 'TCA', 'TCG']
+        intermediates = ['ACT', 'ACC', 'TGT', 'TGC']
         mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
         mc.set_stationary_freqs(mc.calc_stationary_frequencies(Ns=1))
         mc.calc_rate_matrix(Ns=1)
-        q = mc.calc_hitting_prob_through(['AGT', 'AGC'],
-                                         ['ACT', 'ACC',
-                                          'TGT', 'TGC'])
+        q = mc.calc_hitting_prob_through(ser2, intermediates)
         q = pd.Series(q, index=mc.space.genotypes)
-        ser4 = ['TCT', 'TCC', 'TCA', 'TCG']
-        assert(np.allclose(q.loc[ser4].mean(), 0.294839135549))
+        assert(np.allclose(q.loc[ser4].mean(), 0.29483, atol=1e-4))
+        
+        # Compare with TPT derived rates into the Ser2 block
+        paths = mc.get_reactive_paths(ser4, ser2)
+        idx1 = mc.space.get_state_idxs(intermediates)
+        idx2 = mc.space.get_state_idxs(ser2)
+        rate1 = paths.eff_flow_matrix[idx1, :][:, idx2].todense().sum()
+        assert(np.allclose(q.loc[ser4].mean(), rate1 / paths.reactive_rate, atol=1e-2))
     
     def test_run_forward(self):
         mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
