@@ -57,6 +57,29 @@ class RandomWalk(object):
                 remaining_time = remaining_time - t
         return(times, path)
     
+    def calc_hitting_prob_through(self, state_labels, through_labels):
+        states_idxs = self.space.get_state_idxs(state_labels).values
+        through_idxs = self.space.get_state_idxs(through_labels).values
+        Q = self.rate_matrix
+        
+        idx = np.full(Q.shape[0], True)
+        idx[states_idxs] = False
+        
+        Q_red = Q[idx, :]
+        U = Q_red[:, idx]
+        v =  np.zeros(Q.shape[0])
+        v[through_idxs] = -Q[through_idxs, :][:, states_idxs].sum(1).A1
+        v = np.delete(v, states_idxs)
+        q_red, res = bicgstab(U, v, atol=1e-16)
+        
+        if res != 0:
+            rmse = np.sqrt(np.mean((U.dot(q_red) - v) ** 2))
+            print('Warning: BICGSTAB exitCode: {}. RMSE={}'.format(res, rmse))
+        
+        q = np.ones(Q.shape[0])
+        q[idx] = q_red
+        return(q)
+    
     def get_reactive_paths(self, start_labels, end_labels, avoid_labels=None):
         start = self.space.get_state_idxs(start_labels).values
         end = self.space.get_state_idxs(end_labels).values
@@ -278,6 +301,12 @@ class WMWalk(TimeReversibleRandomWalk):
     
     
     '''
+    def __init__(self, space, log=None, Ns=None):
+        super().__init__(space, log=log)
+        
+        if Ns is not None:
+            self.set_Ns(Ns)
+    
     def ex_rates_vector_to_matrix(self, ex_rates, n_alleles):
         ex_rates_m = np.zeros((n_alleles, n_alleles))
         idxs = np.arange(n_alleles)
@@ -554,7 +583,7 @@ class WMWalk(TimeReversibleRandomWalk):
         m.setdiag(-m.dot(sqrt_freqs) / sqrt_freqs)
         self.sandwich_rate_matrix = m.tocsr()
     
-    def calc_rate_matrix(self, Ns, neutral_stat_freqs=None,
+    def calc_rate_matrix(self, Ns=None, neutral_stat_freqs=None,
                          neutral_exchange_rates=None):
         '''
         Calculates the rate matrix for the random walk in the discrete space
@@ -575,6 +604,10 @@ class WMWalk(TimeReversibleRandomWalk):
             are assumed.
             
         '''
+        
+        if Ns is None:
+            Ns = self.Ns
+        
         self.report('Calculating rate matrix with Ns={}'.format(Ns))
         self.calc_sandwich_rate_matrix(Ns=Ns,
                                        neutral_stat_freqs=neutral_stat_freqs,
