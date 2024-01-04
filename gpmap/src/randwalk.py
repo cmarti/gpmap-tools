@@ -193,6 +193,9 @@ class TimeReversibleRandomWalk(RandomWalk):
         '''
         
         # Set or find Ns value to use
+        if Ns is None and hasattr(self, 'Ns'):
+            Ns = self.Ns
+        
         if Ns is None and mean_function is None and mean_function_perc is None:
             msg = 'One of [Ns,  mean_function, mean_function_perc]'
             msg += 'is required to calculate the rate matrix'
