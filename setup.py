@@ -40,7 +40,7 @@ def main():
         install_requires=['biopython',
                           'matplotlib', 'seaborn',
                           'tqdm', 'numpy', 'scipy',
-                          'pandas', 'fastparquet',
+                          'pandas', 'pyarrow',
                           'datashader>=0.13.0',
                           'holoviews>=1.15.0',
                           'plotly>=5.9.0'],
