@@ -1,21 +1,25 @@
 #!/usr/bin/env python
 import itertools
-from _collections import defaultdict
-
 import pandas as pd
 import numpy as np
-import scipy.sparse as sp
 
 from itertools import chain
-from scipy.sparse.csr import csr_matrix
-from jellyfish import hamming_distance
+from collections import defaultdict
+
 from Bio.Seq import Seq 
 from Bio.Data.CodonTable import CodonTable
+from scipy.sparse import csr_matrix, hstack, vstack
 
 from gpmap.src.settings import NUCLEOTIDES, COMPLEMENT, ALPHABETS, ALPHABET
 from gpmap.src.utils import check_error
 from gpmap.src.matrix import get_sparse_diag_matrix
 from gpmap.src.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
+
+
+def hamming_distance(s1, s2):
+    distance = len(s1) - len(s2)
+    distance += np.sum([c1 != c2 for c1, c2 in zip(s1, s2)])
+    return(distance)
 
 
 def extend_ambigous_seq(seq, mapping):
@@ -306,7 +310,7 @@ def get_one_hot_from_alleles(alphabet):
         col_idxs = np.hstack([i * np.ones(nrows, dtype=int) for i in range(n_alleles)])
         data = np.ones(nrows * n_alleles)
         m0 = csr_matrix((data, (row_idxs, col_idxs)))
-        m = sp.hstack([m0, sp.vstack([m1] * n_alleles)])
+        m = hstack([m0, vstack([m1] * n_alleles)])
         return(m)
     
                 

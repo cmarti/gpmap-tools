@@ -5,21 +5,19 @@ import pandas as pd
 import networkx as nx
 
 from itertools import product, combinations
-from _collections import defaultdict
+from collections import defaultdict
 
 from scipy.sparse.csr import csr_matrix
 from scipy.special._logsumexp import logsumexp
-from jellyfish import hamming_distance
 
 from gpmap.src.seq import (translate_seqs, guess_space_configuration,
                            guess_alphabet_type, get_seqs_from_alleles,
-                           get_product_states)
+                           get_product_states, hamming_distance)
 from gpmap.src.utils import check_error, write_edges
 from gpmap.src.matrix import calc_cartesian_product
 from gpmap.src.settings import (DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET,
                                 ALPHABET, MAX_STATES, PROT_AMBIGUOUS_VALUES,
                                 DNA_AMBIGUOUS_VALUES, RNA_AMBIGUOUS_VALUES)
-from gpmap.src.linop import ProjectionOperator, VjProjectionOperator
 from gpmap.src.graph import calc_max_min_path
 
 
@@ -707,72 +705,6 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
     @property
     def is_regular(self):
         return(np.unique(self.n_alleles).shape[0] == 1)
-    
-    def calc_variance_components(self):
-        '''
-        Calculates the variance components associated to the function
-        along the SequenceSpace. It returns the squared module of the
-        projection into each of the l+1 eigenspaces of the graph Laplacian
-        representing the variance associated to epistatic interations of order k
-        
-        See Zhou et al. 2021
-        https://www.pnas.org/doi/suppl/10.1073/pnas.2204233119
-        
-        Returns
-        -------
-        lambdas: array-like of shape (seq_length + 1, )
-            Vector containing the squared module of the projections into the
-            k'th eigenspaces in increasing order of k.
-         
-        '''
-        if not hasattr(self, 'W'):
-            n_alleles = np.unique(self.n_alleles)
-            msg = 'Variance components can only be calculated for spaces'
-            msg += ' with constant number of alleles across sites'
-            check_error(n_alleles.shape[0] == 1, msg)
-            n_alleles = n_alleles[0]
-            self.W = ProjectionOperator(n_alleles=n_alleles,
-                                        seq_length=self.seq_length)
-        lambdas = []
-        for k in np.arange(self.seq_length + 1):
-            self.W.set_lambdas(k=k)
-            dimensionality = self.W.L.lambdas_multiplicity[k]
-            lambdas.append(np.sum(self.W.dot(self.y) ** 2) / dimensionality)
-        return(np.array(lambdas))
-    
-    def calc_vjs_variance_components(self, k):
-        '''
-        Calculates the squared module of the projection into the `Vj` subspaces
-        of order `k` defined by each individual combination of `k` sites as
-        defined by `j` 
-        
-        Parameters
-        ----------
-        k : int from 0 to seq_length + 1
-            
-        
-        Returns
-        -------
-        lambdas: dict
-            Dictionary with combinations of `k` sites as keys and the associated
-            squared modules of the projection into the individual subspaces 
-        '''
-        
-        if not hasattr(self, 'Pj'):
-            n_alleles = np.unique(self.n_alleles)
-            msg = 'Variance components can only be calculated for spaces'
-            msg += ' with constant number of alleles across sites'
-            check_error(n_alleles.shape[0] == 1, msg)
-            n_alleles = n_alleles[0]
-            self.Pj = VjProjectionOperator(n_alleles, self.seq_length)
-            
-        positions = np.arange(self.seq_length)
-        dimension = (self.Pj.alpha - 1) ** float(k)
-        variances = {}
-        for j in combinations(positions, k):
-            self.Pj.set_j(np.array(j))
-            variances[j] = np.sum(self.Pj.dot(self.y) ** 2) / dimension 
-        return(variances)
     
     def get_single_mutant_matrix(self, sequence, center=False):
         '''

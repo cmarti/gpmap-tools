@@ -41,7 +41,6 @@ def main():
                           'matplotlib', 'seaborn',
                           'tqdm', 'numpy', 'scipy',
                           'pandas', 'fastparquet',
-                          'jellyfish',
                           'datashader>=0.13.0',
                           'holoviews>=1.15.0',
                           'plotly>=5.9.0'],

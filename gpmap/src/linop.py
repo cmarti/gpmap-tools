@@ -7,7 +7,7 @@ from scipy.linalg import lu_factor, lu_solve
 from scipy.linalg import eigh_tridiagonal, orth
 from scipy.sparse import csr_matrix
 from scipy.special import comb, factorial
-from scipy.sparse.linalg import minres
+from scipy.sparse.linalg import minres, LinearOperator
 from scipy.sparse.linalg._interface import _CustomLinearOperator
 
 from gpmap.src.utils import check_error
@@ -988,3 +988,74 @@ class SkewedKernelOperator(SeqLinOperator):
     def inv_quad(self, v, show=False):
         u = self.inv_dot(v, show=show)
         return(np.sum(u * v))
+
+
+def calc_variance_components(space):
+    '''
+    Calculates the variance components associated to the function
+    along the SequenceSpace. It returns the squared module of the
+    projection into each of the l+1 eigenspaces of the graph Laplacian
+    representing the variance associated to epistatic interations of order k
+    
+    See Zhou et al. 2021
+    https://www.pnas.org/doi/suppl/10.1073/pnas.2204233119
+    
+    Returns
+    -------
+    lambdas: array-like of shape (seq_length + 1, )
+        Vector containing the squared module of the projections into the
+        k'th eigenspaces in increasing order of k.
+     
+    '''
+
+    n_alleles = np.unique(space.n_alleles)
+    msg = 'Variance components can only be calculated for spaces'
+    msg += ' with constant number of alleles across sites'
+    check_error(n_alleles.shape[0] == 1, msg)
+    n_alleles = n_alleles[0]
+    W = ProjectionOperator(n_alleles=n_alleles, seq_length=space.seq_length)
+    
+    lambdas = []
+    for k in np.arange(space.seq_length + 1):
+        W.set_lambdas(k=k)
+        dimensionality = W.L.lambdas_multiplicity[k]
+        lambdas.append(np.sum(W.dot(space.y) ** 2) / dimensionality)
+    return(np.array(lambdas))
+
+
+def calc_vjs_variance_components(space, k):
+    '''
+    Calculates the squared module of the projection into the `Vj` subspaces
+    of order `k` defined by each individual combination of `k` sites as
+    defined by `j` 
+    
+    Parameters
+    ----------
+    space : SequenceSpace
+        SequenceSpace object for which to calculate the Vj's variance components
+    
+    k : int from 0 to seq_length + 1
+        Order of interaction to calculate
+        
+    
+    Returns
+    -------
+    lambdas: dict
+        Dictionary with combinations of `k` sites as keys and the associated
+        squared modules of the projection into the individual subspaces 
+    '''
+    
+    n_alleles = np.unique(space.n_alleles)
+    msg = 'Variance components can only be calculated for spaces'
+    msg += ' with constant number of alleles across sites'
+    check_error(n_alleles.shape[0] == 1, msg)
+    n_alleles = n_alleles[0]
+    Pj = VjProjectionOperator(n_alleles, space.seq_length)
+        
+    positions = np.arange(space.seq_length)
+    dimension = (Pj.alpha - 1) ** float(k)
+    variances = {}
+    for j in combinations(positions, k):
+        Pj.set_j(np.array(j))
+        variances[j] = np.sum(Pj.dot(space.y) ** 2) / dimension 
+    return(variances)
