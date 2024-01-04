@@ -5,10 +5,10 @@ import pandas as pd
 from time import time
 from tqdm import tqdm
 from numpy.linalg.linalg import matrix_power
-from scipy.optimize._minimize import minimize
-from scipy.special._logsumexp import logsumexp
+from scipy.optimize import minimize
+from scipy.special import logsumexp
 from scipy.stats.stats import pearsonr
-from scipy.stats._continuous_distns import norm
+from scipy.stats import norm
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import check_error, get_CV_splits
