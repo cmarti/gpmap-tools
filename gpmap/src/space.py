@@ -8,7 +8,7 @@ from itertools import product, combinations
 from collections import defaultdict
 
 from scipy.sparse.csr import csr_matrix
-from scipy.special._logsumexp import logsumexp
+from scipy.special import logsumexp
 
 from gpmap.src.seq import (translate_seqs, guess_space_configuration,
                            guess_alphabet_type, get_seqs_from_alleles,
