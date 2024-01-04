@@ -1,9 +1,8 @@
 import numpy as np
 
 from itertools import combinations
-from scipy.special._basic import comb
-from scipy.special._logsumexp import logsumexp
-from scipy.optimize._minimize import minimize
+from scipy.special import comb, logsumexp
+from scipy.optimize import minimize
 
 from gpmap.src.seq import seq_to_one_hot
 from gpmap.src.utils import check_error
