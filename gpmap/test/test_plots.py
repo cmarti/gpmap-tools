@@ -18,9 +18,65 @@ from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWalk
 from gpmap.src.plot.utils import get_lines_from_edges_df
 from gpmap.src.datasets import DataSet
+from gpmap.src.plot.mpl import raster_edges, raster_nodes, calc_raster
         
 
 class MatPlotsTests(unittest.TestCase):
+    def test_raster_nodes(self):
+        nodes_df = pd.DataFrame({'1': [0, 1, 3],
+                                 '2': [0, 3, 1],
+                                 'function': [1, 1, 2]})
+        z = raster_nodes(nodes_df, resolution=4, color=None)
+        assert(np.all(z == np.array([[0., 1., 0., 0.], 
+                                     [0., 0., 0., 0.],
+                                     [0., 0., 0., 1.],
+                                     [1., 0., 0., 0.]])))
+        
+        z = raster_nodes(nodes_df, resolution=4)
+        assert(np.all(z == np.array([[0., 1., 0., 0.], 
+                                     [0., 0., 0., 0.],
+                                     [0., 0., 0., 2.],
+                                     [1., 0., 0., 0.]])))
+        
+        z = raster_nodes(nodes_df, resolution=4, only_first=True)
+        assert(np.all(z == np.array([[0., 1., 0., 0.], 
+                                     [0., 0., 0., 0.],
+                                     [0., 0., 0., 2.],
+                                     [1., 0., 0., 0.]])))
+        
+    
+    def test_raster_edges(self):
+        nodes_df = pd.DataFrame({'1': [0, 1, 3],
+                                 '2': [0, 3, 1]})
+        edges_df = pd.DataFrame({'i': [0, 0],
+                                 'j': [1, 2]})
+        z = raster_edges(nodes_df, edges_df, aa=False, resolution=4)
+        assert(np.all(z == np.array([[0., 1., 0., 0.],
+                                     [0., 1., 0., 0.],
+                                     [1., 0., 1., 1.],
+                                     [2., 1., 0., 0.]])))
+        
+        z = raster_edges(nodes_df, edges_df, aa=False, resolution=4,
+                         only_first=True)
+        assert(np.all(z == np.array([[0., 1., 0., 0.],
+                                     [0., 1., 0., 0.],
+                                     [1., 0., 1., 1.],
+                                     [1., 1., 0., 0.]])))
+    
+    def test_plot_rasterized_visualization(self):
+        ser = DataSet('serine')
+
+        nodes_raster, edges_raster, extent = calc_raster(ser.nodes, edges_df=ser.edges, 
+                                                         nodes_resolution=100,
+                                                         edges_resolution=200)
+
+        fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
+        pmpl.plot_visualization_raster(axes, nodes_raster, extent,
+                                       edges_raster=edges_raster,
+                                       inset_cbar=False)
+        pmpl.savefig(fig, 'test')
+        
+        
     def test_get_lines_from_edges_df(self):
         nodes_df = pd.DataFrame({'1': [0, 1, 2],
                                  '2': [1, 2, 3],
@@ -356,6 +412,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'DatashaderTests.test_plot_visualization_big']
+    import sys;sys.argv = ['', 'MatPlotsTests.test_plot_rasterized_visualization']
     unittest.main()
 

@@ -8,6 +8,7 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
+from skimage.draw import line, line_aa
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
@@ -16,7 +17,7 @@ from gpmap.src.utils import check_error
 from gpmap.src.seq import guess_space_configuration
 from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
                                  minimize_nodes_distance)
-from itertools import product, chain
+from itertools import product, chain, cycle
 from gpmap.src.plot.utils import sort_nodes
 
 def init_fig(nrow=1, ncol=1, figsize=None, style='ticks',
@@ -488,11 +489,11 @@ def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
 
 
 def add_cbar(sc, axes, cbar_axes=None, label='Function', fontsize=12,
-              fraction=0.1, pad=0.02, orientation='vertical', nticks=5,
-              vmin=None, vmax=None):
+             fraction=0.1, shrink=0.7, pad=0.02, orientation='vertical', nticks=5,
+             vmin=None, vmax=None):
     ax, cax = (axes, None) if cbar_axes is None else (None, cbar_axes)
     cbar = plt.colorbar(sc, ax=ax, cax=cax, fraction=fraction,
-                        pad=pad, orientation=orientation)
+                        pad=pad, orientation=orientation, shrink=shrink)
     cbar.set_label(label=label, fontsize=fontsize)
     
     if vmin is not None and vmax is not None:
@@ -832,8 +833,151 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
         axes.text(xpos, ypos, panel_label, ha='left')
     
     savefig(fig, fpath)
+   
     
+'''
+Rasterization functionality
+'''
+def raster_edges(nodes_df, edges_df, x='1', y='2', color=None, aa=True,
+                 only_first=False, resolution=800):
+    cs = cycle([1]) if color is None else edges_df[color]
+    xy = digitize_coords(nodes_df, x, y, resolution)
+    
+    vs = np.zeros(xy.max(0) + 1)
+    edges = np.hstack([xy[edges_df['i'], :], xy[edges_df['j'], :]])
+    
+    for (r0, c0, r1, c1), c in zip(edges, cs):
 
+        if aa:
+            rr, cc, v = line_aa(r0, c0, r1, c1)
+        else:
+            rr, cc = line(r0, c0, r1, c1)
+            v = 1.
+        
+        v = v * c
+        if only_first:
+            v = v * (vs[rr, cc] == 0.).astype(float)
+        vs[rr, cc] +=  v
+    
+    return(vs.T[::-1, :])
+
+
+def digitize_coords(nodes_df, x, y, resolution):
+    xmin, xmax = nodes_df[x].min(), nodes_df[x].max()
+    ymin, ymax = nodes_df[y].min(), nodes_df[y].max()
+    ratio = (xmax - xmin) /  (ymax - ymin)
+    xres, yres = int(resolution * ratio), int(resolution / ratio)
+    xbins = np.linspace(xmin, xmax, xres + 1)
+    xbins[-1] += 1e-12
+    ybins = np.linspace(ymin, ymax, yres + 1)
+    ybins[-1] += 1e-12
+    x, y = np.digitize(nodes_df[x], xbins)-1, np.digitize(nodes_df[y], ybins)-1
+    xy = np.vstack([x, y]).T
+    return(xy)
+
+
+def prep_nodes_raster_df(nodes_df, x, y, resolution, color):
+    xy = digitize_coords(nodes_df, x, y, resolution)
+    df = pd.DataFrame(xy, columns=['x', 'y'])
+    if color is None:
+        df['c'] = 1.
+    else:
+        df['c'] = nodes_df[color].values
+    return(df)
+
+
+def raster_nodes(nodes_df, x='1', y='2', color='function',
+                 palette=None,
+                 sort_by=None, sort_ascending=False,
+                 only_first=True, resolution=800):
+    df = prep_nodes_raster_df(nodes_df, x, y, resolution, color)
+    
+    if sort_by is not None:
+        df.sort_values(sort_by, ascending=sort_ascending, inplace=True)
+        
+    if only_first:
+        v = df.groupby(['x', 'y'])['c'].first().reset_index()
+    else:
+        v = df.groupby(['x', 'y'])['c'].sum().reset_index()
+        
+    z = np.zeros(v[['x', 'y']].max()+1)
+    x, y = v['x'].values, v['y'].values
+    z[x, y] = v['c'].values
+    return(z.T[::-1, :])
+
+
+def calc_raster(nodes_df, x='1', y='2', edges_df=None,
+                nodes_resolution=800, edges_resolution=1200,
+                antialias=True):
+    rasters = raster_nodes(nodes_df, resolution=nodes_resolution)
+    
+    if edges_df is not None:
+        edges_raster = raster_edges(nodes_df, edges_df, resolution=edges_resolution,
+                                    aa=antialias)
+        rasters = (rasters, edges_raster)
+    extent = (nodes_df[x].min(), nodes_df[x].max(),  nodes_df[y].min(), nodes_df[y].max())
+    return(rasters + (extent,))
+
+
+def plot_raster(axes, z, extent=(0, 1, 0, 1),
+                cmap='viridis', vmin=None, vmax=None, alpha=1,
+                cbar=False, cbar_axes=None, cbar_label='', fontsize=10,
+                orientation='veritcal',
+                set_zero_transparent=True):
+
+    if set_zero_transparent:
+        z[z == 0.] = np.nan
+    im = axes.imshow(z, cmap=cmap, vmin=vmin, vmax=vmax, alpha=alpha,
+                     extent=extent)
+    if cbar:
+        add_cbar(im, axes, cbar_axes=cbar_axes, label=cbar_label,
+                 fontsize=fontsize, orientation=orientation,
+                 vmin=vmin, vmax=vmax)
+
+
+def plot_visualization_raster(axes, nodes_raster, extent, edges_raster=None,
+                              x='1', y='2',
+                              nodes_cmap='viridis',
+                              nodes_vmin=None, nodes_vmax=None,
+                              nodes_cbar=True, nodes_cbar_axes=None, nodes_cmap_label='Function', 
+
+                              edges_cmap='Greys', edges_alpha=0.5,
+
+                              center_spines=False, inset_cbar=False, 
+                              inset_pos=(0.7, 0.7), 
+                              axis_fontsize=12, fontsize=8):
+    
+    if edges_raster is not None:
+        z = np.log(edges_raster + 1)
+        z = z / z.max()
+        plot_raster(axes, z, extent, cmap=edges_cmap, alpha=edges_alpha)
+    
+    orientation = 'vertical'
+    if inset_cbar:
+        nodes_cbar_axes = get_cbar_inset_axes(axes,
+                                              horizontal=orientation=='horizontal',
+                                              pos=inset_pos)
+
+    plot_raster(axes, nodes_raster, extent, cmap=nodes_cmap, vmin=nodes_vmin,
+                vmax=nodes_vmax,
+                cbar=nodes_cbar, cbar_axes=nodes_cbar_axes,
+                cbar_label=nodes_cmap_label, fontsize=fontsize,
+                orientation=orientation)
+    
+    add_axis_labels(axes, x, y, fontsize=axis_fontsize,
+                    center_spines=center_spines)
+    
+    xlim, ylim = axes.get_xlim(), axes.get_ylim()
+    dx, dy = xlim[1] - xlim[0], ylim[1] - ylim[0]
+    padding = 0.1
+    xlim = (xlim[0] - padding * dx, xlim[1] + padding * dx)
+    ylim = (ylim[0] - padding * dy, ylim[1] + padding * dy)
+    axes.set(xlim=xlim, ylim=ylim)
+
+
+'''
+Auxiliary plots
+'''
 def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
                        xlabel=r'$\log_{10}(a)$',
                        ylabel='log(L)',  show_folds=True, highlight='max',
@@ -953,3 +1097,4 @@ def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
     if seq_density is not None:
         fig.tight_layout()
     return(fig)
+    
