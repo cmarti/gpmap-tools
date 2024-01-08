@@ -123,6 +123,29 @@ class SeqDEFTTests(unittest.TestCase):
         
         r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
         assert(r > 0.6)
+        
+    def test_seq_deft_inference_adjusted_logq(self):
+        seqdeft = SeqDEFT(P=2, a=500)
+        seqdeft.init(seq_length=4, alphabet_type='dna')
+        phi = seqdeft.simulate_phi(a=500)
+        X = seqdeft.simulate(N=1000, phi=phi)
+        X = np.array([x + np.random.choice(X) for x in X])
+        positions = np.arange(4)
+        
+        allele_freqs = {'A': 0.3, 'G': 0.3, 'C': 0.2, 'T': 0.2}
+        seq_densities = seqdeft.fit(X=X, positions=positions,
+                                    adjust_freqs=True,
+                                    allele_freqs=allele_freqs)
+        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        assert(np.allclose(seq_densities['adjusted_Q_star'].sum(), 1))
+        assert(len(seq_densities.index[0]) == 4)
+        
+        # Ensure adjustmnet was done in the right direction
+        assert(seq_densities.loc['AAAA', 'Q_star'] > seq_densities.loc['AAAA', 'adjusted_Q_star'])
+        assert(seq_densities.loc['TTTT', 'Q_star'] < seq_densities.loc['TTTT', 'adjusted_Q_star'])
+        
+        r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
+        assert(r > 0.6)
     
     def test_seqdeft_missing_alleles(self):
         seqdeft = SeqDEFT(P=2)

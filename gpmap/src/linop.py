@@ -8,7 +8,7 @@ from scipy.linalg import eigh_tridiagonal, orth
 from scipy.sparse import csr_matrix
 from scipy.special import comb, factorial
 from scipy.sparse.linalg import minres, LinearOperator
-from scipy.sparse.linalg._interface import _CustomLinearOperator
+from scipy.sparse.linalg.interface import _CustomLinearOperator
 
 from gpmap.src.utils import check_error
 from gpmap.src.matrix import (calc_cartesian_product,
@@ -16,7 +16,6 @@ from gpmap.src.matrix import (calc_cartesian_product,
                               calc_cartesian_product_dot,
                               calc_tensor_product_dot, calc_tensor_product_quad, 
                               inner_product, kron_dot, diag_pre_multiply)
-
 
 
 class ExtendedLinearOperator(_CustomLinearOperator):
@@ -214,8 +213,6 @@ class MatrixPolynomial(ExtendedLinearOperator):
         power = v
         u = self.coeffs[0] * v
         for c in self.coeffs[1:]:
-            if c == 0:
-                continue
             power = self.linop.dot(power)
             u += c * power
         return(u)

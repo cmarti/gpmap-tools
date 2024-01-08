@@ -15,7 +15,8 @@ from gpmap.src.utils import check_error, get_CV_splits
 from gpmap.src.matrix import reciprocal, calc_matrix_polynomial_quad
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
-                           get_subsequences)
+                           get_subsequences, calc_allele_frequencies,
+    calc_expected_logp, calc_genetic_code_aa_freqs)
 from gpmap.src.linop import (DeltaPOperator, VarianceComponentKernelOperator,
                              ExtendedLinearOperator)
 from gpmap.src.kernel import KernelAligner
@@ -706,10 +707,17 @@ class SeqDEFT(DeltaPEstimator):
         data.loc[obs['x'].values] = obs['y'].values
         return(data)
     
-    def _set_data(self, X, y=None, y_var=None):
-        check_error(y_var is None, msg='y_var is not compatible with SeqDEFT')
+    def _set_data(self, X, y=None, allele_freqs=None, **kwargs):
         if y is None:
             y = calc_msa_weights(X, phylo_correction=self.phylo_correction)
+        
+        if self.adjust_freqs:
+            if allele_freqs is None:
+                allele_freqs = calc_allele_frequencies(X, y=y)
+            elif isinstance(allele_freqs, dict):
+                self.allele_freqs = allele_freqs
+            else:
+                self.allele_freqs = calc_genetic_code_aa_freqs(allele_freqs)
             
         self.X = get_subsequences(X, positions=self.positions)
         self.y = y
@@ -719,14 +727,16 @@ class SeqDEFT(DeltaPEstimator):
         self.N = data.sum()
         self.R = (data / self.N)
     
-    def set_data(self, X, y=None, positions=None, phylo_correction=False):
+    def set_data(self, X, y=None, positions=None, phylo_correction=False,
+                 adjust_freqs=False, allele_freqs=None):
         self.init(genotypes=get_subsequences(X, positions=positions))
         self.positions = positions
+        self.adjust_freqs = adjust_freqs
         self.phylo_correction = phylo_correction
-        self._set_data(X, y=y)
+        self._set_data(X, y=y, allele_freqs=allele_freqs)
     
     def fit(self, X, y=None, positions=None, phylo_correction=False,
-            force_fit_a=True):
+            force_fit_a=True, adjust_freqs=False, allele_freqs=None):
         """
         Infers the sequence-function relationship under the specified
         \Delta^{(P)} prior 
@@ -745,12 +755,23 @@ class SeqDEFT(DeltaPEstimator):
             If provided, subsequences at these positions in the provided
             input sequences will be used as input
         
-        phylo_correction: bool
+        phylo_correction: bool (False)
             Apply phylogenetic correction using the full length sequences
             
         force_fit_a : bool 
             Whether to re-fit ``a`` using cross-validation even if it is already
             defined a priori
+        
+        adjust_freqs: bool (False)
+            Whether to correct densities by the expected allele frequencies
+            in the full length sequences
+        
+        allele_freqs: dict or codon_table
+            Dictionary containing the allele expected frequencies frequencies
+            for every allele in the set of possible sequences or the codon
+            table to use to genereate expected aminoacid frequencies
+            If `None`, they will be calculated from the full length observed
+            sequences.
             
         Returns
         -------
@@ -761,7 +782,8 @@ class SeqDEFT(DeltaPEstimator):
         
         """
         self.set_data(X, y=y, positions=positions,
-                      phylo_correction=phylo_correction)
+                      phylo_correction=phylo_correction,
+                      adjust_freqs=adjust_freqs, allele_freqs=allele_freqs)
         phi_inf = self._fit(np.inf)
         
         if not self.a_is_fixed and force_fit_a:
@@ -811,6 +833,11 @@ class SeqDEFT(DeltaPEstimator):
         Q_star = self.phi_to_Q(phi)
         seq_densities = pd.DataFrame({'frequency': self.R, 'Q_star': Q_star},
                                      index=self.genotypes)
+        if self.adjust_freqs:
+            exp_phi = -calc_expected_logp(self.genotypes, self.allele_freqs)
+            phi_adj = np.log(Q_star) - exp_phi
+            seq_densities['adjusted_Q_star'] = self.phi_to_Q(phi_adj)
+        
         return(seq_densities)
     
     # Optional methods
