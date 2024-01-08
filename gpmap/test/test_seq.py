@@ -9,7 +9,8 @@ from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
                            guess_space_configuration, get_custom_codon_table,
                            get_seqs_from_alleles, get_one_hot_from_alleles,
                            generate_freq_reduced_code, transcribe_seqs,
-                           msa_to_counts)
+                           msa_to_counts, calc_allele_frequencies,
+    calc_expected_logp)
 
 
 class SeqTests(unittest.TestCase):
@@ -210,6 +211,39 @@ class SeqTests(unittest.TestCase):
         assert(np.all(X == np.array(['GT', 'TA'])))
         assert(np.all(y == np.array([4/3., 1.])))
     
+    def test_calc_allele_freqs(self):
+        X = np.array(['AGCT', 'ACGT', 'GTCA'])
+        allele_freqs = calc_allele_frequencies(X)
+        for v in allele_freqs.values():
+            assert(v == 0.25)
+            
+        X = np.array(['AGCT', 'ACGC', 'AAAA'])
+        allele_freqs = calc_allele_frequencies(X)
+        exp_freqs = {'A': 1/2, 'G': 1/6, 'C': 1/4, 'T': 1/12}
+        for a, v in allele_freqs.items():
+            assert(v == exp_freqs[a])
+            
+        # With sequence weights
+        y = np.array([1, 1, 2])
+        allele_freqs = calc_allele_frequencies(X, y=y)
+        exp_freqs = {'A': 10/16, 'G': 2/16, 'C': 3/16, 'T': 1/16}
+        for a, v in allele_freqs.items():
+            assert(v == exp_freqs[a])
+    
+    def test_calc_expected_logp(self):
+        X = ['AGCT', 'ACGT', 'GTCA']
+        exp_freqs = {'A': 1/4, 'G': 1/4, 'C': 1/4, 'T': 1/4}
+        logq = calc_expected_logp(X, exp_freqs)
+        assert(np.all(logq == -4 * np.log(4)))
+    
+        X = ['AGCT', 'ACGC', 'AAAA']    
+        exp_freqs = {'A': 1/2, 'G': 1/6, 'C': 1/4, 'T': 1/12}
+        logq = calc_expected_logp(X, exp_freqs)
+        exp_logq = np.log([1 / (2 * 6 * 4 * 12),
+                           1 / (2 * 4 * 4 * 6), 
+                           1 / 2 ** 4])
+        assert(np.allclose(logq, exp_logq))
+        
         
 if __name__ == '__main__':
     import sys;sys.argv = ['', 'SeqTests']

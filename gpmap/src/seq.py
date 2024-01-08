@@ -441,3 +441,26 @@ def msa_to_counts(X, y=None, positions=None, phylo_correction=False, max_dist=0.
     X, counts = data['x'].values, data['y'].values
     return(X, counts) 
     
+
+def calc_allele_frequencies(X, y=None):
+    counts = {}
+
+    if y is None:
+        y = np.ones(X.shape)
+        
+    for x, w in zip(X, y):
+        for c in x:
+            try:
+                counts[c] += w
+            except KeyError:
+                counts[c] = w
+                
+    total = np.sum([v for v in counts.values()])
+    freqs = {a: c / total for a, c in counts.items()}
+    return(freqs)
+                
+
+def calc_expected_logp(X, allele_freqs):            
+    log_freqs = {a: np.log(freq) for a, freq in allele_freqs.items()}
+    exp_logp = np.sum([[log_freqs[c] for c in x] for x in X], axis=1)
+    return(exp_logp)
