@@ -458,6 +458,13 @@ def calc_allele_frequencies(X, y=None):
     total = np.sum([v for v in counts.values()])
     freqs = {a: c / total for a, c in counts.items()}
     return(freqs)
+
+
+def calc_genetic_code_aa_freqs(codon_table='Standard'):
+    dna = get_seqs_from_alleles([DNA_ALPHABET] * 3)
+    aa = translate_seqs(dna, codon_table)
+    aa = np.array([a for a in aa if a in PROTEIN_ALPHABET])
+    return(calc_allele_frequencies(aa))
                 
 
 def calc_expected_logp(X, allele_freqs):            

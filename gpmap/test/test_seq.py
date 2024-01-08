@@ -10,7 +10,7 @@ from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
                            get_seqs_from_alleles, get_one_hot_from_alleles,
                            generate_freq_reduced_code, transcribe_seqs,
                            msa_to_counts, calc_allele_frequencies,
-    calc_expected_logp)
+    calc_expected_logp, calc_genetic_code_aa_freqs)
 
 
 class SeqTests(unittest.TestCase):
@@ -229,6 +229,17 @@ class SeqTests(unittest.TestCase):
         exp_freqs = {'A': 10/16, 'G': 2/16, 'C': 3/16, 'T': 1/16}
         for a, v in allele_freqs.items():
             assert(v == exp_freqs[a])
+            
+        # From genetic code
+        allele_freqs = calc_genetic_code_aa_freqs()
+        assert(allele_freqs['A'] == 4./61)
+        assert(allele_freqs['L'] == 6./61)
+        assert(allele_freqs['W'] == 1./61)
+        
+        allele_freqs = calc_genetic_code_aa_freqs(codon_table=11)
+        assert(allele_freqs['A'] == 4./61)
+        assert(allele_freqs['L'] == 6./61)
+        assert(allele_freqs['W'] == 1./61)
     
     def test_calc_expected_logp(self):
         X = ['AGCT', 'ACGT', 'GTCA']
