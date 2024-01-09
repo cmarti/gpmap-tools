@@ -533,21 +533,7 @@ class DeltaPEstimator(LandscapeEstimator):
         grad_S1 = a / self.DP.n_p_faces * self.DP_dot_phi
         return(grad_S1)
     
-    def S(self, phi, a):
-        S = self.calc_neg_log_prior_prob(phi, a)
-        S += self.calc_neg_log_likelihood(phi)
-        if hasattr(self, 'calc_regularization'):
-            S += self.calc_regularization(phi)
-        return(S)
-    
-    def S_grad(self, phi, a):
-        S_grad = self.calc_neg_log_prior_prob_grad(phi, a)
-        S_grad += self.calc_neg_log_likelihood_grad(phi)
-        if hasattr(self, 'calc_regularization'):
-            S_grad += self.calc_regularization_grad(phi) 
-        return(S_grad)
-    
-    def calc_loss(self, phi):
+    def calc_loss_and_grad_finite(self, phi):
         DP_dot_phi = self.DP.dot(phi)
         loss = self._a / (2 * self.DP.n_p_faces) * np.sum(phi * DP_dot_phi)
         loss += self.calc_neg_log_likelihood(phi)
@@ -561,22 +547,7 @@ class DeltaPEstimator(LandscapeEstimator):
             
         return(loss, grad)
     
-    def S_inf(self, b):
-        phi = self._b_to_phi(b)
-        S = self.calc_neg_log_likelihood(phi)
-        if hasattr(self, 'calc_regularization'):
-            S += self.calc_regularization(phi)
-        return(S)
-    
-    def S_grad_inf(self, b):
-        phi = self._b_to_phi(b)
-        S_grad = self.calc_neg_log_likelihood_grad(phi)
-        if hasattr(self, 'calc_regularization'):
-            S_grad += self.calc_regularization_grad(phi)
-        S_grad = self._phi_to_b(S_grad)
-        return(S_grad)
-    
-    def calc_loss_inf(self, b):
+    def calc_loss_and_grad_inf(self, b):
         phi = self._b_to_phi(b)
         
         # Calculate loss
@@ -591,6 +562,12 @@ class DeltaPEstimator(LandscapeEstimator):
         grad = self._phi_to_b(grad)
         return(loss, grad)
     
+    def calc_loss_and_grad(self, x):
+        if np.isinf(self._a):
+            return(self.calc_loss_and_grad_inf(x))
+        else:
+            return(self.calc_loss_and_grad_finite(x))
+        
     def calc_cv_logL(self, cv_data, phi_initial=None):
         for a, fold, train, test in tqdm(cv_data, total=self.total_folds):
             (X_train, y_train, y_var_train), (X_test, y_test, y_var_test) = train, test
@@ -635,38 +612,36 @@ class DeltaPEstimator(LandscapeEstimator):
     def _sd_to_a(self, sd):
         return(self.DP.n_p_faces / sd ** 2)
     
-    def _fit(self, a, phi_initial=None):
-        self._a = a
-        check_error(a >= 0, msg='"a" must be larger or equal than 0')
+    def get_x0(self, x0=None):
+        if x0 is None:
+            x0 = np.log(self.n_genotypes) * np.ones(self.n_genotypes)
         
-        if phi_initial is None and a > 0:
-            # Initialize with equal log density for every sequence
-            phi_initial = np.log(self.n_genotypes) * np.ones(self.n_genotypes)
+        if np.isinf(self._a):
+            x0 = self._phi_to_b(x0)
+        return(x0)
+        
+    def get_res_phi(self, res):
+        if not res.success:
+            print(res.message)
+        out = res.x
+        
+        if np.isinf(self._a):
+            out = self._b_to_phi(out)
+        return(out)
+    
+    def _fit(self, a, phi_initial=None):
+        check_error(a >= 0, msg='"a" must be larger or equal than 0')
+        self._a = a
         
         if a == 0 and hasattr(self, '_fit_a_0'):
             phi = self._fit_a_0()
             
-        elif a == np.inf:
-            b_initial = self._phi_to_b(phi_initial)
-            res = minimize(fun=self.calc_loss_inf, jac=True,
-                           x0=b_initial, method=self.opt_method,
-                           options=self.optimization_opts)
-            if not res.success:
-                print(res.message)
-                
-            b_a = res.x
-            phi = self._b_to_phi(b_a)
-            
         else:
-            res = minimize(fun=self.calc_loss, jac=True,
-                           x0=phi_initial, method=self.opt_method,
+            x0 = self.get_x0(phi_initial)
+            res = minimize(fun=self.calc_loss_and_grad, jac=True,
+                           x0=x0, method=self.opt_method,
                            options=self.optimization_opts)
-            # res = minimize(fun=self.S, jac=self.S_grad, args=(a,),
-            #                x0=phi_initial, method=self.opt_method,
-            #                options=self.optimization_opts)
-            if not res.success:
-                print(res.message)
-            phi = res.x
+            phi = self.get_res_phi(res)
         
         # a, N = a * scale_by, N *scale_by    
         return(phi)
