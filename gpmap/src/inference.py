@@ -868,9 +868,9 @@ class SeqDEFT(DeltaPEstimator):
         seq_densities = pd.DataFrame({'frequency': self.R, 'Q_star': Q_star},
                                      index=self.genotypes)
         if self.adjust_freqs:
-            exp_phi = -calc_expected_logp(self.genotypes, self.allele_freqs)
-            phi_adj = np.log(Q_star) - exp_phi
-            seq_densities['adjusted_Q_star'] = self.phi_to_Q(phi_adj)
+            exp_logp = calc_expected_logp(self.genotypes, self.allele_freqs)
+            logp_adj = np.log(Q_star) - exp_logp
+            seq_densities['adjusted_Q_star'] = self.phi_to_Q(-logp_adj)
         
         return(seq_densities)
     
