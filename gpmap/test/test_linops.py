@@ -5,7 +5,6 @@ import numpy as np
 from timeit import timeit
 from itertools import combinations
 from scipy.special import comb
-from scipy.sparse.linalg import LinearOperator
 
 from gpmap.src.settings import ALPHABET
 from gpmap.src.seq import generate_possible_sequences
