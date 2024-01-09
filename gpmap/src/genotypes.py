@@ -179,8 +179,7 @@ def select_genotypes(nodes_df, genotypes, edges=None, is_idx=False):
     
     if edges is not None:
         edges = select_edges_from_genotypes(nodes_df['idx'], edges)
-        nodes_df.drop(['idx'], axis=1, inplace=True)
-        return(nodes_df, edges)
+        return(nodes_df.drop(['idx'], axis=1), edges)
     else:
         return(nodes_df)
     
