@@ -8,7 +8,10 @@ from scipy.linalg import eigh_tridiagonal, orth
 from scipy.sparse import csr_matrix
 from scipy.special import comb, factorial
 from scipy.sparse.linalg import minres, LinearOperator
-from scipy.sparse.linalg.interface import _CustomLinearOperator
+try:
+    from scipy.sparse.linalg.interface import _CustomLinearOperator
+except ImportError:
+    from scipy.sparse.linalg._interface import _CustomLinearOperator
 
 from gpmap.src.utils import check_error
 from gpmap.src.matrix import (calc_cartesian_product,
