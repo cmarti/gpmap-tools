@@ -3,15 +3,19 @@
 # Learn more about .gitignore:
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
-# Node artifact files
-node_modules/
+# Other files
 dist/
 build/
-cache/*
+gpmap/test/data
+scripts
+gpmap_tools.egg-info
 
-# Project pydev files
+# Other programs files
 .pydevproject
 .project
+.vscode
+.pytest_cache
+.settings
 
 # Compiled Java class files
 *.class
@@ -54,3 +58,4 @@ Thumbs.db
 *.mov
 *.wmv
 
+/.pytest_cache/
