@@ -3,9 +3,7 @@ import unittest
 import numpy as np
 
 from gpmap.src.datasets import DataSet
-from gpmap.src.settings import DATASETS, VIZ_DIR
-from gpmap.src.randwalk import WMWalk
-from os.path import join
+from gpmap.src.settings import DATASETS
 
 
 class DatasetsTests(unittest.TestCase):
