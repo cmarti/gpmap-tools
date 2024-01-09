@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import unittest
-
 import numpy as np
+
 from scipy.sparse import csr_matrix
 
 from gpmap.src.matrix import (calc_cartesian_product, calc_tensor_product,
