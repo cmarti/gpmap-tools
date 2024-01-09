@@ -13,12 +13,13 @@ import gpmap.src.plot.mpl as pmpl
 import gpmap.src.plot.ds as pds
 import gpmap.src.plot.ply as ply
 
-from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR, VIZ_DIR
+from gpmap.src.settings import BIN_DIR, VIZ_DIR
 from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWalk
 from gpmap.src.plot.utils import get_lines_from_edges_df
 from gpmap.src.datasets import DataSet
 from gpmap.src.plot.mpl import raster_edges, raster_nodes, calc_raster
+from gpmap.src.utils import write_dataframe, write_edges
         
 
 class MatPlotsTests(unittest.TestCase):
@@ -270,12 +271,17 @@ class MatPlotsTests(unittest.TestCase):
                    '--alleles']
             check_call(cmd)
     
-    def test_plot_relaxation_times_bin(self):    
+    def test_plot_relaxation_times_bin(self):
         bin_fpath = join(BIN_DIR, 'plot_relaxation_times.py')
-        decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.decay_rates') 
-        cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
-        check_call(cmd)
+        ser = DataSet('serine')
+        
+        with NamedTemporaryFile() as fhand:
+            input_fpath = '{}.decay_rates.csv'.format(fhand.name)
+            ser.relaxation_times.to_csv(input_fpath, index=False)
+            
+            output_fpath = '{}.decay_rates.png'.format(fhand.name)
+            cmd = [sys.executable, bin_fpath, input_fpath, '-o', output_fpath]
+            check_call(cmd)
         
         
 class DatashaderTests(unittest.TestCase):
@@ -299,17 +305,6 @@ class DatashaderTests(unittest.TestCase):
                                           shade_nodes=False, shade_edges=False)
             pds.savefig(dsg, fpath)
         
-    def test_plot_visualization_big(self):  
-        gb1 = DataSet('gb1')
-        dsg =  pds.plot_visualization(gb1.nodes, edges_df=gb1.edges,
-                                      shade_nodes=True, shade_edges=True,
-                                      sort_by='3', sort_ascending=True,
-                                      nodes_resolution=200)
-        
-        with NamedTemporaryFile('w') as fhand:
-            fpath = fhand.name
-            pds.savefig(dsg, fpath)
-        
     def test_figure_allele_grid(self):  
         ser = DataSet('serine')
 
@@ -330,29 +325,51 @@ class DatashaderTests(unittest.TestCase):
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
             pds.figure_allele_grid(ndf.copy(), edges_df=edf.copy(), fpath=fpath)
+    
+    def test_plot_visualization_big(self):  
+        gb1 = DataSet('gb1')
+        dsg =  pds.plot_visualization(gb1.nodes, edges_df=gb1.edges,
+                                      shade_nodes=True, shade_edges=True,
+                                      sort_by='3', sort_ascending=True,
+                                      nodes_resolution=200)
         
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pds.savefig(dsg, fpath)    
     
     def test_plot_visualization_bin_datashader(self):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        gb1 = DataSet('gb1')
         
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
-               '-er', '1800']
-        check_call(cmd)
+        with NamedTemporaryFile('w') as fhand:
+            nodes_fpath = '{}.nodes.pq'.format(fhand.name)
+            write_dataframe(gb1.nodes, nodes_fpath)
+            
+            edges_fpath = '{}.edges.npz'.format(fhand.name)
+            write_edges(gb1.edges, edges_fpath)
+
+            output_fpath = '{}.visualization.png'.format(fhand.name)
+            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+                   '-o', output_fpath, '--datashader',
+                   '-nr', '800', '-er', '800']
+            check_call(cmd)
     
     def test_plot_visualization_bin_datashader_alleles(self):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        gb1 = DataSet('gb1')
         
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
-               '-er', '1800', '--alleles']
-        check_call(cmd)
+        with NamedTemporaryFile('w') as fhand:
+            nodes_fpath = '{}.nodes.pq'.format(fhand.name)
+            write_dataframe(gb1.nodes, nodes_fpath)
+            
+            edges_fpath = '{}.edges.npz'.format(fhand.name)
+            write_edges(gb1.edges, edges_fpath)
+
+            output_fpath = '{}.visualization.png'.format(fhand.name)
+            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+                   '-o', output_fpath, '--datashader',
+                   '-nr', '800', '-er', '800', '--alleles']
+            check_call(cmd)
     
 
 class PlotlyTests(unittest.TestCase):
@@ -412,6 +429,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatPlotsTests.test_plot_rasterized_visualization']
+    import sys;sys.argv = ['', 'DatashaderTests.test_plot_visualization_bin_datashader_alleles']
     unittest.main()
 

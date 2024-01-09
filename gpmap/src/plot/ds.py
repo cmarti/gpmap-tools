@@ -118,26 +118,24 @@ def savefig(dsg, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360,
 
 
 def _get_allele_panel(nodes_df, x, y, edges_dsg,
-                      nc, alphabet, i, j, col, position_labels,
+                      seq_pos, allele, pos_label,
                       nodes_resolution, square, background_color,
                       sort_by='function', sort_ascending=True):
-    try:
-        allele  = alphabet[j][i]
-        nodes_df['allele'] = (nc[col] == allele).astype(int)
-    except IndexError:
-        allele = ''
+    if seq_pos is None:
         nodes_df['allele'] = np.nan
-        
+    else:
+        nodes_df['allele'] = (seq_pos == allele).astype(int)
+    
     nodes = plot_nodes(nodes_df.copy(), x, y,  color='allele',
                        cmap='viridis', resolution=nodes_resolution, 
                        shade=True, square=square,
                        sort_by=sort_by, sort_ascending=sort_ascending)
-    nodes = nodes.relabel('{}{}'.format(j+1, allele))
+
     dsg = nodes if edges_dsg is None else edges_dsg * nodes
     dsg.opts(xlabel='Diffusion axis {}'.format(x),
              ylabel='Diffusion axis {}'.format(y),
              bgcolor=background_color, padding=0.1,
-             title='{}{}'.format(position_labels[j], allele))
+             title='{}{}'.format(pos_label, allele))
     return(dsg)
 
 
@@ -169,20 +167,24 @@ def figure_allele_grid(nodes_df, fpath, x='1', y='2', edges_df=None,
 
     if positions is None:
         positions = np.arange(length)
+    else:
+        length = len(positions)
 
-    nc = {i: np.array([seq[i] for seq in nodes_df.index])
-          for i in range(length)}
+    nc = {label: np.array([seq[i] for seq in nodes_df.index])
+          for i, label in zip(positions, position_labels)}
     plots = None
     for i in range(n_alleles):
-        for col, j in enumerate(positions):
+        for j, (pos, pos_label) in enumerate(zip(positions, position_labels)):
+            allele = alphabet[pos][i]
+            seq_pos = nc[pos_label]
             dsg = _get_allele_panel(nodes_df, x, y, edges_dsg,
-                                    nc, alphabet, i, j, col, position_labels,
+                                    seq_pos, allele, pos_label,
                                     nodes_resolution, square, background_color,
                                     sort_by=sort_by, sort_ascending=sort_ascending)
             
             if i < n_alleles - 1:
                 dsg.opts(xlabel='')
-            if col > 0:
+            if j > 0:
                 dsg.opts(ylabel='')
             plots = dsg if plots is None else plots + dsg
             

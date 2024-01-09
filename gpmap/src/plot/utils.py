@@ -1,13 +1,8 @@
 #!/usr/bin/env python
-import warnings
 import numpy as np
-import pandas as pd
 
-from gpmap.src.settings import PLOTS_FORMAT
-from gpmap.src.utils import check_error
 from gpmap.src.seq import guess_space_configuration
-from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
-                                 minimize_nodes_distance)
+from gpmap.src.genotypes import get_edges_coords
 
 
 def get_lines_from_edges_df(nodes_df, edges_df, x=1, y=2, z=None,
