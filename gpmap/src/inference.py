@@ -525,11 +525,12 @@ class DeltaPEstimator(LandscapeEstimator):
         return(self.get_regularization_constants())
     
     def calc_neg_log_prior_prob(self, phi, a):
-        S1 = a / (2*self.DP.n_p_faces) * self.DP.quad(phi)
+        self.DP_dot_phi = self.DP.dot(phi)
+        S1 = a / (2*self.DP.n_p_faces) * np.sum(phi * self.DP_dot_phi)
         return(S1)
     
     def calc_neg_log_prior_prob_grad(self, phi, a):
-        grad_S1 = a / self.DP.n_p_faces * self.DP.dot(phi)
+        grad_S1 = a / self.DP.n_p_faces * self.DP_dot_phi
         return(grad_S1)
     
     def S(self, phi, a):
@@ -546,6 +547,20 @@ class DeltaPEstimator(LandscapeEstimator):
             S_grad += self.calc_regularization_grad(phi) 
         return(S_grad)
     
+    def calc_loss(self, phi):
+        DP_dot_phi = self.DP.dot(phi)
+        loss = self._a / (2 * self.DP.n_p_faces) * np.sum(phi * DP_dot_phi)
+        loss += self.calc_neg_log_likelihood(phi)
+        if hasattr(self, 'calc_regularization'):
+            loss += self.calc_regularization(phi)
+        
+        grad = self._a / self.DP.n_p_faces * DP_dot_phi
+        grad += self.calc_neg_log_likelihood_grad(phi)
+        if hasattr(self, 'calc_regularization'):
+            grad += self.calc_regularization_grad(phi)
+            
+        return(loss, grad)
+    
     def S_inf(self, b):
         phi = self._b_to_phi(b)
         S = self.calc_neg_log_likelihood(phi)
@@ -560,6 +575,21 @@ class DeltaPEstimator(LandscapeEstimator):
             S_grad += self.calc_regularization_grad(phi)
         S_grad = self._phi_to_b(S_grad)
         return(S_grad)
+    
+    def calc_loss_inf(self, b):
+        phi = self._b_to_phi(b)
+        
+        # Calculate loss
+        loss = self.calc_neg_log_likelihood(phi)
+        if hasattr(self, 'calc_regularization'):
+            loss += self.calc_regularization(phi)
+        
+        # Calculate gradient
+        grad = self.calc_neg_log_likelihood_grad(phi)
+        if hasattr(self, 'calc_regularization'):
+            grad += self.calc_regularization_grad(phi)
+        grad = self._phi_to_b(grad)
+        return(loss, grad)
     
     def calc_cv_logL(self, cv_data, phi_initial=None):
         for a, fold, train, test in tqdm(cv_data, total=self.total_folds):
@@ -606,6 +636,7 @@ class DeltaPEstimator(LandscapeEstimator):
         return(self.DP.n_p_faces / sd ** 2)
     
     def _fit(self, a, phi_initial=None):
+        self._a = a
         check_error(a >= 0, msg='"a" must be larger or equal than 0')
         
         if phi_initial is None and a > 0:
@@ -617,7 +648,7 @@ class DeltaPEstimator(LandscapeEstimator):
             
         elif a == np.inf:
             b_initial = self._phi_to_b(phi_initial)
-            res = minimize(fun=self.S_inf, jac=self.S_grad_inf,
+            res = minimize(fun=self.calc_loss_inf, jac=True,
                            x0=b_initial, method=self.opt_method,
                            options=self.optimization_opts)
             if not res.success:
@@ -627,9 +658,12 @@ class DeltaPEstimator(LandscapeEstimator):
             phi = self._b_to_phi(b_a)
             
         else:
-            res = minimize(fun=self.S, jac=self.S_grad, args=(a,),
+            res = minimize(fun=self.calc_loss, jac=True,
                            x0=phi_initial, method=self.opt_method,
                            options=self.optimization_opts)
+            # res = minimize(fun=self.S, jac=self.S_grad, args=(a,),
+            #                x0=phi_initial, method=self.opt_method,
+            #                options=self.optimization_opts)
             if not res.success:
                 print(res.message)
             phi = res.x
@@ -723,7 +757,7 @@ class SeqDEFT(DeltaPEstimator):
         self.y = y
         self.y_var = None
         
-        data = self.fill_zeros_counts(self.X, y)
+        data = self.fill_zeros_counts(self.X, y).values
         self.N = data.sum()
         self.R = (data / self.N)
     
