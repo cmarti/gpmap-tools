@@ -9,6 +9,7 @@ build/
 gpmap/test/data
 scripts
 gpmap_tools.egg-info
+docs/usage/.ipynb_checkpoints
 
 # Other programs files
 .pydevproject
