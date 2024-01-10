@@ -5,6 +5,7 @@ import numpy as np
 
 from os.path import join
 from subprocess import check_call
+from tempfile import NamedTemporaryFile
 
 from scipy.stats.mstats_basic import pearsonr
 from scipy.special._basic import comb
@@ -13,7 +14,6 @@ from gpmap.src.inference import VCregression
 from gpmap.src.settings import BIN_DIR
 from gpmap.src.linop import LaplacianOperator, ProjectionOperator
 from gpmap.src.space import SequenceSpace
-from tempfile import NamedTemporaryFile
 
 
 class VCTests(unittest.TestCase):
