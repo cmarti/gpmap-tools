@@ -4,7 +4,7 @@ import argparse
 import pandas as pd
 
 from gpmap.src.utils import LogTrack
-from gpmap.src.plot import plot_relaxation_times
+from gpmap.src.plot.mpl import plot_relaxation_times
 
         
 def main():

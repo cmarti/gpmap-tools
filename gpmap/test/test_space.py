@@ -3,16 +3,14 @@ import unittest
 import pandas as pd
 import numpy as np
 
-from os.path import join
 from tempfile import NamedTemporaryFile
-from scipy.sparse.csr import csr_matrix
-from jellyfish import hamming_distance
+from scipy.sparse import csr_matrix
+from scipy.special import comb
 
-from gpmap.src.settings import TEST_DATA_DIR
+from gpmap.src.seq import hamming_distance, translate_seqs
 from gpmap.src.datasets import DataSet
 from gpmap.src.space import (SequenceSpace, DiscreteSpace, CodonSpace,
                              ProductSpace, GridSpace, HammingBallSpace)
-from scipy.special._basic import comb
 
 
 class SpaceTests(unittest.TestCase):
@@ -274,19 +272,19 @@ class SpaceTests(unittest.TestCase):
     
     def test_write_space(self):
         space = CodonSpace(['S'], add_variation=True, seed=0)
-        fpath = join(TEST_DATA_DIR, 'serine.csv')
-        space.write_csv(fpath)
         
-        df = pd.read_csv(fpath, index_col=0)
-        codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
-        assert(np.all(df[df['y'] > 1.5].index.values == codons))
+        with NamedTemporaryFile() as fhand:
+            fpath = '{}.csv'.format(fhand.name)
+            space.write_csv(fpath)
+            
+            df = pd.read_csv(fpath, index_col=0)
+            codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
+            assert(np.all(df[df['y'] > 1.5].index.values == codons))
     
     def test_build_space_from_sequences(self):
-        fpath = join(TEST_DATA_DIR, 'serine.csv')
-        data = pd.read_csv(fpath, index_col=0)
+        data = DataSet('serine').landscape
         codons = ['AGC', 'AGT', 'TCA', 'TCC', 'TCG', 'TCT']
-        
-        s = SequenceSpace(X=data.index.values, y=data['y'].values)
+        s = SequenceSpace(X=data.index.values, y=data.y.values)
         assert(np.all(s.state_labels[s.y > 1.5] == codons))
 
         # Shuffle sequences before
@@ -313,12 +311,13 @@ class SpaceTests(unittest.TestCase):
         assert(np.allclose(m.mean(1), 0))
     
     def test_to_codon_space(self):
-        fpath = join(TEST_DATA_DIR, 'serine.protein.csv')
-        data = pd.read_csv(fpath, index_col=0)
+        data = DataSet('serine').landscape
+        data['protein'] = translate_seqs(data.index.values)
+        data = data.groupby(['protein']).mean().drop('*', axis=0)
         
         # Fail if stop_y is not provided
         try:
-            s = SequenceSpace(X=data.index.values, y=data['function'].values)
+            s = SequenceSpace(X=data.index.values, y=data.y.values)
             s = s.to_nucleotide_space(codon_table='Standard')
             self.fail()
         except ValueError:
@@ -327,19 +326,18 @@ class SpaceTests(unittest.TestCase):
         # Fail if there are missing protein sequences
         try:
             s = SequenceSpace(X=data.index.values[:-1],
-                              y=data['function'].values[:-1], stop_y=0)
+                              y=data.y.values[:-1], stop_y=0)
             s = s.to_nucleotide_space(codon_table='Standard')
             self.fail()
         except ValueError:
             pass
         
         # Correct run        
-        s = SequenceSpace(X=data.index.values, y=data['function'].values, stop_y=0)
+        s = SequenceSpace(X=data.index.values, y=data.y.values, stop_y=0)
         s = s.to_nucleotide_space(codon_table='Standard')
         assert(s.n_genotypes == 64)
         assert(hasattr(s,'protein_seqs'))
         assert(np.unique(s.protein_seqs).shape[0] == 21)
-        
     
     def test_write_edges(self):
         s = SequenceSpace(seq_length=6, alphabet_type='dna')

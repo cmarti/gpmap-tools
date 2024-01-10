@@ -38,7 +38,7 @@ def main():
                 'filter_genotypes = bin.filter_genotypes:main',
             ]},
         install_requires=['biopython',
-                          'matplotlib', 'seaborn',
+                          'matplotlib',
                           'tqdm', 'numpy', 'scipy',
                           'pandas', 'pyarrow',
                           'datashader>=0.13.0',

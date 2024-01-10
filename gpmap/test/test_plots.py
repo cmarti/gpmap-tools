@@ -13,12 +13,13 @@ import gpmap.src.plot.mpl as pmpl
 import gpmap.src.plot.ds as pds
 import gpmap.src.plot.ply as ply
 
-from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR, VIZ_DIR
+from gpmap.src.settings import BIN_DIR, VIZ_DIR
 from gpmap.src.genotypes import select_genotypes
 from gpmap.src.randwalk import WMWalk
 from gpmap.src.plot.utils import get_lines_from_edges_df
 from gpmap.src.datasets import DataSet
 from gpmap.src.plot.mpl import raster_edges, raster_nodes, calc_raster
+from gpmap.src.utils import write_dataframe, write_edges
         
 
 class MatPlotsTests(unittest.TestCase):
@@ -74,7 +75,10 @@ class MatPlotsTests(unittest.TestCase):
         pmpl.plot_visualization_raster(axes, nodes_raster, extent,
                                        edges_raster=edges_raster,
                                        inset_cbar=False)
-        pmpl.savefig(fig, 'test')
+        
+        with NamedTemporaryFile() as fhand:
+            fpath = fhand.name
+            pmpl.savefig(fig, fpath)
         
         
     def test_get_lines_from_edges_df(self):
@@ -270,12 +274,17 @@ class MatPlotsTests(unittest.TestCase):
                    '--alleles']
             check_call(cmd)
     
-    def test_plot_relaxation_times_bin(self):    
+    def test_plot_relaxation_times_bin(self):
         bin_fpath = join(BIN_DIR, 'plot_relaxation_times.py')
-        decay_fpath = join(TEST_DATA_DIR, 'serine.decay_rates.csv')
-        plot_fpath = join(TEST_DATA_DIR, 'serine.decay_rates') 
-        cmd = [sys.executable, bin_fpath, decay_fpath, '-o', plot_fpath]
-        check_call(cmd)
+        ser = DataSet('serine')
+        
+        with NamedTemporaryFile() as fhand:
+            input_fpath = '{}.decay_rates.csv'.format(fhand.name)
+            ser.relaxation_times.to_csv(input_fpath, index=False)
+            
+            output_fpath = '{}.decay_rates.png'.format(fhand.name)
+            cmd = [sys.executable, bin_fpath, input_fpath, '-o', output_fpath]
+            check_call(cmd)
         
         
 class DatashaderTests(unittest.TestCase):
@@ -299,17 +308,6 @@ class DatashaderTests(unittest.TestCase):
                                           shade_nodes=False, shade_edges=False)
             pds.savefig(dsg, fpath)
         
-    def test_plot_visualization_big(self):  
-        gb1 = DataSet('gb1')
-        dsg =  pds.plot_visualization(gb1.nodes, edges_df=gb1.edges,
-                                      shade_nodes=True, shade_edges=True,
-                                      sort_by='3', sort_ascending=True,
-                                      nodes_resolution=200)
-        
-        with NamedTemporaryFile('w') as fhand:
-            fpath = fhand.name
-            pds.savefig(dsg, fpath)
-        
     def test_figure_allele_grid(self):  
         ser = DataSet('serine')
 
@@ -330,88 +328,105 @@ class DatashaderTests(unittest.TestCase):
         with NamedTemporaryFile('w') as fhand:
             fpath = fhand.name
             pds.figure_allele_grid(ndf.copy(), edges_df=edf.copy(), fpath=fpath)
+    
+    def test_plot_visualization_big(self):  
+        gb1 = DataSet('gb1')
+        dsg =  pds.plot_visualization(gb1.nodes, edges_df=gb1.edges,
+                                      shade_nodes=True, shade_edges=True,
+                                      sort_by='3', sort_ascending=True,
+                                      nodes_resolution=200)
         
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pds.savefig(dsg, fpath)    
     
     def test_plot_visualization_bin_datashader(self):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        gb1 = DataSet('gb1')
         
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
-               '-er', '1800']
-        check_call(cmd)
+        with NamedTemporaryFile('w') as fhand:
+            nodes_fpath = '{}.nodes.pq'.format(fhand.name)
+            write_dataframe(gb1.nodes, nodes_fpath)
+            
+            edges_fpath = '{}.edges.npz'.format(fhand.name)
+            write_edges(gb1.edges, edges_fpath)
+
+            output_fpath = '{}.visualization.png'.format(fhand.name)
+            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+                   '-o', output_fpath, '--datashader',
+                   '-nr', '800', '-er', '800']
+            check_call(cmd)
     
     def test_plot_visualization_bin_datashader_alleles(self):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        nodes_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.edges.npz')
-        plot_fpath = join(TEST_DATA_DIR, 'dmsc.2.3.plot')
+        gb1 = DataSet('gb1')
         
-        cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
-               '-o', plot_fpath, '-nc', 'f', '--datashader', '-nr', '800',
-               '-er', '1800', '--alleles']
-        check_call(cmd)
+        with NamedTemporaryFile('w') as fhand:
+            nodes_fpath = '{}.nodes.pq'.format(fhand.name)
+            write_dataframe(gb1.nodes, nodes_fpath)
+            
+            edges_fpath = '{}.edges.npz'.format(fhand.name)
+            write_edges(gb1.edges, edges_fpath)
+
+            output_fpath = '{}.visualization.png'.format(fhand.name)
+            cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
+                   '-o', output_fpath, '--datashader',
+                   '-nr', '800', '-er', '800', '--alleles']
+            check_call(cmd)
     
 
 class PlotlyTests(unittest.TestCase):
     def test_interactive_plot(self):
-        nodes_fpath = join(TEST_DATA_DIR, 'serine.nodes.csv')
-        edges_fpath = join(TEST_DATA_DIR, 'serine.edges.csv')
-        nodes_df = pd.read_csv(nodes_fpath, index_col=0)
-        edges_df = pd.read_csv(edges_fpath)
+        ser = DataSet('serine')
         
-        fpath = join(TEST_DATA_DIR, 'serine.interactive2d')
-        plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
-                         nodes_color='function', nodes_size=10,
-                         edges_width=1)
+        with NamedTemporaryFile() as fhand:
+            fpath = fhand.name
+            ply.plot_visualization(ser.nodes, edges_df=ser.edges, fpath=fpath,
+                                   nodes_color='function', nodes_size=10,
+                                   edges_width=1)
         
-        fpath = join(TEST_DATA_DIR, 'serine.interactive3d')
-        plot_interactive(nodes_df, edges_df=edges_df, fpath=fpath,
-                         nodes_color='function', nodes_size=10,
-                         edges_width=1, z='3')
+        with NamedTemporaryFile() as fhand:
+            fpath = fhand.name
+            ply.plot_visualization(ser.nodes, edges_df=ser.edges, fpath=fpath,
+                                   nodes_color='function', nodes_size=10,
+                                   edges_width=1, z='3')
 
 
 class InferencePlotsTests(unittest.TestCase):
     def test_plot_a_optimization(self):
-        fpath = join(TEST_DATA_DIR, 'logL.csv')
-        log_Ls = pd.read_csv(fpath, index_col=0)
-        fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
-        pmpl.plot_hyperparam_cv(log_Ls, axes, err_bars='stderr',
-                           x='log_sd', xlabel=r'$\log_{10}(\sigma_P)$')
-        fpath = join(TEST_DATA_DIR, 'seqdeft_a')
-        pmpl.savefig(fig, fpath)
-    
-    def test_plot_beta_optimization(self):    
-        fpath = join(TEST_DATA_DIR, 'vc.cv_loss.csv')
-        mses = pd.read_csv(fpath, index_col=0)
-        print(mses)
+        log_a = np.linspace(-2, 2, 11)
+        logL = np.exp(-log_a ** 2) - 5
+        log_a = np.array([-np.inf] + list(log_a) + [np.inf])
+        logL = np.array([-5] + list(logL) + [-5])
+        df1 = pd.DataFrame({'log_a': log_a, 'logL': logL, 'fold': np.zeros(logL.shape)})
+        df2 = pd.DataFrame({'log_a': log_a, 'logL': logL-1, 'fold': np.ones(logL.shape)})
+        df3 = pd.DataFrame({'log_a': log_a, 'logL': logL+0.5, 'fold': np.ones(logL.shape) * 2})
+        df = pd.concat([df1, df2, df3])
         
-        fig, subplots = pmpl.init_fig(1, 3, colsize=4, rowsize=3.5)
-        pmpl.plot_hyperparam_cv(mses, subplots[0], err_bars='stderr',
-                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
-                           y='mse', ylabel='MSE', highlight='min')
-        pmpl.plot_hyperparam_cv(mses, subplots[1], err_bars='stderr',
-                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
-                           y='logL', ylabel='log(L)')
-        pmpl.plot_hyperparam_cv(mses, subplots[2], err_bars='stderr',
-                           x='log_beta', xlabel=r'$\log_{10}(\beta)$',
-                           y='r2', ylabel=r'$R^2$')
-               
-        fpath = join(TEST_DATA_DIR, 'vc_beta')
-        pmpl.savefig(fig, fpath)
+        fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
+        pmpl.plot_hyperparam_cv(df, axes, err_bars='stderr',
+                                x='log_a', xlabel=r'$\log_{10}(a)$')
+        
+        with NamedTemporaryFile() as fhand:
+            fpath = fhand.name
+            pmpl.savefig(fig, fpath)
     
     def test_plot_SeqDEFT_summary(self):
-        fpath = join(TEST_DATA_DIR, 'logL.csv')
-        logl = pd.read_csv(fpath)
-        
-        fig = pmpl.plot_SeqDEFT_summary(logl)
-        fpath = join(TEST_DATA_DIR, 'seqdeft_output.log_Ls.png')
-        pmpl.savefig(fig, fpath)
+        log_a = np.linspace(-2, 2, 11)
+        logL = np.exp(-log_a ** 2) - 5
+        log_a = np.array([-np.inf] + list(log_a) + [np.inf])
+        logL = np.array([-5] + list(logL) + [-5])
+        df1 = pd.DataFrame({'log_a': log_a, 'logL': logL, 'fold': np.zeros(logL.shape)})
+        df2 = pd.DataFrame({'log_a': log_a, 'logL': logL-1, 'fold': np.ones(logL.shape)})
+        df3 = pd.DataFrame({'log_a': log_a, 'logL': logL+0.5, 'fold': np.ones(logL.shape) * 2})
+        df = pd.concat([df1, df2, df3])
+
+        with NamedTemporaryFile() as fhand:
+            fpath = fhand.name
+            fig = pmpl.plot_SeqDEFT_summary(df)
+            pmpl.savefig(fig, fpath)
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatPlotsTests.test_plot_rasterized_visualization']
+    import sys;sys.argv = ['', 'MatPlotsTests']
     unittest.main()
-

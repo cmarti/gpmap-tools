@@ -10,11 +10,11 @@ from subprocess import check_call
 from tempfile import NamedTemporaryFile
 from scipy.sparse import load_npz, csr_matrix
 
-from gpmap.src.settings import TEST_DATA_DIR, BIN_DIR
-from gpmap.src.space import CodonSpace, SequenceSpace
+from gpmap.src.datasets import DataSet
+from gpmap.src.settings import BIN_DIR
+from gpmap.src.space import CodonSpace, SequenceSpace, DiscreteSpace
 from gpmap.src.randwalk import WMWalk, ReactivePaths
-from gpmap.src.seq import get_seqs_from_alleles
-from build.lib.gpmap.src.space import DiscreteSpace
+from gpmap.src.seq import get_seqs_from_alleles, translate_seqs
 
 
 class RandomWalkTests(unittest.TestCase):
@@ -401,11 +401,14 @@ class RandomWalkTests(unittest.TestCase):
     
     def test_calc_visualization_bin(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
-        fpath = join(TEST_DATA_DIR, 'serine.csv')
+        data = DataSet('serine').landscape
         
         with NamedTemporaryFile() as fhand:
+            input_fpath = '{}.input.csv'.format(fhand.name)
+            data.to_csv(input_fpath)
+             
             out_fpath = fhand.name
-            cmd = [sys.executable, bin_fpath, fpath, '-o', out_fpath,
+            cmd = [sys.executable, bin_fpath, input_fpath, '-o', out_fpath,
                    '-p', '90', '-e', '-nf', 'csv']
             check_call(cmd)
             
@@ -418,29 +421,42 @@ class RandomWalkTests(unittest.TestCase):
     
     def test_calc_visualization_bin_guess_config(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
-        fpath = join(TEST_DATA_DIR, 'test.csv')
+        data = DataSet('serine').landscape
         
         with NamedTemporaryFile() as fhand:
-            cmd = [sys.executable, bin_fpath, fpath, '-o', fhand.name,
-                   '-m', '0.5', '-e']
+            input_fpath = '{}.input.csv'.format(fhand.name)
+            data.to_csv(input_fpath)
+            
+            cmd = [sys.executable, bin_fpath, input_fpath, '-o', fhand.name,
+                   '-m', '1.5', '-e']
             check_call(cmd)
     
     def test_calc_visualization_codon_restricted(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
-        fpath = join(TEST_DATA_DIR, 'test.csv')
-        data = pd.read_csv(fpath, index_col=0)
-        cmd = [sys.executable, bin_fpath, fpath, '-m', '0.65', '-e', '-nf', 'csv']
+        data = DataSet('serine').landscape
+        data['protein'] = translate_seqs(data.index.values)
+        data = data.groupby(['protein']).mean().drop('*', axis=0)
         
         # run with standard genetic code
         with NamedTemporaryFile() as fhand:
+            input_fpath = '{}.input.csv'.format(fhand.name)
+            data.to_csv(input_fpath)
+            
             out_fpath = fhand.name
-            check_call(cmd + ['-o', out_fpath])
+            cmd = [sys.executable, bin_fpath, input_fpath,
+                   '-m', '1.5', '-e', '-nf', 'csv', '-o', out_fpath]
+            check_call(cmd)
             edges1 = load_npz('{}.edges.npz'.format(out_fpath))
         
         # run with bacterial genetic code 11
         with NamedTemporaryFile() as fhand:
+            input_fpath = '{}.input.csv'.format(fhand.name)
+            data.to_csv(input_fpath)
+            
             out_fpath = fhand.name
-            check_call(cmd + ['-o', out_fpath, '-c', '11']) 
+            cmd = [sys.executable, bin_fpath, input_fpath, '-m', '1.5', '-e',
+                   '-nf', 'csv', '-o', out_fpath, '-c', '11']
+            check_call(cmd) 
             df = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
             assert(df.shape[0] == data.shape[0])
 
@@ -450,24 +466,51 @@ class RandomWalkTests(unittest.TestCase):
 
     def test_calc_visualization_codon_bin(self):
         bin_fpath = join(BIN_DIR, 'calc_visualization.py')
-        fpath = join(TEST_DATA_DIR, 'serine.protein.csv')
-        cmd = [sys.executable, bin_fpath, fpath, '-Ns', '1', 
-               '-e', '-C', '-nf', 'csv']
+        data = DataSet('serine').landscape
+        data['protein'] = translate_seqs(data.index.values)
+        data = data.groupby(['protein']).mean().drop('*', axis=0)
         
         # standard genetic code
         with NamedTemporaryFile() as fhand:
+            input_fpath = '{}.input.csv'.format(fhand.name)
+            data.to_csv(input_fpath)
+            
             out_fpath = fhand.name
-            check_call(cmd + ['-o', out_fpath, '-c', 'Standard'])
+            cmd = [sys.executable, bin_fpath, input_fpath, '-Ns', '1', 
+               '-e', '-C', '-nf', 'csv', '-o', out_fpath, '-c', 'Standard']
+            check_call(cmd)
             
             nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
             assert('protein' in nodes.columns)
             assert(nodes.shape[0] == 64)
         
         # custom genetic code
+        aa = ['W', 'W', 'K', 'K', 'C', 'C', 'C', 'C',
+              'H', 'H', '*', '*', 'I', 'I', '*', 'M',
+              'K', 'K', 'K', 'K', 'E', 'E', 'E', 'E',
+              'L', 'L', 'Q', 'Q', 'P', 'P', 'P', 'P',
+              'D', 'D', 'D', 'S', 'A', 'A', 'A', 'A',
+              'T', 'T', 'F', 'F', 'C', 'C', 'P', 'P',
+              'V', 'V', 'V', 'V', 'G', 'G', 'G', 'G',
+              'N', 'N', 'R', 'R', 'Y', 'Y', 'Y', 'Y']
+        codons = ['UUU', 'UUC', 'UUA', 'UUG', 'UCU', 'UCC', 'UCA', 'UCG',
+                  'UAU', 'UAC', 'UAA', 'UAG', 'UGU', 'UGC', 'UGA', 'UGG',
+                  'CUU', 'CUC', 'CUA', 'CUG', 'CCU', 'CCC', 'CCA', 'CCG',
+                  'CAU', 'CAC', 'CAA', 'CAG', 'CGU', 'CGC', 'CGA', 'CGG',
+                  'AUU', 'AUC', 'AUA', 'AUG', 'ACU', 'ACC', 'ACA', 'ACG',
+                  'AAU', 'AAC', 'AAA', 'AAG', 'AGU', 'AGC', 'AGA', 'AGG',
+                  'GUU', 'GUC', 'GUA', 'GUG', 'GCU', 'GCC', 'GCA', 'GCG',
+                  'GAU', 'GAC', 'GAA', 'GAG', 'GGU', 'GGC', 'GGA', 'GGG']
+        aa_mapping = pd.DataFrame({'Letter': aa, 'Codon': codons})
+        
         with NamedTemporaryFile() as fhand:
+            codon_fpath = '{}.codon_table.csv'.format(fhand.name)
+            aa_mapping.to_csv(codon_fpath)
+            
             out_fpath = fhand.name
-            codon_fpath = join(TEST_DATA_DIR, 'code_6037.csv')
-            check_call(cmd + ['-o', out_fpath, '-c', codon_fpath])
+            cmd = [sys.executable, bin_fpath, input_fpath, '-Ns', '1', 
+                   '-e', '-C', '-nf', 'csv', '-o', out_fpath, '-c', codon_fpath]
+            check_call(cmd)
             nodes = pd.read_csv('{}.nodes.csv'.format(out_fpath), index_col=0)
             assert('protein' in nodes.columns)
             assert(nodes.shape[0] == 64)
@@ -664,5 +707,5 @@ class ReactivePathsTests(unittest.TestCase):
     
         
 if __name__ == '__main__':
-    sys.argv = ['', 'RandomWalkTests.test_calc_hitting_prob_through']
+    sys.argv = ['', 'RandomWalkTests']
     unittest.main()

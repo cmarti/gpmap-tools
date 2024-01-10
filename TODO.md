@@ -30,6 +30,7 @@
 - Review scipy functionality for e.g. cartesian product and compare performance with our implementation and whether we need it at all now. 
 - Add bin to rasterize nodes and edges
 - Remove test data from repository
+- Delete seaborn from documentation as well
 
 
 ### Mid priority

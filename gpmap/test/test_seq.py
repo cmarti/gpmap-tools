@@ -3,8 +3,6 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from os.path import join
-from gpmap.src.settings import TEST_DATA_DIR
 from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
                            guess_space_configuration, get_custom_codon_table,
                            get_seqs_from_alleles, get_one_hot_from_alleles,
@@ -82,22 +80,6 @@ class SeqTests(unittest.TestCase):
         assert(config['n_alleles'] == [3, 3])
         assert(config['alphabet'] == [['A', 'B', 'C'], ['A', 'B', 'C']])
         
-        # With a real file
-        fpath = join(TEST_DATA_DIR, 'gfp.short.csv')
-        data = pd.read_csv(fpath).sort_values('pseudo_prot').set_index('pseudo_prot')
-        config = guess_space_configuration(data.index.values)
-        assert(config['length'] == 13)
-        assert(config['n_alleles'] == [2, 1, 8, 1, 2, 2, 6, 1, 1, 1, 2, 1, 2])
-        assert(config['alphabet_type'] == 'protein')
-    
-        # With another real file
-        fpath = join(TEST_DATA_DIR, 'test.csv')
-        data = pd.read_csv(fpath, index_col=0)
-        config = guess_space_configuration(data.index.values)
-        assert(config['length'] == 7)
-        assert(config['n_alleles'] == [2, 3, 2, 2, 3, 2, 3])
-        assert(config['alphabet_type'] == 'protein')
-        
     def test_translate(self):
         dna = np.array(['ATGTGA', 'ATGTGAATG'])
         
@@ -110,8 +92,23 @@ class SeqTests(unittest.TestCase):
         assert(np.all(protein == ['M*', 'M*M']))
     
     def test_get_custom_codon_table(self):
-        fpath = join(TEST_DATA_DIR, 'code_6037.csv')
-        aa_mapping = pd.read_csv(fpath)
+        aa = ['W', 'W', 'K', 'K', 'C', 'C', 'C', 'C',
+              'H', 'H', '*', '*', 'I', 'I', '*', 'M',
+              'K', 'K', 'K', 'K', 'E', 'E', 'E', 'E',
+              'L', 'L', 'Q', 'Q', 'P', 'P', 'P', 'P',
+              'D', 'D', 'D', 'S', 'A', 'A', 'A', 'A',
+              'T', 'T', 'F', 'F', 'C', 'C', 'P', 'P',
+              'V', 'V', 'V', 'V', 'G', 'G', 'G', 'G',
+              'N', 'N', 'R', 'R', 'Y', 'Y', 'Y', 'Y']
+        codons = ['UUU', 'UUC', 'UUA', 'UUG', 'UCU', 'UCC', 'UCA', 'UCG',
+                  'UAU', 'UAC', 'UAA', 'UAG', 'UGU', 'UGC', 'UGA', 'UGG',
+                  'CUU', 'CUC', 'CUA', 'CUG', 'CCU', 'CCC', 'CCA', 'CCG',
+                  'CAU', 'CAC', 'CAA', 'CAG', 'CGU', 'CGC', 'CGA', 'CGG',
+                  'AUU', 'AUC', 'AUA', 'AUG', 'ACU', 'ACC', 'ACA', 'ACG',
+                  'AAU', 'AAC', 'AAA', 'AAG', 'AGU', 'AGC', 'AGA', 'AGG',
+                  'GUU', 'GUC', 'GUA', 'GUG', 'GCU', 'GCC', 'GCA', 'GCG',
+                  'GAU', 'GAC', 'GAA', 'GAG', 'GGU', 'GGC', 'GGA', 'GGG']
+        aa_mapping = pd.DataFrame({'Letter': aa, 'Codon': codons})
         codon_table = get_custom_codon_table(aa_mapping)
         
         assert(codon_table.__str__())

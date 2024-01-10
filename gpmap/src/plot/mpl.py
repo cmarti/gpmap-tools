@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import warnings
 import numpy as np
-import seaborn as sns
 import pandas as pd
 import matplotlib.patches as mpatches
 import matplotlib.cm as cm
@@ -20,10 +19,10 @@ from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
 from itertools import product, chain, cycle
 from gpmap.src.plot.utils import sort_nodes
 
-def init_fig(nrow=1, ncol=1, figsize=None, style='ticks',
+
+def init_fig(nrow=1, ncol=1, figsize=None,
              colsize=3, rowsize=3, sharex=False, sharey=False,
              hspace=None, wspace=None):
-    sns.set_style(style)
     if figsize is None:
         figsize = (colsize * ncol, rowsize * nrow)
     fig, axes = plt.subplots(nrow, ncol, figsize=figsize,
@@ -32,9 +31,7 @@ def init_fig(nrow=1, ncol=1, figsize=None, style='ticks',
     return(fig, axes)
 
 
-def init_single_fig(figsize=None, style='ticks',
-             colsize=3, rowsize=3, is_3d=False):
-    sns.set_style(style)
+def init_single_fig(figsize=None, colsize=3, rowsize=3, is_3d=False):
     if figsize is None:
         figsize = (colsize, rowsize)
     fig = plt.figure(figsize=figsize)
@@ -81,7 +78,7 @@ def set_centered_spines(axes, xlabel='', ylabel='',
                   fontsize=fontsize, ha='right', va='center')
     axes.annotate(ylabel, xy=ylabel_pos, xycoords=('data', 'axes fraction'),
                   fontsize=fontsize, ha='left', va='bottom')
-    sns.despine(ax=axes)
+    axes.spines[['right', 'top']].set_visible(False)
 
 
 def savefig(fig, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360, figsize=None):
@@ -100,7 +97,7 @@ def savefig(fig, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360, figsize=None
 
 
 def empty_axes(axes):
-    sns.despine(ax=axes, left=True, bottom=True)
+    axes.spines[['left', 'bottom', 'right', 'top']].set_visible(False)
     axes.set_xticks([])
     axes.set_yticks([])
 
@@ -396,7 +393,7 @@ def plot_color_hist(axes, values, cmap='viridis', bins=50, fontsize=8):
     for value, patch in zip(values, patches):
         patch.set_facecolor(cmap(value))
     
-    sns.despine(ax=axes)
+    axes.spines[['right', 'top']].set_visible(False)
     axes.set(yticks=[], xticks=[], xlim=(bins[0], bins[-1]))
     axes.set_ylabel(ylabel='Frequency', fontsize=fontsize)
 
@@ -455,6 +452,22 @@ def get_element_sizes(df, size, min_size, max_size):
     return(size)
 
 
+def color_palette(name, n):
+    cmap = cm.cm.get_cmap(name)
+    mpl_qual_pals = {
+        "tab10": 10, "tab20": 20, "tab20b": 20, "tab20c": 20,
+        "Set1": 9, "Set2": 8, "Set3": 12,
+        "Accent": 8, "Paired": 12,
+        "Pastel1": 9, "Pastel2": 8, "Dark2": 8,
+    }
+    if name in mpl_qual_pals:
+        bins = np.linspace(0, 1, mpl_qual_pals[name])[:n]
+    else:
+        bins = np.linspace(0, 1, int(n) + 2)[1:-1]
+    palette = list(map(tuple, cmap(bins)[:, :3]))
+    return(palette)
+
+
 def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
     if color in df.columns:
         
@@ -463,7 +476,7 @@ def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
             if isinstance(palette, str):
                 labels = np.unique(df[color])
                 n_colors = labels.shape[0]
-                c = sns.color_palette(palette, n_colors)
+                c = color_palette(palette, n_colors)
                 palette = dict(zip(labels, c))
             elif not isinstance(palette, dict):
                 raise ValueError('palette must be a str or dict')
@@ -992,9 +1005,10 @@ def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
     y_star = sdf['mean'][idx]
     
     if show_folds:
-        sns.lineplot(x=x, y=y, hue='fold', ax=axes, legend=False,
-                     data=df.sort_values(x), alpha=0.4, linewidth=0.5,
-                     zorder=1)
+        for _, fold_df in df.groupby('fold'):
+            axes.plot(fold_df[x], fold_df[y], c='black', lw=0.5, alpha=0.4,
+                      zorder=1)
+        
     axes.plot(sdf['x'], sdf['mean'], color='black', lw=1, zorder=1)
     axes.scatter(sdf['x'], sdf['mean'], color='black', s=15)
     axes.scatter(x_star, y_star, color='red', s=25, zorder=10, alpha=1)

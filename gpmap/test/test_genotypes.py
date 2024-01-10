@@ -8,7 +8,7 @@ import pandas as pd
 from os.path import join
 from subprocess import check_call
 from tempfile import NamedTemporaryFile
-from scipy.sparse.csr import csr_matrix
+from scipy.sparse import csr_matrix
 
 from gpmap.src.settings import BIN_DIR
 from gpmap.src.utils import write_dataframe, read_dataframe
