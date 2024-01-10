@@ -564,10 +564,10 @@ class GridSpace(ProductSpace):
         self.length = length
         self.ndim = ndim
         
-        if np.array(length).shape[0] > 1:
-            elementary_graphs = [self.calc_elementary_graph(l) for l in length]
-        else:
+        if isinstance(length, int):
             elementary_graphs = [self.calc_elementary_graph(length)] * ndim
+        else:
+            elementary_graphs = [self.calc_elementary_graph(l) for l in length]
         super().__init__(elementary_graphs, y=y)
     
     def calc_elementary_graph(self, length):

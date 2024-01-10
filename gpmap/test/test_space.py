@@ -297,22 +297,6 @@ class SpaceTests(unittest.TestCase):
         s = SequenceSpace(X=data.index.values, y=data['y'].values)
         assert(np.all(sorted(s.state_labels[s.y > 1.5]) == sorted(codons)))
     
-    def test_calculate_variance_components(self):
-        space = DataSet('gb1').to_sequence_space()
-        lambdas = space.calc_variance_components()
-        assert(np.all(lambdas > 0))
-        
-    def test_calc_vjs_variance_components(self):
-        space = DataSet('gb1').to_sequence_space()
-        
-        vj1 = space.calc_vjs_variance_components(k=1)  
-        assert(vj1[(2,)] > vj1[(0,)])
-        assert(vj1[(3,)] > vj1[(1,)])
-        
-        vj2 = space.calc_vjs_variance_components(k=2)
-        for v in vj2.values():
-            assert(vj2[(2,3)] >= v)
-            
     def test_get_single_mutant_matrix(self):
         space = DataSet('gb1').to_sequence_space()
         m = space.get_single_mutant_matrix('WWLG', center=False)

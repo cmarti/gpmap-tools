@@ -10,7 +10,7 @@ from gpmap.src.seq import (translate_seqs, guess_alphabet_type,
                            get_seqs_from_alleles, get_one_hot_from_alleles,
                            generate_freq_reduced_code, transcribe_seqs,
                            msa_to_counts, calc_allele_frequencies,
-    calc_expected_logp, calc_genetic_code_aa_freqs)
+                           calc_expected_logp, calc_genetic_code_aa_freqs)
 
 
 class SeqTests(unittest.TestCase):

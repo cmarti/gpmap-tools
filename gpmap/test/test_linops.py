@@ -7,6 +7,7 @@ from itertools import combinations
 from scipy.special import comb
 from scipy.sparse.linalg import LinearOperator
 
+from gpmap.src.datasets import DataSet
 from gpmap.src.settings import ALPHABET
 from gpmap.src.seq import generate_possible_sequences
 from gpmap.src.matrix import get_sparse_diag_matrix
@@ -16,7 +17,9 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VarianceComponentKernelOperator,
                              DeltaPOperator, ProjectionOperator2,
                              RhoProjectionOperator, ConnectednessKernelOperator,
-                             ExtendedLinearOperator)
+                             ExtendedLinearOperator,
+                             calc_variance_components,
+                             calc_vjs_variance_components)
 
 
 class LinOpsTests(unittest.TestCase):
@@ -508,6 +511,22 @@ class LinOpsTests(unittest.TestCase):
         
         T2 = linop.lanczos(v0, n_vectors=4, return_Q=False)[1]
         assert(np.allclose(T, T2))
+    
+    def test_calculate_variance_components(self):
+        space = DataSet('gb1').to_sequence_space()
+        lambdas = calc_variance_components(space)
+        assert(np.all(lambdas > 0))
+        
+    def test_calc_vjs_variance_components(self):
+        space = DataSet('gb1').to_sequence_space()
+        
+        vj1 = calc_vjs_variance_components(space, k=1)  
+        assert(vj1[(2,)] > vj1[(0,)])
+        assert(vj1[(3,)] > vj1[(1,)])
+        
+        vj2 = calc_vjs_variance_components(space, k=2)
+        for v in vj2.values():
+            assert(vj2[(2,3)] >= v)
         
 
 class SkewedLinOpsTests(unittest.TestCase):

@@ -130,7 +130,7 @@ class UtilsTests(unittest.TestCase):
         # Without experimental variance
         data = pd.DataFrame({'y': [1, 2, 1.1], 'seq': seqs}).set_index('seq')        
         df = evaluate_predictions(test_pred_sets, data)
-        assert(np.all(df.columns == ['label', 'mse', 'r2']))
+        assert(np.all(df.columns == ['label', 'n', 'mse', 'r2']))
         assert(np.allclose(df['mse'].values, [0.0025, 0, 0.05 / 3]))
         assert(np.all(np.isnan(df['r2'].values[:2])))
         assert(np.allclose(df['r2'].values[2], 0.991758))
