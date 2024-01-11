@@ -47,6 +47,7 @@ def get_hist_inset_axes(axes, pos=(0.2, 0.7), width=0.4, height=0.25):
 
 def get_cbar_inset_axes(axes, horizontal=False, pos=(0.2, 0.6),
                         width=0.1, height=0.4):
+
     if horizontal:
         width, height = height, width
     ax = axes.inset_axes((pos[0], pos[1], width, height))
@@ -385,13 +386,14 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
 
 
 def plot_color_hist(axes, values, cmap='viridis', bins=50, fontsize=8):
-    _, bins, patches = axes.hist(values, bins=bins)
+    _, bins, bars = axes.hist(values, bins=bins)
     values = 0.5 * (bins[1:] + bins[:-1])
     values = (values - bins[0]) / (bins[-1] - bins[0])
     
     cmap = cm.get_cmap(cmap)
-    for value, patch in zip(values, patches):
-        patch.set_facecolor(cmap(value))
+    for value, bar in zip(values, bars):
+        for patch in bar.patches:
+            patch.set_facecolor(cmap(value))
     
     axes.spines[['right', 'top']].set_visible(False)
     axes.set(yticks=[], xticks=[], xlim=(bins[0], bins[-1]))
@@ -630,7 +632,7 @@ def plot_visualization(axes, nodes_df, edges_df=None,
             plot_color_hist(nodes_hist_axes, nodes_df[nodes_color], nodes_cmap,
                             bins=20)
     if inset_cbar:
-        nodes_cbar_axes = get_cbar_inset_axes(axes, orientation=orientation,
+        nodes_cbar_axes = get_cbar_inset_axes(axes, horizontal=orientation=='horizontal',
                                               pos=inset_pos)
     
     plot_nodes(axes, nodes_df=nodes_df, x=x, y=y, z=z,
