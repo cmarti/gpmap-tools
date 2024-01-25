@@ -256,16 +256,70 @@ def data_to_df(data):
     return(df)
 
 
-def generate_p_training_config(n_ps=10, nreps=3):
-    ps = np.vstack([np.linspace(0.05, 0.95, n_ps)] * nreps).T.flatten()
+def generate_p_training_config(ps=None, n_ps=10, n_reps=3,
+                               pmin=0.05, pmax=0.95):
+    '''
+    Returns a pd.DataFrame with the configuration to generate data 
+    splits with different proportions of the training data
+
+    Parameters
+    ----------
+    ps : array-like, optional
+        Array containing the specific training proportions to use, by default None. In
+        that case, a uniform set of proportions between `pmin` and `pmax`
+        will be generated
+    n_ps : int, optional
+        Number of different training proportions to use, by default 10
+    n_reps : int, optional
+        Number of replicates for each training propotion, by default 3
+    pmin : float, optional
+        Minimum proportion of training data to use, by default 0.05
+    pmax : float, optional
+        Maximum proportion of training data to use, by default 0.95
+
+    Returns
+    -------
+    data : pd.DataFrame
+        DataFrame containing the configuration for the different subdatasets
+        and the corresponding training fractions and replicate information.
+        To be used as input for `get_training_p_splits`
+    '''
+
+    if ps is None:
+        ps = np.linspace(0.05, 0.95, n_ps)
+    else:
+        n_ps = ps.shape[0]
+    ps = np.vstack([ps] * n_reps).T.flatten()
+
     i = np.arange(ps.shape[0])
-    rep = np.hstack([j * np.ones(n_ps) for j in range(nreps)])
+    rep = np.hstack([np.arange(n_reps) for j in range(n_ps)])
     data = pd.DataFrame({'id': i, 'p': ps, 'rep': rep})
     return(data)
 
 
 def get_training_p_splits(config, X, y, y_var=None, max_pred=None,
                           fixed_test=False):
+    '''
+    Given a training proportion configuration dataframe generated
+    by `generate_p_training_config`, returns a generator of data 
+    splits into training and test subsets of the desired sizes
+
+    Parameters
+    ----------
+    config : pd.DataFrame
+        DataFrame containing the training proportions configuration
+    X : array-like of str
+        Array containing the set of sequences from which to sample
+    y : array-like of float
+        Array containing the corresponding quantitiative information
+        associated to each sequence
+    y_var : array-like of float, optional
+        Variance associated to each measurement `y`, by default None
+    max_pred : int, optional
+        Maximum number of test points to return for each split, by default None
+    fixed_test : bool, optional
+        Whether to use the same test data across each of the replicates, by default False
+    '''
     msg = 'X and y must have the same size'
     check_error(X.shape[0] == y.shape[0], msg=msg)
     data = (X, y, y_var)

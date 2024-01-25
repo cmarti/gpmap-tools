@@ -8,7 +8,8 @@ from tempfile import NamedTemporaryFile
 
 from gpmap.src.utils import (get_CV_splits, edges_df_to_csr_matrix, read_edges,
                              write_edges, counts_to_seqs,
-                             evaluate_predictions, get_training_p_splits)
+                             evaluate_predictions, get_training_p_splits,
+                             generate_p_training_config)
 
 
 class UtilsTests(unittest.TestCase):
@@ -73,7 +74,18 @@ class UtilsTests(unittest.TestCase):
             self.fail()
         except TypeError:
             pass
-    
+
+    def test_generate_p_training_config(self):
+        config = generate_p_training_config(n_ps=3, n_reps=2)
+        assert(np.all(config['id'] == np.arange(6))) 
+        assert(np.allclose(config['p'], [0.05, 0.05, 0.5, 0.5, 0.95, 0.95])) 
+        assert(np.all(config['rep'] == [0, 1, 0, 1, 0, 1]))    
+
+        config = generate_p_training_config(ps=np.array([0.2, 0.5, 0.8]), n_reps=2)
+        assert(np.all(config['id'] == np.arange(6))) 
+        assert(np.allclose(config['p'], [0.2, 0.2, 0.5, 0.5, 0.8, 0.8])) 
+        assert(np.all(config['rep'] == [0, 1, 0, 1, 0, 1]))    
+
     def test_get_CV_splits(self):
         np.random.seed(0)
         X = np.array(['A', 'B', 'C'])
