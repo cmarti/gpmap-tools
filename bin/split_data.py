@@ -35,6 +35,8 @@ def main():
                               help='Number of different training proportions (10)')
     trainp_group.add_argument('-m', '--max_pred', default=None, type=int,
                               help='Max number of test sequences to generate')
+    trainp_group.add_argument('--ps', default=None,
+                              help='File containing specific training proportions to use')
     trainp_group.add_argument('--fixed_test', default=False, action='store_true',
                               help='Keep a constant test set across splits')
 
@@ -53,8 +55,9 @@ def main():
     run_cv = parsed_args.cv
     nfolds = parsed_args.k_folds
     
-    nreps = parsed_args.nreps
+    n_reps = parsed_args.nreps
     n_ps = parsed_args.n_ps
+    ps_fpath = parsed_args.ps
     max_pred = parsed_args.max_pred
     fixed_test = parsed_args.fixed_test
 
@@ -81,7 +84,8 @@ def main():
                                max_pred=max_pred)
     else:
         log.write('Generating training and test sets with variable proportions')
-        config = generate_p_training_config(n_ps=n_ps, nreps=nreps)
+        ps = None if ps_fpath is None else np.array([float(x.strip()) for x in open(ps_fpath)])
+        config = generate_p_training_config(ps=ps, n_ps=n_ps, nreps=n_reps)
         config.to_csv(out_fpath)
         
         splits = get_training_p_splits(config, X, y, y_var=y_var, 
