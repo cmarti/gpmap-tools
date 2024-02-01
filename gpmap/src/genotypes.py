@@ -183,6 +183,35 @@ def select_genotypes(nodes_df, genotypes, edges=None, is_idx=False):
     else:
         return(nodes_df)
     
+
+def select_path(nodes_df, path):
+    '''
+    Function that returns the nodes and edges dataframes for plotting a path
+    
+    Parameters
+    ----------
+    nodes_df: pd.DataFrame of shape (n_genotypes, n_features)
+        DataFrame with the genotypes from a full sequence space as index
+        Typically, it will contain, at least, the coordinates of the 
+        visualization for each genotype, but it will keep any other column
+        in the DataFrame for later use
+    path : array-like
+        Array-like containing the series of states comprising a path in the
+        discrete space
+        
+    Returns
+    -------
+    output: (nodes_df, edges)
+        Landscape containing the selected genotypes in the path and the 
+        edges that specify the connections between them
+    
+    '''
+    ndf = nodes_df.loc[path, :]
+    l = ndf.shape[0]
+    edf = pd.DataFrame({'i': np.arange(0, l-1),
+                        'j': np.arange(1, l)})
+    return(ndf, edf)
+    
     
 def select_d_neighbors(nodes_df, genotype_labels, d=1, edges=None):
     seq_matrix = np.array([[s for s in seq] for seq in nodes_df.index])
