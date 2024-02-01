@@ -24,7 +24,8 @@ def main():
                              'datasets/*/smn1*',
                              'datasets/*/dmsc*',
                              'datasets/*/pard*',
-                             'datasets/*/5ss*']},
+                             'datasets/*/5ss*',
+                             'datasets/*/trna*']},
         entry_points={
             'console_scripts': [
                 'fit_SeqDEFT = bin.fit_seqdeft:main',
@@ -37,8 +38,8 @@ def main():
                 'plot_decay_rates = bin.plot_decay_rates:main',
                 'filter_genotypes = bin.filter_genotypes:main',
             ]},
-        install_requires=['biopython',
-                          'matplotlib',
+        install_requires=['biopython', 'matplotlib',
+                          'scikit-image',
                           'tqdm', 'numpy', 'scipy',
                           'pandas', 'pyarrow',
                           'datashader>=0.13.0',

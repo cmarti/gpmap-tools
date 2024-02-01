@@ -41,5 +41,3 @@ PHI_UB, PHI_LB = 100, 0
 NUCLEOTIDES = ['A', 'U', 'G', 'C']
 COMPLEMENT = {'U': 'A', 'A': 'U', 'G': 'C', 'C': 'G', 'N': 'N',
               'T': 'A', '[': ']', ']': '['}
-
-DATASETS = ['serine', 'gb1', 'f1u', 'smn1', 'dmsc', '5ss', 'pard']

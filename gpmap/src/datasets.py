@@ -1,29 +1,31 @@
+from os import listdir
 from os.path import join, exists
 
-from gpmap.src.space import SequenceSpace
-from gpmap.src.utils import check_error, read_dataframe, read_edges
-from gpmap.src.settings import (DATASETS, RAW_DATA_DIR, LANDSCAPES_DIR,
-                                PROCESSED_DIR, VIZ_DIR)
+import matplotlib.pyplot as plt
+import gpmap.src.plot.mpl as plot
 
+from gpmap.src.utils import (check_error, read_dataframe, read_edges,
+                             write_edges, write_dataframe)
+from gpmap.src.settings import (RAW_DATA_DIR, LANDSCAPES_DIR,
+                                PROCESSED_DIR, VIZ_DIR)
+from gpmap.src.space import SequenceSpace
+from gpmap.src.randwalk import WMWalk
 
 class DataSet(object):
-    def __init__(self, dataset):
-        msg = 'Dataset not recognized: try one of {}'.format(DATASETS)
-        check_error(dataset in DATASETS, msg=msg)
-        
-        self.name = dataset
-        self.load_data()
-    
-    def load_data(self):
-        fpath = join(PROCESSED_DIR, '{}.pq'.format(self.name))
-        self.data = read_dataframe(fpath)
-        
-        if not 'X' in self.data.columns:
-            msg = '"m" column missing from data table'
-            check_error('m' in self.data.columns, msg=msg)
+    def __init__(self, dataset_name, data=None, landscape=None):
+        self.name = dataset_name
+
+        if data is None and landscape is None:
+            datasets = list_available_datasets()
+            check_error(dataset_name in datasets,
+                        msg='Dataset not available: check {}'.format(datasets))
+        else:
+            check_error(landscape is not None,
+                        msg='landscape must be provided for new dataset')
+            self._landscape = landscape
             
-            msg = '"var" column missing from data table'
-            check_error('var' in self.data.columns, msg=msg)
+            if data is not None:
+                self._data = data
     
     def _load(self, fdir, label, suffix=''):
         fpath = join(fdir, '{}.pq'.format(self.name + suffix))
@@ -40,6 +42,13 @@ class DataSet(object):
             df = read_dataframe(fpath)
         return(df)
     
+    def _write(self, df, fdir, suffix='', fmt='pq'):
+        fpath = join(fdir, '{}.{}'.format(self.name + suffix, fmt))
+        if fmt == 'npz': 
+            write_edges(df, fpath)
+        else:
+            write_dataframe(df, fpath)
+    
     @property
     def landscape(self):
         if not hasattr(self, '_landscape'):
@@ -52,6 +61,13 @@ class DataSet(object):
         if not hasattr(self, '_raw_data'):
             self._raw_data = self._load(fdir=RAW_DATA_DIR, label='raw data')
         return(self._raw_data)
+    
+    @property
+    def data(self):
+        if not hasattr(self, '_data'):
+            self._data = self._load(fdir=PROCESSED_DIR,
+                                    label='processed data')
+        return(self._data)
     
     @property
     def nodes(self):
@@ -79,3 +95,40 @@ class DataSet(object):
         space = SequenceSpace(X=self.landscape.index.values,
                               y=self.landscape.iloc[:, 0].values)
         return(space)
+    
+    def calc_visualization(self, n_components=20, Ns=None, mean_function=None):
+        space = self.to_sequence_space()
+        rw = WMWalk(space)
+        rw.calc_visualization(n_components=n_components, Ns=Ns,
+                              mean_function=mean_function)
+        self._nodes = rw.nodes_df
+        self._edges = space.get_edges_df()
+        self._relaxation_times = rw.decay_rates_df
+    
+    def plot(self):
+        fig, subplots = plt.subplots(1, 2, figsize=(8, 3.5))
+        axes = subplots[0]
+        plot.plot_relaxation_times(self.relaxation_times, axes)
+        axes.set_ylim(0, None)
+
+        axes = subplots[1]
+        plot.plot_visualization(axes, self.nodes, edges_df=self.edges)
+        fig.tight_layout()
+    
+    def save(self):
+        self._write(self._landscape, LANDSCAPES_DIR, fmt='pq')
+
+        attrs = ['_raw_data', '_data', '_nodes', '_edges', '_relaxation_times']
+        fdirs = [RAW_DATA_DIR, PROCESSED_DIR, VIZ_DIR, VIZ_DIR, VIZ_DIR]
+        suffixes = ['', '', '.nodes', '.edges', '.relaxation_times']
+        fmts = ['pq', 'pq', 'pq', 'npz', 'pq']
+
+        for attr, fdir, suffix, fmt in zip(attrs, fdirs, suffixes, fmts):
+            if hasattr(self, attr):
+                df = getattr(self, attr)
+                self._write(df, fdir, suffix, fmt=fmt)
+    
+
+def list_available_datasets():
+    dataset_names = ['.'.join(fname.split('.')[:-1]) for fname in listdir(LANDSCAPES_DIR)]
+    return(dataset_names)
