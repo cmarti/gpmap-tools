@@ -85,7 +85,7 @@ def main():
     else:
         log.write('Generating training and test sets with variable proportions')
         ps = None if ps_fpath is None else np.array([float(x.strip()) for x in open(ps_fpath)])
-        config = generate_p_training_config(ps=ps, n_ps=n_ps, nreps=n_reps)
+        config = generate_p_training_config(ps=ps, n_ps=n_ps, n_reps=n_reps)
         config.to_csv(out_fpath)
         
         splits = get_training_p_splits(config, X, y, y_var=y_var, 
