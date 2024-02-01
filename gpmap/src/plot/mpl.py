@@ -31,14 +31,6 @@ def init_fig(nrow=1, ncol=1, figsize=None,
     return(fig, axes)
 
 
-def init_single_fig(figsize=None, colsize=3, rowsize=3, is_3d=False):
-    if figsize is None:
-        figsize = (colsize, rowsize)
-    fig = plt.figure(figsize=figsize)
-    axes = fig.add_subplot(1, 1, 1, projection='3d' if is_3d else None)
-    return(fig, axes)
-
-
 def get_hist_inset_axes(axes, pos=(0.2, 0.7), width=0.4, height=0.25):
     ax = axes.inset_axes((pos[0], pos[1], width, height))
     ax.patch.set_alpha(0)
@@ -438,13 +430,6 @@ def get_axis_lims(nodes_df, x, y, z=None):
     axis_range = axis_max - axis_min
     axis_lims = (axis_min - 0.05 * axis_range, axis_max + 0.05 * axis_range)
     return(axis_lims)    
-
-
-def autoscale_axes(nodes_df, axes, x, y, z=None):
-    axis_lims = get_axis_lims(nodes_df, x, y, z=z)
-    axes.set(xlim=axis_lims, ylim=axis_lims, aspect='square')
-    if hasattr(axes, 'set_zlim'):
-        axes.set_zlim(axis_lims)
 
 
 def get_element_sizes(df, size, min_size, max_size):
@@ -1030,22 +1015,22 @@ def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
     
     for r in sdf.loc[np.isinf(sdf['x']), :].to_dict(orient='index').values():
         x, y = r['x'], r['mean']
-        label = r'{} = $\infty$'.format(xlabel)
-        if y < 0:
-            label = r'{} = -$\infty$'.format(xlabel)
+        sign = '' if x > 0 else '-'
+        label = '{}'.format(xlabel) + ' = {}'.format(sign) + r'$\infty$'
+        
         if not np.isnan(y):
             axes.plot(xlims, (y, y), lw=0.5, c='darkred', linestyle='--',
                       label=label)
+            
     axes.legend(loc=legend_loc, fontsize=9)
     axes.set(xlabel=xlabel, ylabel='Out of sample {}'.format(ylabel),
              ylim=ylims, xlim=xlims)
 
 
 def plot_density_vs_frequency(seq_density, axes):
-    with warnings.catch_warnings():
+    with np.errstate(divide='ignore'):
         logf = np.log10(seq_density['frequency'])
         logq = np.log10(seq_density['Q_star'])
-        warnings.simplefilter("ignore")
         data = pd.DataFrame({'logR': logf, 'logQ': logq}).dropna()
                              
     axes.scatter(data['logR'], data['logQ'],
