@@ -388,8 +388,7 @@ class DeltaPOperator(ConstantDiagOperator):
 
     def calc_kernel_basis(self, max_value_to_zero=1e-12):
         basis = np.hstack([self.L.calc_eigenspace_basis(k=p) for p in range(self.P)])
-        basis[np.abs(basis) < max_value_to_zero] = 0
-        self.kernel_basis = csr_matrix(basis)
+        self.kernel_basis = basis
     
     def calc_lambdas(self):
         lambdas = []
@@ -417,7 +416,7 @@ class _KronOperator(SeqLinOperator):
         
     def _matvec(self, v):
         return(kron_dot(self.matrices, v))
-    
+
 
 class VjProjectionOperator(_KronOperator):
     def set_j(self, positions):

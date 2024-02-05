@@ -372,19 +372,26 @@ class LinOpsTests(unittest.TestCase):
         basis = DP.kernel_basis
         
         # Ensure basis is orthonormal
-        prod = basis.T.dot(basis)
+        prod = basis.T @ basis
         identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
-        assert(np.allclose((prod - identity).todense(), 0))
-        
-        # Ensure basis is sparse
-        max_values = basis.shape[0] * basis.shape[1]
-        assert(basis.data.shape[0] < max_values) 
+        assert(np.allclose((prod - identity), 0))
         
         # Ensure they generate good projection matrices
-        u = np.dot(basis, basis.T).dot(basis)
-        error = (basis - u).mean()
-        assert(np.allclose(error, 0))
-    
+        u = basis @ prod
+        assert(np.allclose(basis, u, atol=1e-8))
+
+        # Repeat with larger number of alleles
+        DP = DeltaPOperator(P=2, n_alleles=20, seq_length=4)
+        DP.calc_kernel_basis()
+        basis = DP.kernel_basis
+        
+        prod = basis.T @ basis
+        identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
+        assert(np.allclose((prod - identity), 0))
+
+        u = basis @ prod
+        assert(np.allclose(basis, u, atol=1e-8))
+        
     def test_calc_trace(self):
         P = RhoProjectionOperator(4, 5)
         P.set_rho(0.5)
