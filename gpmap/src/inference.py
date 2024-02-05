@@ -16,7 +16,7 @@ from gpmap.src.matrix import reciprocal, calc_matrix_polynomial_quad
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences, calc_allele_frequencies,
-    calc_expected_logp, calc_genetic_code_aa_freqs)
+                           calc_expected_logp, calc_genetic_code_aa_freqs)
 from gpmap.src.linop import (DeltaPOperator, VarianceComponentKernelOperator,
                              ExtendedLinearOperator)
 from gpmap.src.kernel import KernelAligner
@@ -287,7 +287,8 @@ class VCregression(LandscapeEstimator):
         cv_loss = self.calc_cv_loss(cv_data)
          
         self.cv_loss_df = pd.DataFrame(cv_loss)
-        self.cv_loss_df['log_beta'] = np.log10(self.cv_loss_df['beta'])
+        with np.errstate(divide='ignore'):
+            self.cv_loss_df['log_beta'] = np.log10(self.cv_loss_df['beta'])
         loss = self.cv_loss_df.groupby('beta')['loss'].mean()
         self.beta = loss.index[np.argmin(loss)]
     
@@ -519,19 +520,14 @@ class DeltaPEstimator(LandscapeEstimator):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.DP = DeltaPOperator(self.P, self.n_alleles, self.seq_length)
-        self.DP.calc_kernel_basis()
+
+    def get_kernel_basis(self):
+        if not hasattr(self.DP, 'kenel_basis'):
+            self.DP.calc_kernel_basis()
+        return(self.DP.kernel_basis)
     
     def get_a_values(self):
         return(self.get_regularization_constants())
-    
-    def calc_neg_log_prior_prob(self, phi, a):
-        self.DP_dot_phi = self.DP.dot(phi)
-        S1 = a / (2*self.DP.n_p_faces) * np.sum(phi * self.DP_dot_phi)
-        return(S1)
-    
-    def calc_neg_log_prior_prob_grad(self, phi, a):
-        grad_S1 = a / self.DP.n_p_faces * self.DP_dot_phi
-        return(grad_S1)
     
     def calc_loss_and_grad_finite(self, phi):
         DP_dot_phi = self.DP.dot(phi)
@@ -580,10 +576,11 @@ class DeltaPEstimator(LandscapeEstimator):
             yield({'a': a, 'fold': fold, 'logL': test_logL})
 
     def get_cv_logL_df(self, cv_logL):
-        cv_log_L = pd.DataFrame(cv_logL)
-        cv_log_L['log_a'] = np.log10(cv_log_L['a'])
-        cv_log_L['sd'] = self._a_to_sd(cv_log_L['a'])
-        cv_log_L['log_sd'] = np.log10(cv_log_L['sd'])
+        with np.errstate(divide = 'ignore'):
+            cv_log_L = pd.DataFrame(cv_logL)
+            cv_log_L['log_a'] = np.log10(cv_log_L['a'])
+            cv_log_L['sd'] = self._a_to_sd(cv_log_L['a'])
+            cv_log_L['log_sd'] = np.log10(cv_log_L['sd'])
         return(cv_log_L)
     
     def get_ml_a(self, cv_logL_df):
@@ -601,10 +598,10 @@ class DeltaPEstimator(LandscapeEstimator):
         self.a = self.get_ml_a(self.logL_df)
     
     def _phi_to_b(self, phi):
-        return(self.DP.kernel_basis.T.dot(phi))
+        return(self.get_kernel_basis().T.dot(phi))
     
     def _b_to_phi(self, b):
-        return(self.DP.kernel_basis.dot(b))
+        return(self.get_kernel_basis().dot(b))
 
     def _a_to_sd(self, a):
         return(np.sqrt(self.DP.n_p_faces / a))
@@ -829,7 +826,9 @@ class SeqDEFT(DeltaPEstimator):
         return(regularizer)
     
     def calc_neg_log_likelihood(self, phi):
-        S2 = self.N * np.sum(self.R * phi)
+        phi_aux = phi.copy()
+        phi_aux[np.logical_and(np.isinf(phi_aux), self.R == 0)] = 0
+        S2 = self.N * np.sum(self.R * phi_aux)
         S3 = self.N * np.sum(safe_exp(-phi))
         return(S2 + S3)
     
