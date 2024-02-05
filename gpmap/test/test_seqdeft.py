@@ -23,6 +23,26 @@ class SeqDEFTTests(unittest.TestCase):
         
         assert(seqdeft.seq_length == 3)
         assert(seqdeft.n_alleles == 2)
+    
+    def test_neg_log_likelihood(self):
+        np.random.seed(0)
+        seqdeft = SeqDEFT(P=2)
+        seqdeft.init(seq_length=2, n_alleles=2)
+        phi = seqdeft.simulate_phi(a=10)
+        X = seqdeft.simulate(N=5, phi=phi)
+        seqdeft.set_data(X=X)
+        
+        nll = seqdeft.calc_neg_log_likelihood(phi)
+        assert(np.allclose(nll, 20.004045229268037))
+        
+        phi[0] = np.inf
+        nll = seqdeft.calc_neg_log_likelihood(phi)
+        assert(np.isfinite(nll))
+        assert(np.allclose(nll, 15.497034348611063))
+        
+        phi[1] = np.inf
+        nll = seqdeft.calc_neg_log_likelihood(phi)
+        assert(np.isinf(nll))
         
     def test_seq_deft_simulate(self):
         seqdeft = SeqDEFT(P=2)
@@ -198,7 +218,9 @@ class SeqDEFTTests(unittest.TestCase):
 
         with NamedTemporaryFile(mode='w') as fhand:        
             fig = plot_SeqDEFT_summary(log_Ls, seq_densities, legend_loc=2)
-            savefig(fig, fhand.name)
+            fpath = fhand.name
+            fpath = '/home/martigo/elzar/test_seqdeft.png'
+            savefig(fig, fpath)
         
 
 if __name__ == '__main__':
