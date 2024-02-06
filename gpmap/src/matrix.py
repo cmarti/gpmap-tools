@@ -142,20 +142,28 @@ def calc_tensor_product_dot2(m1, m2, v):
 
 
 def kron_dot(matrices, v):
-    shape = tuple([m_i.shape[1] for m_i in matrices])
+    shape = [m_i.shape[1] for m_i in matrices]
     if np.prod(shape) != v.shape[0]:
         msg = 'Incorrect dimensions of matrices and `v`'
         raise ValueError(msg)
     
     m = v.reshape(shape)
-    
     for i, m_i in enumerate(matrices):
         axes = np.arange(len(shape))
         axes[[i, 0]] = np.array([0, i])
-        new_shape = (m_i.shape[0], int(v.shape[0] / m_i.shape[0]))
-        m = np.transpose(m_i.dot(np.transpose(m, axes=axes).reshape(new_shape)).reshape(shape), axes=axes)
+
+        n = np.prod(m.shape)
+        tmp_shape = (m_i.shape[1], int(n / m_i.shape[1]))
+        mx = np.transpose(m, axes=axes).reshape(tmp_shape)
+        p = m_i @ mx
+
+        shape[i] = m_i.shape[0]
+        tmp_shape = shape.copy()
+        tmp_shape[0], tmp_shape[i] = tmp_shape[i], tmp_shape[0]
+
+        m = np.transpose(p.reshape(tmp_shape), axes=axes)
     
-    return(m.reshape(v.shape))
+    return(m.reshape(np.prod(shape)))
 
 
 def calc_tensor_product_quad(matrices, v1, v2=None):
