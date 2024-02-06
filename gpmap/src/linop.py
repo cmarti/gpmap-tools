@@ -413,10 +413,79 @@ class _KronOperator(SeqLinOperator):
         self.b = b
         self.W0 = np.outer(b, b) / np.sum(b ** 2)
         self.W1 = np.eye(self.alpha) - self.W0
-        
+    
     def _matvec(self, v):
         return(kron_dot(self.matrices, v))
+    
+    def transpose_dot(self, v):
+        return(kron_dot([m.T for m in self.matrices], v))
 
+
+class VjBasisOperator(_KronOperator):
+    def __init__(self, n_alleles, seq_length, j):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        self.shape = (self.n, (self.alpha - 1) ** len(j))
+        self.j = j
+        self.matrices = [self.W1 if i in j else self.W0 for i in range(self.l)]
+
+    def calc_elementary_W(self):
+        site_L = self.alpha * np.eye(self.alpha) - np.ones((self.alpha, self.alpha))
+        self.W0 = np.full((self.alpha, 1), 1 / np.sqrt(self.alpha)) 
+        self.W1 = orth(site_L)
+
+class EigenBasisOperator(SeqLinOperator):
+    def __init__(self, n_alleles, seq_length, k):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        self.k = k
+        self.m = (self.alpha - 1) ** self.k
+        self.shape = (self.n, int(comb(self.l, self.k) * self.m))
+
+    def _matvec(self, v):
+        positions = np.arange(self.l)
+        u = 0
+        for i, j in enumerate(combinations(positions, self.k)):
+            B = VjBasisOperator(self.alpha, self.l, j)
+            v_i = v[self.m*i:self.m*(i+1)]
+            u += B @ v_i
+        return(u)
+    
+    def transpose_dot(self, v):
+        positions = np.arange(self.l)
+        u = np.zeros(self.shape[1])
+        for i, j in enumerate(combinations(positions, self.k)):
+            B = VjBasisOperator(self.alpha, self.l, j)
+            u[self.m*i:self.m*(i+1)] = B.transpose_dot(v)
+        return(u)
+
+
+class DeltaKernelBasisOperator(SeqLinOperator):
+    def __init__(self, n_alleles, seq_length, P):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        self.P = P
+        m = int(np.sum([comb(self.l, k) * (self.alpha - 1) ** k
+                        for k in range(P)]))
+        self.shape = (self.n, m)
+
+    def _matvec(self, v):
+        u = 0.
+        start = 0
+        for k in range(self.P):
+            B = EigenBasisOperator(self.alpha, self.l, k=k)
+            end = start + B.shape[1]
+            u += B @ v[start:end]
+            start = end
+        return(u)
+    
+    def transpose_dot(self, v):
+        u = np.zeros(self.shape[1])
+        start = 0
+        for k in range(self.P):
+            B = EigenBasisOperator(self.alpha, self.l, k=k)
+            end = start + B.shape[1]
+            u[start:end] = B.transpose_dot(v)
+            start = end
+        return(u)
+    
 
 class VjProjectionOperator(_KronOperator):
     def set_j(self, positions):
@@ -520,12 +589,14 @@ class ProjectionOperator2(SeqLinOperator):
 
 
 class ProjectionOperator(ConstantDiagOperator):
-    def __init__(self, n_alleles=None, seq_length=None):
+    def __init__(self, n_alleles=None, seq_length=None, k=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.L = LaplacianOperator(n_alleles=n_alleles, seq_length=seq_length)
         self.m_k = self.L.lambdas_multiplicity
         self.calc_eig_vandermonde_matrix()
         self.calc_polynomial_coeffs(numeric=False)
+        if k is not None:
+            self.set_lambdas(k=k)
     
     def calc_eig_vandermonde_matrix(self):
         self.V = np.vstack([self.L.lambdas ** i for i in range(self.lp1)]).T
