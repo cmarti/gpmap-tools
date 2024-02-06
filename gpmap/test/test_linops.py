@@ -16,7 +16,8 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VarianceComponentKernelOperator,
                              DeltaPOperator, ProjectionOperator2,
                              RhoProjectionOperator, ConnectednessKernelOperator,
-                             ExtendedLinearOperator,
+                             ExtendedLinearOperator, VjBasisOperator,
+                             EigenBasisOperator, DeltaKernelBasisOperator,
                              calc_variance_components,
                              calc_vjs_variance_components)
 
@@ -366,6 +367,23 @@ class LinOpsTests(unittest.TestCase):
             lambda_k = a ** P * comb(k, P)
             assert(DP.lambdas[k] == lambda_k)
     
+    def test_Vj_basis_operator(self):
+        M = VjBasisOperator(4, 5, j=(0, 2))
+        assert(M.shape == (4 ** 5, 9))
+
+        v = np.random.normal(size=(9,))
+        u = M @ v
+        assert(u.shape[0] == 4 ** 5)
+
+    def test_eigenbasis_operator(self):
+        W = ProjectionOperator(4, 5, k=2)
+        B = EigenBasisOperator(4, 5, k=2)
+
+        v = np.random.normal(size=W.shape[0])
+        u1 = W @ v
+        u2 = B @ B.transpose_dot(v)
+        assert(np.allclose(u1, u2))
+    
     def test_DP_calc_kernel_basis(self):
         DP = DeltaPOperator(P=2, n_alleles=4, seq_length=5)
         DP.calc_kernel_basis()
@@ -373,8 +391,8 @@ class LinOpsTests(unittest.TestCase):
         
         # Ensure basis is orthonormal
         prod = basis.T @ basis
-        identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
-        assert(np.allclose((prod - identity), 0))
+        identity = np.eye(prod.shape[0])
+        assert(np.allclose(prod,  identity))
         
         # Ensure they generate good projection matrices
         u = basis @ prod
@@ -386,11 +404,26 @@ class LinOpsTests(unittest.TestCase):
         basis = DP.kernel_basis
         
         prod = basis.T @ basis
-        identity = get_sparse_diag_matrix(np.ones(prod.shape[0]))
-        assert(np.allclose((prod - identity), 0))
+        identity = np.eye(prod.shape[0])
+        assert(np.allclose(prod,  identity))
 
         u = basis @ prod
         assert(np.allclose(basis, u, atol=1e-8))
+    
+    def test_DP_kernel_basis_operator(self):
+        DP = DeltaPOperator(P=2, n_alleles=4, seq_length=5)
+        DP.calc_kernel_basis()
+        B = DeltaKernelBasisOperator(4, 5, P=2)
+
+        v = np.random.normal(size=DP.kernel_basis.shape[1])
+        u1 = DP.kernel_basis @ v
+        u2 = B @ v
+        assert(np.allclose(u1, u2))
+
+        v = np.random.normal(size=DP.kernel_basis.shape[0])
+        u1 = DP.kernel_basis.T @ v
+        u2 = B.transpose_dot(v)
+        assert(np.allclose(u1, u2))
         
     def test_calc_trace(self):
         P = RhoProjectionOperator(4, 5)
