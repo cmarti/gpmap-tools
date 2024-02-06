@@ -18,7 +18,7 @@ from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_subsequences, calc_allele_frequencies,
                            calc_expected_logp, calc_genetic_code_aa_freqs)
 from gpmap.src.linop import (DeltaPOperator, VarianceComponentKernelOperator,
-                             ExtendedLinearOperator)
+                             ExtendedLinearOperator, DeltaKernelBasisOperator)
 from gpmap.src.kernel import KernelAligner
 
 
@@ -520,12 +520,8 @@ class DeltaPEstimator(LandscapeEstimator):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.DP = DeltaPOperator(self.P, self.n_alleles, self.seq_length)
+        self.kernel_basis = DeltaKernelBasisOperator(self.n_alleles, self.seq_length, self.P)
 
-    def get_kernel_basis(self):
-        if not hasattr(self.DP, 'kenel_basis'):
-            self.DP.calc_kernel_basis()
-        return(self.DP.kernel_basis)
-    
     def get_a_values(self):
         return(self.get_regularization_constants())
     
@@ -598,10 +594,10 @@ class DeltaPEstimator(LandscapeEstimator):
         self.a = self.get_ml_a(self.logL_df)
     
     def _phi_to_b(self, phi):
-        return(self.get_kernel_basis().T.dot(phi))
+        return(self.kernel_basis.transpose_dot(phi))
     
     def _b_to_phi(self, b):
-        return(self.get_kernel_basis().dot(b))
+        return(self.kernel_basis.dot(b))
 
     def _a_to_sd(self, a):
         return(np.sqrt(self.DP.n_p_faces / a))
