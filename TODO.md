@@ -14,33 +14,29 @@
 - Update plotly plotting functionalities
 - Review Kernel alignment loss function in the paper, code and docs to match
 - Add stationary function distribution to the histogram plot
-- Write specific Kernel with uniform noise function that allows direct calculation of the logdet of full covariance matrix that we can use for MLL maximization
 - Try to reduce dependencies: networkx, datashader. Make some optional: tqdm, fastparquet, plotly
 - Add documentation for transition path theory
-- Add tests for SeqDEFT intermediates: likelihood calculation under different P's
 - Review typos in documentation
 - Fix problems in readthedocs updating
-- Reorganize extended linear operator: think which methods should be functions to facilate class inheritance and which ones should work with matrices as well
 - Think about separation of basic functionalities that are used in visualization and inference
 - Review scipy functionality for e.g. cartesian product and compare performance with our implementation and whether we need it at all now. 
-- Add bin to rasterize nodes and edges
 - Delete seaborn from documentation as well
 - Write __str__ method for DataSet to highlight the main properties of the dataset
 - Remove fontsize arguments from the plotting functions: makes things very messy. It may jsut be better to use rcParams
+- Review linear operators and make clean up other functions and operators that can be built as subclasses of more general ones. Operators should be defined with specific parameter values.
 
 
 ### Mid priority
+- Add bin to rasterize nodes and edges
+- Reorganize extended linear operator: think which methods should be functions to facilate class inheritance and which ones should work with matrices as well
 - Reimplement datashader plotting functions using v0.12 native mpl interface
 - There is a clear problem when calculating the rate matrix with mutational biases. Review and test if there is still error in calculation of rate matrix when having variable mutation rates. Re-test mutational biases
-- Think whether to implement an embedding object
+- Think whether to implement an embedding object -> This is almost the DataSet object now
 - Streamline reduced alphabet
-- Compare inv_dot using minres and taking the reciprocal of the eigenvalues. minres allows having different residual variances per observation though
 - Implement the 1SD rule to select hyperparameter in cv
 - Better figure out how to calculate the covariance distance using L polynomial and reimplement without L_powers_unique_entries_inv
-- Implement product kernel class that uses kron_dot
 - Implement kernel alignment on the 2^k different covariances that we can fit as an additive function of rho's and lambda's. The challenge is to extract those values from the data efficiently
 - Implement DeltaP interpolation and regression
-- relationship with kernel regression that would allow non linear transformations
   
 ### Low priority
 - Add some descriptions to the datasets and reference to the original paper

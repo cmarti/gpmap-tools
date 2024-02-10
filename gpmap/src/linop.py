@@ -17,7 +17,6 @@ from gpmap.src.utils import check_error
 from gpmap.src.matrix import (calc_cartesian_product,
                               calc_matrix_polynomial_dot, calc_tensor_product,
                               calc_cartesian_product_dot,
-                              calc_tensor_product_dot, calc_tensor_product_quad, 
                               inner_product, kron_dot, diag_pre_multiply)
 
 
@@ -200,9 +199,24 @@ class ExtendedLinearOperator(_CustomLinearOperator):
             else:
                 msg = 'Unknown method for log_det estimation: {}'.format(method)
                 raise ValueError(msg)
-            
 
-class MatrixPolynomial(ExtendedLinearOperator):
+class KronOperator(ExtendedLinearOperator):
+    def __init__(self, matrices):
+        self.matrices = matrices
+        self.v_shape = [m_i.shape[1] for m_i in self.matrices]
+        self.shape = (np.prod([m_i.shape[0] for m_i in self.matrices]),
+                      np.prod(self.v_shape))
+
+    def _matvec(self, v):
+        check_error(v.shape == self.shape[1],
+                    msg='Incorrect dimensions of matrices and `v`')
+        u_tensor = v.reshape(self.v_shape)
+        for i, m in enumerate(self.matrices):
+            u_tensor = np.tensordot(m, u_tensor, axes=([1], [i]))
+        u = u_tensor.transpose().flatten()
+        return(u)
+
+class PolynomialOperator(ExtendedLinearOperator):
     def __init__(self, linop, coeffs=None):
         self.linop = linop
         if coeffs is not None:
@@ -235,13 +249,13 @@ class MatrixPolynomial(ExtendedLinearOperator):
         return(np.array(trace))
     
 
-class TruncatedMatrixExp(MatrixPolynomial):
+class TruncatedMatrixExp(PolynomialOperator):
     def __init__(self, linop, m):
         coeffs = np.array([1/factorial(i) for i in range(m+1)])
         super().__init__(linop, coeffs)
 
 
-class TruncatedMatrixLog(MatrixPolynomial):
+class TruncatedMatrixLog(PolynomialOperator):
     def __init__(self, linop, m, alpha=1):
         self.shape = linop.shape
         j = np.arange(1, m)

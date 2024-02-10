@@ -16,10 +16,10 @@ def inner_product(x1, x2, metric=None):
         return(x1.dot(metric.dot(x2.T)))
 
 
-def quad(matrix, v1, v2=None):
+def quad(linop, v1, v2=None):
     if v2 is None:
         v2 = v1
-    return(np.sum(matrix.dot(v1) * v2))
+    return(np.sum(linop.dot(v1) * v2))
 
 
 def get_sparse_diag_matrix(values):
@@ -116,36 +116,10 @@ def calc_tensor_product(matrices):
     return(m)
 
 
-def calc_tensor_product_dot(matrices, v):
-    d1 = np.prod([m.shape[0] for m in matrices])
-    check_error(d1 == v.shape[0], 'Dimension missmatch between matrix and vector')
-    
-    if len(matrices) == 1:
-        return(matrices[0].dot(v))
-    
-    a = matrices[0].shape[0]
-    s = v.shape[0] // a
-    m = matrices[0]
-    vs = [v[s*j:s*(j+1)] for j in range(a)]
-    us = [calc_tensor_product_dot(matrices[1:], v_i) for v_i in vs]
-    
-    u = np.zeros(v.shape[0])
-    for col in range(a):
-        u_i = np.hstack([m[k, col] * us[col] for k in range(a)]) 
-        u += u_i
-    return(u)
-
-
-def calc_tensor_product_dot2(m1, m2, v):
-    m = v.reshape((m1.shape[1], m2.shape[1])).T
-    return(m1.dot(m2.dot(m).T).reshape(v.shape))
-
-
 def kron_dot(matrices, v):
     shape = [m_i.shape[1] for m_i in matrices]
-    if np.prod(shape) != v.shape[0]:
-        msg = 'Incorrect dimensions of matrices and `v`'
-        raise ValueError(msg)
+    check_error(np.prod(shape) == v.shape[0],
+                msg='Incorrect dimensions of matrices and `v`')
     
     m = v.reshape(shape)
     for i, m_i in enumerate(matrices):
@@ -162,26 +136,7 @@ def kron_dot(matrices, v):
         tmp_shape[0], tmp_shape[i] = tmp_shape[i], tmp_shape[0]
 
         m = np.transpose(p.reshape(tmp_shape), axes=axes)
-    
     return(m.reshape(np.prod(shape)))
-
-
-def calc_tensor_product_quad(matrices, v1, v2=None):
-    if v2 is None:
-        v2 = v1.copy()
-    
-    if len(matrices) == 1:
-        return(quad(matrices[0], v1, v2))
-    
-    a = matrices[0].shape[0]
-    s = v1.shape[0] // a
-    m = matrices[0]
-    v1s = [v1[s*j:s*(j+1)] for j in range(a)]
-    v2s = [v2[s*j:s*(j+1)] for j in range(a)]
-
-    ss = np.sum([m[row, col] * calc_tensor_product_quad(matrices[1:], v1s[row], v2s[col])
-                 for row, col in product(np.arange(a), repeat=2)])
-    return(ss)
 
 
 def reciprocal(x, y):

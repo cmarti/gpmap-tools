@@ -7,7 +7,7 @@ from scipy.sparse import csr_matrix
 from gpmap.src.matrix import (calc_cartesian_product, calc_tensor_product,
                               calc_cartesian_product_dot, calc_tensor_product_dot,
                               calc_tensor_product_quad, quad,
-                              calc_tensor_product_dot2, kron_dot,
+                              calc_tensor_product_dot2, kron_dot, kron_dot2,
                               diag_pre_multiply, diag_post_multiply,
                               lanczos_conjugate_gradient, rate_to_jump_matrix)
 
@@ -178,37 +178,6 @@ class MatrixTests(unittest.TestCase):
         u2 = calc_tensor_product_dot2(m2, m3, v)
         assert(np.allclose(u1, u2))
 
-    def test_kron_dot(self):
-        m1 = 0.5 * np.array([[1, 1],
-                             [1, 1]])
-        m2 = 0.5 * np.array([[1, -1],
-                             [-1, 1]])
-
-        v = np.array([1, 1, 1, 1, 0, 0, 0, 0])
-        m = np.kron(m2, np.kron(m1, m1))
-        u1 = m.dot(v)
-        u2 = kron_dot([m2, m1, m1], v)
-        assert(np.allclose(u1, u2))
-
-        # Try different sizes
-        m2 = 0.5 * np.array([[1],
-                             [-1]])
-        v = np.array([1, 1, 0, 0])
-        m = np.kron(m2, np.kron(m1, m1))
-        u1 = m.dot(v)
-        u2 = kron_dot([m2, m1, m1], v)
-        assert(np.allclose(u1, u2))
-
-        # Try with random matrices of different sizes
-        matrices = [np.random.normal(size=(2, 2)),
-                    np.random.normal(size=(3, 3)),
-                    np.random.normal(size=(4, 1))]
-        m = np.kron(matrices[0], np.kron(matrices[1], matrices[2]))
-        v = np.random.normal(size=m.shape[1])
-        u1 = m.dot(v)
-        u2 = kron_dot(matrices, v)
-        assert(np.allclose(u1, u2))
-        
     def test_tensor_product_quad(self):
         m1 = 0.5 * np.array([[1, 1],
                              [1, 1]])

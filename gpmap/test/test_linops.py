@@ -18,6 +18,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              RhoProjectionOperator, ConnectednessKernelOperator,
                              ExtendedLinearOperator, VjBasisOperator,
                              EigenBasisOperator, DeltaKernelBasisOperator,
+                             KronOperator,
                              calc_variance_components,
                              calc_vjs_variance_components)
 
@@ -409,6 +410,36 @@ class LinOpsTests(unittest.TestCase):
 
         u = basis @ prod
         assert(np.allclose(basis, u, atol=1e-8))
+    
+    def test_kron_operator(self):
+        m1 = np.random.normal(size=(2, 2))
+        m2 = np.random.normal(size=(2, 2))
+        m3 = np.random.normal(size=(2, 1))
+        m4 = np.random.normal(size=(2, 3))
+        
+        # With 2 matrices
+        K = KronOperator([m1, m2])
+        m = np.kron(m1, m2)
+        v = np.random.normal(size=K.shape[1])
+        assert(np.allclose(m.dot(v), K.dot(v)))
+
+        # With 3 matrices
+        K = KronOperator([m2, m1, m1])
+        m = np.kron(m2, np.kron(m1, m1))
+        v = np.random.normal(size=K.shape[1])
+        assert(np.allclose(m.dot(v), K.dot(v)))
+
+        # Try different sizes
+        K = KronOperator([m3, m1, m2])
+        m = np.kron(m3, np.kron(m1, m2))
+        v = np.random.normal(size=K.shape[1])
+        assert(np.allclose(m.dot(v), K.dot(v)))
+
+        # Try with random matrices of different sizes
+        K = KronOperator([m1, m2, m3, m4])
+        m = np.kron(m1, np.kron(m2, np.kron(m3, m4)))
+        v = np.random.normal(size=K.shape[1])
+        assert(np.allclose(m.dot(v), K.dot(v)))
     
     def test_DP_kernel_basis_operator(self):
         DP = DeltaPOperator(P=2, n_alleles=4, seq_length=5)
