@@ -4,10 +4,7 @@ import numpy as np
 
 from scipy.sparse import csr_matrix
 
-from gpmap.src.matrix import (calc_cartesian_product, calc_tensor_product,
-                              calc_cartesian_product_dot, calc_tensor_product_dot,
-                              calc_tensor_product_quad, quad,
-                              calc_tensor_product_dot2, kron_dot, kron_dot2,
+from gpmap.src.matrix import (calc_cartesian_product, calc_cartesian_product_dot, 
                               diag_pre_multiply, diag_post_multiply,
                               lanczos_conjugate_gradient, rate_to_jump_matrix)
 
@@ -116,90 +113,6 @@ class MatrixTests(unittest.TestCase):
         u2 = calc_cartesian_product_dot(ms, v)
         assert(np.allclose(u1, u2))
         
-    def test_tensor_product(self):
-        matrix1 = np.array([[0.6],
-                            [0.4]])
-        matrix2 = np.array([[0.7],
-                            [0.3]])
-        expected = np.array([[0.42],
-                             [0.18],
-                             [0.28],
-                             [0.12]])
-        result = calc_tensor_product([matrix1, matrix2])
-        assert(np.allclose(result, expected))
-    
-    def test_tensor_product_dot(self):
-        m1 = 0.5 * np.array([[1, 1],
-                             [1, 1]])
-        m2 = 0.5 * np.array([[1, -1],
-                             [-1, 1]])
-        ms = [m1, m2]
-        m = calc_tensor_product(ms)
-        
-        v = np.ones(4)
-        u1 = m.dot(v)
-        u2 = calc_tensor_product_dot(ms, v)
-        assert(np.allclose(u1, u2))
-        
-        # Test in larger scenario
-        ms = [m1, m2, m2, m1, m2, m1, m1]
-        m = calc_tensor_product(ms)
-        v = np.random.normal(size=m.shape[0])
-        u1 = m.dot(v)
-        u2 = calc_tensor_product_dot(ms, v)
-        assert(np.allclose(u1, u2))
-        
-    def test_tensor_product_dot2(self):
-        v = np.random.normal(size=4)
-        m1 = 0.5 * np.array([[1, 1],
-                             [1, 1]])
-        m2 = 0.5 * np.array([[1, -1],
-                             [-1, 1]])
-        
-        m = np.kron(m1, m2)
-        u1 = m.dot(v)
-        u2 = calc_tensor_product_dot2(m1, m2, v)
-        assert(np.allclose(u1, u2))
-        
-        m = np.kron(m1, m1)
-        u1 = m.dot(v)
-        u2 = calc_tensor_product_dot2(m1, m1, v)
-        assert(np.allclose(u1, u2))
-        
-        m = np.kron(m2, m2)
-        u1 = m.dot(v)
-        u2 = calc_tensor_product_dot2(m2, m2, v)
-        assert(np.allclose(u1, u2))
-
-        v = np.random.normal(size=8)
-        m3 = np.kron(m1, m2)
-        m = np.kron(m2, m3)
-        u1 = m.dot(v)
-        u2 = calc_tensor_product_dot2(m2, m3, v)
-        assert(np.allclose(u1, u2))
-
-    def test_tensor_product_quad(self):
-        m1 = 0.5 * np.array([[1, 1],
-                             [1, 1]])
-        m2 = 0.5 * np.array([[1, -1],
-                             [-1, 1]])
-        
-        # Test small case
-        ms = [m1, m2]
-        m = calc_tensor_product(ms)
-        v = np.random.normal(size=m.shape[0])
-        u1 = quad(m, v)
-        u2 = calc_tensor_product_quad(ms, v, v)
-        assert(np.allclose(u1, u2))
-
-        # Test in larger scenario
-        ms = [m1, m2, m2]
-        m = calc_tensor_product(ms)
-        v = np.random.normal(size=m.shape[0])
-        u1 = quad(m, v)
-        u2 = calc_tensor_product_quad(ms, v)
-        assert(np.allclose(u1, u2))
-    
     def test_lanczos_conjugate_gradient(self):
         A = np.ones((4, 4)) + np.diag(np.ones(4))
         x_true = np.random.normal(size=4)

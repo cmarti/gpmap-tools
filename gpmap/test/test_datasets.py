@@ -2,8 +2,7 @@
 import unittest
 import numpy as np
 
-from gpmap.src.datasets import DataSet
-from gpmap.src.settings import DATASETS
+from gpmap.src.datasets import DataSet, list_available_datasets
 
 
 class DatasetsTests(unittest.TestCase):
@@ -18,7 +17,7 @@ class DatasetsTests(unittest.TestCase):
         assert(landscape.shape[0] == 20**4)
         
         # Test that all datasets in global variable are available
-        for dataset_name in DATASETS:
+        for dataset_name in list_available_datasets():
             dataset = DataSet(dataset_name)
             
         # Test error with missing dataset

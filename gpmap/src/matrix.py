@@ -161,26 +161,6 @@ def grad_Frob(lambdas, M, a):
     return grad_Frob1 - grad_Frob2
 
 
-def calc_matrix_polynomial_dot(coefficients, matrix, v):
-    power = v
-    polynomial = coefficients[0] * v
-    
-    for c in coefficients[1:]:
-        
-        if c == 0:
-            continue
-        
-        power = matrix.dot(power)
-        polynomial += c * power
-    
-    return(polynomial)
-
-
-def calc_matrix_polynomial_quad(coefficients, matrix, v):
-    Av = calc_matrix_polynomial_dot(coefficients, matrix, v)
-    return(np.sum(v * Av))
-
-
 def calc_cartesian_prod_freqs(site_freqs):
     if get_length(site_freqs) == 1:
             return(site_freqs[0])

@@ -13,15 +13,14 @@ from scipy.special import comb
 from gpmap.src.inference import VCregression
 from gpmap.src.settings import BIN_DIR
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             calc_variance_components)
+                             calc_variance_components, calc_covariance_distance)
 from gpmap.src.space import SequenceSpace
 
 
 class VCTests(unittest.TestCase):
     def test_lambdas_to_variance_p(self):
-        vc = VCregression()
-        vc.init(3, 2)
         lambdas = np.array([0, 1, 0.5, 0.1])
+        vc = VCregression(n_alleles=2, seq_length=3, lambdas=lambdas)
         v = vc.lambdas_to_variance(lambdas)
         assert(np.allclose(v, [3/4.6, 1.5/4.6, 0.1/4.6]))
     
@@ -29,44 +28,40 @@ class VCTests(unittest.TestCase):
         np.random.seed(1)
         sigma = 0.1
         l, a = 4, 4
-        vc = VCregression()
-        vc.init(l, a)
+
+        lambdas = np.array([0, 200, 20, 2, 0.2])
+        vc = VCregression(n_alleles=a, seq_length=l, lambdas=lambdas)
         
         # Test functioning and size
-        lambdas = np.array([0, 200, 20, 2, 0.2])
-        data = vc.simulate(lambdas, sigma)
+        data = vc.simulate(sigma)
         f = data['y_true'].values
         assert(data.shape[0] == 256)
         
         # Test missing genotypes
-        data = vc.simulate(lambdas, sigma, p_missing=0.1)
+        data = vc.simulate(sigma, p_missing=0.1)
         assert(data.dropna().shape[0] < 256)
         
         # Test pure components
-        W = ProjectionOperator(a, l)
+        
         for k1 in range(l + 1):
-            lambdas = np.zeros(l+1)
-            lambdas[k1] = 1
-            
-            data = vc.simulate(lambdas)
+            vc.set_lambdas(k=k1)    
+            data = vc.simulate()
             f = data['y_true'].values
         
             for k2 in range(l+1):
-                W.set_lambdas(k=k2)
+                W = ProjectionOperator(a, l, k=k2)
                 f_k_rq = W.rayleigh_quotient(f)
                 assert(np.allclose(f_k_rq, k1 == k2))
     
     def test_calc_emp_dist_cov(self):
         np.random.seed(1)
         sigma, lambdas = 0.1, np.array([0, 200, 20, 2, 0.2])
-        
         seq_length, n_alleles = 4, 4
         
-        vc = VCregression()
-        vc.init(seq_length, n_alleles)
-        data = vc.simulate(lambdas, sigma)
-        vc.set_data(X=data.index.values, y=data.y.values)
-        rho, n = vc.calc_emp_dist_cov()
+        vc = VCregression(n_alleles=n_alleles, seq_length=seq_length,
+                          lambdas=lambdas)
+        data = vc.simulate(sigma)
+        rho, n = calc_covariance_distance(data.y.values, n_alleles, seq_length)
         
         # Ensure we get the expected number of pairs per distance category
         for d in range(seq_length + 1):
@@ -80,9 +75,9 @@ class VCTests(unittest.TestCase):
         assert(rho[4] < 0)
         
         # With missing data
-        data = vc.simulate(lambdas, sigma, p_missing=0.1).dropna()
-        vc.set_data(X=data.index.values, y=data.y.values, y_var=data.y_var)
-        rho, n = vc.calc_emp_dist_cov()
+        data = vc.simulate(sigma, p_missing=0.1).dropna()
+        idx = vc.get_obs_idx(data.index.values)
+        rho, n = calc_covariance_distance(data.y.values, n_alleles, seq_length, idx=idx)
             
         # Ensure anticorrelated distances
         assert(rho[3] < 0)
@@ -90,9 +85,9 @@ class VCTests(unittest.TestCase):
     
     def test_vc_fit(self):
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
-        vc = VCregression()
-        vc.init(seq_length=lambdas.shape[0]-1, alphabet_type='dna')
-        data = vc.simulate(lambdas, sigma=0.1)
+        a, l = 4, lambdas.shape[0]-1
+        vc = VCregression(n_alleles=a, seq_length=l, lambdas=lambdas)
+        data = vc.simulate(sigma=0.1)
         
         # Ensure MSE is within a small range
         vc.fit(data.index.values, data['y'], y_var=data['y_var'])
@@ -111,16 +106,13 @@ class VCTests(unittest.TestCase):
         
     def test_vc_predict(self):
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
-        vc = VCregression()
-        vc.init(seq_length=lambdas.shape[0]-1, alphabet_type='dna')
-        data = vc.simulate(lambdas, sigma=0.1)
+        a, l = 4, lambdas.shape[0]-1
+        vc = VCregression(seq_length=l, n_alleles=a, lambdas=lambdas)
+        data = vc.simulate(sigma=0.1)
         
         # Using the a priori known variance components
-        vc = VCregression()
         vc.set_data(X=data.index, y=data['y'], y_var=data['y_var'])
-        vc.set_lambdas(lambdas)
         pred = vc.predict()
-        
         mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], data['y_true'])[0]
         assert(rho > 0.95)
@@ -131,7 +123,7 @@ class VCTests(unittest.TestCase):
         assert('var' in pred.columns)
         assert(np.all(pred['var'] > 0))
         
-        # Capture error with incomplete input
+        # Capture error with missing lambdas
         vc = VCregression()
         vc.set_data(X=data.index, y=data['y'], y_var=data['y_var'])
         try:
@@ -140,13 +132,7 @@ class VCTests(unittest.TestCase):
         except ValueError:
             pass
     
-    def test_vc_predict_from_incomplete_data(self):
-        length = 5
-        lambdas = np.exp(-np.arange(0, length+1))
-        
-        vc = VCregression()
-        vc.init(seq_length=length, alphabet_type='dna')
-        data = vc.simulate(lambdas=lambdas, sigma=0.05)
+        # Subset the data
         idx = np.random.uniform(size=data.shape[0]) < 0.9
         train, test = data.loc[idx, :], data.loc[~idx, :]
 
@@ -154,14 +140,14 @@ class VCTests(unittest.TestCase):
         vc = VCregression()
         vc.set_data(X=train.index, y=train['y'], y_var=train['y_var'])
         vc.set_lambdas(lambdas)
-        pred = vc.predict(Xpred=test.index.values)
+        pred = vc.predict(X_pred=test.index.values)
         mse = np.mean((pred['ypred'] - test['y_true']) ** 2)
         rho = pearsonr(pred['ypred'], test['y_true'])[0]
         assert(rho > 0.6)
         assert(mse < 0.3)
         
         # Calculate variances and check calibration
-        pred = vc.predict(Xpred=test.index.values, calc_variance=True)
+        pred = vc.predict(X_pred=test.index.values, calc_variance=True)
         sigma = np.sqrt(pred['var'])
         pred['lower'] = pred['ypred'] - 2 * sigma
         pred['upper'] = pred['ypred'] + 2 * sigma
@@ -169,7 +155,7 @@ class VCTests(unittest.TestCase):
                            test['y_true'] < pred['upper']).mean()
         assert(p > 0.9)
     
-    def test_vc_fit_bin(self):
+    def test_vc_regression_bin(self):
         bin_fpath = join(BIN_DIR, 'vc_regression.py')
 
         with NamedTemporaryFile() as fhand:
@@ -179,12 +165,12 @@ class VCTests(unittest.TestCase):
             xpred_fpath = '{}.xpred.txt'.format(fhand.name)
             
             # Simulate data
-            length = 4
-            lambdas = np.exp(-np.arange(0, length+1))
+            a, l = 4, 5
+            lambdas = np.exp(-np.arange(0, l+1))
             
-            vc = VCregression()
-            vc.init(seq_length=length, alphabet_type='dna')
-            data = vc.simulate(lambdas=lambdas, sigma=0.05)
+            vc = VCregression(alphabet_type='dna', seq_length=l,
+                              lambdas=lambdas)
+            data = vc.simulate(sigma=0.05)
             idx = np.random.uniform(size=data.shape[0]) < 0.9
             train, test = data.loc[idx, :], data.loc[~idx, :]
             
@@ -216,19 +202,6 @@ class VCTests(unittest.TestCase):
                    '--var', '-p', xpred_fpath, '--lambdas', lambdas_fpath]
             check_call(cmd)
             
-    def test_calculate_variance_components(self):
-        vc = VCregression()
-        vc.init(n_alleles=4, seq_length=8)
-        lambdas0 = np.array([0, 10, 5, 2, 1, 0.5, 0.2, 0, 0])
-        data = vc.simulate(lambdas=lambdas0)
-        
-        # Ensure kernel alignment and calculation of variance components is the same
-        space = SequenceSpace(X=data.index.values, y=data.y.values)
-        lambdas1 = calc_variance_components(space)
-        vc.fit(X=data.index.values, y=data.y.values)
-        lambdas2 = vc.lambdas
-        assert(np.allclose(lambdas2, lambdas1))
-
 
 class SkewedVCTests(unittest.TestCase):
     def xtest_simulate_skewed_vc(self):  

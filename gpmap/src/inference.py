@@ -12,17 +12,19 @@ from scipy.stats import norm
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import check_error, get_CV_splits
-from gpmap.src.matrix import reciprocal, calc_matrix_polynomial_quad
+from gpmap.src.matrix import reciprocal
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences, calc_allele_frequencies,
                            calc_expected_logp, calc_genetic_code_aa_freqs)
-from gpmap.src.linop import (DeltaPOperator, VarianceComponentKernelOperator,
-                             ExtendedLinearOperator, DeltaKernelBasisOperator)
+from gpmap.src.linop import (DeltaPOperator, calc_covariance_distance,
+                             ExtendedLinearOperator, DeltaKernelBasisOperator,
+                             KernelOperator, ProjectionOperator, PolynomialOperator,
+                             LaplacianOperator)
 from gpmap.src.kernel import KernelAligner
 
 
-class LandscapeEstimator(object):
+class SeqGaussianProcessRegressor(object):
     def __init__(self, expand_alphabet=True):
         self.expand_alphabet = expand_alphabet
     
@@ -71,65 +73,131 @@ class LandscapeEstimator(object):
                                        index=self.genotypes)
         
 
-class GaussianProcessRegressor(LandscapeEstimator):
-    def __init__(self, kernel_class):
-        self.kernel_class = kernel_class
+class GaussianProcessRegressor(SeqGaussianProcessRegressor):
+    def __init__(self, base_kernel, progress=True):
+        self.K = base_kernel
+        self.progress = progress
     
     def set_data(self, X, y, y_var=None):
         self.define_space(genotypes=X)
-        self.define_kernel(n_alleles=self.n_alleles, seq_length=self.seq_length)
         self.X = X
         self.y = y
         self.n_obs = y.shape[0]
+        self.obs_idx = self.get_obs_idx()
 
         if y_var is None:
             y_var = np.zeros(y.shape[0])    
                 
         self.y_var = y_var
-        self.K.set_y_var(y_var=y_var, obs_idx=self.get_obs_idx(X))
     
-    def define_kernel(self, n_alleles, seq_length):
-        self.K = self.kernel_class(n_alleles=n_alleles, seq_length=seq_length)
-        self.n = self.K.n
+    @property
+    def K_BB(self):
+        if not hasattr(self, '_K_BB'):
+            self._K_BB = KernelOperator(self.K, x1=self.obs_idx,
+                                        x2=self.obs_idx,
+                                        y_var_diag=self.y_var)
+        return(self._K_BB)
     
-    def predict(self):
-        self.K.set_mode(all_rows=False, add_y_var_diag=True, full_v=False)
-        a_star = self.K.inv_dot(self.y)
-        
-        self.K.set_mode(all_rows=True, add_y_var_diag=False)
-        y_pred = self.K.dot(a_star)
+    def calc_posterior_mean(self):
+        K_aB = KernelOperator(self.K, x2=self.obs_idx)
+        y_pred = K_aB @ self.K_BB.inv_dot(self.y)
         return(y_pred)
     
     def calc_posterior_variance_i(self, i):
-        self.K.set_mode(full_v=True, all_rows=True)
         K_i = self.K.get_column(i)
         K_ii = K_i[i]
-        K_Bi = self.K.gt2data.T.dot(K_i)
-        
-        self.K.set_mode(all_rows=False, add_y_var_diag=True, full_v=False)
-        post_var = K_ii - self.K.inv_quad(K_Bi)
+        K_Bi = K_i[self.obs_idx]
+        post_var = K_ii - self.K_BB.inv_quad(K_Bi)
         return(post_var)
     
     def calc_posterior_variance(self, X_pred=None):
-        pred_idx = np.arange(self.n) if X_pred is None else self.get_obs_idx(X_pred)
+        pred_idx = np.arange(self.n_genotypes) if X_pred is None else self.get_obs_idx(X_pred)
         if self.progress:
-            pred_idx = tqdm(pred_idx, total=X_pred.shape[0])
+            pred_idx = tqdm(pred_idx)
 
         post_vars = np.array([self.calc_posterior_variance_i(i) for i in pred_idx])        
         return(post_vars)
     
+    def predict(self, X_pred=None, calc_variance=False):
+        """
+        Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
+        the provided or all genotypes
+        
+        Parameters
+        ----------
+        X_pred : array-like of shape (n_genotypes,)
+            Vector containing the genotypes for which we want to predict the
+            phenotype. If `n_genotypes == None` then predictions are provided
+            for the whole sequence space
+        
+        calc_variance : bool (False)
+            Option to also return the posterior variances for each individual
+            genotype
+        
+        Returns
+        -------
+        function : pd.DataFrame of shape (n_genotypes, 1)
+                   Returns the phenotypic predictions for each input genotype
+                   in the column ``ypred`` and genotype labels as row names.
+                   If ``calc_variance=True``, then it has an additional
+                   column with the posterior variances for each genotype
+        """
+        msg = 'Make sure `lambdas` are specified for making predictions'
+        check_error(hasattr(self, 'lambdas'), msg=msg)
+        
+        t0 = time()
+        ypred = self.calc_posterior_mean()
+        pred = pd.DataFrame({'ypred': ypred}, index=self.genotypes)
+        if X_pred is not None:
+            pred = pred.loc[X_pred, :]
+        if calc_variance:
+            pred['var'] = self.calc_posterior_variance(X_pred=X_pred)
+        self.pred_time = time() - t0
+        return(pred)
+    
     def sample(self):
-        a = np.random.normal(size=self.n)
-        self.K.set_mode(full_v=True, all_rows=True)
-        y = self.K.one_half_power_dot(a)
+        a = np.random.normal(size=self.n_genotypes)
+        y = self.K.matrix_sqrt() @ a
         return(y)
     
-    def simulate(self, sigma=0):
-        yhat = self.sample()
-        y = np.random.normal(yhat, sigma) if sigma > 0 else yhat
-        y_var = np.full(self.n, sigma**2, dtype=float)
-        return(yhat, y, y_var)
+    def simulate(self, sigma=0, p_missing=0):
+        '''
+        Simulates data under the specified Variance component priors
+        
+        Parameters
+        ----------
+        sigma : real
+            Standard deviation of the experimental noise additional to the
+            variance components
+        
+        p_missing : float between 0 and 1
+            Probability of randomly missing genotypes in the simulated output
+            data
+            
+        Returns
+        -------
+        data : pd.DataFrame of shape (n_genotypes, 3)
+            DataFrame with the columns ``y_true``, ``y``and ``var`` corresponding
+            to the true function at each genotype, the observed values and the
+            variance of the measurement respectively for each sequence or 
+            genotype indicated in the ``DataFrame.index`` 
+        
+        '''
+        y_true = self.sample()
+        y = np.random.normal(y_true, sigma) if sigma > 0 else y_true
+        y_var = np.full(self.n_genotypes, sigma ** 2, dtype=float)
+        
+        data = pd.DataFrame({'y_true': y_true,
+                             'y': y, 
+                             'y_var': y_var},
+                            index=self.genotypes)
+
+        if p_missing > 0:
+            idxs = np.random.uniform(size=y.shape[0]) < p_missing
+            data.loc[idxs, ['y', 'y_var']]  = np.nan
+        return(data)
     
+    ### Ongoing attempt to do evidence maximization ###
     def neg_marginal_log_likelihood(self, params):
         self.K.set_params(params)
         self.K_inv_y = self.K.inv_dot(self.y)
@@ -171,7 +239,7 @@ class GaussianProcessRegressor(LandscapeEstimator):
         return(params)
     
 
-class VCregression(LandscapeEstimator):
+class VCregression(GaussianProcessRegressor):
     '''
         Variance Component regression model that allows inference and prediction
         of a scalar function in sequence spaces under a Gaussian Process prior
@@ -183,8 +251,9 @@ class VCregression(LandscapeEstimator):
     '''
     def __init__(self, beta=0, cross_validation=False, 
                  num_beta=20, nfolds=5, min_log_beta=-2,
-                 max_log_beta=7, cv_loss_function='frobenius_norm'):
-        super().__init__()
+                 max_log_beta=7, cv_loss_function='frobenius_norm',
+                 n_alleles=None, seq_length=None, lambdas=None,
+                 alphabet_type='custom'):
         self.beta = beta
         self.nfolds = nfolds
         self.num_reg = num_beta
@@ -194,83 +263,77 @@ class VCregression(LandscapeEstimator):
         self.max_log_reg = max_log_beta
         self.run_cv = cross_validation
         self.cv_loss_function = cv_loss_function
+
+        if lambdas is not None:
+            self.init(n_alleles=n_alleles, seq_length=seq_length,
+                      alphabet_type=alphabet_type)
+            self.set_lambdas(lambdas)
         
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom'):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
         self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
-        self.K = VarianceComponentKernelOperator(self.n_alleles, self.seq_length)
-        self.calc_L_powers_unique_entries_matrix() # For covariance d calculations
     
-    def calc_L_powers_unique_entries_matrix(self):
-        """Construct entries of powers of L. 
-        Column: powers of L. 
-        Row: Hamming distance"""
-        
-        l, a, s = self.seq_length, self.n_alleles, self.seq_length + 1
-    
-        # Construct C
-        C = np.zeros([s, s])
-        for i in range(s):
-            for j in range(s):
-                if i == j:
-                    C[i, j] = i * (a - 2)
-                if i == j + 1:
-                    C[i, j] = i
-                if i == j - 1:
-                    C[i, j] = (l - j + 1) * (a - 1)
-    
-        # Construct D
-        D = np.array(np.diag(l * (a - 1) * np.ones(s), 0))
-    
-        # Construct B
-        B = D - C
-    
-        # Construct u
-        u = np.zeros(s)
-        u[0], u[1] = l * (a - 1), -1
-    
-        # Construct MAT column by column
-        MAT = np.zeros([s, s])
-        MAT[0, 0] = 1
-        for j in range(1, s):
-            MAT[:, j] = matrix_power(B, j-1).dot(u)
-    
-        # Invert MAT
-        self.L_powers_unique_entries_inv = np.linalg.inv(MAT)
-        self.L_powers_unique_entries = MAT
-    
-    def set_data(self, X, y, y_var=None):
+    def set_data(self, X, y, y_var=None, cov=None, ns=None):
         self.init(genotypes=X)
         self.X = X
         self.y = y
         self.n_obs = y.shape[0]
+        self.obs_idx = self.get_obs_idx(seqs=X)
 
         if y_var is None:
             y_var = np.zeros(y.shape[0])    
                 
         self.y_var = y_var
-        self.K.set_y_var(y_var=y_var, obs_idx=self.get_obs_idx(X))
+        self.cov = cov
+        self.ns = ns
+
+    def calc_covariance_distance(self, X, y):
+        return(calc_covariance_distance(y, self.n_alleles,
+                                        self.seq_length, 
+                                        self.get_obs_idx(X)))
+    
+    def lambdas_to_variance(self, lambdas):
+        variance_components = (lambdas * self.K.m_k)[1:]
+        variance_components = variance_components / variance_components.sum()
+        return(variance_components)
+
+    def get_cv_iter(self, hyperparam_values):
+        for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
+                                                     y_var=self.y_var,
+                                                     nfolds=self.nfolds):
+            X_train, y_train, y_var_train = train 
+            train_cov, train_ns = self.calc_covariance_distance(X_train, y_train)
+            train = X_train, y_train, y_var_train, train_cov, train_ns
+
+            X_test, y_test, y_var_test = validation
+            test_cov, test_ns = self.calc_covariance_distance(X_train, y_train)
+            validation = X_test, y_test, y_var_test, test_cov, test_ns
+
+            for param in hyperparam_values:
+                yield(param, fold, train, validation)
 
     def calc_cv_loss(self, cv_data):
         for beta, fold, train, test in tqdm(cv_data, total=self.total_folds):
-            X_train, y_train, y_var_train = train 
-            X_test, y_test, y_var_test = test
+            X_train, y_train, y_var_train, train_cov, train_ns = train 
+            X_test, y_test, y_var_test, test_cov, test_ns = test
 
             # Find best lambdas
-            self.set_data(X=X_train, y=y_train, y_var=y_var_train)
+            self.set_data(X=X_train, y=y_train, y_var=y_var_train,
+                          cov=train_cov, ns=train_ns)
             lambdas = self._fit(beta)
 
             # Calculate loss in test data
             if self.cv_loss_function == 'frobenius_norm':
                 self.set_data(X=X_test, y=y_test, y_var=y_var_test)
-                cov, ns = self.calc_emp_dist_cov()
-                self.kernel_aligner.set_data(cov, ns)
+                self.kernel_aligner.set_data(test_cov, test_ns)
                 loss = self.kernel_aligner.calc_mse(lambdas)
+
             else:
                 self.set_lambdas(lambdas)
                 ypred = self.predict(X_test)['ypred'].values
+
                 if self.cv_loss_function == 'logL':
                     loss = -norm.logpdf(y_test, loc=ypred, scale=np.sqrt(y_var_test)).sum()
                 elif self.cv_loss_function == 'r2':
@@ -280,7 +343,7 @@ class VCregression(LandscapeEstimator):
                     raise ValueError(msg)
             
             yield({'beta': beta, 'fold': fold, 'loss': loss})
-            
+
     def fit_beta_cv(self):
         beta_values = self.get_regularization_constants()
         cv_data = self.get_cv_iter(beta_values)
@@ -296,7 +359,10 @@ class VCregression(LandscapeEstimator):
         if beta is None:
             beta = self.beta
             
-        cov, ns = self.calc_emp_dist_cov()
+        cov, ns = self.cov, self.ns
+        if cov is None or ns is None:
+            cov, ns = self.calc_covariance_distance(self.X, self.y)
+
         self.kernel_aligner.set_data(cov, ns)
         self.kernel_aligner.set_beta(beta)
         lambdas = self.kernel_aligner.fit()
@@ -340,146 +406,16 @@ class VCregression(LandscapeEstimator):
             self.set_data(X, y, y_var=y_var)
         
         lambdas = self._fit()
+        self.fit_time = time() - t0
         self.set_lambdas(lambdas)
-        self.fit_time = time() - t0 
-        return(lambdas)
-    
-    def calc_emp_dist_cov(self):
-        seq_values = self.K.gt2data.dot(self.y)
-        observed_seqs = self.K.gt2data.dot(np.ones(self.n_obs))
 
-        # Compute rho_d and N_d
-        size = self.seq_length + 1
-        cov, distance_class_ns = np.zeros(size), np.zeros(size)
-        L = self.K.W.L
-        for d in range(size):
-            c_k = self.L_powers_unique_entries_inv[:, d]
-            distance_class_ns[d] = calc_matrix_polynomial_quad(c_k, L, observed_seqs)
-            quad = calc_matrix_polynomial_quad(c_k, L, seq_values)
-            cov[d] = reciprocal(quad, distance_class_ns[d])
-            
-        return(cov, distance_class_ns)
-    
-    def lambdas_to_variance(self, lambdas):
-        variance_components = (lambdas * self.K.m_k)[1:]
-        variance_components = variance_components / variance_components.sum()
-        return(variance_components)
-    
-    def set_lambdas(self, lambdas):
-        self.lambdas = lambdas
-        self.K.set_lambdas(lambdas=lambdas)
-    
-    def predict(self, Xpred=None, calc_variance=False):
-        """
-        Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
-        the provided or all genotypes
-        
-        Parameters
-        ----------
-        Xpred : array-like of shape (n_genotypes,)
-            Vector containing the genotypes for which we want to predict the
-            phenotype. If `n_genotypes == None` then predictions are provided
-            for the whole sequence space
-        
-        estimate_variance : bool (False)
-            Option to also return the posterior variances for each individual
-            genotype
-        
-        Returns
-        -------
-        function : pd.DataFrame of shape (n_genotypes, 1)
-                   Returns the phenotypic predictions for each input genotype
-                   in the column ``ypred`` and genotype labels as row names.
-                   If ``estimate_variance=True``, then it has an additional
-                   column with the posterior variances for each genotype
-        """
-        t0 = time()
-        self.K.set_mode()
-        a_star = self.K.inv_dot(self.y)
-        
-        self.K.set_mode(all_rows=True, add_y_var_diag=False)
-        ypred = self.K.dot(a_star)
-        
-        pred = pd.DataFrame({'ypred': ypred}, index=self.genotypes)
-        if Xpred is not None:
-            pred = pred.loc[Xpred, :]
+    def set_lambdas(self, lambdas=None, k=None):
+        W = ProjectionOperator(self.n_alleles, self.seq_length,
+                               lambdas=lambdas, k=k)
+        self.lambdas = W.lambdas
+        super().__init__(base_kernel=W)
 
-        if calc_variance:
-            pred['var'] = self.calc_posterior_variance(Xpred=pred.index)
-        self.pred_time = time() - t0
-        return(pred)
-    
-    def get_indicator_function(self, i):
-        vec = np.zeros(self.n_genotypes)
-        vec[i] = 1
-        return(vec)
-    
-    def calc_posterior_variance(self, Xpred=None):
-        """compute posterior variances for a list of sequences"""
-        if Xpred is None:
-            Xpred = self.genotypes
-        pred_idx = self.get_obs_idx(Xpred)
-    
-        post_vars = []
-        for i in tqdm(pred_idx, total=Xpred.shape[0]):
-            v = self.get_indicator_function(i)
-            self.K.set_mode(full_v=True, all_rows=True)
-            
-            K_i = self.K.dot(v)
-            K_ii = K_i[i]
-            K_Bi = self.K.gt2data.T.dot(K_i)
-            
-            self.K.set_mode()
-            post_vars.append(K_ii - self.K.inv_quad(K_Bi))
-            
-        post_vars = np.array(post_vars)
-        return(post_vars)
-    
-    def simulate(self, lambdas, sigma=0, p_missing=0):
-        '''
-        Simulates data under the specified Variance component priors
-        
-        Parameters
-        ----------
-        lambdas : array-like of shape (seq_length + 1,)
-            Vector containing the variance of each of the ``seq_length``
-            components characterizing the prior
-        
-        sigma : real
-            Standard deviation of the experimental noise additional to the
-            variance components
-        
-        p_missing : float between 0 and 1
-            Probability of randomly missing genotypes in the simulated output
-            data
-            
-        Returns
-        -------
-        data : pd.DataFrame of shape (n_genotypes, 3)
-            DataFrame with the columns ``y_true``, ``y``and ``var`` corresponding
-            to the true function at each genotype, the observed values and the
-            variance of the measurement respectively for each sequence or
-             genotype indicated in the ``DataFrame.index`` 
-        
-        '''
-        
-        a = np.random.normal(size=self.n_genotypes)
-        self.set_lambdas(np.sqrt(lambdas))
-        yhat = self.K.W.dot(a)
-        y = np.random.normal(yhat, sigma) if sigma > 0 else yhat
-        y_var = np.full(self.n_genotypes, sigma**2, dtype=float)
-        
-        if p_missing > 0:
-            sel_idxs = np.random.uniform(size=y.shape[0]) < p_missing
-            y[sel_idxs] = np.nan
-            y_var[sel_idxs] = np.nan
-        
-        data = pd.DataFrame({'y_true': yhat, 'y': y, 'y_var': y_var},
-                            index=self.genotypes)
-        return(data)
-
-
-class DeltaPEstimator(LandscapeEstimator):
+class DeltaPEstimator(SeqGaussianProcessRegressor):
     def __init__(self, P, a=None, num_reg=20, nfolds=5,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,

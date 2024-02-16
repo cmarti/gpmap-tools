@@ -52,8 +52,8 @@ def main():
     X = data.index.values
     y = data.values[:, 0]
     y_var = data.values[:, 1] if data.shape[1] > 1 else None 
-    Xpred = [line.strip().strip('"')
-             for line in open(pred_fpath)] if pred_fpath is not None else None
+    X_pred = [line.strip().strip('"')
+              for line in open(pred_fpath)] if pred_fpath is not None else None
     
     # Create VC model, fit and predict
     vc = VCregression(cross_validation=regularize)
@@ -66,10 +66,13 @@ def main():
         log.write('Load variance components from {}'.format(lambdas_fpath))
         lambdas = np.array([float(x.strip()) for x in open(lambdas_fpath)])
         
-    log.write('Obtain phenotypic predictions')
+    msg = 'Obtain phenotypic predictions'
+    if calc_variance:
+        msg += '. Calculating posterior variance'
+    log.write(msg)
     vc.set_data(X=X, y=y, y_var=y_var)
     vc.set_lambdas(lambdas)
-    result = vc.predict(Xpred=Xpred, calc_variance=calc_variance)
+    result = vc.predict(X_pred=X_pred, calc_variance=calc_variance)
     
     # Save output
     write_dataframe(result, out_fpath)
