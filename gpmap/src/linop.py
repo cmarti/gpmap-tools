@@ -216,7 +216,7 @@ class KronOperator(ExtendedLinearOperator):
                       np.prod(self.v_shape))
 
     def _matvec(self, v):
-        check_error(v.shape == self.shape[1],
+        check_error(v.shape[0] == self.shape[1],
                     msg='Incorrect dimensions of matrices and `v`')
         u_tensor = v.reshape(self.v_shape)
         for i, m in enumerate(self.matrices):
@@ -354,7 +354,7 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         
     def set_P(self, P):
         self.P = P
-        if self.P == (self.l + 1):
+        if self.P == (self.lp1):
             msg = '"P" = l+1, the optimal density is equal to the empirical frequency.'
             raise ValueError(msg)
         elif not 1 <= self.P <= self.l:
@@ -542,7 +542,20 @@ class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
     def calc_polynomial_coefficients(self, distance):
         self.calc_L_powers_distance_matrix_inverse()
         self.coeffs = self.L_powers_d_inv[:, distance]
+
+
+class CovarianceVjOperator(ConstantDiagSeqOperator, KronOperator):
+    def __init__(self, n_alleles, seq_length, j):
+        self.j = j
+
+        ConstantDiagSeqOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length)
+        KronOperator.__init__(self, self.get_matrices())
     
+    def get_matrices(self):
+        C0 = np.eye(self.alpha)
+        C1 = np.ones((self.alpha, self.alpha)) - C0
+        return([C1 if i in self.j else C0 for i in range(self.l)])
+
 
 class VjOperator(ConstantDiagSeqOperator, KronOperator):
     def __init__(self, n_alleles, seq_length, j):
@@ -553,6 +566,7 @@ class VjOperator(ConstantDiagSeqOperator, KronOperator):
         self.repeats = self.alpha ** (self.l - self.k)
         
         KronOperator.__init__(self, self.get_matrices(j))
+        
 
 class VjBasisOperator(VjOperator):
     def get_matrices(self, j):
@@ -1136,21 +1150,51 @@ class ConnectednessKernelOperator(BaseKernelOperator):
 #         return(np.sum(u * v))
 
 
-def calc_covariance_distance(y, n_alleles, seq_length, idx=None):
+def _get_seq_values_and_obs_seqs(y, n_alleles, seq_length, idx=None):
     n = n_alleles ** seq_length
     if idx is not None:
         seq_values, observed_seqs = np.zeros(n), np.zeros(n)
         seq_values[idx], observed_seqs[idx] = y, 1.
     else:
         seq_values, observed_seqs = y, np.ones(n, dtype=float)
+    return(seq_values, observed_seqs)
+
+
+def calc_covariance_distance(y, n_alleles, seq_length, idx=None):
+    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(y, n_alleles,
+                                                        seq_length, idx=None)
 
     cov, ns = np.zeros(seq_length + 1), np.zeros(seq_length + 1)
     for d in range(seq_length + 1):
         P = CovarianceDistanceOperator(n_alleles, seq_length, distance=d)
         quad = P.quad(seq_values)
-        ns[d] = P.quad(observed_seqs)
+        ns[d] = P.quad(obs_seqs)
         cov[d] = reciprocal(quad, ns[d])
     return(cov, ns)
+
+
+def calc_covariance_vjs(y, n_alleles, seq_length, idx=None):
+    lp1 = seq_length + 1
+    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(y, n_alleles,
+                                                        seq_length, idx=idx)
+
+    cov, ns = [], []
+    sites = np.arange(seq_length)
+    sites_matrix = []
+    for k in range(lp1):
+        for j in combinations(sites, k):
+            P = CovarianceVjOperator(n_alleles, seq_length, j=j)
+            quad = P.quad(seq_values)
+            nj = P.quad(obs_seqs)
+            z = np.array([i in j for i in range(seq_length)], dtype=float)
+            
+            cov.append(reciprocal(quad, nj))
+            ns.append(nj)
+            sites_matrix.append(z)
+
+    sites_matrix = np.array(sites_matrix)
+    cov, ns = np.array(cov), np.array(ns)
+    return(cov, ns, sites_matrix)
 
 
 def calc_variance_components(space):

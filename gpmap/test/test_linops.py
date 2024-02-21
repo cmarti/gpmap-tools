@@ -14,12 +14,12 @@ from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator,
                              VarianceComponentKernelOperator,
-                             DeltaPOperator, ProjectionOperator2,
-                             RhoProjectionOperator, ConnectednessKernelOperator,
-                             ExtendedLinearOperator, VjBasisOperator,
+                             DeltaPOperator, RhoProjectionOperator,
+                             VjBasisOperator, KernelOperator,
                              EigenBasisOperator, DeltaKernelBasisOperator,
                              KronOperator, PolynomialOperator,
-                             KernelOperator,
+                             CovarianceDistanceOperator, CovarianceVjOperator,
+                             calc_covariance_vjs,
                              calc_variance_components,
                              calc_vjs_variance_components)
 
@@ -172,7 +172,7 @@ class LinOpsTests(unittest.TestCase):
         v = np.random.normal(size=K_transpose.shape[1])
         assert(np.allclose(m.T.dot(v), K_transpose.dot(v)))
         assert(np.allclose(m.T, K_transpose.todense()))
-    
+
     def test_vj_projection_operator(self):
         a, l = 2, 2
         
@@ -386,7 +386,133 @@ class LinOpsTests(unittest.TestCase):
         
         v = np.random.normal(size=K.shape[1])
         assert(np.allclose(B.dot(v), K.dot(v)))
+    
+    def test_covariance_distance_operator(self):
+        a, l = 2, 2
+        v = np.random.normal(size=(a**l, 1))
+        S = v @ v.T
+
+        # Ensure the sum over all possible distances matches
+        ss1 = S.sum()
+        ss2 = 0
+        for d in range(l+1):
+            C = CovarianceDistanceOperator(a, l, d)
+            ss2 += C.quad(v)
+        assert(np.allclose(ss1, ss2))
+
+        # Check distance=0
+        s0 = np.sum(v ** 2)
+        C0 = CovarianceDistanceOperator(a, l, distance=0)
+        assert(np.allclose(C0.quad(v), s0))
         
+        # Check distance=1
+        C1 = CovarianceDistanceOperator(a, l, distance=1)
+        m1 = np.array([[0, 1, 1, 0],
+                       [1, 0, 0, 1],
+                       [1, 0, 0, 1],
+                       [0, 1, 1, 0]])
+        assert(np.allclose(np.sum(m1 * S), C1.quad(v)))
+
+        # Check distance=2
+        C2 = CovarianceDistanceOperator(a, l, distance=2)
+        m2 = np.array([[0, 0, 0, 1],
+                       [0, 0, 1, 0],
+                       [0, 1, 0, 0],
+                       [1, 0, 0, 0]])
+        assert(np.allclose(np.sum(m2 * S), C2.quad(v)))
+
+    def test_covariance_vj_operator(self):
+        a, l = 2, 2
+        sites = np.arange(l)
+        v = np.random.normal(size=(a**l, 1))
+        S = v @ v.T
+
+        # Check 00
+        s00 = np.sum(v ** 2)
+        C00 = CovarianceVjOperator(a, l, j=[])
+        assert(np.allclose(np.eye(a ** l), C00.todense()))
+        assert(np.allclose(C00.quad(v), s00))
+        
+        # Check 01
+        C01 = CovarianceVjOperator(a, l, j=[0])
+        m01 = np.array([[0, 0, 1, 0],
+                        [0, 0, 0, 1],
+                        [1, 0, 0, 0],
+                        [0, 1, 0, 0]])
+        assert(np.allclose(m01, C01.todense()))
+        assert(np.allclose(np.sum(m01 * S), C01.quad(v)))
+
+        # Check 10
+        C10 = CovarianceVjOperator(a, l, j=[1])
+        m10 = np.array([[0, 1, 0, 0],
+                        [1, 0, 0, 0],
+                        [0, 0, 0, 1],
+                        [0, 0, 1, 0]])
+        assert(np.allclose(m10, C10.todense()))
+        assert(np.allclose(np.sum(m10 * S), C10.quad(v)))
+
+        # Check distance=2
+        C11 = CovarianceVjOperator(a, l, j=(0, 1))
+        m11 = np.array([[0, 0, 0, 1],
+                        [0, 0, 1, 0],
+                        [0, 1, 0, 0],
+                        [1, 0, 0, 0]])
+        assert(np.allclose(m11, C11.todense()))
+        assert(np.allclose(np.sum(m11 * S), C11.quad(v)))
+    
+        # Ensure the sum over all possible distances matches
+        ss1 = S.sum()
+        ss2 = 0
+        for k in range(l+1):
+            for j in combinations(sites, k):
+                C = CovarianceVjOperator(a, l, j=j)
+                ss2 += C.quad(v)
+        assert(np.allclose(ss1, ss2))
+    
+    def test_calc_covariance_vjs(self):
+        # Test simple cases
+        a, l = 2, 2
+        y = np.array([1, 1, 1, 1])
+        cov, ns, sites = calc_covariance_vjs(y, a, l)
+        assert(np.allclose(cov, 1))
+        assert(np.allclose(ns, 4))
+
+        y = np.array([1, -1, 1, -1])
+        cov, ns, sites = calc_covariance_vjs(y, a, l)
+        assert(np.allclose(cov, [1, 1, -1, -1]))
+        assert(np.allclose(ns, 4))
+
+        y = np.array([1, 1, -1, -1])
+        cov, ns, sites = calc_covariance_vjs(y, a, l)
+        assert(np.allclose(cov, [1, -1, 1, -1]))
+        assert(np.allclose(ns, 4))
+
+        y = np.array([1, 0, 0, -1])
+        cov, ns, sites = calc_covariance_vjs(y, a, l)
+        assert(np.allclose(cov, [0.5, 0, 0, -0.5]))
+        assert(np.allclose(ns, 4))
+
+        # Test in a bigger landscape
+        a, l = 4, 5
+        n = a ** l
+        y = np.random.normal(size=n)
+        
+        # Verify output shapes
+        cov, ns, sites = calc_covariance_vjs(y, a, l)
+        assert(cov.shape == (2 ** l,))
+        assert(ns.shape == (2 ** l,))
+        assert(sites.shape == (2 ** l, l))
+
+        # Ensure changes when seeing only part of the data        
+        idx = np.arange(n)[np.random.uniform(size=n) < 0.9]
+        cov2, ns2, sites2 = calc_covariance_vjs(y[idx], a, l, idx=idx)
+        assert(cov.shape == (2 ** l,))
+        assert(ns.shape == (2 ** l,))
+        assert(sites.shape == (2 ** l, l))
+
+        assert(np.all(ns2 <= ns))
+        assert(np.all(cov2 != cov))
+
     def test_calculate_variance_components(self):
         space = DataSet('gb1').to_sequence_space()
         lambdas = calc_variance_components(space)
