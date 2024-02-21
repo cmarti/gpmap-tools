@@ -455,7 +455,7 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
              alphabet_type='custom'):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
-        self.DP = DeltaPOperator(self.P, self.n_alleles, self.seq_length)
+        self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
         self.kernel_basis = DeltaKernelBasisOperator(self.n_alleles, self.seq_length, self.P)
 
     def get_a_values(self):
@@ -575,12 +575,12 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
         # a, N = a * scale_by, N *scale_by    
         return(phi)
     
-    def _get_vc(self):
-        if not hasattr(self, '_vc'):
-            self._vc = VCregression()
-            self._vc.init(genotypes=self.genotypes)
-        return(self._vc)
-    
+    def _get_lambdas(self, a):
+        self.DP.calc_lambdas()
+        lambdas = np.zeros(self.DP.lambdas.shape)
+        lambdas[self.P:] = self.DP.n_p_faces / (a * self.DP.lambdas[self.P:])
+        return(lambdas)
+
     def simulate_phi(self, a):
         '''
         Simulates data under the specified `a` penalization for
@@ -601,11 +601,11 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
             sampled from the prior characterized by `a`
         '''
         
-        vc = self._get_vc()
-        self.DP.calc_lambdas()
-        lambdas = np.zeros(self.DP.lambdas.shape)
-        lambdas[self.P:] = self.DP.n_p_faces / (a * self.DP.lambdas[self.P:])
-        phi = vc.simulate(lambdas)['y'].values
+        lambdas = self._get_lambdas(a)
+        x = np.random.normal(size=self.n_genotypes)
+        W_sqrt = ProjectionOperator(self.n_alleles, self.seq_length,
+                                    lambdas=lambdas).matrix_sqrt()
+        phi = W_sqrt @ x
         return(phi)
 
 

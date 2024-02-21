@@ -33,12 +33,12 @@ class SeqDEFTTests(unittest.TestCase):
         seqdeft.set_data(X=X)
         
         nll = seqdeft.calc_neg_log_likelihood(phi)
-        assert(np.allclose(nll, 20.004045229268037))
+        assert(np.allclose(nll, 20.419260247508454))
         
-        phi[0] = np.inf
+        phi[2] = np.inf
         nll = seqdeft.calc_neg_log_likelihood(phi)
         assert(np.isfinite(nll))
-        assert(np.allclose(nll, 15.497034348611063))
+        assert(np.allclose(nll, 14.8723466362513))
         
         phi[1] = np.inf
         nll = seqdeft.calc_neg_log_likelihood(phi)
@@ -219,7 +219,6 @@ class SeqDEFTTests(unittest.TestCase):
         with NamedTemporaryFile(mode='w') as fhand:        
             fig = plot_SeqDEFT_summary(log_Ls, seq_densities, legend_loc=2)
             fpath = fhand.name
-            fpath = '/home/martigo/elzar/test_seqdeft.png'
             savefig(fig, fpath)
         
 
