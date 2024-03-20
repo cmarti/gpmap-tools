@@ -455,6 +455,7 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
              alphabet_type='custom'):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
+        self.set_baseline_phi()
         self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
         self.kernel_basis = DeltaKernelBasisOperator(self.n_alleles, self.seq_length, self.P)
 
@@ -575,6 +576,19 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
         # a, N = a * scale_by, N *scale_by    
         return(phi)
     
+    def set_baseline_phi(self, baseline_phi=None, X=None):
+        if baseline_phi is None:
+            self.baseline_phi = np.zeros(self.n_genotypes)
+        else:
+            msg = 'baseline_phi needs to be the size of n_genotypes'
+            check_error(baseline_phi.shape[0] == self.n_genotypes, msg=msg)
+
+            if X is None:
+                self.baseline_phi = baseline_phi
+            else:
+                baseline_phi = pd.Series(baseline_phi, index=X)
+                self.baseline_phi = baseline_phi.loc[self.genotypes].values
+    
     def _get_lambdas(self, a):
         self.DP.calc_lambdas()
         lambdas = np.zeros(self.DP.lambdas.shape)
@@ -673,7 +687,8 @@ class SeqDEFT(DeltaPEstimator):
         self.phylo_correction = phylo_correction
         self._set_data(X, y=y, allele_freqs=allele_freqs)
     
-    def fit(self, X, y=None, positions=None, phylo_correction=False,
+    def fit(self, X, y=None, baseline_phi=None, baseline_X=None,
+            positions=None, phylo_correction=False,
             force_fit_a=True, adjust_freqs=False, allele_freqs=None):
         """
         Infers the sequence-function relationship under the specified
@@ -688,6 +703,12 @@ class SeqDEFT(DeltaPEstimator):
             Vector containing the weights for each observed sequence. 
             By default, each sequence takes a weight of 1. These weights
             can be calculated using phylogenetic correction
+
+        baseline_phi: array-like of shape (n_genotypes,)
+            Vector containing the baseline_phi to include in the model
+
+        baseline_X: array-like of shape (n_genotypes,)
+            Vector containing the sequences associated with baseline_phi
         
         positions: array-like of shape (n_pos,)
             If provided, subsequences at these positions in the provided
@@ -722,6 +743,7 @@ class SeqDEFT(DeltaPEstimator):
         self.set_data(X, y=y, positions=positions,
                       phylo_correction=phylo_correction,
                       adjust_freqs=adjust_freqs, allele_freqs=allele_freqs)
+        self.set_baseline_phi(baseline_phi=baseline_phi, X=baseline_X)
         phi_inf = self._fit(np.inf)
         
         if not self.a_is_fixed and force_fit_a:
@@ -758,20 +780,22 @@ class SeqDEFT(DeltaPEstimator):
         return(regularizer)
     
     def calc_neg_log_likelihood(self, phi):
-        phi_aux = phi.copy()
+        phi_aux = phi.copy() + self.baseline_phi
         phi_aux[np.logical_and(np.isinf(phi_aux), self.R == 0)] = 0
         S2 = self.N * np.sum(self.R * phi_aux)
         S3 = self.N * np.sum(safe_exp(-phi))
         return(S2 + S3)
     
     def calc_neg_log_likelihood_grad(self, phi):
+        # TODO: review gradient calculation in case of baseline_phi
         grad_S2 = self.N * self.R
-        grad_S3 = self.N * safe_exp(-phi)
+        grad_S3 = self.N * safe_exp(-(phi + self.baseline_phi))
         return(grad_S2 - grad_S3)
     
     def phi_to_output(self, phi):
         Q_star = self.phi_to_Q(phi)
-        seq_densities = pd.DataFrame({'frequency': self.R, 'Q_star': Q_star},
+        seq_densities = pd.DataFrame({'frequency': self.R, 'phi': phi,
+                                      'Q_star': Q_star},
                                      index=self.genotypes)
         if self.adjust_freqs:
             exp_logp = calc_expected_logp(self.genotypes, self.allele_freqs)
@@ -822,7 +846,7 @@ class SeqDEFT(DeltaPEstimator):
         return(-phi - logsumexp(-phi))
     
     def phi_to_Q(self, phi):
-        return(np.exp(self.phi_to_logQ(phi)))
+        return(np.exp(self.phi_to_logQ(phi + self.baseline_phi)))
     
     def _fit_a_0(self):
         with np.errstate(divide='ignore'):

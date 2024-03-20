@@ -498,7 +498,18 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
     
     def matrix_sqrt(self):
         return(ProjectionOperator(self.alpha, self.l, lambdas=np.sqrt(self.lambdas)))
-    
+
+
+class ExtendedDeltaPOperator(ProjectionOperator):
+    def __init__(self, n_alleles, seq_length, P, lambdas0, **params):
+        msg = 'Ensure that lambdas0 has size P'
+        check_error(lambdas0.shape[0] == P, msg=msg)
+        DP = DeltaPOperator(n_alleles, seq_length, P)
+        DP.calc_lambdas()
+        lambdas = DP.lambdas
+        lambdas[:P] = 1 / lambdas0
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length,
+                         lambdas=lambdas, **params)
 
 class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
     def __init__(self, n_alleles, seq_length, distance):
@@ -1186,7 +1197,7 @@ def calc_covariance_vjs(y, n_alleles, seq_length, idx=None):
             P = CovarianceVjOperator(n_alleles, seq_length, j=j)
             quad = P.quad(seq_values)
             nj = P.quad(obs_seqs)
-            z = np.array([i in j for i in range(seq_length)], dtype=float)
+            z = np.array([i not in j for i in range(seq_length)], dtype=float)
             
             cov.append(reciprocal(quad, nj))
             ns.append(nj)
