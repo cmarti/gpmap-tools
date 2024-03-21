@@ -15,6 +15,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              VjProjectionOperator,
                              VarianceComponentKernelOperator,
                              DeltaPOperator, RhoProjectionOperator,
+                             ExtendedDeltaPOperator,
                              VjBasisOperator, KernelOperator,
                              EigenBasisOperator, DeltaKernelBasisOperator,
                              KronOperator, PolynomialOperator,
@@ -132,6 +133,12 @@ class LinOpsTests(unittest.TestCase):
         for k in range(P, l+1):
             lambda_k = a ** P * comb(k, P)
             assert(DP.lambdas[k] == lambda_k)
+    
+    def test_extended_deltap_operator(self):
+        op = ExtendedDeltaPOperator(n_alleles=2, seq_length=3, P=2,
+                                    lambdas0=np.array([1, 1.]))
+        print(op.lambdas)
+        
     
     def test_kron_operator(self):
         m1 = np.random.normal(size=(2, 2))

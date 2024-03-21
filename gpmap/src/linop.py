@@ -1235,7 +1235,7 @@ def calc_variance_components(space):
     lambdas = []
     for k in np.arange(space.seq_length + 1):
         W = ProjectionOperator(n_alleles=n_alleles, seq_length=space.seq_length, k=k)
-        lambdas.append(np.sum(W.quad(space.y)) / W.m_k[k])
+        lambdas.append(W.quad(space.y) / W.m_k[k])
     return(np.array(lambdas))
 
 
