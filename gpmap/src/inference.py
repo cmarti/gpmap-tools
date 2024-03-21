@@ -783,14 +783,15 @@ class SeqDEFT(DeltaPEstimator):
         phi_aux = phi.copy() + self.baseline_phi
         phi_aux[np.logical_and(np.isinf(phi_aux), self.R == 0)] = 0
         S2 = self.N * np.sum(self.R * phi_aux)
-        S3 = self.N * np.sum(safe_exp(-phi))
+        S3 = self.N * np.sum(safe_exp(-phi_aux))
         return(S2 + S3)
     
     def calc_neg_log_likelihood_grad(self, phi):
         # TODO: review gradient calculation in case of baseline_phi
-        grad_S2 = self.N * self.R
-        grad_S3 = self.N * safe_exp(-(phi + self.baseline_phi))
-        return(grad_S2 - grad_S3)
+        phi_aux = phi.copy() + self.baseline_phi
+        grad_S2 =  self.N * self.R
+        grad_S3 = -self.N * safe_exp(-phi_aux)
+        return(grad_S2 + grad_S3)
     
     def phi_to_output(self, phi):
         Q_star = self.phi_to_Q(phi)

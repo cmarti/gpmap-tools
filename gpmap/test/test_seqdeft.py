@@ -3,15 +3,19 @@ import sys
 import unittest
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from os.path import join
 from tempfile import NamedTemporaryFile
 from subprocess import check_call
 from scipy.stats import pearsonr
+from scipy.special import logsumexp
 
 from gpmap.src.settings import BIN_DIR
+from gpmap.src.seq import generate_possible_sequences
+from gpmap.src.linop import ProjectionOperator
 from gpmap.src.inference import SeqDEFT
-from gpmap.src.plot.mpl import plot_SeqDEFT_summary, savefig
+from gpmap.src.plot.mpl import plot_SeqDEFT_summary, savefig, plot_density_vs_frequency
 
 
 class SeqDEFTTests(unittest.TestCase):
@@ -92,6 +96,77 @@ class SeqDEFTTests(unittest.TestCase):
         # Ensure it is similar the true probabilities
         r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
         assert(r > 0.6)
+    
+    def test_seq_deft_inference_baseline(self):
+        np.random.seed(3)
+        l, a = 7, 4
+        seqdeft_a = 50
+        out = 3
+        
+        # Simulate a pairwise function on l=5
+        x = np.random.normal(size=a ** l)
+        lambdas = np.zeros(l+1)
+        lambdas[1:3] = [300, 75]
+        P = ProjectionOperator(a, l, lambdas=np.sqrt(lambdas))
+        phi = P @ x
+
+        # Ensure lack of higher order components
+        P3 = ProjectionOperator(a, l, k=3)
+        k3 = P3.quad(phi)
+        assert(k3 < 1e-8)
+
+        # Average out last 2 positions
+        seqs = np.array(list(generate_possible_sequences(l)))
+        baseline = pd.DataFrame({'seqs': seqs, 'phi': phi, 'subseq': [x[:-out] for x in seqs],
+                                 'Q': np.exp(phi - logsumexp(phi))})
+        baseline_phi = -np.log(baseline.groupby('subseq')['Q'].sum())
+
+        # Ensure some higher order component induced by missing sites
+        P3 = ProjectionOperator(a, l-out, k=3)
+        k3_short = P3.quad(baseline_phi)
+        assert(k3_short > 1e3 * k3)
+
+        # Simulate from prior at l=4 with baseline phi
+        seqdeft = SeqDEFT(P=3, a=seqdeft_a)
+        seqdeft.init(seq_length=l-out, alphabet_type='rna')
+        phi = seqdeft.simulate_phi(a=seqdeft_a)
+        X = seqdeft.simulate(N=2000, phi=phi + baseline_phi.values)
+
+        # Fit model without baseline
+        seq_densities = seqdeft.fit(X=X)
+        phi1 = seq_densities['phi']
+        r1 = pearsonr(phi, phi1)[0]
+
+        # Fit model with baseline should increase correlation with true phi
+        seq_densities = seqdeft.fit(X=X,
+                                    baseline_phi=baseline_phi.values,
+                                    baseline_X=baseline_phi.index.values)
+        phi2 = seq_densities['phi']
+        r2 = pearsonr(phi, phi2)[0]
+        assert(r2 > r1)
+
+        # Calculate variance components
+        lambdas, lambdas2 = [], []
+        for k in np.arange(l - out + 1):
+            W = ProjectionOperator(a, l-out, k=k)
+            lambdas.append(W.quad(phi) / W.m_k[k])
+            lambdas2.append(W.quad(phi2) / W.m_k[k])
+        print(lambdas)
+        print(lambdas2)
+
+        fig, subplots = plt.subplots(1, 3, figsize=(9, 3))
+
+        axes = subplots[0]
+        axes.hist(baseline_phi - baseline_phi.mean(), alpha=0.5, label='baseline')
+        axes.hist(phi - phi.mean(), alpha=0.5, label='phi')
+        axes.legend(loc=2)
+
+        axes = subplots[1]
+        axes.scatter(-phi2, -phi, s=5, c='black')
+
+        axes = subplots[2]
+        plot_density_vs_frequency(seq_densities, axes)
+        savefig(fig, 'test')
     
     def test_seq_deft_inference_cv(self):
         seqdeft = SeqDEFT(P=2)
