@@ -513,10 +513,8 @@ class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
     def __init__(self, n_alleles, seq_length, distance):
         SeqOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length)
         L = LaplacianOperator(n_alleles=n_alleles, seq_length=seq_length)
-        self.L_lambdas = L.lambdas
-        self.m_k = L.lambdas_multiplicity
-        self.calc_polynomial_coefficients(distance=distance)
-        PolynomialOperator.__init__(self, L, self.coeffs)
+        coeffs = self.calc_polynomial_coefficients(distance=distance)
+        PolynomialOperator.__init__(self, L, coeffs)
     
     def calc_L_powers_distance_matrix_inverse(self):
         """Construct entries of powers of L. 
@@ -550,7 +548,7 @@ class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
     
     def calc_polynomial_coefficients(self, distance):
         self.calc_L_powers_distance_matrix_inverse()
-        self.coeffs = self.L_powers_d_inv[:, distance]
+        return(self.L_powers_d_inv[:, distance])
 
 
 class CovarianceVjOperator(ConstantDiagSeqOperator, KronOperator):
