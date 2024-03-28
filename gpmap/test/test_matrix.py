@@ -4,9 +4,10 @@ import numpy as np
 
 from scipy.sparse import csr_matrix
 
-from gpmap.src.matrix import (calc_cartesian_product, calc_cartesian_product_dot, 
+from gpmap.src.matrix import (calc_cartesian_product,
+                              calc_cartesian_product_dot, 
                               diag_pre_multiply, diag_post_multiply,
-                              lanczos_conjugate_gradient, rate_to_jump_matrix)
+                              rate_to_jump_matrix, kron)
 
 
 class MatrixTests(unittest.TestCase):
@@ -33,6 +34,26 @@ class MatrixTests(unittest.TestCase):
         
         r = diag_post_multiply(d, m)
         assert(np.allclose(r, np.array([[2, 2], [4, 3]])))
+    
+    def test_kron_product(self):
+        m = np.array([[1, 2],
+                      [2, 3]])
+        n = np.array([[4, 2],
+                      [2, 2]])
+        
+        # Test kron of two matrices
+        p1 = np.kron(m, m)
+        p2 = kron([m, m])
+        assert(np.allclose(p1, p2))
+        
+        p1 = np.kron(m, n)
+        p2 = kron([m, n])
+        assert(np.allclose(p1, p2))
+        
+        # Test more than 2 matrices
+        p1 = np.kron(m, np.kron(n, m))
+        p2 = kron([m, n, m])
+        assert(np.allclose(p1, p2))
         
     def test_cartesian_product(self):
         # With adjacency matrices
@@ -113,19 +134,6 @@ class MatrixTests(unittest.TestCase):
         u2 = calc_cartesian_product_dot(ms, v)
         assert(np.allclose(u1, u2))
         
-    def test_lanczos_conjugate_gradient(self):
-        A = np.ones((4, 4)) + np.diag(np.ones(4))
-        x_true = np.random.normal(size=4)
-        b = A.dot(x_true)
-        print(A)
-        print(x_true)
-        print(b)
-        
-        tol = 1e-6
-        x = lanczos_conjugate_gradient(A, b, tol=tol)
-        print(x)
-        assert(np.allclose(x, x_true, atol=tol))
-    
     def test_rate_to_jump_matrix(self):
         # Test easy matrix
         Q = np.array([[-2, 1, 1],

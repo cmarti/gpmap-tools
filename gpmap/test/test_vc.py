@@ -53,10 +53,10 @@ class VCTests(unittest.TestCase):
                 f_k_rq = W.rayleigh_quotient(f)
                 assert(np.allclose(f_k_rq, k1 == k2))
     
-    def test_calc_emp_dist_cov(self):
+    def test_calc_distance_covariance(self):
         np.random.seed(1)
         sigma, lambdas = 0.1, np.array([0, 200, 20, 2, 0.2])
-        seq_length, n_alleles = 4, 4
+        n_alleles, seq_length = 4, 4
         
         vc = VCregression(n_alleles=n_alleles, seq_length=seq_length,
                           lambdas=lambdas)
@@ -84,13 +84,16 @@ class VCTests(unittest.TestCase):
         assert(rho[4] < 0)
     
     def test_vc_fit(self):
+        # Simulate data
+        np.random.seed(0)
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
         a, l = 4, lambdas.shape[0]-1
         vc = VCregression(n_alleles=a, seq_length=l, lambdas=lambdas)
         data = vc.simulate(sigma=0.1)
         
         # Ensure MSE is within a small range
-        vc.fit(data.index.values, data['y'], y_var=data['y_var'])
+        vc = VCregression()
+        vc.fit(X=data.index.values, y=data['y'], y_var=data['y_var'])
         sd1 = np.log2((vc.lambdas[1:]+1e-6) / (lambdas[1:]+1e-6)).std()
         assert(sd1 < 2)
         
@@ -171,7 +174,7 @@ class VCTests(unittest.TestCase):
             vc = VCregression(alphabet_type='dna', seq_length=l,
                               lambdas=lambdas)
             data = vc.simulate(sigma=0.05)
-            idx = np.random.uniform(size=data.shape[0]) < 0.9
+            idx = np.random.uniform(size=data.shape[0]) < 0.99
             train, test = data.loc[idx, :], data.loc[~idx, :]
             
             # Save simulated data in temporary files

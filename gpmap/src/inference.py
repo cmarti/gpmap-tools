@@ -4,7 +4,6 @@ import pandas as pd
 
 from time import time
 from tqdm import tqdm
-from numpy.linalg.linalg import matrix_power
 from scipy.optimize import minimize
 from scipy.special import logsumexp
 from scipy.stats.stats import pearsonr
@@ -12,16 +11,14 @@ from scipy.stats import norm
 
 from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
 from gpmap.src.utils import check_error, get_CV_splits
-from gpmap.src.matrix import reciprocal
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences, calc_allele_frequencies,
                            calc_expected_logp, calc_genetic_code_aa_freqs)
 from gpmap.src.linop import (DeltaPOperator, calc_covariance_distance,
                              ExtendedLinearOperator, DeltaKernelBasisOperator,
-                             KernelOperator, ProjectionOperator, PolynomialOperator,
-                             LaplacianOperator)
-from gpmap.src.kernel import KernelAligner
+                             KernelOperator, ProjectionOperator)
+from gpmap.src.aligner import VCKernelAligner
 
 
 class SeqGaussianProcessRegressor(object):
@@ -57,13 +54,13 @@ class SeqGaussianProcessRegressor(object):
             n_alleles = len(alphabet)
             alphabet = [alphabet] * seq_length
         
-        self.set_config(seq_length, n_alleles, alphabet)
+        self.set_config(n_alleles, seq_length, alphabet)
     
     def get_obs_idx(self, seqs):
         obs_idx = self.genotype_idxs[seqs]
         return(obs_idx)
     
-    def set_config(self, seq_length, n_alleles, alphabet):
+    def set_config(self, n_alleles, seq_length, alphabet):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
         self.alphabet = alphabet
@@ -232,8 +229,7 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         f = self.neg_marginal_log_likelihood
         f_grad = self.neg_marginal_log_likelihood_grad
         res = minimize(fun=f, x0=x0,
-                        jac=f_grad, method='L-BFGS-B'
-                       )
+                       jac=f_grad, method='L-BFGS-B')
         params = res.x
         self.K.set_params(params)
         return(params)
@@ -273,7 +269,8 @@ class VCregression(GaussianProcessRegressor):
              alphabet_type='custom'):
         self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                           genotypes=genotypes, alphabet_type=alphabet_type)
-        self.kernel_aligner = KernelAligner(self.seq_length, self.n_alleles)
+        self.kernel_aligner = VCKernelAligner(n_alleles=self.n_alleles,
+                                              seq_length=self.seq_length)
     
     def set_data(self, X, y, y_var=None, cov=None, ns=None):
         self.init(genotypes=X)
@@ -362,10 +359,8 @@ class VCregression(GaussianProcessRegressor):
         cov, ns = self.cov, self.ns
         if cov is None or ns is None:
             cov, ns = self.calc_covariance_distance(self.X, self.y)
-
-        self.kernel_aligner.set_data(cov, ns)
         self.kernel_aligner.set_beta(beta)
-        lambdas = self.kernel_aligner.fit()
+        lambdas = self.kernel_aligner.fit(cov, ns)
         return(lambdas)
     
     def fit(self, X, y, y_var=None):
@@ -406,14 +401,16 @@ class VCregression(GaussianProcessRegressor):
             self.set_data(X, y, y_var=y_var)
         
         lambdas = self._fit()
+        
         self.fit_time = time() - t0
         self.set_lambdas(lambdas)
 
     def set_lambdas(self, lambdas=None, k=None):
         W = ProjectionOperator(self.n_alleles, self.seq_length,
                                lambdas=lambdas, k=k)
-        self.lambdas = W.lambdas
+        self.lambdas = lambdas
         super().__init__(base_kernel=W)
+
 
 class DeltaPEstimator(SeqGaussianProcessRegressor):
     def __init__(self, P, a=None, num_reg=20, nfolds=5,
@@ -781,9 +778,10 @@ class SeqDEFT(DeltaPEstimator):
     
     def calc_neg_log_likelihood(self, phi):
         phi_aux = phi.copy() + self.baseline_phi
+        S3 = self.N * np.sum(safe_exp(-phi_aux))
+        
         phi_aux[np.logical_and(np.isinf(phi_aux), self.R == 0)] = 0
         S2 = self.N * np.sum(self.R * phi_aux)
-        S3 = self.N * np.sum(safe_exp(-phi_aux))
         return(S2 + S3)
     
     def calc_neg_log_likelihood_grad(self, phi):

@@ -43,7 +43,7 @@ class SequenceKernel(object):
 
 class VarianceComponentKernel(SequenceKernel):
     def __init__(self, n_alleles, seq_length):
-        super().__init__(seq_length=n_alleles, seq_length=n_alleles)
+        super().__init__(seq_length=seq_length, n_alleles=n_alleles)
         self.calc_krawchouk_matrix()
         self.n_params = self.lp1
     

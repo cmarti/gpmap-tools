@@ -173,9 +173,9 @@ def figure_allele_grid(nodes_df, fpath, x='1', y='2', edges_df=None,
     nc = {label: np.array([seq[i] for seq in nodes_df.index])
           for i, label in zip(positions, position_labels)}
     plots = None
-    for i in range(n_alleles):
-        for j, (pos, pos_label) in enumerate(zip(positions, position_labels)):
-            allele = alphabet[pos][i]
+    for j, (pos, pos_label) in enumerate(zip(positions, position_labels)):
+        alleles = alphabet[pos]
+        for i, allele in enumerate(alleles):
             seq_pos = nc[pos_label]
             dsg = _get_allele_panel(nodes_df, x, y, edges_dsg,
                                     seq_pos, allele, pos_label,

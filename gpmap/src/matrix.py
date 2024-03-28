@@ -22,6 +22,16 @@ def quad(linop, v1, v2=None):
     return(np.sum(linop.dot(v1) * v2))
 
 
+def kron(matrices):
+    n = len(matrices)
+    msg = 'Provide at least two matrices to take Kron product'
+    check_error(n >= 2, msg=msg)
+    if n == 2:
+        return(np.kron(matrices[0], matrices[1]))
+    else:
+        return(np.kron(matrices[0], kron(matrices[1:])))
+
+
 def get_sparse_diag_matrix(values):
     n_genotypes = values.shape[0]
     m = dia_matrix((values, np.array([0])), shape=(n_genotypes, n_genotypes))
@@ -100,45 +110,6 @@ def calc_cartesian_product_dot(matrices, v):
     return(u)
 
 
-def calc_tensor_product(matrices):
-    if len(matrices) == 1:
-        return(matrices[0])
-    
-    m1, m2 = matrices[0], calc_tensor_product(matrices[1:])
-    rows = []
-    for j in range(m1.shape[0]):
-        row = [m2 * m1[j, k] for k in range(m1.shape[1])]
-        if len(row) > 1:
-            rows.append(np.hstack(row))
-        else: 
-            rows.append(row[0])
-    m = np.vstack(rows)
-    return(m)
-
-
-def kron_dot(matrices, v):
-    shape = [m_i.shape[1] for m_i in matrices]
-    check_error(np.prod(shape) == v.shape[0],
-                msg='Incorrect dimensions of matrices and `v`')
-    
-    m = v.reshape(shape)
-    for i, m_i in enumerate(matrices):
-        axes = np.arange(len(shape))
-        axes[[i, 0]] = np.array([0, i])
-
-        n = np.prod(m.shape)
-        tmp_shape = (m_i.shape[1], int(n / m_i.shape[1]))
-        mx = np.transpose(m, axes=axes).reshape(tmp_shape)
-        p = m_i @ mx
-
-        shape[i] = m_i.shape[0]
-        tmp_shape = shape.copy()
-        tmp_shape[0], tmp_shape[i] = tmp_shape[i], tmp_shape[0]
-
-        m = np.transpose(p.reshape(tmp_shape), axes=axes)
-    return(m.reshape(np.prod(shape)))
-
-
 def reciprocal(x, y):
     """calculate reciprocal of variable, if variable=0, return 0"""
     if y == 0:
@@ -194,14 +165,13 @@ def rate_to_jump_matrix(rate_matrix):
     return(jump_matrix)
 
 
-def lanczos_conjugate_gradient(A, b, tol=1e-6, max_iter=100):
-    x = np.zeros(b.shape)
-    p = b
-    r = b
-    w = 0
-    gamma = 1
-    prev_u = 0
-    
+# def lanczos_conjugate_gradient(A, b, tol=1e-6, max_iter=100):
+#     x = np.zeros(b.shape)
+#     p = b
+#     r = b
+#     w = 0
+#     gamma = 1
+#     prev_u = 0
 #     u = np.zeros(b.shape)
 #     r = A.dot(u) - b
 #     r_norm = norm(r)

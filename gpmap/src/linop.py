@@ -14,9 +14,7 @@ except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
 from gpmap.src.utils import check_error
-from gpmap.src.matrix import (calc_cartesian_product,
-                              calc_cartesian_product_dot,
-                              inner_product, kron_dot, diag_pre_multiply,
+from gpmap.src.matrix import (inner_product, diag_pre_multiply,
                               reciprocal)
 
 
@@ -585,6 +583,7 @@ class VjBasisOperator(VjOperator):
         b = [np.full((self.alpha, 1), 1 / np.sqrt(self.alpha)), orth(site_L)]
         return([b[int(i in j)] for i in range(self.l)])
     
+    
 class VjProjectionOperator(VjOperator):
     def get_matrices(self, j):
         self.W0 = np.full((self.alpha, self.alpha), fill_value=1./self.alpha)
@@ -602,8 +601,8 @@ class VjProjectionOperator(VjOperator):
         if self.k == 0:
             sqnorm = self.repeats * u ** 2
         else:
-            matrices = [self.W1] * self.k
-            sqnorm = self.repeats * np.sum(kron_dot(matrices, u.flatten()) ** 2)
+            A = KronOperator([self.W1] * self.k)
+            sqnorm = self.repeats * np.sum((A @ u.flatten()) ** 2)
         return(sqnorm)
     
 class RhoProjectionOperator(ConstantDiagSeqOperator, KronOperator):
@@ -641,6 +640,9 @@ class RhoProjectionOperator(ConstantDiagSeqOperator, KronOperator):
         log_rho = np.log(self.rho)
         k = np.sum([comb(self.l, i-1) for i in range(self.l)])
         return(k * np.sum(log_rho))
+    
+    def matrix_sqrt(self):
+        return(RhoProjectionOperator(self.alpha, self.l, rho=np.sqrt(self.rho)))
 
 
 class EigenBasisOperator(SeqOperator):
@@ -1173,7 +1175,7 @@ def _get_seq_values_and_obs_seqs(y, n_alleles, seq_length, idx=None):
 
 def calc_covariance_distance(y, n_alleles, seq_length, idx=None):
     seq_values, obs_seqs = _get_seq_values_and_obs_seqs(y, n_alleles,
-                                                        seq_length, idx=None)
+                                                        seq_length, idx=idx)
 
     cov, ns = np.zeros(seq_length + 1), np.zeros(seq_length + 1)
     for d in range(seq_length + 1):
@@ -1208,7 +1210,15 @@ def calc_covariance_vjs(y, n_alleles, seq_length, idx=None):
     return(cov, ns, sites_matrix)
 
 
-def calc_variance_components(space):
+def calc_variance_components(y, n_alleles, seq_length):
+    lambdas = []
+    for k in np.arange(seq_length + 1):
+        W = ProjectionOperator(n_alleles=n_alleles, seq_length=seq_length, k=k)
+        lambdas.append(W.quad(y) / W.m_k[k])
+    return(np.array(lambdas))
+
+
+def calc_space_variance_components(space):
     '''
     Calculates the variance components associated to the function
     along the SequenceSpace. It returns the squared module of the
@@ -1217,6 +1227,11 @@ def calc_variance_components(space):
     
     See Zhou et al. 2021
     https://www.pnas.org/doi/suppl/10.1073/pnas.2204233119
+
+    Parameters
+    ----------
+    space : SequenceSpace
+        SequenceSpace object for which to calculate the variance components
     
     Returns
     -------
@@ -1225,21 +1240,28 @@ def calc_variance_components(space):
         k'th eigenspaces in increasing order of k.
      
     '''
-
     n_alleles = np.unique(space.n_alleles)
     msg = 'Variance components can only be calculated for spaces'
     msg += ' with constant number of alleles across sites'
     check_error(n_alleles.shape[0] == 1, msg)
     n_alleles = n_alleles[0]
-    
-    lambdas = []
-    for k in np.arange(space.seq_length + 1):
-        W = ProjectionOperator(n_alleles=n_alleles, seq_length=space.seq_length, k=k)
-        lambdas.append(W.quad(space.y) / W.m_k[k])
-    return(np.array(lambdas))
+    seq_length = space.seq_length
+    y = space.y
+    vc = calc_variance_components(y, n_alleles, seq_length)
+    return(vc)
 
 
-def calc_vjs_variance_components(space, k):
+def calc_vjs_variance_components(y, a, l, k):
+    positions = np.arange(l)
+    dimension = (a - 1) ** float(k)
+    variances = {}
+    for j in combinations(positions, k):
+        Pj = VjProjectionOperator(a, l, j=j)
+        variances[j] = np.sum(Pj.dot(y) ** 2) / dimension 
+    return(variances)
+
+
+def calc_space_vjs_variance_components(space, k):
     '''
     Calculates the squared module of the projection into the `Vj` subspaces
     of order `k` defined by each individual combination of `k` sites as
@@ -1252,7 +1274,6 @@ def calc_vjs_variance_components(space, k):
     
     k : int from 0 to seq_length + 1
         Order of interaction to calculate
-        
     
     Returns
     -------
@@ -1266,11 +1287,5 @@ def calc_vjs_variance_components(space, k):
     msg += ' with constant number of alleles across sites'
     check_error(n_alleles.shape[0] == 1, msg)
     n_alleles = n_alleles[0]
-        
-    positions = np.arange(space.seq_length)
-    dimension = (n_alleles - 1) ** float(k)
-    variances = {}
-    for j in combinations(positions, k):
-        Pj = VjProjectionOperator(n_alleles, space.seq_length, j=j)
-        variances[j] = np.sum(Pj.dot(space.y) ** 2) / dimension 
-    return(variances)
+    vc = calc_vjs_variance_components(space.y, n_alleles, space.seq_length, k)
+    return(vc)

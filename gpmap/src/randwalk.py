@@ -12,7 +12,7 @@ from scipy.special import logsumexp, comb
 from gpmap.src.settings import DNA_ALPHABET
 from gpmap.src.utils import check_error, write_log
 from gpmap.src.matrix import (get_sparse_diag_matrix, calc_cartesian_product,
-                              calc_tensor_product, rate_to_jump_matrix)
+                              kron, rate_to_jump_matrix)
 from gpmap.src.graph import calc_bottleneck, calc_pathway, has_path
 
 
@@ -350,7 +350,7 @@ class WMWalk(TimeReversibleRandomWalk):
             sites_stat_freqs = [np.ones(a) / a for a in self.space.n_alleles]
             
         sites_stat_freqs = [np.array([freqs]).T for freqs in sites_stat_freqs]
-        freqs = calc_tensor_product(sites_stat_freqs).flatten()
+        freqs = kron(sites_stat_freqs).flatten()
         return(freqs)
     
     def calc_gtr_rate_matrix(self, exchange_rates_matrix, stationary_freqs):

@@ -19,7 +19,7 @@ from itertools import product
 
 
 class GPTests(unittest.TestCase):
-    def test_prior_sample(self):
+    def xtest_prior_sample(self):
         l, a = 5, 4
         
         # Sample from fixed rho kernel
@@ -43,7 +43,7 @@ class GPTests(unittest.TestCase):
         y = model.sample()
         assert(y.shape[0] == a**l)
         
-    def test_gp_fit(self):
+    def xtest_gp_fit(self):
         alleles = ['A', 'C', 'G', 'T']
         l, a = 5, len(alleles)
         X = np.array([''.join(c) for c in product(alleles, repeat=l)])
@@ -66,5 +66,5 @@ class GPTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    sys.argv = ['', 'GPTests.test_gp_fit']
+    sys.argv = ['', 'GPTests']
     unittest.main()

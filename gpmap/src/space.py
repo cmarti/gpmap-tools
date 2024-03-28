@@ -243,7 +243,7 @@ class GeneralSequenceSpace(DiscreteSpace):
     def set_seq_length(self, seq_length=None, n_alleles=None, alphabet=None):
         if seq_length is None:
             check_error(n_alleles is not None or alphabet is not None,
-                        'One of seq_length, n_alleles or alphabet is required')
+                        'One of n_alleles, seq_length or alphabet is required')
             seq_length = len(n_alleles) if n_alleles is not None else len(alphabet)
         self.seq_length = seq_length
         

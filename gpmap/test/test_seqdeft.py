@@ -151,22 +151,24 @@ class SeqDEFTTests(unittest.TestCase):
             W = ProjectionOperator(a, l-out, k=k)
             lambdas.append(W.quad(phi) / W.m_k[k])
             lambdas2.append(W.quad(phi2) / W.m_k[k])
-        print(lambdas)
-        print(lambdas2)
 
         fig, subplots = plt.subplots(1, 3, figsize=(9, 3))
 
         axes = subplots[0]
-        axes.hist(baseline_phi - baseline_phi.mean(), alpha=0.5, label='baseline')
-        axes.hist(phi - phi.mean(), alpha=0.5, label='phi')
+        axes.hist(baseline_phi - baseline_phi.mean(), alpha=0.5, label='$\phi_{baseline}$')
+        axes.hist(phi - phi.mean(), alpha=0.5, label='$\phi_{target}$')
         axes.legend(loc=2)
+        axes.set(xlabel='$\phi$', ylabel='# sequences')
+        axes.grid(alpha=0.2)
 
         axes = subplots[1]
         axes.scatter(-phi2, -phi, s=5, c='black')
+        axes.set(xlabel='$-\phi_{inferred}$', ylabel='$-\phi_{target}$')
+        axes.grid(alpha=0.2)
 
         axes = subplots[2]
         plot_density_vs_frequency(seq_densities, axes)
-        savefig(fig, 'test')
+        axes.grid(alpha=0.2)
     
     def test_seq_deft_inference_cv(self):
         seqdeft = SeqDEFT(P=2)

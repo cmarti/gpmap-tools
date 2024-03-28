@@ -234,8 +234,8 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
     '''
     # TODO: get colors and width as either fixed values or from edges_df
     edges_coords = get_edges_coords(nodes_df, edges_df, x=x, y=y, z=z, avoid_dups=True)
-    c, cbar, legend, vmin, vmax = get_element_color(edges_df, color, palette,
-                                                    cbar, legend)
+    c, cbar, legend, vmin, vmax, _ = get_element_color(edges_df, color, palette,
+                                                       cbar, legend)
     widths = get_element_sizes(edges_df, width, min_width, max_width)
     get_lines = LineCollection if z is None else Line3DCollection
     lines = get_lines(edges_coords, colors=c, linewidths=widths,
@@ -347,10 +347,6 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
         Location of the legend in case of coloring according to a categoric 
         variable
         
-    autoscale_axis : bool (False)
-        Scale axis limits so that the span the same range of values on all axis
-        for a more realistic representation of distances
-    
     Returns
     -------
     line_collection : LineCollection or Line3DCollection
@@ -359,10 +355,13 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
     
     ndf = sort_nodes(nodes_df, sort_by, sort_ascending, color)
     s = get_element_sizes(ndf, size, min_size, max_size)
-    c, cbar, legend, vmin, vmax = get_element_color(ndf, color, palette,
+    c, cbar, legend, vmin, vmax, continuous = get_element_color(ndf, color, palette,
                                                     cbar, legend, vmin, vmax)
-    kwargs = {'c': c, 'linewidth': lw, 's': s, 'zorder': zorder,
-              'alpha': alpha, 'edgecolor': edgecolor, 'cmap': cm.get_cmap(cmap)}
+    kwargs = {'linewidth': lw, 's': s, 'zorder': zorder,
+              'alpha': alpha, 'edgecolor': edgecolor}
+    if continuous:
+        kwargs['cmap'] = cm.get_cmap(cmap)
+        
     if vcenter:
         kwargs['norm'] = colors.CenteredNorm()
     else:
@@ -371,7 +370,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
         
     if z is not None:
         kwargs['zs'] = ndf[z]
-    sc = axes.scatter(ndf[x], ndf[y], **kwargs)
+    sc = axes.scatter(ndf[x], ndf[y], c=c, **kwargs)
     add_color_info(sc, axes, cbar, cbar_axes, cbar_label,
                    legend, palette, legend_loc, fontsize,
                    cbar_orientation, vmin, vmax)
@@ -384,8 +383,12 @@ def plot_color_hist(axes, values, cmap='viridis', bins=50, fontsize=8):
     
     cmap = cm.get_cmap(cmap)
     for value, bar in zip(values, bars):
-        for patch in bar.patches:
-            patch.set_facecolor(cmap(value))
+        color = cmap(value)
+        if hasattr(bar, 'patches'):
+            for patch in bar.patches:
+                patch.set_facecolor(color)
+        else:
+            bar.set_facecolor(color)
     
     axes.spines[['right', 'top']].set_visible(False)
     axes.set(yticks=[], xticks=[], xlim=(bins[0], bins[-1]))
@@ -456,6 +459,7 @@ def color_palette(name, n):
 
 
 def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
+    continuous = False
     if color in df.columns:
         
         # Categorical color map
@@ -478,6 +482,7 @@ def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
                 vmin = color.min()
             if vmax is None:
                 vmax = color.max()
+            continuous = True
             
         else:
             msg = 'color dtype is not compatible: {}'.format(df[color].dtype)
@@ -485,7 +490,7 @@ def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
     else:
         cbar, legend = False, False
     
-    return(color, cbar, legend, vmin, vmax)
+    return(color, cbar, legend, vmin, vmax, continuous)
 
 
 def add_cbar(sc, axes, cbar_axes=None, label='Function', fontsize=12,
@@ -594,7 +599,101 @@ def plot_visualization(axes, nodes_df, edges_df=None,
                        center_spines=False, add_hist=False, inset_cbar=False,
                        inset_pos=(0.7, 0.7),
                        axis_fontsize=12, fontsize=8, 
-                       prev_nodes_df=None, autoscale_axis=False):
+                       prev_nodes_df=None):
+    '''
+    Plots the nodes representing the states of the discrete space on the
+    provided coordinates and the edges representing the connections between
+    states that are conneted if provided
+
+    Parameters
+    ----------
+    axes : matplotlib
+        matplotlib ``Axes`` in which to plot the edges.
+    pd.DataFrame of shape (n_genotypes, n_variables)
+        ``pd.DataFrame`` containing the coordinates in every of the ``n_components``
+        in addition to the "function" and "stationary_freq" columns. Additional
+        columns are also allowed
+    pd.DataFrame of shape (n_edges, 2)
+        ``pd.DataFrame`` the connectivity information between states of the
+        discrete space to plot. It has columns "i" and "j" for the indexes
+        of the pairs of states that are connected.
+    x : str, optional
+        _description_, by default '1'
+    y : str, optional
+        _description_, by default '2'
+    z : _type_, optional
+        _description_, by default None
+    nodes_alpha : int, optional
+        _description_, by default 1
+    nodes_zorder : int, optional
+        _description_, by default 2
+    nodes_color : str, optional
+        _description_, by default 'function'
+    nodes_cmap : str, optional
+        _description_, by default 'viridis'
+    nodes_palette : _type_, optional
+        _description_, by default None
+    nodes_vmin : _type_, optional
+        _description_, by default None
+    nodes_vmax : _type_, optional
+        _description_, by default None
+    nodes_vcenter : bool, optional
+        _description_, by default False
+    nodes_cbar : bool, optional
+        _description_, by default True
+    nodes_cbar_axes : _type_, optional
+        _description_, by default None
+    nodes_cmap_label : str, optional
+        _description_, by default 'Function'
+    nodes_size : float, optional
+        _description_, by default 2.5
+    nodes_min_size : int, optional
+        _description_, by default 1
+    nodes_max_size : int, optional
+        _description_, by default 40
+    nodes_lw : int, optional
+        _description_, by default 0
+    nodes_edgecolor : str, optional
+        _description_, by default 'black'
+    edges_alpha : float, optional
+        _description_, by default 0.1
+    edges_zorder : int, optional
+        _description_, by default 1
+    edges_color : str, optional
+        _description_, by default 'grey'
+    edges_cmap : str, optional
+        _description_, by default 'binary'
+    edges_palete : _type_, optional
+        _description_, by default None
+    edges_cbar : bool, optional
+        _description_, by default False
+    edges_cbar_axes : _type_, optional
+        _description_, by default None
+    edges_width : float, optional
+        _description_, by default 0.5
+    edges_max_width : int, optional
+        _description_, by default 1
+    edges_min_width : float, optional
+        _description_, by default 0.1
+    sort_by : _type_, optional
+        _description_, by default None
+    sort_ascending : bool, optional
+        _description_, by default False
+    center_spines : bool, optional
+        _description_, by default False
+    add_hist : bool, optional
+        _description_, by default False
+    inset_cbar : bool, optional
+        _description_, by default False
+    inset_pos : tuple, optional
+        _description_, by default (0.7, 0.7)
+    axis_fontsize : int, optional
+        _description_, by default 12
+    fontsize : int, optional
+        _description_, by default 8
+    prev_nodes_df : _type_, optional
+        _description_, by default None
+    '''
     
     if prev_nodes_df is not None:
         axis = [x, y] if z is None else [x, y, z]
@@ -630,9 +729,6 @@ def plot_visualization(axes, nodes_df, edges_df=None,
                edgecolor=nodes_edgecolor, lw=nodes_lw,
                vmax=nodes_vmax, vmin=nodes_vmin, vcenter=nodes_vcenter,
                fontsize=fontsize)
-    
-    if autoscale_axis:
-        autoscale_axis(nodes_df, axes, x, y, z=z)
     
     add_axis_labels(axes, x, y, z=z, fontsize=axis_fontsize,
                     center_spines=center_spines)
@@ -780,7 +876,7 @@ def figure_allele_grid(nodes_df, edges_df=None,
 def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
                        allele_color='orange', background_color='lightgrey',
                        nodes_size=None, edges_color='grey', edges_width=0.5,
-                       positions=None, position_labels=None, autoscale_axis=True,
+                       positions=None, position_labels=None,
                        colsize=3, rowsize=2.7, xpos_label=0.05, ypos_label=0.92,
                        is_prot=False, alphabet_type='rna', codon_table='Standard',
                        ncol=None, nrow=1, labels_full_seq=False):
@@ -807,15 +903,14 @@ def figure_shifts_grid(nodes_df, seq, edges_df=None, fpath=None, x='1', y='2',
         axes = subplots[col]
         plot_visualization(axes, nodes_df, edges_df=edges_df, x=x, y=y,
                            nodes_color=background_color, nodes_size=nodes_size,
-                           edges_color=edges_color, edges_width=edges_width,
-                           autoscale_axis=autoscale_axis)
+                           edges_color=edges_color, edges_width=edges_width)
         sel_nodes_df = get_nodes_df_highlight(nodes_df,
                                               genotype_groups=genotype_groups,
                                               is_prot=is_prot,
                                               alphabet_type=alphabet_type,
                                               codon_table=codon_table)
         plot_nodes(axes, sel_nodes_df, x=x, y=y, color=allele_color,
-                   size=nodes_size, autoscale_axis=False)
+                   size=nodes_size)
         
         if col // ncol != nrow - 1:
             axes.set_xlabel('')

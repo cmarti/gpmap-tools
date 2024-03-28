@@ -3,89 +3,19 @@ import unittest
 
 import numpy as np
 
-from scipy.special._basic import comb
+from scipy.special import comb
 
+from gpmap.src.aligner import FullKernelAligner
 from gpmap.src.inference import VCregression, GaussianProcessRegressor
 from gpmap.src.kernel import (VarianceComponentKernel, SequenceKernel,
-                              VCKernelAligner, FullKernelAligner,
-                              SkewedVarianceComponentKernel, ConnectednessKernel,
-                              RhoKernelAligner)
-from gpmap.src.linop import (ConnectednessKernelOperator, RhoProjectionOperator,
-                             VarianceComponentKernelOperator,
-                             calc_covariance_vjs)
+                              SkewedVarianceComponentKernel, ConnectednessKernel)
+from gpmap.src.linop import (ConnectednessKernelOperator,
+                             VarianceComponentKernelOperator)
 from gpmap.src.seq import generate_possible_sequences
 
 
 class KernelTest(unittest.TestCase):
-    def test_vc_kernel_alignment(self):
-        np.random.seed(1)
-        seq_length, n_alleles = 5, 4
-        lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
-        
-        vc = VCregression()
-        vc.init(n_alleles, seq_length) 
-        aligner = VCKernelAligner(n_alleles, seq_length)
-        
-        data = vc.simulate(lambdas)
-        vc.set_data(X=data.index.values, y=data.y.values)
-        cov, n = vc.calc_emp_dist_cov()
-        aligner.set_data(cov, n)
-        
-        # Align with beta = 0
-        lambdas_star = aligner.fit()
-        pred = aligner.predict(lambdas_star)
-        assert(np.allclose(cov, pred, rtol=0.01))
-        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
-        
-        # Align with beta > 0
-        aligner.set_beta(0.01)
-        lambdas_star = aligner.fit()
-        pred = aligner.predict(lambdas_star)
-        assert(np.allclose(cov, pred))
-        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
-        
-        # Problematic case
-        aligner.set_beta(0)
-        cov = [5.38809419, 3.10647274, 1.47573831,
-               0.39676481, -0.30354594, -0.70018283]
-        n = [819, 9834, 58980, 176754, 265160, 159214]
-        aligner.set_data(cov, n)
-        lambdas = aligner.fit()
-        assert(np.all(np.isnan(lambdas) == False))
-    
-    def test_rho_kernel_alignment(self):
-        a, l = 4, 5
-        logit_rho0 = np.array([-4, 0, 1., 1, -5])
-        log_mu0 = 0
-        rho0 = np.exp(logit_rho0) / (1 + np.exp(logit_rho0))
-        
-        x = np.random.normal(size=a ** l)
-        P = RhoProjectionOperator(a, l, rho=np.sqrt(rho0))
-        y = P @ x
-        y_std = y.std()
-        y = y / y_std
-        
-        covs, ns, sites_matrix = calc_covariance_vjs(y, a, l)
-        
-        aligner = RhoKernelAligner(l, a)
-        aligner.set_data(covs, ns, sites_matrix)
-        log_mu, logit_rho = aligner.fit()
-
-        assert(np.all(logit_rho[0] < logit_rho[1:4]))
-        assert(np.all(logit_rho[-1] < logit_rho[1:4]))
-
-        print(log_mu, logit_rho)
-        
-        cov0 = aligner.calc_cov(aligner.params_to_x(log_mu0, logit_rho0))
-        cov = aligner.calc_cov(aligner.params_to_x(log_mu, logit_rho))
-        print(cov0)
-        print(cov)
-        print(covs)
-        print(aligner.frobenius_norm(aligner.params_to_x(log_mu0, logit_rho0)))
-        print(aligner.frobenius_norm(aligner.params_to_x(log_mu, logit_rho)))
-        # print(logit_rho)
-    
-    def xtest_sequence_kernel(self):
+    def test_sequence_kernel(self):
         kernel = SequenceKernel(2, 2)
         X = np.array(['AA', 'AB', 'BA', 'BB'])
         kernel.set_data(X, alleles=['A', 'B'])
@@ -106,7 +36,7 @@ class KernelTest(unittest.TestCase):
         hamming = kernel.calc_hamming_distance(kernel.x1, kernel.x2)
         assert(np.allclose(hamming, d))
     
-    def xtest_vc_kernel(self):
+    def test_vc_kernel(self):
         kernel = VarianceComponentKernel(2, 2)
         X = np.array(['AA', 'AB', 'BA', 'BB'])
         kernel.set_data(X, alleles=['A', 'B'])
@@ -134,7 +64,7 @@ class KernelTest(unittest.TestCase):
                          [ 1., -1., -1.,  1.]])
         assert(np.allclose(cov, 1/4 * pair))
     
-    def xtest_rho_kernel(self):
+    def test_rho_kernel(self):
         kernel = ConnectednessKernel(2, 2)
         X = np.array(['AA', 'AB', 'BA', 'BB'])
         kernel.set_data(X, alleles=['A', 'B'])
@@ -145,7 +75,7 @@ class KernelTest(unittest.TestCase):
         cov = kernel(rho=[0.5, 0.2])
         assert(np.allclose(cov[0], 1/4 * np.array([1.8, 1.2, 0.6, 0.4])))
     
-    def xtest_rho_kernel_grad(self):
+    def test_rho_kernel_grad(self):
         X = np.array(['AA', 'AB', 'BA', 'BB'])
 
         # Equal sites        
@@ -169,7 +99,7 @@ class KernelTest(unittest.TestCase):
         grad = grads[0] + grads[1]
         assert(np.allclose(grad[0], np.array([0.75, -0.25, -0.25, -0.25]) / 4))
 
-    def xtest_frob2(self):
+    def test_frob2(self):
         X = np.array(['AA', 'AB', 'BA', 'BB'])
         kernel = VarianceComponentKernel(2, 2)
         aligner = FullKernelAligner(kernel=kernel)

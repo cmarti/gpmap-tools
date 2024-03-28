@@ -21,8 +21,8 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              KronOperator, PolynomialOperator,
                              CovarianceDistanceOperator, CovarianceVjOperator,
                              calc_covariance_vjs,
-                             calc_variance_components,
-                             calc_vjs_variance_components)
+                             calc_space_variance_components,
+                             calc_space_vjs_variance_components)
 
 
 class LinOpsTests(unittest.TestCase):
@@ -522,17 +522,17 @@ class LinOpsTests(unittest.TestCase):
 
     def test_calculate_variance_components(self):
         space = DataSet('gb1').to_sequence_space()
-        lambdas = calc_variance_components(space)
+        lambdas = calc_space_variance_components(space)
         assert(np.all(lambdas > 0))
         
     def test_calc_vjs_variance_components(self):
         space = DataSet('gb1').to_sequence_space()
         
-        vj1 = calc_vjs_variance_components(space, k=1)  
+        vj1 = calc_space_vjs_variance_components(space, k=1)  
         assert(vj1[(2,)] > vj1[(0,)])
         assert(vj1[(3,)] > vj1[(1,)])
         
-        vj2 = calc_vjs_variance_components(space, k=2)
+        vj2 = calc_space_vjs_variance_components(space, k=2)
         for v in vj2.values():
             assert(vj2[(2,3)] >= v)
         
