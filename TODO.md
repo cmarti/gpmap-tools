@@ -1,32 +1,28 @@
 ### High priority
+- Fix problems in readthedocs updating
+- Review typos in documentation
+- Merge with master branch and release new stable version to pypi
+- 
 - Try to implement nodes_vmin option for plotly interactive plotting to keep color scale constant even if we select top genotypes  
 - Review bounds for plots in datashader allele grid: padding option may not have been activated. Maybe build some default function to use cross all datashader plots
-- Merge with master branch and release new stable version to pypi
-- Clean warnings and prints from running tests
-- Fix plot tests
-- Change "a" parametrization to sigma or variance
 - Review and update binaries with latests features
 - Try to have a common function to evaluate predictions across subsets of data: evaluating and CV fitting
 - Review SeqDEFT a range values. They don't flatten out at the ends as much as we would like.
 - Add some more plotting details to the tutorials e.g. edge coloring and positioning of legends and colorbars in different places
 - Make sure every function in the docs is in the API with docstrings as well
-- Update plotting binaries with new functions
 - Update plotly plotting functionalities
 - Review Kernel alignment loss function in the paper, code and docs to match
 - Add stationary function distribution to the histogram plot
 - Try to reduce dependencies: networkx, datashader. Make some optional: tqdm, fastparquet, plotly
 - Add documentation for transition path theory
-- Review typos in documentation
-- Fix problems in readthedocs updating
 - Think about separation of basic functionalities that are used in visualization and inference
-- Review scipy functionality for e.g. cartesian product and compare performance with our implementation and whether we need it at all now. 
 - Delete seaborn from documentation as well
 - Write __str__ method for DataSet to highlight the main properties of the dataset
-- Remove fontsize arguments from the plotting functions: makes things very messy. It may jsut be better to use rcParams
-- Review linear operators and make clean up other functions and operators that can be built as subclasses of more general ones. Operators should be defined with specific parameter values.
+- Add return_grad argument to loss function in SeqDEFT
 
 
 ### Mid priority
+- Change "a" parametrization to sigma or variance
 - Add bin to rasterize nodes and edges
 - Reorganize extended linear operator: think which methods should be functions to facilate class inheritance and which ones should work with matrices as well
 - Reimplement datashader plotting functions using v0.12 native mpl interface
@@ -34,8 +30,6 @@
 - Think whether to implement an embedding object -> This is almost the DataSet object now
 - Streamline reduced alphabet
 - Implement the 1SD rule to select hyperparameter in cv
-- Better figure out how to calculate the covariance distance using L polynomial and reimplement without L_powers_unique_entries_inv
-- Implement kernel alignment on the 2^k different covariances that we can fit as an additive function of rho's and lambda's. The challenge is to extract those values from the data efficiently
 - Implement DeltaP interpolation and regression
   
 ### Low priority
