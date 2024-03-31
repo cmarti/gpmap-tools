@@ -13,28 +13,101 @@ from scipy.sparse import load_npz, csr_matrix
 from gpmap.src.datasets import DataSet
 from gpmap.src.settings import BIN_DIR
 from gpmap.src.space import CodonSpace, SequenceSpace, DiscreteSpace
-from gpmap.src.randwalk import WMWalk, ReactivePaths
+from gpmap.src.randwalk import WMWalk, ReactivePaths, PopulationSizeModel
 from gpmap.src.seq import get_seqs_from_alleles, translate_seqs
 
 
 class RandomWalkTests(unittest.TestCase):
+    def test_estimate_Ns(self):
+        y = np.array([1, 0, 0.5, 0.75])
+        model = PopulationSizeModel(y)
+        assert(np.isclose(model.calc_p(Ns=0).sum(), 1))
+        assert(np.isclose(model.calc_p(Ns=1).sum(), 1))
+        m = model.predict(Ns=1)
+        
+        # Evaluate loss and gradient at the right value
+        loss, grad = model.loss(logNs=0, exp_m=m, return_grad=True)
+        assert(np.isclose(loss, 0))
+        assert(np.isclose(grad, 0))
+        
+        _, grad = model.loss(logNs=-1, exp_m=m, return_grad=True)
+        assert(grad > 0)
+        
+        _, grad = model.loss(logNs=1, exp_m=m, return_grad=True)
+        assert(grad < 0)
+        
+        # Fit model
+        Ns = model.fit(m=m)
+        pred = model.predict(Ns=Ns)
+        assert(np.isclose(Ns, 1, atol=1e-4))
+        assert(np.isclose(pred, m, atol=1e-4))
+        
+        # Run in a larger set of y values
+        y = np.random.normal(size=10000)
+        model = PopulationSizeModel(y)
+        m = model.predict(Ns=1)
+        Ns = model.fit(m=m)
+        pred = model.predict(Ns=Ns)
+        assert(np.isclose(Ns, 1))
+        assert(np.isclose(pred, m))
+        
+        # With neutral biases
+        y = np.random.normal(size=10000)
+        p_neutral = np.exp(np.random.normal(scale=0.2, size=y.shape[0]))
+        model = PopulationSizeModel(y, p_neutral=p_neutral)
+        m = model.predict(Ns=1)
+        Ns = model.fit(m=m)
+        pred = model.predict(Ns=Ns)
+        assert(np.isclose(Ns, 1, atol=1e-4))
+        assert(np.isclose(pred, m, atol=1e-4))
+        
+        # Test in the serine landscape
+        space = CodonSpace(['S'], add_variation=True, seed=0)
+        y = space.y
+        true_Ns = 2
+        model = PopulationSizeModel(y)
+        m = model.predict(Ns=true_Ns)
+        Ns = model.fit(m=m)
+        pred = model.predict(Ns=Ns)
+        assert(np.isclose(Ns, true_Ns, atol=1e-4))
+        assert(np.isclose(pred, m, atol=1e-4))
+        
     def test_set_Ns(self):
         mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        model = PopulationSizeModel(mc.space.y)
+        true_Ns = 3
+        true_mf = model.predict(true_Ns)
 
-        freqs = mc.calc_stationary_frequencies(Ns=0)
-        assert(np.unique(freqs).shape[0] == 1)
-
-        # Specify Ns directly
-        mc.set_Ns(Ns=1)
-        assert(mc.Ns == 1)
+        # Direct setting
+        mc.set_Ns(Ns=true_Ns)
+        assert(mc.Ns == true_Ns)
         
+        # Verify methods of mean function calculation
+        freqs = mc.calc_stationary_frequencies(Ns=true_Ns)
+        true_mf2 = mc.calc_stationary_mean_function(freqs=freqs)
+        assert(true_mf2 == true_mf)
+        
+        # Set through mean function
+        mc.set_Ns(mean_function=true_mf)
+        freqs = mc.calc_stationary_frequencies(Ns=mc.Ns)
+        mf = mc.calc_stationary_mean_function(freqs=freqs)
+        assert(np.isclose(mf, true_mf, atol=1e-4))
+        assert(np.isclose(mc.Ns, true_Ns, atol=1e-4))
+        
+        # Set through mean function percentile
+        perc = np.mean(mc.space.y <= true_mf) * 100
+        true_mf = np.percentile(mc.space.y, perc)
+        mc.set_Ns(mean_function_perc=perc)
+        mf = mc.calc_stationary_mean_function(mc.calc_stationary_frequencies(Ns=mc.Ns))
+        assert(np.isclose(mf, true_mf, atol=1e-4))
+        
+        # Check errors
         try:
             mc.set_Ns(Ns=-1)
             self.fail()
         except ValueError:
             pass
         
-        # Specify through the mean function at stationarity
         try: 
             mc.set_Ns(mean_function=0)
             self.fail()
@@ -47,10 +120,6 @@ class RandomWalkTests(unittest.TestCase):
         except ValueError:
             pass
         
-        mc.set_Ns(mean_function=1.22743)
-        assert(np.isclose(mc.Ns, 1))
-        
-        # Specify through the percentile at stationarity
         try: 
             mc.set_Ns(mean_function_perc=-1)
             self.fail()
@@ -63,8 +132,14 @@ class RandomWalkTests(unittest.TestCase):
         except ValueError:
             pass
         
-        mc.set_Ns(mean_function_perc=80)
-        assert(np.isclose(mc.Ns, 0.59174))
+    def test_set_Ns_range(self):
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))
+        for Ns in np.geomspace(0.01, 10, 20):
+            freqs = mc.calc_stationary_frequencies(Ns)
+            true_mf = mc.calc_stationary_mean_function(freqs=freqs)
+            mc.set_Ns(mean_function=true_mf)
+            mf = mc.calc_stationary_mean_function(freqs=mc.calc_stationary_frequencies(mc.Ns))
+            assert(np.allclose(true_mf, mf, atol=1e-4))
     
     def test_calc_jump_matrix(self):
         mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0))

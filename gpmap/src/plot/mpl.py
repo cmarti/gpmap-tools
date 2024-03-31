@@ -48,7 +48,7 @@ def get_cbar_inset_axes(axes, horizontal=False, pos=(0.2, 0.6),
 
 def set_centered_spines(axes, xlabel='', ylabel='',
                         xlabel_pos=(1.1, 0.1), ylabel_pos=(0.1,  0.94), 
-                        add_grid=True, zorder=3, alpha=0.5, fontsize=12):
+                        add_grid=True, zorder=3, alpha=0.5, fontsize=None):
     axes.spines['left'].set(position=('data', 0), zorder=zorder,
                             alpha=alpha)
     axes.spines['bottom'].set(position=('data', 0), zorder=zorder,  
@@ -169,7 +169,7 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
                color='grey', cbar=True, cmap='binary', cbar_axes=None,
                cbar_orientation='vertical',
                cbar_label='', palette=None, legend=True, legend_loc=0,
-               width=0.5, max_width=1, min_width=0.1, fontsize=12):
+               width=0.5, max_width=1, min_width=0.1, fontsize=None):
     '''
     Plots the edges representing the connections between states that are conneted
     in the discrete space under a particular embedding
@@ -255,7 +255,7 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
                cbar_orientation='vertical',
                vcenter=None, vmax=None, vmin=None, palette='Set1',
                size=2.5, max_size=40, min_size=1,
-               lw=0, edgecolor='black', fontsize=8, legend=True, legend_loc=0):
+               lw=0, edgecolor='black', legend=True, legend_loc=0):
     '''
     Plots the nodes representing the states of the discrete space on the
     provided coordinates
@@ -337,9 +337,6 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
     edgecolor : str ('black')
         Color of the line edges delimiting the markers representing the nodes
         
-    fontsize : float (12)
-        Fontsize to use for axis and legend labels
-    
     legend: bool (True)
         Show legend on the plot
     
@@ -372,11 +369,11 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
         kwargs['zs'] = ndf[z]
     sc = axes.scatter(ndf[x], ndf[y], c=c, **kwargs)
     add_color_info(sc, axes, cbar, cbar_axes, cbar_label,
-                   legend, palette, legend_loc, fontsize,
+                   legend, palette, legend_loc,
                    cbar_orientation, vmin, vmax)
 
 
-def plot_color_hist(axes, values, cmap='viridis', bins=50, fontsize=8):
+def plot_color_hist(axes, values, cmap='viridis', bins=50, fontsize=None):
     _, bins, bars = axes.hist(values, bins=bins)
     values = 0.5 * (bins[1:] + bins[:-1])
     values = (values - bins[0]) / (bins[-1] - bins[0])
@@ -395,7 +392,7 @@ def plot_color_hist(axes, values, cmap='viridis', bins=50, fontsize=8):
     axes.set_ylabel(ylabel='Frequency', fontsize=fontsize)
 
 
-def add_axis_labels(axes, x, y, z=None, fontsize=12, center_spines=False):
+def add_axis_labels(axes, x, y, z=None, fontsize=None, center_spines=False):
     xlabel, ylabel = 'Diffusion axis {}'.format(x), 'Diffusion axis {}'.format(y)
         
     if center_spines:
@@ -413,8 +410,8 @@ def add_axis_labels(axes, x, y, z=None, fontsize=12, center_spines=False):
     
     
 def add_color_info(sc, axes, cbar, cbar_axes, cbar_label,
-                   legend, palette, legend_loc, fontsize, orientation,
-                   vmin, vmax):
+                   legend, palette, legend_loc, orientation,
+                   vmin, vmax, fontsize=None):
     if cbar:
         add_cbar(sc, axes, cbar_axes=cbar_axes, label=cbar_label,
                  fontsize=fontsize, fraction=0.1, pad=0.02,
@@ -493,7 +490,7 @@ def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
     return(color, cbar, legend, vmin, vmax, continuous)
 
 
-def add_cbar(sc, axes, cbar_axes=None, label='Function', fontsize=12,
+def add_cbar(sc, axes, cbar_axes=None, label='Function', fontsize=None,
              fraction=0.1, shrink=0.7, pad=0.02, orientation='vertical', nticks=5,
              vmin=None, vmax=None):
     ax, cax = (axes, None) if cbar_axes is None else (None, cbar_axes)
@@ -505,10 +502,10 @@ def add_cbar(sc, axes, cbar_axes=None, label='Function', fontsize=12,
         ticks = np.linspace(vmin, vmax, nticks)
         cbar.set_ticks(ticks)
         ticklabels = ['{:.1f}'.format(x) for x in ticks]
-        cbar.set_ticklabels(ticklabels, fontsize=fontsize-1)
+        cbar.set_ticklabels(ticklabels, fontsize=fontsize)
 
 
-def draw_cbar(axes, cmap, label, vmin=0, vmax=1, fontsize=12,
+def draw_cbar(axes, cmap, label, vmin=0, vmax=1, fontsize=None,
               orientation='vertical', nticks=5, width=12):
     values = np.linspace(0, 1, 256)
     values = np.vstack([values]*width)
@@ -532,14 +529,14 @@ def draw_cbar(axes, cmap, label, vmin=0, vmax=1, fontsize=12,
     
     axes.imshow(values, cmap=cmap)
     
-    set_ticklabels(ticklabels, fontsize=fontsize-1)
+    set_ticklabels(ticklabels, fontsize=fontsize)
     axes.set_ylabel(ylabel, fontsize=fontsize)
     axes.set_xlabel(xlabel, fontsize=fontsize)
     axes.set(xticks=xticks, yticks=yticks, xlim=xlims, ylim=ylims)
 
 
 def add_cbar_hist_inset(axes, values, cmap='viridis',
-                        label='Function', fontsize=9, pos=(0.6, 0.5),
+                        label='Function', fontsize=None, pos=(0.6, 0.5),
                         width=0.4, height=0.2, bins=50):
 
     vmin, vmax = values.min(), values.max()    
@@ -555,7 +552,7 @@ def add_cbar_hist_inset(axes, values, cmap='viridis',
     
 
 def plot_genotypes_box(axes, xlims, ylims, lw=1, c='black', facecolor='none',
-                       title=None, title_pos='top', fontsize=10):
+                       title=None, title_pos='top', fontsize=None):
     
     dx, dy = xlims[1] - xlims[0], ylims[1] - ylims[0]
     rect = mpatches.Rectangle((xlims[0], ylims[0]), dx, dy,
@@ -595,10 +592,9 @@ def plot_visualization(axes, nodes_df, edges_df=None,
                        edges_cbar=False, edges_cbar_axes=None,
                        edges_width=0.5, edges_max_width=1, edges_min_width=0.1,
                        
-                       sort_by=None, sort_ascending=False,
+                       sort_by=None, sort_ascending=True,
                        center_spines=False, add_hist=False, inset_cbar=False,
                        inset_pos=(0.7, 0.7),
-                       axis_fontsize=12, fontsize=8, 
                        prev_nodes_df=None):
     '''
     Plots the nodes representing the states of the discrete space on the
@@ -687,10 +683,6 @@ def plot_visualization(axes, nodes_df, edges_df=None,
         _description_, by default False
     inset_pos : tuple, optional
         _description_, by default (0.7, 0.7)
-    axis_fontsize : int, optional
-        _description_, by default 12
-    fontsize : int, optional
-        _description_, by default 8
     prev_nodes_df : _type_, optional
         _description_, by default None
     '''
@@ -727,11 +719,9 @@ def plot_visualization(axes, nodes_df, edges_df=None,
                palette=nodes_palette, alpha=nodes_alpha, zorder=nodes_zorder,
                max_size=nodes_max_size, min_size=nodes_min_size,
                edgecolor=nodes_edgecolor, lw=nodes_lw,
-               vmax=nodes_vmax, vmin=nodes_vmin, vcenter=nodes_vcenter,
-               fontsize=fontsize)
+               vmax=nodes_vmax, vmin=nodes_vmin, vcenter=nodes_vcenter)
     
-    add_axis_labels(axes, x, y, z=z, fontsize=axis_fontsize,
-                    center_spines=center_spines)
+    add_axis_labels(axes, x, y, z=z, center_spines=center_spines)
 
 
 def calc_stationary_ymeans(y, n, ymin=None, ymax=None, pmin=0.05, pmax=0.8):
@@ -748,11 +738,13 @@ def calc_stationary_ymeans(y, n, ymin=None, ymax=None, pmin=0.05, pmax=0.8):
 
 
 def figure_Ns_grid(rw, x='1', y='2', pmin=0, pmax=0.8, ncol=4, nrow=3,
-                   show_edges=True, fontsize=12, fpath=None, **kwargs):
+                   show_edges=True, fpath=None, **kwargs):
     fig, subplots = init_fig(nrow, ncol, colsize=3, rowsize=2.7,
                              sharex=True, sharey=True, hspace=0.2, wspace=0.2)
-    fig.subplots_adjust(right=0.9, left=0.1)
-    cbar_axes = fig.add_axes([0.92, 0.2, 0.015, 0.6])
+    vspace = max(0.25 - 0.05 * nrow, 0.1)
+    fig.subplots_adjust(right=0.9, left=0.085,
+                        bottom=vspace, top=1-vspace)
+    cbar_axes = fig.add_axes([0.92, 0.25, 0.015, 0.5])
     subplots = subplots.flatten()
     ymeans = calc_stationary_ymeans(rw.space.y, n=ncol*nrow, pmin=pmin, pmax=pmax)
     
@@ -766,15 +758,15 @@ def figure_Ns_grid(rw, x='1', y='2', pmin=0, pmax=0.8, ncol=4, nrow=3,
         
         plot_visualization(axes, ndf, edf, x=x, y=y, nodes_cbar=is_last_plot,
                            nodes_cbar_axes=cbar_axes if is_last_plot else None, 
-                           fontsize=fontsize, prev_nodes_df=prev_nodes_df, 
+                           prev_nodes_df=prev_nodes_df, 
                            **kwargs)
         prev_nodes_df = rw.nodes_df
         title = r'$\bar{y}$' + ' = {:.2f}; Ns={:.2f}'.format(mean_function, rw.Ns)
         axes.set(xlabel='', ylabel='', title=title)
 
-    fig.supxlabel('Diffusion axis {}'.format(x), fontsize=fontsize+4,
+    fig.supxlabel('Diffusion axis {}'.format(x),
                   y=0.05, ha='center', va='center')
-    fig.supylabel('Diffusion axis {}'.format(y), fontsize=fontsize+4, 
+    fig.supylabel('Diffusion axis {}'.format(y),
                   x=0.05, ha='center', va='center')
     savefig(fig, fpath, tight=False)
 
@@ -825,7 +817,7 @@ def figure_allele_grid(nodes_df, edges_df=None,
                        allele_color='orange', background_color='lightgrey',
                        positions=None, position_labels=None, 
                        colsize=3, rowsize=2.7, xpos_label=0.05, ypos_label=0.92,
-                       fmt='png', fpath=None, fontsize=12, **kwargs):
+                       fmt='png', fpath=None, **kwargs):
     
     config = guess_space_configuration(nodes_df.index.values)
     length, n_alleles = config['length'], np.max(config['n_alleles'])
@@ -866,9 +858,9 @@ def figure_allele_grid(nodes_df, edges_df=None,
     if  'y' in kwargs:
         y = kwargs['y']    
     
-    fig.supxlabel('Diffusion axis {}'.format(x), fontsize=fontsize+4,
+    fig.supxlabel('Diffusion axis {}'.format(x), 
                   y=0.05, ha='center', va='center')
-    fig.supylabel('Diffusion axis {}'.format(y), fontsize=fontsize+4, 
+    fig.supylabel('Diffusion axis {}'.format(y), 
                   x=0.05, ha='center', va='center')
     savefig(fig, fpath, fmt=fmt, tight=False)
 
@@ -1016,7 +1008,7 @@ def calc_raster(nodes_df, x='1', y='2', edges_df=None,
 
 def plot_raster(axes, z, extent=(0, 1, 0, 1),
                 cmap='viridis', vmin=None, vmax=None, alpha=1,
-                cbar=False, cbar_axes=None, cbar_label='', fontsize=10,
+                cbar=False, cbar_axes=None, cbar_label='', fontsize=None,
                 orientation='veritcal',
                 set_zero_transparent=True):
 
@@ -1040,7 +1032,7 @@ def plot_visualization_raster(axes, nodes_raster, extent, edges_raster=None,
 
                               center_spines=False, inset_cbar=False, 
                               inset_pos=(0.7, 0.7), 
-                              axis_fontsize=12, fontsize=8):
+                              axis_fontsize=None, fontsize=None):
     
     if edges_raster is not None:
         z = np.log(edges_raster + 1)

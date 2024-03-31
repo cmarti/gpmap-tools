@@ -11,7 +11,29 @@ from gpmap.src.settings import (RAW_DATA_DIR, LANDSCAPES_DIR,
 from gpmap.src.space import SequenceSpace
 from gpmap.src.randwalk import WMWalk
 
+
 class DataSet(object):
+    '''
+    DataSet object that allows convenient manipulation of the different
+    objets related with a given dataset. This includes the original data, 
+    the reconstructed landscape, visualization coordinates
+
+    Parameters
+    ----------
+    dataset_name : str
+        Name of the dataset to load from the built-in list. If `data`
+        or `landscape` are provided, it will be the name given to the
+        new dataset
+    
+    data: pd.DataFrame of shape (n_obs, n_features)
+        Dataframe containing the experimental data using
+        genotypes as index
+        
+    landscape: pd.DataFrame of shape (n_genotypes, 1)
+        Dataframe containing the complete combinatorial landscape
+        from which to build the remaining objects of the dataset
+        
+    '''
     def __init__(self, dataset_name, data=None, landscape=None):
         self.name = dataset_name
 
@@ -130,5 +152,8 @@ class DataSet(object):
     
 
 def list_available_datasets():
+    '''
+    Returns a list with the names of all available built-in datasets
+    '''
     dataset_names = ['.'.join(fname.split('.')[:-1]) for fname in listdir(LANDSCAPES_DIR)]
     return(dataset_names)

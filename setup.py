@@ -1,8 +1,7 @@
 #!/usr/bin/env python
-
 from setuptools import setup, find_packages
 
-VERSION = '0.1.2'
+VERSION = '0.2.0'
 
 
 def main():
@@ -15,7 +14,7 @@ def main():
         description=description,
         author='Carlos Martí-Gómez',
         author_email='martigo@cshl.edu',
-        url='https://bitbucket.org/cmartiga/gpmap_tools',
+        url='https://github.com/cmarti/gpmap-tools',
         packages=find_packages(),
         include_package_data=True,
         package_data = {'': ['datasets/*/serine*',
@@ -45,7 +44,7 @@ def main():
                           'datashader>=0.13.0',
                           'holoviews>=1.15.0',
                           'plotly>=5.9.0'],
-        python_requires='>=3',
+        python_requires='>=3.8',
         platforms='ALL',
         keywords=['genotype-phenotype maps', 'fitness landscape',
                   'exact gaussian process regression'],

@@ -206,7 +206,8 @@ class MatPlotsTests(unittest.TestCase):
         
         with NamedTemporaryFile() as fhand:
             fpath  = fhand.name
-            pmpl.figure_Ns_grid(rw, fpath=fpath)
+            fpath = 'test'
+            pmpl.figure_Ns_grid(rw, fpath=fpath, nrow=2, ncol=5)
     
     def test_axis_grid(self):
         ser = DataSet('serine')

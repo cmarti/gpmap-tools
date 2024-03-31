@@ -191,16 +191,6 @@ class TimeReversibleRandomWalk(RandomWalk):
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
         '''
-        
-        # Set or find Ns value to use
-        if Ns is None and hasattr(self, 'Ns'):
-            Ns = self.Ns
-        
-        if Ns is None and mean_function is None and mean_function_perc is None:
-            msg = 'One of [Ns,  mean_function, mean_function_perc]'
-            msg += 'is required to calculate the rate matrix'
-            raise ValueError(msg)
-        
         self.set_Ns(Ns=Ns, mean_function=mean_function,
                     mean_function_perc=mean_function_perc,
                     neutral_stat_freqs=neutral_stat_freqs)
@@ -267,8 +257,52 @@ class TimeReversibleRandomWalk(RandomWalk):
         if write_edges:
             fpath = '{}.edges.{}'.format(prefix, edges_format)
             self.space.write_edges(fpath)
-    
 
+
+class PopulationSizeModel(object):
+    def __init__(self, y, p_neutral=None):
+        self.y = y
+        if p_neutral is None:
+            self.phi = np.zeros(y.shape)
+        else:
+            self.phi = np.log(p_neutral)
+    
+    def calc_p(self, Ns):
+        S = Ns * self.y + self.phi
+        lnf = logsumexp(S)
+        p = np.exp(S - lnf)
+        return(p)
+    
+    def predict(self, Ns):
+        p = self.calc_p(Ns)
+        m = np.sum(self.y * p)
+        return(m)
+    
+    def loss(self, logNs, exp_m, return_grad=False):
+        Ns = np.exp(logNs)
+        S = Ns * self.y + self.phi
+        lnf = logsumexp(S)
+        p = np.exp(S - lnf)
+        assert(np.isclose(p.sum(), 1))
+        m = np.sum(self.y * p)
+        
+        dm = (exp_m - m)
+        out = dm ** 2
+        
+        if return_grad:
+            x = self.y * np.exp(S)
+            grad = - 2 * Ns * dm * (np.sum(self.y * x) * lnf - np.sum(x) ** 2) / np.exp(2 * lnf)
+            out = (out, grad)
+        return(out)
+    
+    def fit(self, m):
+        res = minimize(self.loss, x0=-3, args=(m, False), 
+                       method='powell',
+                    #    method='L-BFGS-B', jac=True,
+                       options={'maxiter':1000, 'ftol': 1e-12})
+        return(np.exp(res.x[0]))
+        
+        
 class WMWalk(TimeReversibleRandomWalk):
     '''
     Class for Weak Mutation Weak Selection Random Walk on a SequenceSpace.
@@ -458,34 +492,13 @@ class WMWalk(TimeReversibleRandomWalk):
             return(self.space.y.mean())
         return(self.calc_stationary_mean_function(neutral_stat_freqs))
     
-    def mean_function_to_Ns(self, mean_function, neutral_stat_freqs=None,
-                            max_attempts=10, maxiter=100, tol=1e-4):
-        
-        def calc_stationary_function_error(logNs):
-            Ns = np.exp(logNs)
-            log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs=neutral_stat_freqs)
-            x = self.calc_stationary_mean_function(np.exp(log_freqs))
-            sq_error = (mean_function - x) ** 2
-            return(sq_error)
-        
-        for _ in range(max_attempts):
-            result = minimize(calc_stationary_function_error, x0=0, tol=tol,
-                              options={'maxiter': maxiter})
-            Ns = np.exp(result.x[0])
-            log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs=neutral_stat_freqs)
-            inferred_mean_function = np.sum(self.space.y * np.exp(log_freqs))
-            if calc_stationary_function_error(result.x[0]) < tol:
-                break
-        else:
-            msg = 'Could not find the Ns that yields the desired mean function '
-            msg += '= {:.2f}. Best guess is {:.2f}'
-            
-            raise ValueError(msg.format(mean_function, inferred_mean_function))
-    
-        return(Ns)
-    
     def set_Ns(self, Ns=None, mean_function=None, mean_function_perc=None,
-               neutral_stat_freqs=None, tol=1e-4, maxiter=100, max_attempts=10):
+               neutral_stat_freqs=None, tol=1e-4):
+        
+        if Ns is None and mean_function is None and mean_function_perc is None:
+            msg = 'One of [Ns,  mean_function, mean_function_perc]'
+            msg += 'is required to calculate the rate matrix'
+            raise ValueError(msg)
         
         if Ns is not None:
             check_error(Ns >= 0, msg='Ns must be non-negative')
@@ -507,7 +520,7 @@ class WMWalk(TimeReversibleRandomWalk):
             min_mean_function = self.calc_neutral_mean_function(neutral_stat_freqs)
             max_mean_function = self.space.y.max()
             
-            msg = 'mean_function must be between the function mean ({:.2f}) and the maximum function value (:.2f)'
+            msg = 'mean_function must be between the function mean ({:.2f}) and the maximum function value ({:.2f})'
             msg = msg.format(min_mean_function, max_mean_function)
             check_error(mean_function >= min_mean_function and mean_function < max_mean_function, msg=msg)
                 
@@ -517,10 +530,9 @@ class WMWalk(TimeReversibleRandomWalk):
             if np.allclose(min_mean_function, mean_function, atol=tol):
                 self.Ns = 0
             else:
-                self.Ns = self.mean_function_to_Ns(mean_function,
-                                                   neutral_stat_freqs=neutral_stat_freqs,
-                                                   max_attempts=max_attempts,
-                                                   maxiter=maxiter, tol=tol)
+                model = PopulationSizeModel(self.space.y,
+                                            p_neutral=neutral_stat_freqs)
+                self.Ns = model.fit(mean_function)
     
     def _calc_sandwich_rate_vector(self, i, j, Ns,
                                    neutral_stat_freqs=None,
