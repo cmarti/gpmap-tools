@@ -148,18 +148,27 @@ class MatPlotsTests(unittest.TestCase):
     def test_plot_nodes(self):
         ser = DataSet('serine')
 
+        # Plot with a fixed color
         fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
         pmpl.plot_nodes(axes, ser.nodes, size='function', color='white', lw=0.2)
-        
         with NamedTemporaryFile('w') as fhand:
             pmpl.savefig(fig, fhand.name)
             
+        # Plot with a colormap
         fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
         pmpl.plot_nodes(axes, ser.nodes, color='white', size='function',
                         lw=0.2, vcenter=0)
-        
         with NamedTemporaryFile('w') as fhand:
             pmpl.savefig(fig, fhand.name)
+            
+        # Plot with a qualitative palette
+        ser.nodes['group'] = [x.startswith('A') for x in ser.nodes.index]
+        fig, axes = pmpl.init_fig(1, 1, colsize=4, rowsize=3.5)
+        pmpl.plot_nodes(axes, ser.nodes, color='group', size='function',
+                        lw=0.2, vcenter=0, palette='Set1')
+        with NamedTemporaryFile('w') as fhand:
+            fpath = fhand.name
+            pmpl.savefig(fig, fpath)
     
     def test_plot_edges(self):
         ser = DataSet('serine')

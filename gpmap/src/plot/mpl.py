@@ -234,7 +234,7 @@ def plot_edges(axes, nodes_df, edges_df, x='1', y='2', z=None,
     '''
     # TODO: get colors and width as either fixed values or from edges_df
     edges_coords = get_edges_coords(nodes_df, edges_df, x=x, y=y, z=z, avoid_dups=True)
-    c, cbar, legend, vmin, vmax, _ = get_element_color(edges_df, color, palette,
+    c, cbar, palette, legend, vmin, vmax, _ = get_element_color(edges_df, color, palette,
                                                        cbar, legend)
     widths = get_element_sizes(edges_df, width, min_width, max_width)
     get_lines = LineCollection if z is None else Line3DCollection
@@ -352,8 +352,8 @@ def plot_nodes(axes, nodes_df, x='1', y='2', z=None,
     
     ndf = sort_nodes(nodes_df, sort_by, sort_ascending, color)
     s = get_element_sizes(ndf, size, min_size, max_size)
-    c, cbar, legend, vmin, vmax, continuous = get_element_color(ndf, color, palette,
-                                                    cbar, legend, vmin, vmax)
+    c, cbar, palette, legend, vmin, vmax, continuous = get_element_color(ndf, color, palette,
+                                                                cbar, legend, vmin, vmax)
     kwargs = {'linewidth': lw, 's': s, 'zorder': zorder,
               'alpha': alpha, 'edgecolor': edgecolor}
     if continuous:
@@ -440,7 +440,7 @@ def get_element_sizes(df, size, min_size, max_size):
 
 
 def color_palette(name, n):
-    cmap = cm.cm.get_cmap(name)
+    cmap = cm.get_cmap(name)
     mpl_qual_pals = {
         "tab10": 10, "tab20": 20, "tab20b": 20, "tab20c": 20,
         "Set1": 9, "Set2": 8, "Set3": 12,
@@ -460,7 +460,7 @@ def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
     if color in df.columns:
         
         # Categorical color map
-        if df[color].dtype == object:
+        if df[color].dtype in (object, bool, str):
             if isinstance(palette, str):
                 labels = np.unique(df[color])
                 n_colors = labels.shape[0]
@@ -487,7 +487,7 @@ def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
     else:
         cbar, legend = False, False
     
-    return(color, cbar, legend, vmin, vmax, continuous)
+    return(color, cbar, palette, legend, vmin, vmax, continuous)
 
 
 def add_cbar(sc, axes, cbar_axes=None, label='Function', fontsize=None,

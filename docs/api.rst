@@ -68,3 +68,10 @@ Plotting
 .. autofunction:: gpmap.src.plot.plot_interactive
 .. autofunction:: gpmap.src.plot.plot_SeqDEFT_summary
 
+Datasets
+--------
+
+.. autofunction:: gpmap.src.datasets.list_available_datasets
+.. autoclass:: gpmap.src.datasets.DataSet
+    :members: data, landscape, to_sequence_space, calc_visualization,
+              nodes, edges, relaxation_times, plot, save
