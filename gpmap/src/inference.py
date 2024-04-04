@@ -317,7 +317,6 @@ class VCregression(GaussianProcessRegressor):
 
             # Calculate loss in test data
             if self.cv_loss_function == 'frobenius_norm':
-                print(train_cov, test_cov)
                 self.kernel_aligner.set_data(test_cov, test_ns)
                 loss = self.kernel_aligner.calc_mse(lambdas)
 
