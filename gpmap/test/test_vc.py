@@ -106,7 +106,27 @@ class VCTests(unittest.TestCase):
         
         # Ensure regularization improves results
         assert(sd1 > sd2)
-
+        
+    def test_vc_cv_folds(self):
+        # Simulate data
+        np.random.seed(0)
+        lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
+        a, l = 4, lambdas.shape[0]-1
+        vc = VCregression(n_alleles=a, seq_length=l, lambdas=lambdas)
+        data = vc.simulate(sigma=0.1)
+        
+        # Ensure MSE is within a small range
+        vc = VCregression()
+        vc.set_data(X=data.index.values, y=data['y'], y_var=data['y_var'])
+        for _, _, train, test in vc.get_cv_iter([0]):
+            X_train, _, _, train_cov, train_ns = train 
+            X_test, _, _, test_cov, test_ns = test
+            
+            assert(X_test.shape[0] < X_train.shape[0])
+            assert(np.isclose(X_train.shape[0] ** 2, train_ns.sum()))
+            assert(np.isclose(X_test.shape[0] ** 2, test_ns.sum()))
+            assert(not np.allclose(train_cov, test_cov))
+            
     def test_vc_docs(self):
         # Simulate data
         np.random.seed(0)

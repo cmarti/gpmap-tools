@@ -299,7 +299,7 @@ class VCregression(GaussianProcessRegressor):
             train = X_train, y_train, y_var_train, train_cov, train_ns
 
             X_test, y_test, y_var_test = validation
-            test_cov, test_ns = self.calc_covariance_distance(X_train, y_train)
+            test_cov, test_ns = self.calc_covariance_distance(X_test, y_test)
             validation = X_test, y_test, y_var_test, test_cov, test_ns
 
             for param in hyperparam_values:
@@ -317,6 +317,7 @@ class VCregression(GaussianProcessRegressor):
 
             # Calculate loss in test data
             if self.cv_loss_function == 'frobenius_norm':
+                print(train_cov, test_cov)
                 self.kernel_aligner.set_data(test_cov, test_ns)
                 loss = self.kernel_aligner.calc_mse(lambdas)
 
