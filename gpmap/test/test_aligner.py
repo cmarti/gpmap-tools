@@ -4,11 +4,50 @@ import unittest
 import numpy as np
 
 from gpmap.src.aligner import VCKernelAligner, RhoKernelAligner
-from gpmap.src.linop import (RhoProjectionOperator, calc_covariance_vjs,
+from gpmap.src.linop import (RhoProjectionOperator, ProjectionOperator,
+                             calc_covariance_vjs,
                              calc_covariance_distance, calc_variance_components)
 
 
 class KernelAlignerTest(unittest.TestCase):
+    def test_frobenius_norm(self):
+        # Additive covariances
+        a, l = 2, 2
+        cov, ns = [1, 0, -1], [4, 8, 4]
+        log_lambdas = np.array([-10, 0, -10])
+        aligner = VCKernelAligner(a, l)
+        aligner.set_data(cov, ns)
+        F1 = aligner.frobenius_norm(log_lambdas)
+        F2 = aligner.frobenius_norm2(log_lambdas)
+
+        # With simulated data
+        np.random.seed(1)
+        a, l, k = 4, 5, 2
+        P = ProjectionOperator(a, l, k=k)
+        log_lambdas = -6 * np.ones(l + 1)
+        log_lambdas[k] = 0
+        y = P @ np.random.normal(size=P.shape[1])
+        cov, ns = calc_covariance_distance(y, a, l)
+        
+        aligner = VCKernelAligner(a, l)
+        aligner.set_data(cov, ns)
+        F1 = aligner.frobenius_norm(log_lambdas)
+        F2 = aligner.frobenius_norm2(log_lambdas)
+        assert(np.allclose(F1, F2))
+
+        # With exponentially decaying correlations
+        np.random.seed(1)
+        a, l, rho = 4, 5, 0.5
+        P = RhoProjectionOperator(a, l, rho=rho)
+        y = P @ np.random.normal(size=P.shape[1])
+        cov, ns = calc_covariance_distance(y, a, l)
+        
+        aligner = VCKernelAligner(a, l)
+        aligner.set_data(cov, ns)
+        F1 = aligner.frobenius_norm(log_lambdas)
+        F2 = aligner.frobenius_norm2(log_lambdas)
+        assert(np.allclose(F1, F2))
+
     def test_vc_kernel_alignment(self):
         # Simulate data
         np.random.seed(1)

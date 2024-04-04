@@ -2,8 +2,10 @@ import numpy as np
 import scipy.sparse as sp
 
 from itertools import product
+from scipy.special import logsumexp
 from scipy.sparse.csr import csr_matrix
 from scipy.sparse.dia import dia_matrix
+from scipy.sparse.linalg import minres, cg
 
 from gpmap.src.utils import check_error, get_length
 from numpy.linalg.linalg import norm
@@ -14,12 +16,52 @@ def inner_product(x1, x2, metric=None):
         return(x1.dot(x2.T))
     else:
         return(x1.dot(metric.dot(x2.T)))
+    
+
+def dot_log(logA, signA, logB, signB):
+    
+    if len(logB.shape) > 1:
+        logA = np.expand_dims(logA, 2)
+        signA = np.expand_dims(signA, 2)
+
+    logB = np.expand_dims(logB, 0)
+    signB = np.expand_dims(signB, 0)
+
+    msg = 'Ensure the first dimension of A and B match'
+    check_error(logA.shape[1] == logB.shape[1], msg=msg)
+
+    res = logA + logB
+    x_star = np.max(res)
+    res = np.sum(signA * signB * np.exp(res - x_star), axis=1)
+    sign = np.sign(res)
+    res = x_star + np.log(np.abs(res))
+    return(res, sign)
 
 
 def quad(linop, v1, v2=None):
     if v2 is None:
         v2 = v1
     return(np.sum(linop.dot(v1) * v2))
+
+
+def rayleigh_quotient(linop, v, metric=None):
+    return(quad(linop, v) / inner_product(v, v, metric=metric))
+
+
+def inv_dot(linop, v, method='minres', rtol=1e-4, **kwargs):
+    if method == 'minres':
+        res = minres(linop, v, **kwargs)
+    elif method == 'cg':
+        res = cg(linop, v, atol=norm(v) * rtol, **kwargs)
+    else:
+        msg = 'Method {} not allowed'.format(method)
+        raise ValueError(msg)
+    return(res[0])
+
+
+def inv_quad(linop, v, method='minres', rtol=1e-4, **kwargs):
+    u = inv_dot(linop, v, method, rtol, **kwargs)
+    return(np.sum(v * u))
 
 
 def kron(matrices):
@@ -163,34 +205,3 @@ def rate_to_jump_matrix(rate_matrix):
         
     jump_matrix[zero_idxs, zero_idxs] = 1
     return(jump_matrix)
-
-
-# def lanczos_conjugate_gradient(A, b, tol=1e-6, max_iter=100):
-#     x = np.zeros(b.shape)
-#     p = b
-#     r = b
-#     w = 0
-#     gamma = 1
-#     prev_u = 0
-#     u = np.zeros(b.shape)
-#     r = A.dot(u) - b
-#     r_norm = norm(r)
-#     d = r
-#     
-#     for _ in range(max_iter):
-#         print(r)
-#         v = A.dot(r)
-#         alpha = r_norm / np.dot(d, v)
-#         u = u + alpha * r
-#         r = r - alpha * v
-#         r_norm_prev = r_norm
-#         r_norm = norm(r)
-#         
-#         if r_norm < tol:
-#             break
-#         
-#         beta = r_norm / r_norm_prev
-#         d = r - beta * d
-#     
-#     return(u)
-    

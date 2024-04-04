@@ -9,23 +9,90 @@ from scipy.special import comb
 from gpmap.src.datasets import DataSet
 from gpmap.src.settings import ALPHABET
 from gpmap.src.seq import generate_possible_sequences
-from gpmap.src.matrix import get_sparse_diag_matrix
+from gpmap.src.matrix import inv_dot, quad
 from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             VjProjectionOperator,
-                             VarianceComponentKernelOperator,
+                             VjProjectionOperator, DiagonalOperator,
+                             VarianceComponentKernel,
                              DeltaPOperator, RhoProjectionOperator,
-                             ExtendedDeltaPOperator,
+                             ExtendedDeltaPOperator, MatMulOperator,
                              VjBasisOperator, KernelOperator,
                              EigenBasisOperator, DeltaKernelBasisOperator,
                              KronOperator, PolynomialOperator,
                              CovarianceDistanceOperator, CovarianceVjOperator,
+                             SelIdxOperator, ExpandIdxOperator,
                              calc_covariance_vjs,
                              calc_space_variance_components,
                              calc_space_vjs_variance_components)
 
 
 class LinOpsTests(unittest.TestCase):
+    def test_diag_operator(self):
+        D = DiagonalOperator(diag=np.array([2, 1, 2]))
+        
+        # Test matvec
+        v = np.ones(3)
+        assert(np.allclose(D.dot(v), [2, 1, 2]))
+
+        v = 2 * np.ones(3)
+        assert(np.allclose(D.dot(v), [4, 2, 4]))
+
+        # Test matmat
+        B = np.ones((3, 2))
+        assert(np.allclose(D.dot(B), [[2, 2],
+                                      [1, 1],
+                                      [2, 2]]))
+    
+    def test_matmul_operator(self):
+        m = np.array([[1, 2],
+                      [-1, 1],
+                      [2, 0]])
+
+        # Chain 2 operators
+        v = np.random.normal(size=m.shape[0])
+        X = m @ m.T
+        u1 = X.dot(v)
+
+        M = MatMulOperator([m, m.T])
+        u2 = M.dot(v)
+        assert(np.allclose(u1, u2))
+
+        # Chain more than 2 operators
+        v = np.random.normal(size=m.shape[0])
+        X = m.T @ m @ m.T
+        u1 = X.dot(v)
+
+        M = MatMulOperator([m.T, m, m.T])
+        u2 = M.dot(v)
+        assert(np.allclose(u1, u2))
+
+        # Check dimensions error
+        try:
+            M = MatMulOperator([m, m])
+        except ValueError:
+            pass
+    
+    def test_sel_idxs_operator(self):
+        m = np.array([[1, 2, 0],
+                      [-1, 1, 1],
+                      [2, 0, -1]])
+        i, j = np.array([0, 1]), np.array([0, 2])
+        op1 = SelIdxOperator(n=3, idx=i, )
+        op2 = ExpandIdxOperator(n=3, idx=j)
+
+        B = MatMulOperator([op1, m, op2])
+        A = m[i, :][:, j]
+        C = MatMulOperator([m]).submatrix(i, j)
+        assert(B.shape == A.shape)
+        assert(B.shape == C.shape)
+
+        v = np.random.normal(size=B.shape[1])
+        u1 = A @ v
+        u2 = B @ v
+        u3 = C @ v
+        assert(np.allclose(u1, u2))
+        assert(np.allclose(u1, u3))
+
     def test_laplacian_operator(self):
         L = LaplacianOperator(2, 2)
         
@@ -116,14 +183,14 @@ class LinOpsTests(unittest.TestCase):
         # Additive landscape        
         v = np.array([0, 1, 1, 2,
                       0, 1, 1, 2])
-        assert(DP2.quad(v) == 0)
-        assert(DP3.quad(v) == 0)
+        assert(quad(DP2, v) == 0)
+        assert(quad(DP3, v) == 0)
         
         # Pairwise landscape
         v = np.array([0, 1, 1, 3,
                       0, 1, 1, 3])
-        assert(DP2.quad(v) > 0)
-        assert(DP3.quad(v) == 0)
+        assert(quad(DP2, v) > 0)
+        assert(quad(DP3, v) == 0)
     
         # Test eigenvalues
         l, a, P = 5, 4, 2
@@ -360,36 +427,35 @@ class LinOpsTests(unittest.TestCase):
         
         # Solve using CG
         v = np.array([1, 2., 1])
-        u = K.inv_dot(v)
+        u = inv_dot(K, v, method='cg')
         assert(np.allclose(K.dot(u), v))
         
         # Test different indexings
         x1 = np.array([0, 1], dtype=int)
         K = KernelOperator(A, x1=x1)
-        assert(K.shape == [2, 3])
+        assert(K.shape == (2, 3))
         
         v = np.random.normal(size=K.shape[1])
         assert(np.allclose(A[:2, :].dot(v), K.dot(v)))
         
         x2 = np.array([1, 2], dtype=int)
         K = KernelOperator(A, x2=x2)
-        assert(K.shape == [3, 2])
+        assert(K.shape == (3, 2))
         
         v = np.random.normal(size=K.shape[1])
         assert(np.allclose(A[:, 1:].dot(v), K.dot(v)))
         
         K = KernelOperator(A, x1=x1, x2=x2)
-        assert(K.shape == [2, 2])
+        assert(K.shape == (2, 2))
         
         v = np.random.normal(size=K.shape[1])
         assert(np.allclose(A[:2, 1:].dot(v), K.dot(v)))
         
         # Test additing diagonal
-        y_var_diag = np.ones(2)
+        D = DiagonalOperator(np.ones(2))
         B = A[:2, 1:] + np.eye(2)
-        K = KernelOperator(A, x1=x1, x2=x2,
-                           y_var_diag=y_var_diag)
-        assert(K.shape == [2, 2])
+        K = KernelOperator(A, x1=x1, x2=x2) + D
+        assert(K.shape == (2, 2))
         
         v = np.random.normal(size=K.shape[1])
         assert(np.allclose(B.dot(v), K.dot(v)))
@@ -404,13 +470,13 @@ class LinOpsTests(unittest.TestCase):
         ss2 = 0
         for d in range(l+1):
             C = CovarianceDistanceOperator(a, l, d)
-            ss2 += C.quad(v)
+            ss2 += quad(C, v)
         assert(np.allclose(ss1, ss2))
 
         # Check distance=0
         s0 = np.sum(v ** 2)
         C0 = CovarianceDistanceOperator(a, l, distance=0)
-        assert(np.allclose(C0.quad(v), s0))
+        assert(np.allclose(quad(C0, v), s0))
         
         # Check distance=1
         C1 = CovarianceDistanceOperator(a, l, distance=1)
@@ -418,7 +484,7 @@ class LinOpsTests(unittest.TestCase):
                        [1, 0, 0, 1],
                        [1, 0, 0, 1],
                        [0, 1, 1, 0]])
-        assert(np.allclose(np.sum(m1 * S), C1.quad(v)))
+        assert(np.allclose(np.sum(m1 * S), quad(C1, v)))
 
         # Check distance=2
         C2 = CovarianceDistanceOperator(a, l, distance=2)
@@ -426,7 +492,7 @@ class LinOpsTests(unittest.TestCase):
                        [0, 0, 1, 0],
                        [0, 1, 0, 0],
                        [1, 0, 0, 0]])
-        assert(np.allclose(np.sum(m2 * S), C2.quad(v)))
+        assert(np.allclose(np.sum(m2 * S), quad(C2, v)))
 
     def test_covariance_vj_operator(self):
         a, l = 2, 2
@@ -438,7 +504,7 @@ class LinOpsTests(unittest.TestCase):
         s00 = np.sum(v ** 2)
         C00 = CovarianceVjOperator(a, l, j=[])
         assert(np.allclose(np.eye(a ** l), C00.todense()))
-        assert(np.allclose(C00.quad(v), s00))
+        assert(np.allclose(quad(C00, v), s00))
         
         # Check 01
         C01 = CovarianceVjOperator(a, l, j=[0])
@@ -447,7 +513,7 @@ class LinOpsTests(unittest.TestCase):
                         [1, 0, 0, 0],
                         [0, 1, 0, 0]])
         assert(np.allclose(m01, C01.todense()))
-        assert(np.allclose(np.sum(m01 * S), C01.quad(v)))
+        assert(np.allclose(np.sum(m01 * S), quad(C01, v)))
 
         # Check 10
         C10 = CovarianceVjOperator(a, l, j=[1])
@@ -456,7 +522,7 @@ class LinOpsTests(unittest.TestCase):
                         [0, 0, 0, 1],
                         [0, 0, 1, 0]])
         assert(np.allclose(m10, C10.todense()))
-        assert(np.allclose(np.sum(m10 * S), C10.quad(v)))
+        assert(np.allclose(np.sum(m10 * S), quad(C10, v)))
 
         # Check distance=2
         C11 = CovarianceVjOperator(a, l, j=(0, 1))
@@ -465,7 +531,7 @@ class LinOpsTests(unittest.TestCase):
                         [0, 1, 0, 0],
                         [1, 0, 0, 0]])
         assert(np.allclose(m11, C11.todense()))
-        assert(np.allclose(np.sum(m11 * S), C11.quad(v)))
+        assert(np.allclose(np.sum(m11 * S), quad(C11, v)))
     
         # Ensure the sum over all possible distances matches
         ss1 = S.sum()
@@ -473,7 +539,7 @@ class LinOpsTests(unittest.TestCase):
         for k in range(l+1):
             for j in combinations(sites, k):
                 C = CovarianceVjOperator(a, l, j=j)
-                ss2 += C.quad(v)
+                ss2 += quad(C, v)
         assert(np.allclose(ss1, ss2))
     
     def test_calc_covariance_vjs(self):

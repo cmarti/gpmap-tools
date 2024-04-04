@@ -9,15 +9,18 @@ from scipy.special import logsumexp
 from scipy.stats.stats import pearsonr
 from scipy.stats import norm
 
-from gpmap.src.settings import U_MAX, PHI_LB, PHI_UB
-from gpmap.src.utils import check_error, get_CV_splits
+from gpmap.src.settings import PHI_LB, PHI_UB
+from gpmap.src.utils import check_error, get_CV_splits, safe_exp
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences, calc_allele_frequencies,
                            calc_expected_logp, calc_genetic_code_aa_freqs)
 from gpmap.src.linop import (DeltaPOperator, calc_covariance_distance,
                              ExtendedLinearOperator, DeltaKernelBasisOperator,
-                             KernelOperator, ProjectionOperator)
+                             KernelOperator, ProjectionOperator,
+                             VarianceComponentKernel,
+                             DiagonalOperator)
+from gpmap.src.matrix import inv_dot, inv_quad
 from gpmap.src.aligner import VCKernelAligner
 
 
@@ -80,42 +83,42 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         self.X = X
         self.y = y
         self.n_obs = y.shape[0]
-        self.obs_idx = self.get_obs_idx()
+        self.obs_idx = self.get_obs_idx(X)
 
         if y_var is None:
             y_var = np.zeros(y.shape[0])    
                 
         self.y_var = y_var
+        self.D_var = DiagonalOperator(y_var)
     
     @property
     def K_BB(self):
-        if not hasattr(self, '_K_BB'):
-            self._K_BB = KernelOperator(self.K, x1=self.obs_idx,
-                                        x2=self.obs_idx,
-                                        y_var_diag=self.y_var)
+        if not hasattr(self, '_K_BB') or self._K_BB is None:
+            self._K_BB = self.K.compute(self.obs_idx, self.obs_idx, self.D_var)
         return(self._K_BB)
     
-    def calc_posterior_mean(self):
-        K_aB = KernelOperator(self.K, x2=self.obs_idx)
-        y_pred = K_aB @ self.K_BB.inv_dot(self.y)
+    def calc_posterior_mean(self, cg_rtol=1e-8):
+        K_aB = self.K.compute(x2=self.obs_idx)
+        y_pred = K_aB @ inv_dot(self.K_BB, self.y, method='cg', rtol=cg_rtol)
         return(y_pred)
     
-    def calc_posterior_variance_i(self, i):
+    def calc_posterior_variance_i(self, i, cg_rtol=1e-4):
         K_i = self.K.get_column(i)
         K_ii = K_i[i]
         K_Bi = K_i[self.obs_idx]
-        post_var = K_ii - self.K_BB.inv_quad(K_Bi)
+        post_var = K_ii - inv_quad(self.K_BB, K_Bi, method='cg', rtol=cg_rtol)
         return(post_var)
     
-    def calc_posterior_variance(self, X_pred=None):
+    def calc_posterior_variance(self, X_pred=None, cg_rtol=1e-4):
         pred_idx = np.arange(self.n_genotypes) if X_pred is None else self.get_obs_idx(X_pred)
         if self.progress:
             pred_idx = tqdm(pred_idx)
 
-        post_vars = np.array([self.calc_posterior_variance_i(i) for i in pred_idx])        
+        post_vars = np.array([self.calc_posterior_variance_i(i, cg_rtol=cg_rtol)
+                              for i in pred_idx])        
         return(post_vars)
     
-    def predict(self, X_pred=None, calc_variance=False):
+    def predict(self, X_pred=None, calc_variance=False, cg_rtol=1e-16):
         """
         Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
         the provided or all genotypes
@@ -143,17 +146,17 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         check_error(hasattr(self, 'lambdas'), msg=msg)
         
         t0 = time()
-        ypred = self.calc_posterior_mean()
+        ypred = self.calc_posterior_mean(cg_rtol=cg_rtol)
         pred = pd.DataFrame({'ypred': ypred}, index=self.genotypes)
         if X_pred is not None:
             pred = pred.loc[X_pred, :]
         if calc_variance:
-            pred['var'] = self.calc_posterior_variance(X_pred=X_pred)
+            pred['var'] = self.calc_posterior_variance(X_pred=X_pred, cg_rtol=cg_rtol)
         self.pred_time = time() - t0
         return(pred)
     
     def sample(self):
-        a = np.random.normal(size=self.n_genotypes)
+        a = np.random.normal(size=self.K.shape[1])
         y = self.K.matrix_sqrt() @ a
         return(y)
     
@@ -194,45 +197,45 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
             data.loc[idxs, ['y', 'y_var']]  = np.nan
         return(data)
     
-    ### Ongoing attempt to do evidence maximization ###
-    def neg_marginal_log_likelihood(self, params):
-        self.K.set_params(params)
-        self.K_inv_y = self.K.inv_dot(self.y)
-        mll1 = np.dot(self.y, self.K_inv_y) / 2
-        mll2 = self.K.calc_log_det(method='SLQ', n_vectors=5, degree=10) / 2
-#         mll3 = self.n / 2 * np.log(2 * np.pi)
-        mll = mll1 + mll2 
-        print(params, mll1, mll2)
-        return(mll)
+#     ### Ongoing attempt to do evidence maximization ###
+#     def neg_marginal_log_likelihood(self, params):
+#         self.K.set_params(params)
+#         self.K_inv_y = self.K.inv_dot(self.y)
+#         mll1 = np.dot(self.y, self.K_inv_y) / 2
+#         mll2 = self.K.calc_log_det(method='SLQ', n_vectors=5, degree=10) / 2
+# #         mll3 = self.n / 2 * np.log(2 * np.pi)
+#         mll = mll1 + mll2 
+#         print(params, mll1, mll2)
+#         return(mll)
     
-    def neg_marginal_log_likelihood_grad(self, params):
-        if np.any(params != self.K.get_params()):
-            self.K.set_params(params)
-            self.K_inv_y = self.K.inv_dot(self.y)
+#     def neg_marginal_log_likelihood_grad(self, params):
+#         if np.any(params != self.K.get_params()):
+#             self.K.set_params(params)
+#             self.K_inv_y = self.K.inv_dot(self.y)
             
-        grad = []
-        for K_grad in self.K.grad():
+#         grad = []
+#         for K_grad in self.K.grad():
             
-            def matvec(x):
-                v = K_grad.dot(x)
-                return(np.dot(self.K_inv_y, v) * self.K_inv_y - self.K.inv_dot(v))
+#             def matvec(x):
+#                 v = K_grad.dot(x)
+#                 return(np.dot(self.K_inv_y, v) * self.K_inv_y - self.K.inv_dot(v))
             
-            op = ExtendedLinearOperator(matvec=matvec,
-                                        shape=self.K.shape, dtype=self.K.dtype)
-            grad.append(op.calc_trace(exact=False, n_vectors=10))
-        return(-np.array(grad))
+#             op = ExtendedLinearOperator(matvec=matvec,
+#                                         shape=self.K.shape, dtype=self.K.dtype)
+#             grad.append(op.calc_trace(exact=False, n_vectors=10))
+#         return(-np.array(grad))
     
-    def fit(self, X, y, y_var=None):
-        self.set_data(X, y, y_var=y_var)
+#     def fit(self, X, y, y_var=None):
+#         self.set_data(X, y, y_var=y_var)
         
-        x0 = self.K.get_params0()
-        f = self.neg_marginal_log_likelihood
-        f_grad = self.neg_marginal_log_likelihood_grad
-        res = minimize(fun=f, x0=x0,
-                       jac=f_grad, method='L-BFGS-B')
-        params = res.x
-        self.K.set_params(params)
-        return(params)
+#         x0 = self.K.get_params0()
+#         f = self.neg_marginal_log_likelihood
+#         f_grad = self.neg_marginal_log_likelihood_grad
+#         res = minimize(fun=f, x0=x0,
+#                        jac=f_grad, method='L-BFGS-B')
+#         params = res.x
+#         self.K.set_params(params)
+#         return(params)
     
 
 class VCregression(GaussianProcessRegressor):
@@ -245,11 +248,9 @@ class VCregression(GaussianProcessRegressor):
         It requires the use of the same number of alleles per sites
             
     '''
-    def __init__(self, beta=0, cross_validation=False, 
-                 num_beta=20, nfolds=5, min_log_beta=-2,
-                 max_log_beta=7, cv_loss_function='frobenius_norm',
-                 n_alleles=None, seq_length=None, lambdas=None,
-                 alphabet_type='custom'):
+    def __init__(self, lambdas=None, n_alleles=None, seq_length=None, alphabet_type='custom',
+                 beta=0, cross_validation=False, nfolds=5, cv_loss_function='frobenius_norm',
+                 num_beta=20, min_log_beta=-2, max_log_beta=7,  cg_rtol=1e-16):
         self.beta = beta
         self.nfolds = nfolds
         self.num_reg = num_beta
@@ -261,28 +262,21 @@ class VCregression(GaussianProcessRegressor):
         self.cv_loss_function = cv_loss_function
 
         if lambdas is not None:
-            self.init(n_alleles=n_alleles, seq_length=seq_length,
-                      alphabet_type=alphabet_type)
+            self.define_space(n_alleles=n_alleles, seq_length=seq_length,
+                              alphabet_type=alphabet_type)
             self.set_lambdas(lambdas)
         
-    def init(self, seq_length=None, n_alleles=None, genotypes=None,
-             alphabet_type='custom'):
-        self.define_space(seq_length=seq_length, n_alleles=n_alleles,
-                          genotypes=genotypes, alphabet_type=alphabet_type)
-        self.kernel_aligner = VCKernelAligner(n_alleles=self.n_alleles,
-                                              seq_length=self.seq_length)
+        self.cg_rtol = cg_rtol
+        
+    def set_lambdas(self, lambdas=None, k=None):
+        K = VarianceComponentKernel(self.n_alleles, self.seq_length,
+                                    lambdas=lambdas, k=k)
+        self._K_BB = None
+        self.lambdas = K.lambdas
+        super().__init__(base_kernel=K)
     
     def set_data(self, X, y, y_var=None, cov=None, ns=None):
-        self.init(genotypes=X)
-        self.X = X
-        self.y = y
-        self.n_obs = y.shape[0]
-        self.obs_idx = self.get_obs_idx(seqs=X)
-
-        if y_var is None:
-            y_var = np.zeros(y.shape[0])    
-                
-        self.y_var = y_var
+        super().set_data(X, y, y_var=y_var)
         self.cov = cov
         self.ns = ns
 
@@ -323,7 +317,6 @@ class VCregression(GaussianProcessRegressor):
 
             # Calculate loss in test data
             if self.cv_loss_function == 'frobenius_norm':
-                self.set_data(X=X_test, y=y_test, y_var=y_var_test)
                 self.kernel_aligner.set_data(test_cov, test_ns)
                 loss = self.kernel_aligner.calc_mse(lambdas)
 
@@ -393,7 +386,9 @@ class VCregression(GaussianProcessRegressor):
         
         """
         t0 = time()
-        self.init(genotypes=X)
+        self.define_space(genotypes=X)
+        self.kernel_aligner = VCKernelAligner(n_alleles=self.n_alleles,
+                                              seq_length=self.seq_length)
         self.set_data(X, y, y_var=y_var)
         
         if self.run_cv:
@@ -404,12 +399,6 @@ class VCregression(GaussianProcessRegressor):
         
         self.fit_time = time() - t0
         self.set_lambdas(lambdas)
-
-    def set_lambdas(self, lambdas=None, k=None):
-        W = ProjectionOperator(self.n_alleles, self.seq_length,
-                               lambdas=lambdas, k=k)
-        self.lambdas = lambdas
-        super().__init__(base_kernel=W)
 
 
 class DeltaPEstimator(SeqGaussianProcessRegressor):
@@ -904,9 +893,3 @@ def D_geo(phi1, phi2):
     s = np.exp(logsumexp(0.5 * (logQ1 + logQ2)))
     x = min(s, 1)
     return 2 * np.arccos(x)
-
-
-def safe_exp(v):
-    u = v.copy()
-    u[u > U_MAX] = U_MAX
-    return np.exp(u)

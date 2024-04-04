@@ -13,6 +13,7 @@ from scipy.special import logsumexp
 
 from gpmap.src.settings import BIN_DIR
 from gpmap.src.seq import generate_possible_sequences
+from gpmap.src.matrix import quad
 from gpmap.src.linop import ProjectionOperator
 from gpmap.src.inference import SeqDEFT
 from gpmap.src.plot.mpl import plot_SeqDEFT_summary, savefig, plot_density_vs_frequency
@@ -56,7 +57,7 @@ class SeqDEFTTests(unittest.TestCase):
         np.random.seed(2)
         a = 5e2
         phi = seqdeft.simulate_phi(a=a)
-        ss = seqdeft.DP.quad(phi) / seqdeft.n_genotypes
+        ss = quad(seqdeft.DP, phi) / seqdeft.n_genotypes
         ss = ss * a / seqdeft.DP.n_p_faces
         assert(np.abs(ss - 1) < 0.1)
         
@@ -112,7 +113,7 @@ class SeqDEFTTests(unittest.TestCase):
 
         # Ensure lack of higher order components
         P3 = ProjectionOperator(a, l, k=3)
-        k3 = P3.quad(phi)
+        k3 = quad(P3, phi)
         assert(k3 < 1e-8)
 
         # Average out last 2 positions
@@ -123,7 +124,7 @@ class SeqDEFTTests(unittest.TestCase):
 
         # Ensure some higher order component induced by missing sites
         P3 = ProjectionOperator(a, l-out, k=3)
-        k3_short = P3.quad(baseline_phi)
+        k3_short = quad(P3, baseline_phi)
         assert(k3_short > 1e3 * k3)
 
         # Simulate from prior at l=4 with baseline phi
@@ -149,8 +150,8 @@ class SeqDEFTTests(unittest.TestCase):
         lambdas, lambdas2 = [], []
         for k in np.arange(l - out + 1):
             W = ProjectionOperator(a, l-out, k=k)
-            lambdas.append(W.quad(phi) / W.m_k[k])
-            lambdas2.append(W.quad(phi2) / W.m_k[k])
+            lambdas.append(quad(W, phi) / W.m_k[k])
+            lambdas2.append(quad(W, phi2) / W.m_k[k])
 
         fig, subplots = plt.subplots(1, 3, figsize=(9, 3))
 

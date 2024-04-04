@@ -15,6 +15,14 @@ from scipy.sparse.coo import coo_matrix
 from scipy.stats import norm
 from scipy.stats.stats import pearsonr
 
+from gpmap.src.settings import U_MAX
+
+
+def safe_exp(v):
+    u = v.copy()
+    u[u > U_MAX] = U_MAX
+    return np.exp(u)
+
 
 def check_error(condition, msg, error_type=ValueError):
     if not condition:

@@ -3,8 +3,8 @@ import unittest
 import numpy as np
 
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             VarianceComponentKernelOperator,
-                             RhoProjectionOperator, ConnectednessKernelOperator,
+                             VarianceComponentKernel,
+                             RhoProjectionOperator, ConnectednessKernel,
                              ExtendedLinearOperator)
 
 
@@ -24,7 +24,7 @@ class LinalgTests(unittest.TestCase):
         trace = W.calc_trace(exact=True)
         assert(np.allclose(trace, W.get_diag().sum()))
         
-        K = VarianceComponentKernelOperator(4, 5)
+        K = VarianceComponentKernel(4, 5)
         K.set_lambdas(lambdas=[1, 0.5, 0.4, 0.1, 0.02, 0.001])
         trace = K.calc_trace(exact=True)
         assert(np.allclose(trace, W.get_diag().sum()))
@@ -36,7 +36,7 @@ class LinalgTests(unittest.TestCase):
         assert(trace - y_var.sum() < W.calc_trace())
         assert(np.allclose(trace, K.get_diag().sum()))
         
-        K = ConnectednessKernelOperator(4, 5)
+        K = ConnectednessKernel(4, 5)
         K.set_rho(0.5)
         trace = K.calc_trace(exact=True)
         assert(np.allclose(trace, P.get_diag().sum()))

@@ -7,7 +7,7 @@ from scipy.sparse import csr_matrix
 from gpmap.src.matrix import (calc_cartesian_product,
                               calc_cartesian_product_dot, 
                               diag_pre_multiply, diag_post_multiply,
-                              rate_to_jump_matrix, kron)
+                              rate_to_jump_matrix, kron, dot_log)
 
 
 class MatrixTests(unittest.TestCase):
@@ -35,6 +35,43 @@ class MatrixTests(unittest.TestCase):
         r = diag_post_multiply(d, m)
         assert(np.allclose(r, np.array([[2, 2], [4, 3]])))
     
+    def test_dot_log(self):
+        # Matrix vector test
+        m = np.array([[1, 2],
+                      [2, 3]])
+        v = np.array([4, 2])
+        expected = np.log(m @ v)
+        logm, signm = np.log(np.abs(m)), np.sign(m)
+        logv, signv = np.log(np.abs(v)), np.sign(v)
+        res, sign = dot_log(logm, signm, logv, signv)
+        assert(np.allclose(expected, res))
+        assert(np.allclose(sign, 1))
+
+        # Test with negative entries in output
+        m = np.array([[1, 2],
+                      [2, 3]])
+        v = np.array([1, -2])
+        res = m @ v.T
+        expected = np.log(np.abs(res))
+        expected_sign = np.sign(res)
+        logm, signm = np.log(np.abs(m)), np.sign(m)
+        logv, signv = np.log(np.abs(v)), np.sign(v)
+        res, sign = dot_log(logm, signm, logv, signv)
+        assert(np.allclose(expected, res))
+        assert(np.allclose(expected_sign, sign))
+
+        # Test matrix-matrix product
+        m = np.array([[1, 2],
+                      [2, 3]])
+        v = np.array([[4, 2],
+                      [1, 1]])
+        expected = np.log(m @ v)
+        logm, signm = np.log(np.abs(m)), np.sign(m)
+        logv, signv = np.log(np.abs(v)), np.sign(v)
+        res, sign = dot_log(logm, signm, logv, signv)
+        assert(np.allclose(expected, res))
+        assert(np.allclose(sign, 1))
+
     def test_kron_product(self):
         m = np.array([[1, 2],
                       [2, 3]])

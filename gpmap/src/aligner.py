@@ -3,8 +3,8 @@ import numpy as np
 from scipy.special import comb
 from scipy.optimize import minimize
 
-from gpmap.src.utils import check_error
-from gpmap.src.matrix import quad
+from gpmap.src.utils import check_error, safe_exp
+from gpmap.src.matrix import quad, dot_log
 
 
 class VCKernelAligner(object):
@@ -55,10 +55,26 @@ class VCKernelAligner(object):
     def frobenius_norm(self, log_lambdas):
         """cost function for regularized least square method for inferring 
         lambdas"""
-        lambdas = np.exp(log_lambdas)
+        lambdas = safe_exp(log_lambdas)
         Frob1 = lambdas.dot(self.M).dot(lambdas)
         Frob2 = 2 * lambdas.dot(self.a)
         Frob = Frob1 - Frob2
+        if self.beta > 0:
+            Frob += self.beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
+        return(Frob)
+    
+    def frobenius_norm2(self, log_lambdas):
+        """cost function for regularized least square method for inferring 
+        lambdas"""
+        signlambdas = np.ones_like(log_lambdas)
+        logMlambdas, signMlambdas = dot_log(self.logM, self.signM, log_lambdas, signlambdas)
+        log_lambdas_T = np.expand_dims(log_lambdas, 0)
+        signlambdas_T = np.expand_dims(signlambdas, 0)
+        logFrob1, signFrob1 = dot_log(log_lambdas_T, signlambdas_T, logMlambdas, signMlambdas)
+        logFrob2, signFrob2 = dot_log(log_lambdas_T, signlambdas_T, self.loga, self.signa)
+        logFrob2 += np.log(2)
+        Frob = signFrob2 * np.exp(logFrob2) * (signFrob1 * signFrob2 * np.exp(logFrob1 - logFrob2) - 1)
+        Frob = Frob[0]
         if self.beta > 0:
             Frob += self.beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
         return(Frob)
@@ -78,6 +94,8 @@ class VCKernelAligner(object):
                 for d in range(size):
                     M[i, j] += N_d[d] * self.W_kd[i, d] * self.W_kd[j, d]
         self.M = M
+        self.logM = np.log(np.abs(M))
+        self.signM = np.sign(M)
     
     def construct_a(self, rho_d, N_d):
         size = self.seq_length + 1
@@ -86,6 +104,8 @@ class VCKernelAligner(object):
             for d in range(size):
                 a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
         self.a = a
+        self.loga = np.log(np.abs(a))
+        self.signa = np.sign(a)
     
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
@@ -123,6 +143,7 @@ class VCKernelAligner(object):
         lambdas0 = np.dot(self.M_inv, self.a).flatten()
         lambdas0[lambdas0<0] = 1e-10
         log_lambda0 = np.log(lambdas0)
+        # print('log_lambda0', log_lambda0)
         if self.beta == 0:
             res = minimize(fun=self.frobenius_norm,
                            jac=self.frobenius_norm_grad,

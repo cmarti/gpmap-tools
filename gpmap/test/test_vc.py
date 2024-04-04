@@ -12,9 +12,9 @@ from scipy.special import comb
 
 from gpmap.src.inference import VCregression
 from gpmap.src.settings import BIN_DIR
+from gpmap.src.matrix import rayleigh_quotient
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             calc_variance_components, calc_covariance_distance)
-from gpmap.src.space import SequenceSpace
+                             calc_covariance_distance)
 
 
 class VCTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class VCTests(unittest.TestCase):
         
             for k2 in range(l+1):
                 W = ProjectionOperator(a, l, k=k2)
-                f_k_rq = W.rayleigh_quotient(f)
+                f_k_rq = rayleigh_quotient(W, f)
                 assert(np.allclose(f_k_rq, k1 == k2))
     
     def test_calc_distance_covariance(self):
@@ -106,7 +106,26 @@ class VCTests(unittest.TestCase):
         
         # Ensure regularization improves results
         assert(sd1 > sd2)
+
+    def test_vc_docs(self):
+        # Simulate data
+        np.random.seed(0)
+        lambdas_true = np.array([1e3, 1e3, 2e2, 1e0, 1e-1, 3e-3, 1e-5])
+        model = VCregression(seq_length=6, alphabet_type='dna', lambdas=lambdas_true)
+        data = model.simulate(sigma=0.2, p_missing=0.1)
+        obs = data.dropna()
         
+        # Without regularization
+        model.fit(X=obs.index.values, y=obs.y.values, y_var=obs.y_var.values)
+        
+        # Try with regularization and CV
+        cvmodel = VCregression(cross_validation=True)
+        cvmodel.fit(X=obs.index.values, y=obs.y.values, y_var=obs.y_var.values)
+        
+        # Try with different CV metric
+        cvmodel = VCregression(cross_validation=True, cv_loss_function='logL')
+        cvmodel.fit(X=obs.index.values, y=obs.y.values, y_var=obs.y_var.values)
+
     def test_vc_predict(self):
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
         a, l = 4, lambdas.shape[0]-1
@@ -226,7 +245,7 @@ class SkewedVCTests(unittest.TestCase):
         
             for k2 in range(l+1):
                 W.set_lambdas(k=k2)
-                f_k_rq = W.rayleigh_quotient(f)
+                f_k_rq = rayleigh_quotient(W, f)
                 assert(np.allclose(f_k_rq, k1 == k2))
         
         # with variable ps
@@ -244,7 +263,7 @@ class SkewedVCTests(unittest.TestCase):
         
             for k2 in range(l+1):
                 W.set_lambdas(k=k2)
-                f_k_rq = W.rayleigh_quotient(f)
+                f_k_rq = rayleigh_quotient(W, f)
                 assert(np.allclose(f_k_rq, k1 == k2))
         
         

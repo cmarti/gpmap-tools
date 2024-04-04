@@ -3,43 +3,32 @@ import sys
 import unittest
 import numpy as np
 
-from os.path import join
-from subprocess import check_call
-
-from scipy.stats.mstats_basic import pearsonr
-from scipy.special._basic import comb
-
-from gpmap.src.inference import VCregression, GaussianProcessRegressor
-from gpmap.src.settings import BIN_DIR
-from gpmap.src.linop import LaplacianOperator, ProjectionOperator,\
-    ConnectednessKernelOperator, VarianceComponentKernelOperator
-from gpmap.src.space import SequenceSpace
-from tempfile import NamedTemporaryFile
 from itertools import product
+from scipy.stats.mstats_basic import pearsonr
+
+from gpmap.src.inference import GaussianProcessRegressor
+from gpmap.src.linop import ConnectednessKernel, VarianceComponentKernel
 
 
 class GPTests(unittest.TestCase):
-    def xtest_prior_sample(self):
+    def test_prior_sample(self):
         l, a = 5, 4
         
         # Sample from fixed rho kernel
-        kernel = ConnectednessKernelOperator(a, l)
-        kernel.set_rho(0.5)
-        model = GaussianProcessRegressor(kernel=kernel)
+        kernel = ConnectednessKernel(a, l, rho=0.5)
+        model = GaussianProcessRegressor(kernel)
         y = model.sample()
         assert(y.shape[0] == a**l)
         
         # Sample from variable rho kernel
-        kernel = ConnectednessKernelOperator(a, l)
-        kernel.set_rho([0.2, 0.1, 0.8, 0.4, 0.5])
-        model = GaussianProcessRegressor(kernel=kernel)
+        kernel = ConnectednessKernel(a, l, rho=np.array([0.2, 0.1, 0.8, 0.4, 0.5]))
+        model = GaussianProcessRegressor(kernel)
         y = model.sample()
         assert(y.shape[0] == a**l)
         
         # Sample from VC kernel
-        kernel = VarianceComponentKernelOperator(a, l)
-        kernel.set_lambdas(2.**-np.arange(l+1))
-        model = GaussianProcessRegressor(kernel=kernel)
+        kernel = VarianceComponentKernel(a, l, lambdas=2.**-np.arange(l+1))
+        model = GaussianProcessRegressor(kernel)
         y = model.sample()
         assert(y.shape[0] == a**l)
         
@@ -49,7 +38,7 @@ class GPTests(unittest.TestCase):
         X = np.array([''.join(c) for c in product(alleles, repeat=l)])
         
         # Create model and simulate
-        model = GaussianProcessRegressor(VarianceComponentKernelOperator)
+        model = GaussianProcessRegressor(VarianceComponentKernel)
         model.define_kernel(a, l)
         log_lambdas = 3-np.arange(l+1)
         model.K.set_params(log_lambdas)
@@ -59,7 +48,7 @@ class GPTests(unittest.TestCase):
         y_var = np.full(y.shape[0], fill_value=0.25)
         
         # Create model and infer
-        model = GaussianProcessRegressor(VarianceComponentKernelOperator)
+        model = GaussianProcessRegressor(VarianceComponentKernel)
         params = model.fit(X, y, y_var=y_var)
         r = pearsonr(log_lambdas, params)[0]
         assert(r > 0.9)
