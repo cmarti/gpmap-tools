@@ -147,11 +147,11 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         
         t0 = time()
         ypred = self.calc_posterior_mean(cg_rtol=cg_rtol)
-        pred = pd.DataFrame({'ypred': ypred}, index=self.genotypes)
+        pred = pd.DataFrame({'y': ypred}, index=self.genotypes)
         if X_pred is not None:
             pred = pred.loc[X_pred, :]
         if calc_variance:
-            pred['var'] = self.calc_posterior_variance(X_pred=X_pred, cg_rtol=cg_rtol)
+            pred['y_var'] = self.calc_posterior_variance(X_pred=X_pred, cg_rtol=cg_rtol)
         self.pred_time = time() - t0
         return(pred)
     
@@ -322,7 +322,7 @@ class VCregression(GaussianProcessRegressor):
 
             else:
                 self.set_lambdas(lambdas)
-                ypred = self.predict(X_test)['ypred'].values
+                ypred = self.predict(X_test)['y'].values
 
                 if self.cv_loss_function == 'logL':
                     loss = -norm.logpdf(y_test, loc=ypred, scale=np.sqrt(y_var_test)).sum()
@@ -402,10 +402,12 @@ class VCregression(GaussianProcessRegressor):
 
 
 class DeltaPEstimator(SeqGaussianProcessRegressor):
-    def __init__(self, P, a=None, num_reg=20, nfolds=5,
-                 a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
-                 opt_method='L-BFGS-B', optimization_opts={}, scale_by=1,
-                 gtol=1e-3, ftol=1e-8):
+    def __init__(self, P, n_alleles=None, seq_length=None, alphabet_type='custom',
+                 a=None, num_reg=20, nfolds=5,
+                 a_resolution=0.1, max_a_max=1e12,
+                 fac_max=0.1, fac_min=1e-6,
+                 opt_method='L-BFGS-B', optimization_opts={},
+                 scale_by=1, gtol=1e-3, ftol=1e-8):
         super().__init__()
         self.P = P
         self.a = a
@@ -436,6 +438,10 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
         optimization_opts['gtol'] = gtol
         optimization_opts['ftol'] = ftol
         self.optimization_opts = optimization_opts
+
+        if seq_length is not None:
+            self.init(n_alleles=n_alleles, seq_length=seq_length,
+                      alphabet_type=alphabet_type)
         
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom'):

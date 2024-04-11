@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 import unittest
 import numpy as np
+import pandas as pd
 
 from gpmap.src.datasets import DataSet, list_available_datasets
+from gpmap.src.inference import VCregression, SeqDEFT
 
 
 class DatasetsTests(unittest.TestCase):
@@ -43,6 +45,36 @@ class DatasetsTests(unittest.TestCase):
             self.fail()
         except ValueError:
             pass
+    
+    def test_build_regression_dataset(self):
+        np.random.seed(0)
+        lambdas = np.array([10, 2, 0.5, 0.1, 0.02, 0])
+        model = VCregression(seq_length=5, alphabet_type='dna', lambdas=lambdas)
+        data = model.simulate(p_missing=0.2, sigma=0.1).drop('y_true', axis=1).dropna()
+
+        # Build dataset
+        test = DataSet('test', data=data)
+        test.build()
+
+        # Load newly built dataset
+        test = DataSet('test')
+        assert(test.landscape.shape[0] == 4 ** 5)
+        assert(test.nodes.shape[0] == 4 ** 5)
+
+    def test_build_probability_dataset(self):
+        np.random.seed(0)
+        model = SeqDEFT(P=2, seq_length=5, alphabet_type='dna')
+        X = model.simulate(N=1000, a=500)
+        data = pd.DataFrame({'X': X})
+
+        # Build dataset
+        test = DataSet('test', data=data)
+        test.build()
+
+        # Load newly built dataset
+        test = DataSet('test')
+        assert(test.landscape.shape[0] == 4 ** 5)
+        assert(test.nodes.shape[0] == 4 ** 5)
     
     def test_visualization(self):
         serine = DataSet('serine')

@@ -155,15 +155,15 @@ class VCTests(unittest.TestCase):
         # Using the a priori known variance components
         vc.set_data(X=data.index, y=data['y'], y_var=data['y_var'])
         pred = vc.predict()
-        mse = np.mean((pred['ypred'] - data['y_true']) ** 2)
-        rho = pearsonr(pred['ypred'], data['y_true'])[0]
+        mse = np.mean((pred['y'] - data['y_true']) ** 2)
+        rho = pearsonr(pred['y'], data['y_true'])[0]
         assert(rho > 0.95)
         assert(mse < 0.05)
         
         # Estimate posterior variances
         pred = vc.predict(calc_variance=True)
-        assert('var' in pred.columns)
-        assert(np.all(pred['var'] > 0))
+        assert('y_var' in pred.columns)
+        assert(np.all(pred['y_var'] > 0))
         
         # Capture error with missing lambdas
         vc = VCregression()
@@ -183,16 +183,16 @@ class VCTests(unittest.TestCase):
         vc.set_data(X=train.index, y=train['y'], y_var=train['y_var'])
         vc.set_lambdas(lambdas)
         pred = vc.predict(X_pred=test.index.values)
-        mse = np.mean((pred['ypred'] - test['y_true']) ** 2)
-        rho = pearsonr(pred['ypred'], test['y_true'])[0]
+        mse = np.mean((pred['y'] - test['y_true']) ** 2)
+        rho = pearsonr(pred['y'], test['y_true'])[0]
         assert(rho > 0.6)
         assert(mse < 0.3)
         
         # Calculate variances and check calibration
         pred = vc.predict(X_pred=test.index.values, calc_variance=True)
-        sigma = np.sqrt(pred['var'])
-        pred['lower'] = pred['ypred'] - 2 * sigma
-        pred['upper'] = pred['ypred'] + 2 * sigma
+        sigma = np.sqrt(pred['y_var'])
+        pred['lower'] = pred['y'] - 2 * sigma
+        pred['upper'] = pred['y'] + 2 * sigma
         p = np.logical_and(test['y_true'] > pred['lower'],
                            test['y_true'] < pred['upper']).mean()
         assert(p > 0.9)

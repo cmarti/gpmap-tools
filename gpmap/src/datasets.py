@@ -1,8 +1,11 @@
-from os import listdir
-from os.path import join, exists
-
+#!/usr/bin/env python
+import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import gpmap.src.plot.mpl as plot
+
+from os import listdir
+from os.path import join, exists
 
 from gpmap.src.utils import (check_error, read_dataframe, read_edges,
                              write_edges, write_dataframe)
@@ -10,6 +13,7 @@ from gpmap.src.settings import (RAW_DATA_DIR, LANDSCAPES_DIR,
                                 PROCESSED_DIR, VIZ_DIR)
 from gpmap.src.space import SequenceSpace
 from gpmap.src.randwalk import WMWalk
+from gpmap.src.inference import VCregression, SeqDEFT
 
 
 class DataSet(object):
@@ -42,12 +46,17 @@ class DataSet(object):
             check_error(dataset_name in datasets,
                         msg='Dataset not available: check {}'.format(datasets))
         else:
-            check_error(landscape is not None,
-                        msg='landscape must be provided for new dataset')
-            self._landscape = landscape
-            
+            check_error(landscape is not None or data is not None,
+                        msg='landscape or data must be provided for new dataset')
+            if landscape is not None:
+                self._landscape = landscape
             if data is not None:
                 self._data = data
+        
+        self.Ns = None
+    
+    def rename(self, dataset_name):
+        self.name = dataset_name
     
     def _load(self, fdir, label, suffix=''):
         fpath = join(fdir, '{}.pq'.format(self.name + suffix))
@@ -118,14 +127,65 @@ class DataSet(object):
                               y=self.landscape.iloc[:, 0].values)
         return(space)
     
-    def calc_visualization(self, n_components=20, Ns=None, mean_function=None):
+    def calc_visualization(self, n_components=20, Ns=None, mean_function=None,
+                           mean_function_perc=None):
         space = self.to_sequence_space()
         rw = WMWalk(space)
         rw.calc_visualization(n_components=n_components, Ns=Ns,
-                              mean_function=mean_function)
+                              mean_function=mean_function,
+                              mean_function_perc=mean_function_perc)
         self._nodes = rw.nodes_df
         self._edges = space.get_edges_df()
         self._relaxation_times = rw.decay_rates_df
+
+    def infer_landscape(self, P=2, vc_cross_validation=True, vc_cv_loss_function='logL'):
+        if 'X' in self.data.columns:
+            X = self.data.X.values 
+            model = SeqDEFT(P=P)
+            pred = model.fit(X=X)
+            X, y = pred.index.values, np.log(pred.Q_star.values)
+            self.Ns = 1
+        
+        elif 'y' in self.data.columns:
+            X = self.data.index.values 
+            y = self.data['y'].values
+            y_var = self.data['y_var'].values if 'y_var' in self.data.columns else None
+            model = VCregression(cross_validation=vc_cross_validation,
+                                 cv_loss_function=vc_cv_loss_function)
+            model.fit(X=X, y=y, y_var=y_var)
+            pred = model.predict()
+            X, y = pred.index.values, pred.y.values
+        
+        else:
+            msg = 'Model could not be selected for the provided data table. '
+            msg += 'Make sure to include a at least column `X` or `y`'
+            raise ValueError(msg)
+
+        self._landscape = pd.DataFrame({'y': y}, index=X)
+
+    def build(self):
+        if not hasattr(self, '_landscape'):
+            self.infer_landscape()
+        meanv, maxv = self.landscape['y'].mean(), self.landscape['y'].max()
+        mean_function = meanv + 0.8 * (maxv - meanv)
+        self.calc_visualization(Ns=self.Ns, mean_function=mean_function)
+        self.save()
+    
+    def save(self, fdir=None):
+        fdirs = [RAW_DATA_DIR, PROCESSED_DIR, LANDSCAPES_DIR, VIZ_DIR, VIZ_DIR, VIZ_DIR]
+        suffixes = ['', '', '', '.nodes', '.edges', '.relaxation_times']
+        
+        if fdir is not None:
+            suffixes = ['.raw_data', '.data', '.landscape', '.nodes', '.edges', '.relaxation_times']
+            fdirs = [fdir] * len(suffixes)
+
+        attrs = ['_raw_data', '_data', '_landscape', '_nodes', '_edges', '_relaxation_times']
+        fmts = ['pq', 'pq', 'pq', 'pq', 'npz', 'pq']
+
+        for attr, fdir, suffix, fmt in zip(attrs, fdirs, suffixes, fmts):
+            if hasattr(self, attr):
+                df = getattr(self, attr)
+                self._write(df, fdir, suffix, fmt=fmt)
     
     def plot(self):
         fig, subplots = plt.subplots(1, 2, figsize=(8, 3.5))
@@ -136,19 +196,6 @@ class DataSet(object):
         axes = subplots[1]
         plot.plot_visualization(axes, self.nodes, edges_df=self.edges)
         fig.tight_layout()
-    
-    def save(self):
-        self._write(self._landscape, LANDSCAPES_DIR, fmt='pq')
-
-        attrs = ['_raw_data', '_data', '_nodes', '_edges', '_relaxation_times']
-        fdirs = [RAW_DATA_DIR, PROCESSED_DIR, VIZ_DIR, VIZ_DIR, VIZ_DIR]
-        suffixes = ['', '', '.nodes', '.edges', '.relaxation_times']
-        fmts = ['pq', 'pq', 'pq', 'npz', 'pq']
-
-        for attr, fdir, suffix, fmt in zip(attrs, fdirs, suffixes, fmts):
-            if hasattr(self, attr):
-                df = getattr(self, attr)
-                self._write(df, fdir, suffix, fmt=fmt)
     
 
 def list_available_datasets():
