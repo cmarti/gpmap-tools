@@ -33,6 +33,7 @@ Please do not hesitate to contact us with any questions or suggestions for impro
 
 * For technical assistance or to report bugs,
 please contact Carlos Marti (`Email: martigo@cshl.edu <martigo@cshl.edu>`_, `Twitter: @cmarti_ga <https://twitter.com/cmarti_ga>`_).
+
 * For more general correspondence,
 please contact David McCandlish (`Email: mccandlish@cshl.edu <mccandlish@cshl.edu>`_, `Twitter: @TheDMMcC <https://twitter.com/TheDMMcC>`_).
 
