@@ -20,7 +20,7 @@ These experiments indeed often consist in rather incomplete and noisy data. To t
 we provide a simple interface to our previously published Gaussian Process regression methods for
 inference of complete quantitative sequence-function relationships in presence of complex epistatic
 interactions. This library contains methods to perform such inference using both high throughput
-experiments [#mem]_,[#vc]_ or observations of natural sequences e.g. ocurrences of 
+experiments [#vc]_, or observations of natural sequences e.g. ocurrences of 
 the 5´splice site sequence in the human genome [#Chen2021]_.
 
 GPMAP-tools is written for Python 3 and is provided under an MIT open source license.
