@@ -10,3 +10,10 @@ In this section the user can find several use cases in which we applied GPMAP-to
     
     usage/0_discrete_spaces.ipynb
     usage/1_Ser.ipynb
+
+Read more
+"""""""""
+
+.. [#McCandlish2011] `McCandlish DM.
+    Visualizing fitness landscapes (2011)
+    <https://onlinelibrary.wiley.com/doi/10.1111/j.1558-5646.2011.01236.x>`_

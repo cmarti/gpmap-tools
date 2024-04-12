@@ -1,8 +1,11 @@
 ### High priority
-- Fix problems in readthedocs updating
 - Review typos in documentation
 - Merge with master branch and release new stable version to pypi
-- 
+- Write __str__ method for DataSet to highlight the main properties of the dataset
+- Make clean and complete datasets
+- Add data file with citations for the built-in datasets that is updated if new datasets are added with reference
+- Fix and complete documentation about evolution on fitness landscapes
+- Fix mixing time notation to relaxation and write the neutral relaxation time method for cases with mutational biases
 - Try to implement nodes_vmin option for plotly interactive plotting to keep color scale constant even if we select top genotypes  
 - Review bounds for plots in datashader allele grid: padding option may not have been activated. Maybe build some default function to use cross all datashader plots
 - Review and update binaries with latests features
@@ -16,9 +19,8 @@
 - Try to reduce dependencies: networkx, datashader. Make some optional: tqdm, fastparquet, plotly
 - Add documentation for transition path theory
 - Think about separation of basic functionalities that are used in visualization and inference
-- Delete seaborn from documentation as well
-- Write __str__ method for DataSet to highlight the main properties of the dataset
 - Add return_grad argument to loss function in SeqDEFT
+- Explore why VC regression is so slow now and fix. Guess is the definition of the obs_idx matrix within the KernelOperator or the tolerance required by CG being to strict (most likely)
 
 
 ### Mid priority
