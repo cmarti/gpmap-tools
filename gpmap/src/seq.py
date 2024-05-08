@@ -132,10 +132,13 @@ def guess_space_configuration(seqs, ensure_full_space=True,
     alphabet = [[a for a in alleles[i].keys()] for i in range(seq_length)]
     
     if ensure_full_space:
-        msg = 'Number of genotypes does not match the expected from guessed configuration.'
-        msg += ' Ensure that genotypes span the whole sequence space or use'
-        msg += '`ensure_full_space` option to avoid this error'
-        check_error(np.prod(n_alleles) == seqs.shape[0], msg)
+        n_exp = np.prod(n_alleles)
+        n_obs = seqs.shape[0]
+        msg = 'Number of genotypes ({}) does not match the expected '.format(n_obs)
+        msg += 'from the observed alleles in the provided sequences ({}). '.format(n_exp)
+        msg += 'Provide phenotypes for every possible sequence in the space or '
+        msg += 'set `ensure_full_space=False` to avoid this error'
+        check_error(n_exp == n_obs, msg)
     
     if force_regular:
         if force_regular_alleles:
