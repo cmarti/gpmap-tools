@@ -12,7 +12,7 @@ from gpmap.src.seq import generate_possible_sequences
 from gpmap.src.matrix import inv_dot, quad
 from gpmap.src.kernel import VarianceComponentKernel
 from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
-                             VjProjectionOperator, DiagonalOperator,
+                             VjProjectionOperator, DiagonalOperator, IdentityOperator,
                              VarianceComponentKernel,
                              DeltaPOperator, RhoProjectionOperator,
                              ExtendedDeltaPOperator, MatMulOperator,
@@ -42,6 +42,13 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(D.dot(B), [[2, 2],
                                       [1, 1],
                                       [2, 2]]))
+    
+    def test_identity_operator(self):
+        n = 3
+        I = IdentityOperator(n)
+        v = np.random.normal(size=n)
+        assert(np.allclose(v, I @ v))
+        assert(np.allclose(v, I.transpose() @ v))
     
     def test_matmul_operator(self):
         m = np.array([[1, 2],
@@ -424,6 +431,10 @@ class LinOpsTests(unittest.TestCase):
         K = KernelOperator(A)
         v = np.random.normal(size=K.shape[1])
         assert(np.allclose(A.dot(v), K.dot(v)))
+
+        # Test transpose
+        assert(np.allclose(K._rmatmat(v), K.dot(v)))
+        assert(np.allclose(K.transpose().dot(v), K.dot(v)))
         
         # Solve using CG
         v = np.array([1, 2., 1])
@@ -450,8 +461,14 @@ class LinOpsTests(unittest.TestCase):
         
         v = np.random.normal(size=K.shape[1])
         assert(np.allclose(A[:2, 1:].dot(v), K.dot(v)))
+
+        # Test different indexings transpose
+        K = KernelOperator(A, x1=x1)
+        v = np.random.normal(size=(K.shape[0], 1))
+        assert(np.allclose(A[x1, :].T @ v,
+                           K._rmatmat(v)))
         
-        # Test additing diagonal
+        # Test adding diagonal
         D = DiagonalOperator(np.ones(2))
         B = A[:2, 1:] + np.eye(2)
         K = KernelOperator(A, x1=x1, x2=x2) + D

@@ -8,6 +8,7 @@ from scipy.optimize import minimize
 from scipy.special import logsumexp
 from scipy.stats.stats import pearsonr
 from scipy.stats import norm
+from scipy.sparse.linalg import aslinearoperator
 
 from gpmap.src.settings import PHI_LB, PHI_UB
 from gpmap.src.utils import check_error, get_CV_splits, safe_exp
@@ -19,7 +20,7 @@ from gpmap.src.linop import (DeltaPOperator, calc_covariance_distance,
                              ExtendedLinearOperator, DeltaKernelBasisOperator,
                              KernelOperator, ProjectionOperator,
                              VarianceComponentKernel,
-                             DiagonalOperator)
+                             DiagonalOperator, IdentityOperator, InverseOperator)
 from gpmap.src.matrix import inv_dot, inv_quad
 from gpmap.src.aligner import VCKernelAligner
 
@@ -97,7 +98,7 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
             self._K_BB = self.K.compute(self.obs_idx, self.obs_idx, self.D_var)
         return(self._K_BB)
     
-    def calc_posterior_mean(self, cg_rtol=1e-8):
+    def calc_posterior_mean(self, B=None, cg_rtol=1e-8):
         K_aB = self.K.compute(x2=self.obs_idx)
         y_pred = K_aB @ inv_dot(self.K_BB, self.y, method='cg', rtol=cg_rtol)
         return(y_pred)
@@ -118,7 +119,44 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
                               for i in pred_idx])        
         return(post_vars)
     
-    def predict(self, X_pred=None, calc_variance=False, cg_rtol=1e-16):
+    def calc_posterior(self, X_pred=None, B=None, cg_rtol=1e-4):
+        pred_idx = np.arange(self.n_genotypes) if X_pred is None else self.get_obs_idx(X_pred)
+        if B is None:
+            B = IdentityOperator(pred_idx.shape[0])
+        else:
+            B = aslinearoperator(B)
+
+        K_aB = self.K.compute(x1=pred_idx, x2=self.obs_idx)
+        W_aB = B @ K_aB
+        W_Ba = W_aB.transpose()
+
+        # Compute mean
+        K_BB_inv = InverseOperator(self.K_BB, method='cg', rtol=cg_rtol)
+        mean_post = W_aB @ K_BB_inv @ self.y
+
+        # Compute covariance
+        Sigma_prior = B @ self.K.compute(x1=pred_idx, x2=pred_idx) @ B.transpose()
+        Sigma_post = Sigma_prior - W_aB @ K_BB_inv @ W_Ba
+        return(mean_post, Sigma_post)
+    
+    def make_contrasts(self, contrast_matrix, cg_rtol=1e-4):
+        X_pred = contrast_matrix.index.values
+        contrast_names = contrast_matrix.columns.values
+        B = contrast_matrix.values.T
+
+        m, S = self.calc_posterior(X_pred=X_pred, B=B, cg_rtol=cg_rtol)
+        S = S @ np.eye(S.shape[1])
+        stderr = np.sqrt(np.diag(S))
+        posterior = norm(m, stderr)
+        p = posterior.cdf(0.)
+        p = np.max(np.vstack([p, 1-p]), axis=0)
+        dm = 2 * stderr
+        result = pd.DataFrame({'estimate' : m, 'std': stderr,
+                               'ci_95_lower': m - dm, 'ci_95_upper': m + dm,
+                               'p(|x|>0)' : p}, index=contrast_names)
+        return(result)
+
+    def predict(self, X_pred=None, calc_variance=False, cg_rtol=1e-4):
         """
         Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
         the provided or all genotypes
@@ -142,8 +180,6 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
                    If ``calc_variance=True``, then it has an additional
                    column with the posterior variances for each genotype
         """
-        msg = 'Make sure `lambdas` are specified for making predictions'
-        check_error(hasattr(self, 'lambdas'), msg=msg)
         
         t0 = time()
         ypred = self.calc_posterior_mean(cg_rtol=cg_rtol)
@@ -250,7 +286,8 @@ class VCregression(GaussianProcessRegressor):
     '''
     def __init__(self, lambdas=None, n_alleles=None, seq_length=None, alphabet_type='custom',
                  beta=0, cross_validation=False, nfolds=5, cv_loss_function='frobenius_norm',
-                 num_beta=20, min_log_beta=-2, max_log_beta=7,  cg_rtol=1e-16):
+                 num_beta=20, min_log_beta=-2, max_log_beta=7,  cg_rtol=1e-16, progress=True):
+        self.progress = progress
         self.beta = beta
         self.nfolds = nfolds
         self.num_reg = num_beta
@@ -273,7 +310,7 @@ class VCregression(GaussianProcessRegressor):
                                     lambdas=lambdas, k=k)
         self._K_BB = None
         self.lambdas = K.lambdas
-        super().__init__(base_kernel=K)
+        super().__init__(base_kernel=K, progress=self.progress)
     
     def set_data(self, X, y, y_var=None, cov=None, ns=None):
         super().set_data(X, y, y_var=y_var)

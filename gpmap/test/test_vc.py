@@ -2,6 +2,7 @@
 import sys
 import unittest
 import numpy as np
+import pandas as pd
 
 from os.path import join
 from subprocess import check_call
@@ -145,6 +146,62 @@ class VCTests(unittest.TestCase):
         # Try with different CV metric
         cvmodel = VCregression(cross_validation=True, cv_loss_function='logL')
         cvmodel.fit(X=obs.index.values, y=obs.y.values, y_var=obs.y_var.values)
+
+    def test_vc_calc_posterior(self):
+        np.random.seed(0)
+        lambdas = np.array([1, 200, 20, 2, 0.2])
+        a, l = 4, lambdas.shape[0]-1
+        vc = VCregression(seq_length=l, n_alleles=a, lambdas=lambdas, progress=False)
+        data = vc.simulate(sigma=0.1, p_missing=0.05)
+        test = data.loc[np.isnan(data['y']), :].iloc[:3, :]
+        X_pred = test.index.values
+        n = test.shape[0]
+        train = data.dropna()
+        
+        # Ensure that the posterior has the right form
+        vc.set_data(X=train.index.values, y=train['y'], y_var=train['y_var'])
+        m, S = vc.calc_posterior(X_pred=X_pred)
+        assert(m.shape == (n, ))
+        assert(S.shape == (n, n))
+
+        # Test that the diagonal correspond to the posterior variances calculated individually
+        S = S @ np.eye(S.shape[1])
+        y_var1 = np.diag(S)
+        y_var2 = vc.calc_posterior_variance(X_pred=X_pred)
+        assert(np.allclose(y_var1, y_var2))
+
+        # Test posterior of linear combination
+        B = np.array([[0, 1, -1],
+                      [1, -1, 0]])
+        m, S = vc.calc_posterior(X_pred=X_pred, B=B)
+        S = S @ np.eye(S.shape[1])
+        print(m, S)
+    
+    def test_vc_contrasts(self):
+        np.random.seed(0)
+        lambdas = np.array([1, 200, 20, 2, 0.2])
+        l = lambdas.shape[0]-1
+        vc = VCregression(seq_length=l, alphabet_type='dna',
+                          lambdas=lambdas, progress=False)
+        data = vc.simulate(sigma=0.1, p_missing=0.05)
+        test = data.loc[np.isnan(data['y']), :].iloc[:3, :]
+        train = data.dropna()
+        vc.set_data(X=train.index.values, y=train['y'], y_var=train['y_var'])
+        
+        # Make contrasts between random test points
+        contrast_matrix = pd.DataFrame({'c1': [0, 1, -1], 
+                                        'c2': [0.5, 0.5, 0]},
+                                        index=test.index.values)
+        results = vc.make_contrasts(contrast_matrix)
+        assert(results.shape == (2, 5))
+
+        # Make contrasts for mutational effect and epistatic coefficient
+        seqs = ['AGCT', 'AGCC', 'TGCT', 'TGCC']
+        contrast_matrix = pd.DataFrame({'T4C':     [0, 0, 1, -1], 
+                                        'T4C:A1T': [1, -1, -1, 1]},
+                                        index=seqs)
+        results = vc.make_contrasts(contrast_matrix)
+        assert(results.shape == (2, 5))
 
     def test_vc_predict(self):
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])

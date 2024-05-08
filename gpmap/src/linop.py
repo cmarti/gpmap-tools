@@ -12,7 +12,7 @@ except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
 from gpmap.src.utils import check_error
-from gpmap.src.matrix import reciprocal, quad
+from gpmap.src.matrix import reciprocal, quad, inv_dot
 
 
 class ExtendedLinearOperator(_CustomLinearOperator):
@@ -38,6 +38,25 @@ class ExtendedLinearOperator(_CustomLinearOperator):
         v = np.ones(self.shape[0])
         return(self.dot(v))
     
+    def _matmat(self, B):
+        x = []
+        for i in range(B.shape[1]):
+            x.append(self._matvec(B[:, i]))
+        return(np.array(x).T)
+
+class InverseOperator(ExtendedLinearOperator):
+    def __init__(self, linop, method='minres', rtol=1e-4, kwargs={}):
+        # TODO: implement preconditioner option
+        self.linop = linop
+        self.shape = linop.shape
+        self.dtype = linop.dtype
+        self.method = method
+        self.rtol= rtol
+        self.kwargs = kwargs
+
+    def _matvec(self, v):
+        return(inv_dot(self.linop, v, method=self.method, rtol=self.rtol, **self.kwargs))
+
 
 class DiagonalOperator(ExtendedLinearOperator):
     def __init__(self, diag):
@@ -49,6 +68,23 @@ class DiagonalOperator(ExtendedLinearOperator):
     
     def _matmat(self, B):
         return(np.expand_dims(self.diag, 1) * B)
+    
+    def transpose(self):
+        return(self)
+
+
+class IdentityOperator(DiagonalOperator):
+    def __init__(self, n):
+        self.shape = (n, n)
+
+    def _matvec(self, v):
+        return(v)
+    
+    def _matmat(self, B):
+        return(B)
+    
+    def _rmatmat(self, B):
+        return(B)
     
     def transpose(self):
         return(self)
@@ -101,6 +137,32 @@ class SubMatrixOperator(ExtendedLinearOperator):
         
         if self.row_idx is not None:
             u = u[self.row_idx]
+        return(u)
+    
+    def _matmat(self, v):
+        u = v.copy()
+
+        if self.col_idx is not None:
+            u = np.zeros((self.linop.shape[0], v.shape[1]))
+            u[self.col_idx, :] = v
+            
+        u = self.linop @ u
+        
+        if self.row_idx is not None:
+            u = u[self.row_idx, :]
+        return(u)
+    
+    def _rmatmat(self, v):
+        u = v.copy()
+
+        if self.row_idx is not None:
+            u = np.zeros((self.linop.shape[1], v.shape[1]))
+            u[self.row_idx, :] = v
+            
+        u = self.linop.transpose() @ u
+        
+        if self.col_idx is not None:
+            u = u[self.col_idx, :]
         return(u)
     
     def transpose(self):
@@ -430,6 +492,9 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
     
     def matrix_sqrt(self):
         return(ProjectionOperator(self.alpha, self.l, lambdas=np.sqrt(self.lambdas)))
+    
+    def transpose(self):
+        return(self)
 
 
 class ExtendedDeltaPOperator(ProjectionOperator):
@@ -703,7 +768,7 @@ class KernelOperator(SubMatrixOperator):
             return(self.n_obs * self.P.d + np.sum(self.y_var))
         else:
             return(self.n * self.P.d)
-
+    
 
 class Kernel(object):
     def compute(self, x1=None, x2=None, D=None):
