@@ -36,7 +36,7 @@ Landscape Inference
 -------------------
 
 .. autoclass:: gpmap.src.inference.VCregression
-    :members: fit, predict, lambdas_to_variance, project, simulate, calc_L_polynomial_coeffs
+    :members: fit, predict, make_contrasts, lambdas_to_variance, simulate
 
 .. autoclass:: gpmap.src.inference.SeqDEFT
     :members: fit, simulate_phi, simulate

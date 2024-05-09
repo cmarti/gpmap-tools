@@ -128,18 +128,41 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
 
         K_aB = self.K.compute(x1=pred_idx, x2=self.obs_idx)
         W_aB = B @ K_aB
-        W_Ba = W_aB.transpose()
 
         # Compute mean
         K_BB_inv = InverseOperator(self.K_BB, method='cg', rtol=cg_rtol)
         mean_post = W_aB @ K_BB_inv @ self.y
 
         # Compute covariance
-        Sigma_prior = B @ self.K.compute(x1=pred_idx, x2=pred_idx) @ B.transpose()
-        Sigma_post = Sigma_prior - W_aB @ K_BB_inv @ W_Ba
+        K_aa = self.K.compute(x1=pred_idx, x2=pred_idx)
+        Sigma_post = B @ K_aa @ B.transpose() - W_aB @ K_BB_inv @ W_aB.transpose()
         return(mean_post, Sigma_post)
     
     def make_contrasts(self, contrast_matrix, cg_rtol=1e-4):
+        """
+        Computes the posterior distribution of linear combinations of genotypes
+        under the specific Gaussian Process prior.
+
+        Parameters
+        ----------
+        contrast_matrix: pd.DataFrame of shape (n_genotypes, n_contrasts)
+            DataFrame containing the linear combinations of genotypes for
+            which to compute the summary of the posterior distribution
+
+        cg_rtol: float
+            Relative tolerance of Conjugate Gradient algorithm used
+            to compute the posterior
+
+        Returns
+        -------
+        contrasts: pd.DataFrame of shape (n_contrasts, 5)
+            DataFrame containing the summary of the posterior for each of
+            the provided contrasts. This includes the estimate, 
+            the posterior standard deviation, lower and upper bound
+            for the 95 % credible interval and the posterior 
+            probability for each quantity to be larger or smaller than 0.
+
+        """
         X_pred = contrast_matrix.index.values
         contrast_names = contrast_matrix.columns.values
         B = contrast_matrix.values.T
@@ -193,9 +216,9 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
             pred = pred.loc[X_pred, :]
         if calc_variance:
             pred['y_var'] = self.calc_posterior_variance(X_pred=X_pred, cg_rtol=cg_rtol)
-            pred['sd'] = np.sqrt(pred['y_var'])
-            pred['ci_95_lower'] = pred['y'] - 2 * pred['sd']
-            pred['ci_95_upper'] = pred['y'] + 2 * pred['sd']
+            pred['std'] = np.sqrt(pred['y_var'])
+            pred['ci_95_lower'] = pred['y'] - 2 * pred['std']
+            pred['ci_95_upper'] = pred['y'] + 2 * pred['std']
 
         self.pred_time = time() - t0
         return(pred)
