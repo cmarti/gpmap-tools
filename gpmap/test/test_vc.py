@@ -187,6 +187,12 @@ class VCTests(unittest.TestCase):
         test = data.loc[np.isnan(data['y']), :].iloc[:3, :]
         train = data.dropna()
         vc.set_data(X=train.index.values, y=train['y'], y_var=train['y_var'])
+
+        # Test a single contrast
+        contrast_matrix = pd.DataFrame({'c1': [0, 1, -1]},
+                                        index=test.index.values)
+        results = vc.make_contrasts(contrast_matrix)
+        assert(results.shape == (1, 5))
         
         # Make contrasts between random test points
         contrast_matrix = pd.DataFrame({'c1': [0, 1, -1], 

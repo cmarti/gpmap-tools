@@ -144,6 +144,10 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         contrast_names = contrast_matrix.columns.values
         B = contrast_matrix.values.T
 
+        if B.shape[0] == 1:
+            B = np.vstack([B, B])
+            contrast_names = np.append(contrast_names, [None])
+
         m, S = self.calc_posterior(X_pred=X_pred, B=B, cg_rtol=cg_rtol)
         S = S @ np.eye(S.shape[1])
         stderr = np.sqrt(np.diag(S))
@@ -154,6 +158,7 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         result = pd.DataFrame({'estimate' : m, 'std': stderr,
                                'ci_95_lower': m - dm, 'ci_95_upper': m + dm,
                                'p(|x|>0)' : p}, index=contrast_names)
+        result = result.loc[contrast_matrix.columns.values, :]
         return(result)
 
     def predict(self, X_pred=None, calc_variance=False, cg_rtol=1e-4):
@@ -188,6 +193,10 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
             pred = pred.loc[X_pred, :]
         if calc_variance:
             pred['y_var'] = self.calc_posterior_variance(X_pred=X_pred, cg_rtol=cg_rtol)
+            pred['sd'] = np.sqrt(pred['y_var'])
+            pred['ci_95_lower'] = pred['y'] - 2 * pred['sd']
+            pred['ci_95_upper'] = pred['y'] + 2 * pred['sd']
+
         self.pred_time = time() - t0
         return(pred)
     
