@@ -49,7 +49,7 @@ Please do not hesitate to contact us with any questions or suggestions for impro
     api 
 
 References
-""""""""""
+==========
 
 .. [#McCandlish2011] `McCandlish DM.
     Visualizing fitness landscapes (2011)
@@ -70,6 +70,6 @@ References
 
 
 Links
-==============
+=====
 
 - `McCandlish Lab <https://www.cshl.edu/research/faculty-staff/david-mccandlish/#research>`_

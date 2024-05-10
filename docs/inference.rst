@@ -17,8 +17,8 @@ Gaussian Process regression techniques.
     usage/3_VCregression.ipynb
     usage/4_SeqDEFT.ipynb
 
-Read more
-"""""""""
+
+**References**
 
 .. [#Zhou2022] `Zhou J, Wong MS, Chen WC, Krainer AR, Kinney JB, McCandlsih DM.
     Higher order epistasis and phenotypic prediction (2022) <https://www.pnas.org/doi/full/10.1073/pnas.2204233119>`_
