@@ -358,6 +358,15 @@ class VCregression(GaussianProcessRegressor):
         variance_components = (lambdas * self.K.m_k)[1:]
         variance_components = variance_components / variance_components.sum()
         return(variance_components)
+    
+    def get_variance_component_df(self, lambdas):
+        k = np.arange(self.seq_length + 1)
+        vc_perc = np.zeros(size=self.seq_length + 1)
+        vc_perc[1:] = self.lambdas_to_variance(lambdas)
+        df = pd.DataFrame({'k': k, 'lambdas': lambdas,
+                           'var_perc': vc_perc,
+                           'var_perc_cum': np.cumsum(vc_perc)})
+        return(df)
 
     def get_cv_iter(self, hyperparam_values):
         for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
@@ -468,6 +477,7 @@ class VCregression(GaussianProcessRegressor):
         
         self.fit_time = time() - t0
         self.set_lambdas(lambdas)
+        self.vc_df = self.get_variance_component_df(lambdas)
 
 
 class DeltaPEstimator(SeqGaussianProcessRegressor):
