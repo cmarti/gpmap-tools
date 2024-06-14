@@ -66,18 +66,11 @@ class VCKernelAligner(object):
             loss += beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
 
         if return_grad and self.beta == 0:
+            # TODO: update for regularized version and for sigma2 != 0
             grad = (2 * Av - 2 * self.b) * (lambdas)
             return(loss, grad)
 
         return(loss)
-    
-    def grad(self, log_lambdas):
-        msg = 'gradient calculation only implemented for beta=0'
-        check_error(self.beta == 0, msg=msg)
-        lambdas = np.exp(log_lambdas)
-        grad_Frob = (2 * self.M.dot(lambdas) - 2 * self.a) * (lambdas)
-        print('grad', grad_Frob)
-        return(grad_Frob)
     
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""

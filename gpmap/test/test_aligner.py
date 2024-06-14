@@ -19,7 +19,7 @@ class KernelAlignerTest(unittest.TestCase):
         aligner.set_data(cov, ns)
         loss = aligner.calc_loss(log_lambdas)
         assert(loss < 1e-12)
-
+        
         # With simulated data from a pure pairwise model
         np.random.seed(1)
         a, l, k = 4, 5, 2
@@ -35,6 +35,16 @@ class KernelAlignerTest(unittest.TestCase):
         aligner.set_data(cov, ns)
         loss = aligner.calc_loss(exp_log_lambdas)
         assert(loss < 1e-12)
+        
+        # With the true covariances
+        a, l, k = 4, 5, 2
+        log_lambdas_true = np.full(l + 1, -16)
+        log_lambdas_true[k] = 1
+        cov_true = aligner.predict(np.exp(log_lambdas_true))
+        aligner.set_data(cov_true, ns)
+        loss, grad = aligner.calc_loss(log_lambdas_true, return_grad=True)
+        assert(loss < 1e-12)
+        assert(np.allclose(grad, 0, rtol=1e-10))
 
     def test_vc_kernel_alignment(self):
         # Simulate data
@@ -51,6 +61,9 @@ class KernelAlignerTest(unittest.TestCase):
         aligner = VCKernelAligner(a, l)
         lambdas_star = aligner.fit(cov_true, ns)
         cov_pred = aligner.predict(lambdas_star)
+        loss, grad = aligner.calc_loss(np.log(lambdas_star), return_grad=True)
+        assert(loss < 1e-12)
+        assert(np.allclose(grad, 0, rtol=1e-10))
         assert(np.allclose(cov_true, cov_pred, rtol=0.01))
         assert(np.allclose(lambdas_true, lambdas_star, rtol=0.5))
         
