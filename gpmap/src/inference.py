@@ -358,7 +358,7 @@ class VCregression(GaussianProcessRegressor):
         super().set_data(X, y, y_var=y_var)
         self.cov = cov
         self.ns = ns
-        self.sigma2 = y_var.min()
+        self.sigma2 = 0. if y_var is None else np.nanmin(y_var)
 
     def calc_covariance_distance(self, X, y):
         return(calc_covariance_distance(y, self.n_alleles, self.seq_length, 
@@ -426,7 +426,7 @@ class VCregression(GaussianProcessRegressor):
         cov, ns, sigma2 = self.cov, self.ns, self.sigma2
         if cov is None or ns is None:
             cov, ns = self.calc_covariance_distance(self.X, self.y)
-            sigma2 = self.y_var.min()
+            sigma2 = np.nanmin(self.y_var)
 
         self.kernel_aligner.set_beta(beta)
         lambdas = self.kernel_aligner.fit(cov, ns, sigma2=sigma2)
