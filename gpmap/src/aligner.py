@@ -1,7 +1,7 @@
 import numpy as np
 
 from scipy.special import comb
-from scipy.optimize import minimize
+from scipy.optimize import minimize, lsq_linear
 
 from gpmap.src.utils import check_error, safe_exp
 from gpmap.src.matrix import quad, dot_log
@@ -34,12 +34,12 @@ class VCKernelAligner(object):
         self.calc_W_kd_matrix()
         self.calc_second_order_diff_matrix()
     
-    def set_data(self, covs, distances_n):
-        self.covs = covs
-        self.distances_n = distances_n
-        self.construct_a(covs, distances_n)
-        self.construct_M(distances_n)
-        self.M_inv = np.linalg.inv(self.M)
+    def set_data(self, covs, distances_n, sigma2=0):
+        D_n = np.diag(distances_n)
+        self.A = self.W_kd @ D_n @ self.W_kd.T
+        self.b = np.dot(covs, D_n @ self.W_kd.T)
+        self.c = np.dot(covs, D_n @ covs)
+        self.sigma2 = sigma2
     
     def set_beta(self, beta):
         check_error(beta >=0, msg='beta must be >= 0')
@@ -51,61 +51,33 @@ class VCKernelAligner(object):
         for i in range(Diff2.shape[0]):
             Diff2[i, i:i + 3] = [-1, 2, -1]
         self.second_order_diff_matrix = Diff2.T.dot(Diff2)
+        
+    def calc_loss(self, log_lambdas, beta=None, return_grad=False):
+        '''Loss function is proportional to the frobenius norm of the difference between
+           the empirical distance-covariance function and the expected under some lambdas'''
+        if beta is None:
+            beta = self.beta
+
+        lambdas = safe_exp(log_lambdas) + self.sigma2
+        Av = self.A @ lambdas
+        loss = self.c + np.dot(lambdas, Av) - 2 * lambdas.dot(self.b)
+
+        if beta > 0:
+            loss += beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
+
+        if return_grad and self.beta == 0:
+            grad = (2 * Av - 2 * self.b) * (lambdas)
+            return(loss, grad)
+
+        return(loss)
     
-    def frobenius_norm(self, log_lambdas):
-        """cost function for regularized least square method for inferring 
-        lambdas"""
-        lambdas = safe_exp(log_lambdas)
-        Frob1 = lambdas.dot(self.M).dot(lambdas)
-        Frob2 = 2 * lambdas.dot(self.a)
-        Frob = Frob1 - Frob2
-        if self.beta > 0:
-            Frob += self.beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
-        return(Frob)
-    
-    def frobenius_norm2(self, log_lambdas):
-        """cost function for regularized least square method for inferring 
-        lambdas"""
-        signlambdas = np.ones_like(log_lambdas)
-        logMlambdas, signMlambdas = dot_log(self.logM, self.signM, log_lambdas, signlambdas)
-        log_lambdas_T = np.expand_dims(log_lambdas, 0)
-        signlambdas_T = np.expand_dims(signlambdas, 0)
-        logFrob1, signFrob1 = dot_log(log_lambdas_T, signlambdas_T, logMlambdas, signMlambdas)
-        logFrob2, signFrob2 = dot_log(log_lambdas_T, signlambdas_T, self.loga, self.signa)
-        logFrob2 += np.log(2)
-        Frob = signFrob2 * np.exp(logFrob2) * (signFrob1 * signFrob2 * np.exp(logFrob1 - logFrob2) - 1)
-        Frob = Frob[0]
-        if self.beta > 0:
-            Frob += self.beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
-        return(Frob)
-    
-    def frobenius_norm_grad(self, log_lambdas):
+    def grad(self, log_lambdas):
         msg = 'gradient calculation only implemented for beta=0'
         check_error(self.beta == 0, msg=msg)
         lambdas = np.exp(log_lambdas)
-        grad_Frob = (2 * self.M.dot(lambdas) - 2 * self.a)
-        return(grad_Frob * lambdas)
-    
-    def construct_M(self, N_d):
-        size = self.seq_length + 1
-        M = np.zeros([size, size])
-        for i in range(size):
-            for j in range(size):
-                for d in range(size):
-                    M[i, j] += N_d[d] * self.W_kd[i, d] * self.W_kd[j, d]
-        self.M = M
-        self.logM = np.log(np.abs(M))
-        self.signM = np.sign(M)
-    
-    def construct_a(self, rho_d, N_d):
-        size = self.seq_length + 1
-        a = np.zeros(size)
-        for i in range(size):
-            for d in range(size):
-                a[i] += N_d[d] * self.W_kd[i, d] * rho_d[d]
-        self.a = a
-        self.loga = np.log(np.abs(a))
-        self.signa = np.sign(a)
+        grad_Frob = (2 * self.M.dot(lambdas) - 2 * self.a) * (lambdas)
+        print('grad', grad_Frob)
+        return(grad_Frob)
     
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
@@ -122,7 +94,7 @@ class VCKernelAligner(object):
             for d in range(self.seq_length + 1):
                 self.W_kd[k, d] = self.calc_w(k, d)
     
-    def fit(self, covs, ns):
+    def fit(self, covs, ns, sigma2=0):
         '''
         Fit Variance Component kernel by minizing the Frobenious Norm
         with the covariance at each possible distance
@@ -139,28 +111,21 @@ class VCKernelAligner(object):
         lambdas: array-like of shape (seq_length + 1)
             lambdas that best fit the empirical second moments
         '''
-        self.set_data(covs, ns)
-        lambdas0 = np.dot(self.M_inv, self.a).flatten()
-        lambdas0[lambdas0<0] = 1e-10
-        log_lambda0 = np.log(lambdas0)
-        # print('log_lambda0', log_lambda0)
-        if self.beta == 0:
-            res = minimize(fun=self.frobenius_norm,
-                           jac=self.frobenius_norm_grad,
-                           x0=log_lambda0, method='L-BFGS-B')
-        elif self.beta > 0:
-            res = minimize(fun=self.frobenius_norm,
-                           x0=log_lambda0, method='Powell',
-                           options={'xtol': 1e-8, 'ftol': 1e-8})
-        lambdas = np.exp(res.x)
+        self.set_data(covs, ns, sigma2=sigma2)
+        
+        res = lsq_linear(self.A, self.b, bounds=(sigma2, np.inf))
+        lambdas = res.x - sigma2
+
+        if self.beta > 0:
+            log_lambda0 = np.log(lambdas)
+            res = minimize(fun=self.calc_loss, x0=log_lambda0, method='Powell',
+                            options={'xtol': 1e-8, 'ftol': 1e-8})
+            lambdas = np.exp(res.x)
+            
         return(lambdas)
     
     def predict(self, lambdas):
         return(self.W_kd.T.dot(lambdas))
-    
-    def calc_mse(self, lambdas):
-        ss = (self.predict(lambdas) - self.covs) ** 2
-        return(np.sum(ss * (1 / np.sum(self.distances_n)) * self.distances_n))
     
 
 class VjKernelAligner(object):

@@ -10,66 +10,67 @@ from gpmap.src.linop import (RhoProjectionOperator, ProjectionOperator,
 
 
 class KernelAlignerTest(unittest.TestCase):
-    def test_frobenius_norm(self):
+    def test_frobenius_loss(self):
         # Additive covariances
         a, l = 2, 2
-        cov, ns = [1, 0, -1], [4, 8, 4]
-        log_lambdas = np.array([-10, 0, -10])
+        cov, ns = [0.5, 0, -0.5], [4, 8, 4]
+        log_lambdas = np.array([-16, 0, -16])
         aligner = VCKernelAligner(a, l)
         aligner.set_data(cov, ns)
-        F1 = aligner.frobenius_norm(log_lambdas)
-        F2 = aligner.frobenius_norm2(log_lambdas)
+        loss = aligner.calc_loss(log_lambdas)
+        assert(loss < 1e-12)
 
-        # With simulated data
+        # With simulated data from a pure pairwise model
         np.random.seed(1)
         a, l, k = 4, 5, 2
         P = ProjectionOperator(a, l, k=k)
-        log_lambdas = -6 * np.ones(l + 1)
+        log_lambdas = np.full(l + 1, -16.)
         log_lambdas[k] = 0
         y = P @ np.random.normal(size=P.shape[1])
         cov, ns = calc_covariance_distance(y, a, l)
+        exp_lambdas = calc_variance_components(y, a, l)
+        exp_log_lambdas = np.log(np.abs(exp_lambdas))
         
         aligner = VCKernelAligner(a, l)
         aligner.set_data(cov, ns)
-        F1 = aligner.frobenius_norm(log_lambdas)
-        F2 = aligner.frobenius_norm2(log_lambdas)
-        assert(np.allclose(F1, F2))
-
-        # With exponentially decaying correlations
-        np.random.seed(1)
-        a, l, rho = 4, 5, 0.5
-        P = RhoProjectionOperator(a, l, rho=rho)
-        y = P @ np.random.normal(size=P.shape[1])
-        cov, ns = calc_covariance_distance(y, a, l)
-        
-        aligner = VCKernelAligner(a, l)
-        aligner.set_data(cov, ns)
-        F1 = aligner.frobenius_norm(log_lambdas)
-        F2 = aligner.frobenius_norm2(log_lambdas)
-        assert(np.allclose(F1, F2))
+        loss = aligner.calc_loss(exp_log_lambdas)
+        assert(loss < 1e-12)
 
     def test_vc_kernel_alignment(self):
         # Simulate data
         np.random.seed(1)
+        sigma2 = 0.1
         a, l, rho = 4, 5, 0.5
         P = 5 * RhoProjectionOperator(a, l, rho=rho).matrix_sqrt()
-        y = P @ np.random.normal(size=P.shape[1])
-        cov, ns = calc_covariance_distance(y, a, l)
-        lambdas = calc_variance_components(y, a, l)
+        y_true = P @ np.random.normal(size=P.shape[1])
+        cov_true, ns = calc_covariance_distance(y_true, a, l)
+        lambdas_true = calc_variance_components(y_true, a, l)
+        y = np.random.normal(y_true, np.sqrt(sigma2))
 
         # Define kernel aligner and fit unregularized model
         aligner = VCKernelAligner(a, l)
-        lambdas_star = aligner.fit(cov, ns)
-        pred = aligner.predict(lambdas_star)
-        assert(np.allclose(cov, pred, rtol=0.01))
-        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
+        lambdas_star = aligner.fit(cov_true, ns)
+        cov_pred = aligner.predict(lambdas_star)
+        assert(np.allclose(cov_true, cov_pred, rtol=0.01))
+        assert(np.allclose(lambdas_true, lambdas_star, rtol=0.5))
         
         # Align with beta > 0
         aligner = VCKernelAligner(a, l, beta=0.01)
-        lambdas_star = aligner.fit(cov, ns)
-        pred = aligner.predict(lambdas_star)
-        assert(np.allclose(cov, pred, atol=1e-5))
-        assert(np.allclose(lambdas, lambdas_star, rtol=0.5))
+        lambdas_star = aligner.fit(cov_true, ns)
+        cov_pred = aligner.predict(lambdas_star)
+        assert(np.allclose(cov_true, cov_pred, rtol=0.01))
+        assert(np.allclose(lambdas_true, lambdas_star, rtol=0.5))
+
+        # Add known measurement error sigma^2
+        cov_obs, ns = calc_covariance_distance(y, a, l)
+        aligner = VCKernelAligner(a, l)
+        lambdas_star_1 = aligner.fit(cov_obs, ns)
+        lambdas_star_2 = aligner.fit(cov_obs, ns, sigma2=sigma2)
+
+        cov_obs_pred = aligner.predict(lambdas_star_2 + sigma2)
+        assert(not np.allclose(lambdas_star_1, lambdas_star_2, rtol=0.05))
+        assert(np.allclose(cov_obs, cov_obs_pred, rtol=0.05))
+        assert(np.allclose(lambdas_true, lambdas_star_2, rtol=0.5))
         
     def test_rho_kernel_alignment(self):
         # Simulate data

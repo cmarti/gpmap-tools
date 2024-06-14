@@ -253,6 +253,22 @@ def get_CV_splits(X, y, y_var=None, nfolds=10, max_pred=None):
         yield(j, train_data, test_data)
 
 
+def get_cv_iter(cv_splits, hyperparam_values, process_data=None):
+    for fold, train, test in cv_splits:
+        if process_data is not None:
+            train = process_data(train)
+            test = process_data(test)
+        for param in hyperparam_values:
+            yield(param, fold, train, test)
+            
+            
+def calc_cv_loss(cv_iter, train_function, evaluate_function, total_folds=None):
+        for beta, fold, train, test in tqdm(cv_iter, total=total_folds):
+            params = train_function(train, beta)
+            loss = evaluate_function(test, params)
+            yield({'beta': beta, 'fold': fold, 'loss': loss})
+
+
 def data_to_df(data):
     x, y = data[:2]
 
