@@ -11,7 +11,8 @@ from scipy.stats import norm
 from scipy.sparse.linalg import aslinearoperator
 
 from gpmap.src.settings import PHI_LB, PHI_UB
-from gpmap.src.utils import check_error, get_CV_splits, safe_exp
+from gpmap.src.utils import (check_error, get_CV_splits, safe_exp, get_cv_iter,
+                             calc_cv_loss)
 from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_seqs_from_alleles,  calc_msa_weights,
                            get_subsequences, calc_allele_frequencies,
@@ -32,12 +33,19 @@ class SeqGaussianProcessRegressor(object):
     def get_regularization_constants(self):
         return(10**(np.linspace(self.min_log_reg, self.max_log_reg, self.num_reg)))
     
-    def get_cv_iter(self, hyperparam_values):
-        for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
-                                                     y_var=self.y_var,
-                                                     nfolds=self.nfolds):
-            for param in hyperparam_values:
-                yield(param, fold, train, validation)
+    def fit_beta_cv(self):
+        beta_values = self.get_regularization_constants()
+        cv_splits = get_CV_splits(X=self.X, y=self.y, y_var=self.y_var, nfolds=self.nfolds)
+        cv_iter = get_cv_iter(cv_splits, beta_values, process_data=self.process_data)
+        cv_loss = calc_cv_loss(cv_iter, self.cv_fit, self.cv_evaluate,
+                               total_folds=beta_values.shape[0] * self.nfolds)
+        self.cv_loss_df = pd.DataFrame(cv_loss)
+        
+        with np.errstate(divide='ignore'):
+            self.cv_loss_df['log_beta'] = np.log10(self.cv_loss_df['beta'])
+            
+        loss = self.cv_loss_df.groupby('beta')['loss'].mean()
+        self.beta = loss.index[np.argmin(loss)]
     
     def define_space(self, seq_length=None, n_alleles=None, genotypes=None,
                      alphabet_type='custom'):
@@ -328,11 +336,13 @@ class VCregression(GaussianProcessRegressor):
         self.min_log_reg = min_log_beta
         self.max_log_reg = max_log_beta
         self.run_cv = cross_validation
-        self.cv_loss_function = cv_loss_function
+        self.set_cv_loss_function(cv_loss_function)
 
-        if lambdas is not None:
+        if seq_length is not None and (n_alleles is not None or alphabet_type != 'custom'):
             self.define_space(n_alleles=n_alleles, seq_length=seq_length,
                               alphabet_type=alphabet_type)
+
+        if lambdas is not None:
             self.set_lambdas(lambdas)
         
         self.cg_rtol = cg_rtol
@@ -348,10 +358,10 @@ class VCregression(GaussianProcessRegressor):
         super().set_data(X, y, y_var=y_var)
         self.cov = cov
         self.ns = ns
+        self.sigma2 = y_var.min()
 
     def calc_covariance_distance(self, X, y):
-        return(calc_covariance_distance(y, self.n_alleles,
-                                        self.seq_length, 
+        return(calc_covariance_distance(y, self.n_alleles, self.seq_length, 
                                         self.get_obs_idx(X)))
     
     def lambdas_to_variance(self, lambdas):
@@ -360,78 +370,66 @@ class VCregression(GaussianProcessRegressor):
         return(variance_components)
     
     def get_variance_component_df(self, lambdas):
-        k = np.arange(self.seq_length + 1)
-        vc_perc = np.zeros(size=self.seq_length + 1)
+        s = self.seq_length + 1
+        k = np.arange(s)
+        vc_perc = np.zeros(s)
         vc_perc[1:] = self.lambdas_to_variance(lambdas)
         df = pd.DataFrame({'k': k, 'lambdas': lambdas,
                            'var_perc': vc_perc,
                            'var_perc_cum': np.cumsum(vc_perc)})
         return(df)
 
-    def get_cv_iter(self, hyperparam_values):
-        for fold, train, validation in get_CV_splits(X=self.X, y=self.y,
-                                                     y_var=self.y_var,
-                                                     nfolds=self.nfolds):
-            X_train, y_train, y_var_train = train 
-            train_cov, train_ns = self.calc_covariance_distance(X_train, y_train)
-            train = X_train, y_train, y_var_train, train_cov, train_ns
-
-            X_test, y_test, y_var_test = validation
-            test_cov, test_ns = self.calc_covariance_distance(X_test, y_test)
-            validation = X_test, y_test, y_var_test, test_cov, test_ns
-
-            for param in hyperparam_values:
-                yield(param, fold, train, validation)
-
-    def calc_cv_loss(self, cv_data):
-        for beta, fold, train, test in tqdm(cv_data, total=self.total_folds):
-            X_train, y_train, y_var_train, train_cov, train_ns = train 
-            X_test, y_test, y_var_test, test_cov, test_ns = test
-
-            # Find best lambdas
-            self.set_data(X=X_train, y=y_train, y_var=y_var_train,
-                          cov=train_cov, ns=train_ns)
-            lambdas = self._fit(beta)
-
-            # Calculate loss in test data
-            if self.cv_loss_function == 'frobenius_norm':
-                self.kernel_aligner.set_data(test_cov, test_ns)
-                loss = self.kernel_aligner.calc_mse(lambdas)
-
-            else:
-                self.set_lambdas(lambdas)
-                ypred = self.predict(X_test)['y'].values
-
-                if self.cv_loss_function == 'logL':
-                    loss = -norm.logpdf(y_test, loc=ypred, scale=np.sqrt(y_var_test)).sum()
-                elif self.cv_loss_function == 'r2':
-                    loss = -pearsonr(ypred, y_test)[0] ** 2
-                else:
-                    msg = 'Allowed loss functions are [frobenius_norm, r2, logL]'
-                    raise ValueError(msg)
-            
-            yield({'beta': beta, 'fold': fold, 'loss': loss})
-
-    def fit_beta_cv(self):
-        beta_values = self.get_regularization_constants()
-        cv_data = self.get_cv_iter(beta_values)
-        cv_loss = self.calc_cv_loss(cv_data)
-         
-        self.cv_loss_df = pd.DataFrame(cv_loss)
-        with np.errstate(divide='ignore'):
-            self.cv_loss_df['log_beta'] = np.log10(self.cv_loss_df['beta'])
-        loss = self.cv_loss_df.groupby('beta')['loss'].mean()
-        self.beta = loss.index[np.argmin(loss)]
+    def process_data(self, data):
+        X, y, y_var = data
+        cov, ns = self.calc_covariance_distance(X, y)
+        return(X, y, y_var, cov, ns)
     
+    def set_cv_loss_function(self,cv_loss_function):
+        allowed_functions = ['frobenius_norm', 'logL', 'r2']
+        if cv_loss_function not in allowed_functions:
+            msg = 'Loss function {} not allowed. Choose from {}'
+            raise ValueError(msg.format(cv_loss_function, allowed_functions))
+        self.cv_loss_function = cv_loss_function
+            
+    def cv_fit(self, data, beta):
+        X, y, y_var, cov, ns = data
+        self.set_data(X=X, y=y, y_var=y_var, cov=cov, ns=ns)
+        lambdas = self._fit(beta)
+        return(lambdas)
+    
+    def cv_evaluate(self, data, lambdas):
+        X, y, y_var, cov, ns = data
+        
+        if self.cv_loss_function == 'frobenius_norm':
+            # TODO: unclear how to properly deal with the variance here
+            self.kernel_aligner.set_data(cov, ns, sigma2=y_var.min())
+            loss = self.kernel_aligner.calc_loss(lambdas, beta=0, return_grad=False)
+
+        else:
+            self.set_lambdas(lambdas)
+            ypred = self.predict(X)['y'].values
+
+            if self.cv_loss_function == 'logL':
+                loss = -norm.logpdf(y, loc=ypred, scale=np.sqrt(y_var)).sum()
+            elif self.cv_loss_function == 'r2':
+                loss = -pearsonr(ypred, y)[0] ** 2
+            else:
+                msg = 'Allowed loss functions are [frobenius_norm, r2, logL]'
+                raise ValueError(msg)
+            
+        return(loss)
+
     def _fit(self, beta=None):
         if beta is None:
             beta = self.beta
             
-        cov, ns = self.cov, self.ns
+        cov, ns, sigma2 = self.cov, self.ns, self.sigma2
         if cov is None or ns is None:
             cov, ns = self.calc_covariance_distance(self.X, self.y)
+            sigma2 = self.y_var.min()
+
         self.kernel_aligner.set_beta(beta)
-        lambdas = self.kernel_aligner.fit(cov, ns)
+        lambdas = self.kernel_aligner.fit(cov, ns, sigma2=sigma2)
         return(lambdas)
     
     def fit(self, X, y, y_var=None):
