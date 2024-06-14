@@ -106,7 +106,7 @@ class VCKernelAligner(object):
         '''
         self.set_data(covs, ns, sigma2=sigma2)
         
-        res = lsq_linear(self.A, self.b, bounds=(sigma2, np.inf))
+        res = lsq_linear(self.A, self.b, bounds=(sigma2, np.inf), method='bvls')
         lambdas = res.x - sigma2
 
         if self.beta > 0:
