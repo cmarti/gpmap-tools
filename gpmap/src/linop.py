@@ -117,6 +117,7 @@ class MatMulOperator(ExtendedLinearOperator):
 class SubMatrixOperator(ExtendedLinearOperator):
     def __init__(self, linop, row_idx=None, col_idx=None):
         self.linop = linop
+        self.dtype = linop.dtype
         shape = [i for i in linop.shape]
         self.row_idx = row_idx
         self.col_idx = col_idx
@@ -288,6 +289,7 @@ class SeqOperator(ExtendedLinearOperator):
         self.lp1 = seq_length + 1
         self.n = self.alpha ** self.l
         self.shape = (self.n, self.n)
+        self._init_dtype()
         self.shape_contracted = tuple([self.alpha]*self.l)
         self.positions = np.arange(self.l)
     
@@ -328,13 +330,19 @@ class DeltaPOperator(ConstantDiagSeqOperator):
     def __init__(self, n_alleles, seq_length, P):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.L = LaplacianOperator(n_alleles=n_alleles, seq_length=seq_length)
+        self.dtype = self.L.dtype
         self.m_k = self.L.lambdas_multiplicity
         self.set_P(P)
         self.calc_kernel_dimension()
         self.calc_n_p_faces()
+        self.calc_n_p_faces_genotype()
 
     def calc_kernel_dimension(self):
         self.kernel_dimension = np.sum(self.m_k[:self.P])
+        
+    def calc_n_p_faces_genotype(self):
+        n_mut = self.l * (self.alpha - 1)
+        self.n_p_faces_genotype = float(comb(n_mut, self.P))
     
     def calc_n_p_faces(self):
         n_p_sites = comb(self.l, self.P)
