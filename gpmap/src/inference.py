@@ -22,7 +22,7 @@ from gpmap.src.linop import (DeltaPOperator, calc_covariance_distance,
                              KernelOperator, ProjectionOperator,
                              VarianceComponentKernel,
                              DiagonalOperator, IdentityOperator, InverseOperator)
-from gpmap.src.matrix import inv_dot, inv_quad
+from gpmap.src.matrix import inv_dot, inv_quad, quad
 from gpmap.src.aligner import VCKernelAligner
 
 
@@ -91,11 +91,20 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         self.define_space(genotypes=X)
         self.X = X
         self.y = y
+        
+        if np.any(np.isnan(y)):
+            msg = 'y vector contains nans'
+            raise ValueError(msg)
+        
         self.n_obs = y.shape[0]
         self.obs_idx = self.get_obs_idx(X)
 
         if y_var is None:
             y_var = np.zeros(y.shape[0])    
+            
+        if np.any(np.isnan(y_var)):
+            msg = 'y_var vector contains nans'
+            raise ValueError(msg)
                 
         self.y_var = y_var
         self.D_var = DiagonalOperator(y_var)
@@ -476,6 +485,50 @@ class VCregression(GaussianProcessRegressor):
         self.fit_time = time() - t0
         self.set_lambdas(lambdas)
         self.vc_df = self.get_variance_component_df(lambdas)
+
+
+class MinimumEpistasisInterpolator(SeqGaussianProcessRegressor):
+    def __init__(self, P=2, n_alleles=None, seq_length=None, alphabet_type='custom',
+                 cg_rtol=1e-16):
+        self.cg_rtol = cg_rtol
+        self.P = P
+        if seq_length is not None and (n_alleles is not None or alphabet_type != 'custom'):
+            self.define_space(n_alleles=n_alleles, seq_length=seq_length,
+                              alphabet_type=alphabet_type)
+            self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
+
+    def set_data(self, X, y):
+        if np.any(np.isnan(y)):
+            msg = 'y vector contains nans'
+            raise ValueError(msg)
+        
+        self.X = X
+        self.y = y
+        
+        self.define_space(genotypes=X)
+        self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
+        self.s = self.DP.n_p_faces
+        self.p = self.DP.n_p_faces_genotype
+        
+        self.n_obs = y.shape[0]
+        self.obs_idx = self.get_obs_idx(X)
+        z = np.full(self.n_genotypes, True)
+        z[self.obs_idx] = False
+        self.pred_idx = np.where(z)[0]
+
+    def predict(self, smooth=False):
+        y_pred = np.zeros(self.n_genotypes)
+        y_pred[self.obs_idx] = self.y
+        
+        C_IB = 1 / self.s * self.DP.submatrix(row_idx=self.pred_idx, col_idx=self.obs_idx)
+        C_II = 1 / self.s * self.DP.submatrix(row_idx=self.pred_idx, col_idx=self.pred_idx)
+        y_pred[self.pred_idx] = -inv_dot(C_II, C_IB @ self.y, method='cg', rtol=self.cg_rtol)
+        
+        if smooth:
+            y_pred -= 1 / self.p * self.DP @ y_pred
+        
+        self.cost = quad(self.DP, y_pred) / self.s
+        return(y_pred)
 
 
 class DeltaPEstimator(SeqGaussianProcessRegressor):
