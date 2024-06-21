@@ -20,7 +20,7 @@ from gpmap.src.plot.mpl import plot_SeqDEFT_summary, savefig, plot_density_vs_fr
 
 
 class SeqDEFTTests(unittest.TestCase):
-    def test_seqdeft_init(self):
+    def test_init(self):
         seqdeft = SeqDEFT(P=2)
         X = np.array(['AAA', 'ACA', 'BAA', 'BCA',
                       'AAD', 'ACD', 'BAD', 'BCD'])
@@ -29,27 +29,54 @@ class SeqDEFTTests(unittest.TestCase):
         assert(seqdeft.seq_length == 3)
         assert(seqdeft.n_alleles == 2)
     
-    def test_neg_log_likelihood(self):
+    def test_log_likelihood(self):
+        seqdeft = SeqDEFT(P=2, seq_length=2, n_alleles=2)
+        X = np.array(['00', '01', '10', '11'])
+        phi = np.zeros(4)
+        exp_ll = -4 * np.log(4)
+        seqdeft.set_data(X=X)
+        ll = seqdeft.calc_logL(phi)
+        ll2 = seqdeft.calc_logL(phi + 1)        
+        assert(ll == exp_ll)
+        assert(ll2 == exp_ll)
+
+        # Compute likelihood with inf phi
+        X = np.array(['00', '01', '10'])
+        seqdeft.set_data(X=X)
+        phi[3] = np.inf
+        ll = seqdeft.calc_logL(phi)
+        exp_ll = -3 * np.log(3)
+        assert(np.isfinite(ll))
+        assert(np.allclose(ll, exp_ll))
+        
+        phi[1] = np.inf
+        ll = seqdeft.calc_logL(phi)
+        assert(np.isinf(ll))
+    
+    def test_loss(self):
+        # With specific a
         np.random.seed(0)
-        seqdeft = SeqDEFT(P=2)
-        seqdeft.init(seq_length=2, n_alleles=2)
-        phi = seqdeft.simulate_phi(a=10)
+        seqdeft = SeqDEFT(a=10, P=2, seq_length=2, n_alleles=2)
+        phi = seqdeft.simulate_phi(seqdeft.a)
         X = seqdeft.simulate(N=5, phi=phi)
         seqdeft.set_data(X=X)
         
-        nll = seqdeft.calc_neg_log_likelihood(phi)
-        assert(np.allclose(nll, 20.419260247508454))
+        loss, grad = seqdeft.calc_loss(phi, return_grad=True)
+        hess = seqdeft.calc_loss_finite_hessian(phi) @ np.eye(4)
+        assert(np.allclose(loss, 20.043036737841))
+        assert(np.allclose(grad, [-3.79341913, -2.24173531, -3.24173531, -5.79341913]))
+        assert(np.allclose(hess, [[ 17.08504538, -10.,         -10.,          10.        ],
+                                  [-10.,          14.91637697,  10.,         -10.        ],
+                                  [-10.,          10.,          14.91637697, -10.        ],
+                                  [ 10.,         -10.,         -10.,          17.08504538]]))
         
-        phi[2] = np.inf
-        nll = seqdeft.calc_neg_log_likelihood(phi)
-        assert(np.isfinite(nll))
-        assert(np.allclose(nll, 14.8723466362513))
+        # With a=inf
+        b = np.array([2, 1, 1.])
+        loss, grad = seqdeft.calc_loss_inf(b, return_grad=True)
+        assert(np.allclose(loss, 12.355470827897486))
+        assert(np.allclose(grad, [-2.17773541,  0.66166179,  1.66166179]))
         
-        phi[1] = np.inf
-        nll = seqdeft.calc_neg_log_likelihood(phi)
-        assert(np.isinf(nll))
-        
-    def test_seq_deft_simulate(self):
+    def test_simulate(self):
         seqdeft = SeqDEFT(P=2)
         seqdeft.init(seq_length=5, alphabet_type='dna')
         
@@ -76,34 +103,90 @@ class SeqDEFTTests(unittest.TestCase):
         r = pearsonr(-merged['phi'], merged['logy'])[0]
         assert(r > 0.6)
     
-    def test_seq_deft_invalid_a(self):
+    def test_invalid_a(self):
         try:
             SeqDEFT(P=2, a=-500)
             self.fail()
         except ValueError:
             pass
     
-    def test_seq_deft_inference(self):
+    def test_inference(self):
+        np.random.seed(0)
         a = 500
-        seqdeft = SeqDEFT(P=2, a=a)
-        seqdeft.init(seq_length=5, alphabet_type='dna')
+        l = 5
+        seqdeft = SeqDEFT(P=2, a=a, seq_length=l, alphabet_type='dna')
         phi = seqdeft.simulate_phi(a=a)
         X = seqdeft.simulate(N=1000, phi=phi)
 
+        # Infer with a=inf first
+        seqdeft = SeqDEFT(P=2, a=np.inf, seq_length=l, alphabet_type='dna')
+        probs = seqdeft.fit(X)
+        assert(np.allclose(probs['Q_star'].sum(), 1))
+
+        # Ensure it can't learn a function with only k>P interactions
+        r1 = pearsonr(-phi, np.log(probs['Q_star']))[0]
+        assert(r1 < 0.05)
+
+        # Verify uniform distribution
+        assert(np.allclose(probs['Q_star'], 1. / probs.shape[0], atol=1e-3))
+
         # Ensure it is a probability distribution        
-        seq_densities = seqdeft.fit(X=X)
-        assert(np.allclose(seq_densities['Q_star'].sum(), 1))
+        seqdeft = SeqDEFT(P=2, a=a, seq_length=l, alphabet_type='dna')
+        probs = seqdeft.fit(X=X)
+        assert(np.allclose(probs['Q_star'].sum(), 1))
+
+        # Ensure convergence
+        _, grad = seqdeft.calc_loss(probs['phi'])
+        assert(np.allclose(grad, 0, atol=2e-2))
         
         # Ensure it is similar the true probabilities
-        r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
-        assert(r > 0.6)
+        r2 = pearsonr(-phi, np.log(probs['Q_star']))[0]
+        assert(r2 > 0.6)
+
+        # Test inference of maximum entropy model
+        seqdeft = SeqDEFT(P=2, a=np.inf, seq_length=l, alphabet_type='dna')
+        b = 2 * np.random.normal(size=seqdeft.kernel_basis.shape[1])
+        phi = seqdeft._b_to_phi(b)
+        X = seqdeft.simulate(N=1000, phi=phi)
+        probs = seqdeft.fit(X=X)
+        r3 = pearsonr(-phi, np.log(probs['Q_star']))[0]
+        assert(r3 > 0.9)
+
+        # Ensure convergence
+        b = seqdeft._phi_to_b(probs['phi'])
+        _, grad = seqdeft.calc_loss(b)
+        assert(np.allclose(grad, 0, atol=1e-3))
     
-    def test_seq_deft_inference_baseline(self):
+    def test_inference_baseline(self):
+        np.random.seed(3)
+        seqdeft = SeqDEFT(P=2, a=500, seq_length=5, alphabet_type='dna')
+        baseline_phi = seqdeft.simulate_phi(a=1000)
+        target_phi = seqdeft.simulate_phi(a=500)
+        obs_phi = baseline_phi + target_phi
+        X = seqdeft.simulate(N=1000, phi=obs_phi)
+        probs1 = seqdeft.fit(X, baseline_phi=baseline_phi)
+        probs2 = seqdeft.fit(X)
+
+        # Ensure adjusting improves prediction of the target phi
+        r1 = pearsonr(probs1['phi'], target_phi)[0]
+        r2 = pearsonr(probs2['phi'], target_phi)[0]
+        assert(r1 > r2)
+        
+        # Ensure poor prediction of the baseline phi
+        r3 = pearsonr(probs1['phi'], baseline_phi)[0]
+        assert(np.abs(r3) < 0.2)
+
+        # Ensure better prediction of the observed phi
+        r4 = pearsonr(probs2['phi'], obs_phi)[0]
+        r5 = pearsonr(probs1['phi'] + baseline_phi, obs_phi)[0]
+        assert(r5 > r4)
+    
+    def test_inference_outside_interactions(self):
         np.random.seed(3)
         l, a = 7, 4
         seqdeft_a = 50
         out = 3
-        
+
         # Simulate a pairwise function on l=5
         x = np.random.normal(size=a ** l)
         lambdas = np.zeros(l+1)
@@ -171,8 +254,8 @@ class SeqDEFTTests(unittest.TestCase):
         plot_density_vs_frequency(seq_densities, axes)
         axes.grid(alpha=0.2)
     
-    def test_seq_deft_inference_cv(self):
-        seqdeft = SeqDEFT(P=2)
+    def test_inference_cv(self):
+        seqdeft = SeqDEFT(P=2, opt_method='trust-krylov')
         seqdeft.init(seq_length=5, alphabet_type='dna')
         phi = seqdeft.simulate_phi(a=500)
         X = seqdeft.simulate(N=1000, phi=phi)
@@ -188,7 +271,7 @@ class SeqDEFTTests(unittest.TestCase):
         r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
         assert(r > 0.6)
     
-    def test_seq_deft_inference_weigths(self):
+    def test_inference_weigths(self):
         seqdeft = SeqDEFT(P=2)
         seqdeft.init(seq_length=5, alphabet_type='dna')
         phi = seqdeft.simulate_phi(a=500)
@@ -204,7 +287,7 @@ class SeqDEFTTests(unittest.TestCase):
         r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
         assert(r > 0.4)
     
-    def test_seq_deft_inference_phylo_correction(self):
+    def test_inference_phylo_correction(self):
         seqdeft = SeqDEFT(P=2)
         seqdeft.init(seq_length=5, alphabet_type='dna')
         phi = seqdeft.simulate_phi(a=500)
@@ -222,7 +305,7 @@ class SeqDEFTTests(unittest.TestCase):
         r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
         assert(r > 0.6)
         
-    def test_seq_deft_inference_adjusted_logq(self):
+    def test_inference_adjusted_logq(self):
         seqdeft = SeqDEFT(P=2, a=500)
         seqdeft.init(seq_length=4, alphabet_type='dna')
         phi = seqdeft.simulate_phi(a=500)
@@ -245,7 +328,7 @@ class SeqDEFTTests(unittest.TestCase):
         r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
         assert(r > 0.6)
     
-    def test_seqdeft_missing_alleles(self):
+    def test_missing_alleles(self):
         seqdeft = SeqDEFT(P=2)
         seqdeft.init(seq_length=5, alphabet_type='dna')
         phi = seqdeft.simulate_phi(a=500)
@@ -259,7 +342,7 @@ class SeqDEFTTests(unittest.TestCase):
         assert(missing['frequency'].sum() == 0)
         assert(missing['Q_star'].sum() < 1e-8)
     
-    def test_seqdeft_very_few_sequences(self):
+    def test_very_few_sequences(self):
         seqdeft = SeqDEFT(P=2)
         seqdeft.init(seq_length=5, alphabet_type='dna')
         phi = seqdeft.simulate_phi(a=500)
@@ -268,7 +351,7 @@ class SeqDEFTTests(unittest.TestCase):
         seq_densities = seqdeft.fit(X=X)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
-    def test_seqdeft_bin(self):
+    def test_bin(self):
         bin_fpath = join(BIN_DIR, 'fit_seqdeft.py')
         
         seqdeft = SeqDEFT(P=2)
@@ -286,7 +369,7 @@ class SeqDEFTTests(unittest.TestCase):
             check_call(cmd + ['--get_a_values'])
             check_call(cmd)
     
-    def test_seq_deft_cv_plot(self):
+    def test_cv_plot(self):
         seqdeft = SeqDEFT(P=2)
         seqdeft.init(seq_length=5, alphabet_type='dna')
         X = seqdeft.simulate(N=1000, a=500)

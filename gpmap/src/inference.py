@@ -4,6 +4,7 @@ import pandas as pd
 
 from time import time
 from tqdm import tqdm
+from functools import partial
 from scipy.optimize import minimize
 from scipy.special import logsumexp
 from scipy.stats.stats import pearsonr
@@ -18,8 +19,7 @@ from gpmap.src.seq import (guess_space_configuration, get_alphabet,
                            get_subsequences, calc_allele_frequencies,
                            calc_expected_logp, calc_genetic_code_aa_freqs)
 from gpmap.src.linop import (DeltaPOperator, calc_covariance_distance,
-                             ExtendedLinearOperator, DeltaKernelBasisOperator,
-                             KernelOperator, ProjectionOperator,
+                             DeltaKernelBasisOperator, ProjectionOperator,
                              VarianceComponentKernel,
                              DiagonalOperator, IdentityOperator, InverseOperator)
 from gpmap.src.matrix import inv_dot, inv_quad, quad
@@ -531,16 +531,47 @@ class MinimumEpistasisInterpolator(SeqGaussianProcessRegressor):
         return(y_pred)
 
 
-class DeltaPEstimator(SeqGaussianProcessRegressor):
+class SeqDEFT(SeqGaussianProcessRegressor):
+    '''
+    Sequence Density Estimation using Field Theory model that allows inference
+    of a complete sequence probability distribution under a Gaussian Process prior
+    parameterized by variance of local epistatic coefficients of order P 
+    
+    It requires the use of the same number of alleles per sites
+    
+    Parameters
+    ----------
+    P : int
+        Order of the local interaction coefficients that we are penalized 
+        under the prior i.e. `P=2` penalizes local pairwise interaction
+        across all posible faces of the Hamming graph while `P=3` penalizes
+        local 3-way interactions across all possible cubes.
+    
+    a : float (None)
+        Parameter related to the inverse of the variance of the P-order
+        epistatic coefficients that are being penalized. Larger values
+        induce stronger penalization and approximation to the 
+        Maximum-Entropy model of order P-1. If `a=None` the best a is found
+        through cross-validation
+    
+    num_reg : int (20)
+        Number of a values to evaluate through cross-validation
+        
+    nfolds: int (5)
+        Number of folds to use in the cross-validation procedure
+    
+    '''
     def __init__(self, P, n_alleles=None, seq_length=None, alphabet_type='custom',
                  a=None, num_reg=20, nfolds=5,
                  a_resolution=0.1, max_a_max=1e12,
                  fac_max=0.1, fac_min=1e-6,
                  opt_method='L-BFGS-B', optimization_opts={},
+                 maxiter=1000,
                  scale_by=1, gtol=1e-3, ftol=1e-8):
         super().__init__()
         self.P = P
         self.a = a
+        self._a = a
         self.a_is_fixed = a is not None
         self.nfolds = nfolds
         
@@ -567,6 +598,7 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
         self.opt_method = opt_method
         optimization_opts['gtol'] = gtol
         optimization_opts['ftol'] = ftol
+        optimization_opts['maxiter'] = maxiter
         self.optimization_opts = optimization_opts
 
         if seq_length is not None:
@@ -584,52 +616,18 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
     def get_a_values(self):
         return(self.get_regularization_constants())
     
-    def calc_loss_and_grad_finite(self, phi):
-        DP_dot_phi = self.DP.dot(phi)
-        loss = self._a / (2 * self.DP.n_p_faces) * np.sum(phi * DP_dot_phi)
-        loss += self.calc_neg_log_likelihood(phi)
-        if hasattr(self, 'calc_regularization'):
-            loss += self.calc_regularization(phi)
-        
-        grad = self._a / self.DP.n_p_faces * DP_dot_phi
-        grad += self.calc_neg_log_likelihood_grad(phi)
-        if hasattr(self, 'calc_regularization'):
-            grad += self.calc_regularization_grad(phi)
-            
-        return(loss, grad)
+    def cv_fit(self, data, a, phi0=None):
+        X, y, y_var = data
+        self._set_data(X=X, y=y, y_var=y_var)
+        lambdas = self._fit(a, phi0=phi0)
+        return(lambdas)
     
-    def calc_loss_and_grad_inf(self, b):
-        phi = self._b_to_phi(b)
-        
-        # Calculate loss
-        loss = self.calc_neg_log_likelihood(phi)
-        if hasattr(self, 'calc_regularization'):
-            loss += self.calc_regularization(phi)
-        
-        # Calculate gradient
-        grad = self.calc_neg_log_likelihood_grad(phi)
-        if hasattr(self, 'calc_regularization'):
-            grad += self.calc_regularization_grad(phi)
-        grad = self._phi_to_b(grad)
-        return(loss, grad)
+    def cv_evaluate(self, data, phi):
+        X, y, y_var = data
+        self._set_data(X=X, y=y, y_var=y_var)
+        logL = self.calc_logL(phi)
+        return(logL)
     
-    def calc_loss_and_grad(self, x):
-        if np.isinf(self._a):
-            return(self.calc_loss_and_grad_inf(x))
-        else:
-            return(self.calc_loss_and_grad_finite(x))
-        
-    def calc_cv_logL(self, cv_data, phi_initial=None):
-        for a, fold, train, test in tqdm(cv_data, total=self.total_folds):
-            (X_train, y_train, y_var_train), (X_test, y_test, y_var_test) = train, test
-
-            self._set_data(X=X_train, y=y_train, y_var=y_var_train)
-            phi = self._fit(a, phi_initial=phi_initial)
-            
-            self._set_data(X=X_test, y=y_test, y_var=y_var_test)
-            test_logL = -self.calc_neg_log_likelihood(phi)
-            yield({'a': a, 'fold': fold, 'logL': test_logL})
-
     def get_cv_logL_df(self, cv_logL):
         with np.errstate(divide = 'ignore'):
             cv_log_L = pd.DataFrame(cv_logL)
@@ -646,9 +644,12 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
         if phi_inf is None:
             phi_inf = self._fit(np.inf)
         a_values = self.get_a_values(phi_inf=phi_inf)
-        cv_data = self.get_cv_iter(a_values)
-        cv_logL = self.calc_cv_logL(cv_data, phi_initial=phi_inf) 
-        
+
+        cv_splits = get_CV_splits(X=self.X, y=self.y, y_var=self.y_var, nfolds=self.nfolds)
+        cv_iter = get_cv_iter(cv_splits, a_values)
+        cv_logL = calc_cv_loss(cv_iter, partial(self.cv_fit, phi0=phi_inf), self.cv_evaluate,
+                               total_folds=a_values.shape[0] * self.nfolds, param_label='a',
+                               loss_label='logL')
         self.logL_df = self.get_cv_logL_df(cv_logL)    
         self.a = self.get_ml_a(self.logL_df)
     
@@ -681,20 +682,28 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
             out = self._b_to_phi(out)
         return(out)
     
-    def _fit(self, a, phi_initial=None):
+    def _fit(self, a, phi0=None):
         check_error(a >= 0, msg='"a" must be larger or equal than 0')
         self._a = a
         
         if a == 0 and hasattr(self, '_fit_a_0'):
             phi = self._fit_a_0()
             
+        elif np.isfinite(a) and self.n_genotypes > 1e4:
+            x0 = self.get_x0(phi0)
+            res = minimize(fun=self.calc_loss, jac=True, 
+                           hessp=self.calc_loss_finite_hessp,
+                           x0=x0, method='trust-krylov',
+                           options={k: v
+                                    for k, v in self.optimization_opts.items()
+                                    if k != 'ftol'})
+            phi = self.get_res_phi(res)
         else:
-            x0 = self.get_x0(phi_initial)
-            res = minimize(fun=self.calc_loss_and_grad, jac=True,
-                           x0=x0, method=self.opt_method,
+            x0 = self.get_x0(phi0)
+            res = minimize(fun=self.calc_loss, jac=True, 
+                           x0=x0, method='L-BFGS-B',
                            options=self.optimization_opts)
             phi = self.get_res_phi(res)
-        
         # a, N = a * scale_by, N *scale_by    
         return(phi)
     
@@ -743,38 +752,7 @@ class DeltaPEstimator(SeqGaussianProcessRegressor):
                                     lambdas=lambdas).matrix_sqrt()
         phi = W_sqrt @ x
         return(phi)
-
-
-class SeqDEFT(DeltaPEstimator):
-    '''
-    Sequence Density Estimation using Field Theory model that allows inference
-    of a complete sequence probability distribution under a Gaussian Process prior
-    parameterized by variance of local epistatic coefficients of order P 
     
-    It requires the use of the same number of alleles per sites
-    
-    Parameters
-    ----------
-    P : int
-        Order of the local interaction coefficients that we are penalized 
-        under the prior i.e. `P=2` penalizes local pairwise interaction
-        across all posible faces of the Hamming graph while `P=3` penalizes
-        local 3-way interactions across all possible cubes.
-    
-    a : float (None)
-        Parameter related to the inverse of the variance of the P-order
-        epistatic coefficients that are being penalized. Larger values
-        induce stronger penalization and approximation to the 
-        Maximum-Entropy model of order P-1. If `a=None` the best a is found
-        through cross-validation
-    
-    num_reg : int (20)
-        Number of a values to evaluate through cross-validation
-        
-    nfolds: int (5)
-        Number of folds to use in the cross-validation procedure
-    
-    '''
     def fill_zeros_counts(self, X, y):
         obs = pd.DataFrame({'x': X, 'y': y}).groupby(['x'])['y'].sum().reset_index()
         data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
@@ -800,6 +778,8 @@ class SeqDEFT(DeltaPEstimator):
         data = self.fill_zeros_counts(self.X, y).values
         self.N = data.sum()
         self.R = (data / self.N)
+        self.counts = data
+        self.obs_idx = data > 0.
     
     def set_data(self, X, y=None, positions=None, phylo_correction=False,
                  adjust_freqs=False, allele_freqs=None):
@@ -873,7 +853,11 @@ class SeqDEFT(DeltaPEstimator):
             self._set_data(X, y)
         
         # Fit model with a_star or provided a
-        phi = self._fit(self.a, phi_initial=phi_inf)
+        if np.isfinite(self.a):
+            phi = self._fit(self.a, phi0=phi_inf)
+        else:
+            phi = phi_inf
+
         output = self.phi_to_output(phi)
         return(output)
     
@@ -901,20 +885,76 @@ class SeqDEFT(DeltaPEstimator):
                 regularizer[flags] += 2 * (phi[flags] - PHI_LB)
         return(regularizer)
     
-    def calc_neg_log_likelihood(self, phi):
-        phi_aux = phi.copy() + self.baseline_phi
-        S3 = self.N * np.sum(safe_exp(-phi_aux))
-        
-        phi_aux[np.logical_and(np.isinf(phi_aux), self.R == 0)] = 0
-        S2 = self.N * np.sum(self.R * phi_aux)
-        return(S2 + S3)
+    def calc_regularization_hess(self, phi):
+        regularizer = np.zeros(self.n_genotypes)
+        flags = (phi > PHI_UB) | (phi < PHI_LB)
+        if flags.sum() > 0:
+            regularizer[flags] = 2
+        return(DiagonalOperator(regularizer))
     
-    def calc_neg_log_likelihood_grad(self, phi):
-        # TODO: review gradient calculation in case of baseline_phi
-        phi_aux = phi.copy() + self.baseline_phi
-        grad_S2 =  self.N * self.R
-        grad_S3 = -self.N * safe_exp(-phi_aux)
-        return(grad_S2 + grad_S3)
+    def calc_logL(self, phi):
+        logq = self.phi_to_logQ(phi + self.baseline_phi)
+        return(np.dot(self.counts[self.obs_idx], logq[self.obs_idx]))
+    
+    def calc_loss_finite(self, phi, return_grad=True):
+        # Compute loss
+        DP_dot_phi = self.DP @ phi
+        a_over_s = self._a / self.DP.n_p_faces
+
+        loss = a_over_s / 2 * np.dot(phi, DP_dot_phi)
+        obs_phi = phi + self.baseline_phi
+        exp_phi = self.N * safe_exp(-obs_phi)
+        loss += self.N * np.dot(self.R, obs_phi) + exp_phi.sum()
+        if hasattr(self, 'calc_regularization'):
+            loss += self.calc_regularization(obs_phi)
+        
+        # Compute gradient
+        if return_grad:
+            grad = a_over_s * DP_dot_phi + self.counts - exp_phi
+            if hasattr(self, 'calc_regularization'):
+                grad += self.calc_regularization_grad(obs_phi)
+            return(loss, grad)
+    
+        return(loss)
+
+    def calc_loss_finite_hessian(self, phi):
+        a_over_s = self._a / self.DP.n_p_faces
+        obs_phi = phi + self.baseline_phi
+        exp_phi = self.N * safe_exp(-obs_phi)
+        hess = a_over_s * self.DP + DiagonalOperator(exp_phi)
+        if hasattr(self, 'calc_regularization'):
+            hess += self.calc_regularization_hess(obs_phi)
+        return(hess)
+    
+    def calc_loss_finite_hessp(self, phi, p):
+        A = self.calc_loss_finite_hessian(phi)
+        return(A @ p)
+    
+    def calc_loss_inf(self, b, return_grad=True):
+        phi = self._b_to_phi(b)
+
+        # Calculate loss
+        obs_phi = phi + self.baseline_phi
+        exp_phi = self.N * safe_exp(-obs_phi)
+        loss = np.dot(self.counts, obs_phi) + exp_phi.sum()
+        if hasattr(self, 'calc_regularization'):
+            loss += self.calc_regularization(obs_phi)
+        
+        if return_grad:
+            # TODO: review for non-zero baselines
+            grad = self.counts - exp_phi
+            if hasattr(self, 'calc_regularization'):
+                grad += self.calc_regularization_grad(obs_phi)
+            grad = self._phi_to_b(grad)
+            return(loss, grad)
+        
+        return(loss)
+    
+    def calc_loss(self, x, return_grad=True):
+        if np.isinf(self._a):
+            return(self.calc_loss_inf(x, return_grad=return_grad))
+        else:
+            return(self.calc_loss_finite(x, return_grad=return_grad))
     
     def phi_to_output(self, phi):
         Q_star = self.phi_to_Q(phi)
@@ -932,12 +972,12 @@ class SeqDEFT(DeltaPEstimator):
     def calc_a_max(self, phi_inf):
         a_max = self.DP.n_p_faces * self.fac_max
         
-        phi_max = self._fit(a_max, phi_initial=phi_inf)
+        phi_max = self._fit(a_max, phi0=phi_inf)
         distance = D_geo(phi_max, phi_inf)
         
         while distance > self.a_resolution and a_max < self.max_a_max:
             a_max *= 10
-            phi_max = self._fit(a_max, phi_initial=phi_inf)
+            phi_max = self._fit(a_max, phi0=phi_inf)
             distance = D_geo(phi_max, phi_inf)
             
         return(a_max)
@@ -946,13 +986,13 @@ class SeqDEFT(DeltaPEstimator):
         a_min = self.DP.n_p_faces * self.fac_min
         
         phi_0 = self._fit(0)
-        phi_min = self._fit(a_min, phi_initial=phi_inf)
+        phi_min = self._fit(a_min, phi0=phi_inf)
         
         distance = D_geo(phi_min, phi_0)
         
         while distance > self.a_resolution:
             a_min /= 10
-            phi_min = self._fit(a_min, phi_initial=phi_inf)
+            phi_min = self._fit(a_min, phi0=phi_inf)
             distance = D_geo(phi_min, phi_0)
         return(a_min)
 

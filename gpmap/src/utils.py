@@ -262,11 +262,12 @@ def get_cv_iter(cv_splits, hyperparam_values, process_data=None):
             yield(param, fold, train, test)
             
             
-def calc_cv_loss(cv_iter, train_function, evaluate_function, total_folds=None):
+def calc_cv_loss(cv_iter, train_function, evaluate_function, total_folds=None,
+                 param_label='beta', loss_label='loss'):
         for beta, fold, train, test in tqdm(cv_iter, total=total_folds):
             params = train_function(train, beta)
             loss = evaluate_function(test, params)
-            yield({'beta': beta, 'fold': fold, 'loss': loss})
+            yield({param_label: beta, 'fold': fold, loss_label: loss})
 
 
 def data_to_df(data):
