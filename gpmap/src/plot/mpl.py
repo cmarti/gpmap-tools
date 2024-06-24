@@ -1068,7 +1068,12 @@ Auxiliary plots
 def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
                        xlabel=r'$\log_{10}(a)$',
                        ylabel='log(L)',  show_folds=True, highlight='max',
-                       legend_loc=1):
+                       legend_loc=1, refx=None):
+    
+    if refx is not None and np.isin(refx, df[x].values):
+        refdf = df.loc[df[x] == refx, :].set_index('fold')[[y]]
+        df = df.join(refdf, on='fold', rsuffix='_ref')
+        df[y] = df[y] - df['{}_ref'.format(y)]
     
     sdf = df.groupby(x, as_index=False).agg({y: ('mean', 'std', 'count')})
     sdf.columns = ['x', 'mean', 'sd', 'count']
@@ -1140,7 +1145,7 @@ def plot_density_vs_frequency(seq_density, axes):
 
 
 def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
-                         show_folds=True, legend_loc=1):
+                         show_folds=True, legend_loc=1, normalize_logL=True):
     '''
     Generates a 2 panel figure showing how the cross-validated likelihood
     changes with ``a`` hyperparameter and the best selected value for model
@@ -1180,7 +1185,8 @@ def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
         axes = subplots[0]
         
     plot_hyperparam_cv(log_Ls, axes, err_bars=err_bars,
-                       show_folds=show_folds, legend_loc=legend_loc)
+                       show_folds=show_folds, legend_loc=legend_loc,
+                       refx=np.inf if normalize_logL else None)
     
     if seq_density is not None:
         fig.tight_layout()

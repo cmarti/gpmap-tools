@@ -278,7 +278,6 @@ class MatPlotsTests(unittest.TestCase):
             
         # Alleles
         with NamedTemporaryFile('w') as fhand:
-            plot_fpath = fhand.name
             cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
                    '-o', plot_fpath, '-nc', 'function', '-s', 'function',
                    '--alleles']
@@ -434,6 +433,11 @@ class InferencePlotsTests(unittest.TestCase):
         with NamedTemporaryFile() as fhand:
             fpath = fhand.name
             fig = pmpl.plot_SeqDEFT_summary(df)
+            pmpl.savefig(fig, fpath)
+
+        with NamedTemporaryFile() as fhand:
+            fpath = fhand.name
+            fig = pmpl.plot_SeqDEFT_summary(df, normalize_logL=False)
             pmpl.savefig(fig, fpath)
 
         
