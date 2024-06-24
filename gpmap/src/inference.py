@@ -6,7 +6,7 @@ from time import time
 from tqdm import tqdm
 from functools import partial
 from scipy.optimize import minimize
-from scipy.special import logsumexp
+from scipy.special import logsumexp, loggamma
 from scipy.stats.stats import pearsonr
 from scipy.stats import norm
 from scipy.sparse.linalg import aslinearoperator
@@ -779,6 +779,7 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         self.N = data.sum()
         self.R = (data / self.N)
         self.counts = data
+        self.multinomial_constant = loggamma(self.counts.sum() + 1) - loggamma(self.counts + 1).sum()
         self.obs_idx = data > 0.
     
     def set_data(self, X, y=None, positions=None, phylo_correction=False,
@@ -893,8 +894,9 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         return(DiagonalOperator(regularizer))
     
     def calc_logL(self, phi):
+        c = self.multinomial_constant
         logq = self.phi_to_logQ(phi + self.baseline_phi)
-        return(np.dot(self.counts[self.obs_idx], logq[self.obs_idx]))
+        return(c + np.dot(self.counts[self.obs_idx], logq[self.obs_idx]))
     
     def calc_loss_finite(self, phi, return_grad=True):
         # Compute loss
