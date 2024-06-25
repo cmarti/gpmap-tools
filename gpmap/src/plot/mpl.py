@@ -1145,7 +1145,7 @@ def plot_density_vs_frequency(seq_density, axes):
 
 
 def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
-                         show_folds=True, legend_loc=1, normalize_logL=True):
+                         show_folds=False, legend_loc=1, normalize_logL=True):
     '''
     Generates a 2 panel figure showing how the cross-validated likelihood
     changes with ``a`` hyperparameter and the best selected value for model
@@ -1184,9 +1184,10 @@ def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
         plot_density_vs_frequency(seq_density, subplots[1])
         axes = subplots[0]
         
+    ylabel = 'log(L) relative to a=$\infty$' if normalize_logL else 'log(L)'
     plot_hyperparam_cv(log_Ls, axes, err_bars=err_bars,
                        show_folds=show_folds, legend_loc=legend_loc,
-                       refx=np.inf if normalize_logL else None)
+                       ylabel=ylabel, refx=np.inf if normalize_logL else None)
     
     if seq_density is not None:
         fig.tight_layout()
