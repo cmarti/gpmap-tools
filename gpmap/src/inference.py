@@ -689,15 +689,15 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         if a == 0 and hasattr(self, '_fit_a_0'):
             phi = self._fit_a_0()
             
-        elif np.isfinite(a) and self.n_genotypes > 1e4:
-            x0 = self.get_x0(phi0)
-            res = minimize(fun=self.calc_loss, jac=True, 
-                           hessp=self.calc_loss_finite_hessp,
-                           x0=x0, method='trust-krylov',
-                           options={k: v
-                                    for k, v in self.optimization_opts.items()
-                                    if k != 'ftol'})
-            phi = self.get_res_phi(res)
+        # elif np.isfinite(a) and self.n_genotypes > 1e4:
+        #     x0 = self.get_x0(phi0)
+        #     res = minimize(fun=self.calc_loss, jac=True, 
+        #                    hessp=self.calc_loss_finite_hessp,
+        #                    x0=x0, method='trust-krylov',
+        #                    options={k: v
+        #                             for k, v in self.optimization_opts.items()
+        #                             if k != 'ftol'})
+        #     phi = self.get_res_phi(res)
         else:
             x0 = self.get_x0(phi0)
             res = minimize(fun=self.calc_loss, jac=True, 

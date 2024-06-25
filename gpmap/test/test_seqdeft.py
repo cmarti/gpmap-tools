@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from os.path import join
 from tempfile import NamedTemporaryFile
 from subprocess import check_call
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, multinomial
 from scipy.special import logsumexp
 
 from gpmap.src.settings import BIN_DIR
@@ -33,7 +33,8 @@ class SeqDEFTTests(unittest.TestCase):
         seqdeft = SeqDEFT(P=2, seq_length=2, n_alleles=2)
         X = np.array(['00', '01', '10', '11'])
         phi = np.zeros(4)
-        exp_ll = -4 * np.log(4)
+        dist = multinomial(4, p=seqdeft.phi_to_Q(phi))
+        exp_ll = dist.logpmf([1, 1, 1, 1])
         seqdeft.set_data(X=X)
         ll = seqdeft.calc_logL(phi)
         ll2 = seqdeft.calc_logL(phi + 1)        
@@ -45,7 +46,8 @@ class SeqDEFTTests(unittest.TestCase):
         seqdeft.set_data(X=X)
         phi[3] = np.inf
         ll = seqdeft.calc_logL(phi)
-        exp_ll = -3 * np.log(3)
+        dist = multinomial(3, p=seqdeft.phi_to_Q(phi))
+        exp_ll = dist.logpmf([1, 1, 1, 0])
         assert(np.isfinite(ll))
         assert(np.allclose(ll, exp_ll))
         
