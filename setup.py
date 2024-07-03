@@ -38,7 +38,6 @@ def main():
                 'filter_genotypes = bin.filter_genotypes:main',
             ]},
         install_requires=['biopython', 'matplotlib',
-                          'scikit-image',
                           'tqdm', 'numpy', 'scipy',
                           'pandas', 'pyarrow',
                           'datashader>=0.13.0',
