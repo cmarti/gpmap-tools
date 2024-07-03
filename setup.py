@@ -39,7 +39,7 @@ def main():
             ]},
         install_requires=['biopython', 'matplotlib',
                           'tqdm', 'numpy', 'scipy',
-                          'pandas', 'pyarrow',
+                          'pandas', 'pyarrow', 'networkx',
                           'datashader>=0.13.0',
                           'holoviews>=1.15.0',
                           'plotly>=5.9.0'],
