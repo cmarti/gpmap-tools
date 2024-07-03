@@ -7,16 +7,20 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
-from skimage.draw import line, line_aa
+from itertools import product, chain, cycle
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
+
+try:
+    from skimage.draw import line, line_aa
+except ImportError:
+    pass
 
 from gpmap.src.settings import PLOTS_FORMAT
 from gpmap.src.utils import check_error
 from gpmap.src.seq import guess_space_configuration
 from gpmap.src.genotypes import (get_edges_coords, get_nodes_df_highlight,
                                  minimize_nodes_distance)
-from itertools import product, chain, cycle
 from gpmap.src.plot.utils import sort_nodes
 
 
