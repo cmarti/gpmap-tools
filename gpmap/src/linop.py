@@ -17,7 +17,7 @@ from gpmap.src.matrix import reciprocal, quad, inv_dot
 
 class ExtendedLinearOperator(_CustomLinearOperator):
     def _init_dtype(self):
-        v = np.random.normal(size=3)
+        v = np.random.normal(size=2)
         self.dtype = v.dtype
       
     def get_column(self, i):
@@ -93,6 +93,7 @@ class IdentityOperator(DiagonalOperator):
 class MatMulOperator(ExtendedLinearOperator):
     def __init__(self, linops):
         self.linops = linops
+        self._init_dtype()
 
         if len(linops) > 1:
             for A1, A2 in zip(linops, linops[1:]):

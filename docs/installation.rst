@@ -28,7 +28,7 @@ in the dependencies but generally we find that installing it first seems to work
     
     $ pip install datashader==0.13
 
-For using the last version of the library install from bitbucket or git and switch to
+For using the last version of the library install from bitbucket or github and switch to
 the `dev` branch. To test installation is working properly you can run all tests or a
 subset of them. Running all of them may take some time. ::
 

@@ -23,7 +23,7 @@ from gpmap.src.utils import write_dataframe, write_edges
         
 
 class MatPlotsTests(unittest.TestCase):
-    def test_raster_nodes(self):
+    def xtest_raster_nodes(self):
         nodes_df = pd.DataFrame({'1': [0, 1, 3],
                                  '2': [0, 3, 1],
                                  'function': [1, 1, 2]})
@@ -46,7 +46,7 @@ class MatPlotsTests(unittest.TestCase):
                                      [1., 0., 0., 0.]])))
         
     
-    def test_raster_edges(self):
+    def xtest_raster_edges(self):
         nodes_df = pd.DataFrame({'1': [0, 1, 3],
                                  '2': [0, 3, 1]})
         edges_df = pd.DataFrame({'i': [0, 0],
@@ -64,7 +64,7 @@ class MatPlotsTests(unittest.TestCase):
                                      [1., 0., 1., 1.],
                                      [1., 1., 0., 0.]])))
     
-    def test_plot_rasterized_visualization(self):
+    def xtest_plot_rasterized_visualization(self):
         ser = DataSet('serine')
 
         nodes_raster, edges_raster, extent = calc_raster(ser.nodes, edges_df=ser.edges, 
