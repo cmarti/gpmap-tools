@@ -899,11 +899,12 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         return(c + np.dot(self.counts[self.obs_idx], logq[self.obs_idx]))
     
     def calc_loss_finite(self, phi, return_grad=True):
-        # Compute loss
+        # Compute loss from the prior
         DP_dot_phi = self.DP @ phi
         a_over_s = self._a / self.DP.n_p_faces
-
         loss = a_over_s / 2 * np.dot(phi, DP_dot_phi)
+
+        # Compute loss from the likelihood
         obs_phi = phi + self.baseline_phi
         exp_phi = self.N * safe_exp(-obs_phi)
         loss += self.N * np.dot(self.R, obs_phi) + exp_phi.sum()
