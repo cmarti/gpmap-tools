@@ -16,6 +16,7 @@ Now you can clone GPMAP-tools from `GitHub <https://github.com/cmarti/gpmap-tool
 
 and install it in the current python environment: ::
     
+    $ cd gpmap-tools
     $ pip install .
 
 An older version of gpmap-tools is availabel in PyPI and installable through ``pip`` package
