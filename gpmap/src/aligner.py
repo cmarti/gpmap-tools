@@ -36,8 +36,9 @@ class VCKernelAligner(object):
     
     def set_data(self, covs, distances_n, sigma2=0):
         D_n = np.diag(distances_n)
-        self.A = self.W_kd @ D_n @ self.W_kd.T
-        self.b = np.dot(covs, D_n @ self.W_kd.T)
+        WD = self.W_kd @ D_n
+        self.A = WD @ self.W_kd.T
+        self.b = WD @ covs - (sigma2 * self.A).sum(1)
         self.c = np.dot(covs, D_n @ covs)
         self.sigma2 = sigma2
     
@@ -58,16 +59,20 @@ class VCKernelAligner(object):
         if beta is None:
             beta = self.beta
 
-        lambdas = safe_exp(log_lambdas) + self.sigma2
+        lambdas = safe_exp(log_lambdas)
         Av = self.A @ lambdas
-        loss = self.c + np.dot(lambdas, Av) - 2 * lambdas.dot(self.b)
+        loss = self.c + np.dot(lambdas, Av - 2 * self.b)
 
         if beta > 0:
-            loss += beta * quad(self.second_order_diff_matrix, log_lambdas[1:])
+            reg_Av = self.second_order_diff_matrix @ log_lambdas[1:]
+            reg = beta * np.dot(reg_Av, log_lambdas[1:])
+            loss += reg
 
-        if return_grad and self.beta == 0:
-            # TODO: update for regularized version and for sigma2 != 0
-            grad = (2 * Av - 2 * self.b) * (lambdas)
+        if return_grad:
+            with np.errstate(over = 'ignore'):
+                grad = (2 * Av - 2 * self.b) * lambdas
+            if beta > 0:
+                grad += np.append([0], 2 * reg_Av)
             return(loss, grad)
 
         return(loss)
@@ -106,15 +111,17 @@ class VCKernelAligner(object):
         '''
         self.set_data(covs, ns, sigma2=sigma2)
         
-        res = lsq_linear(self.A, self.b, bounds=(sigma2, np.inf), method='bvls')
-        lambdas = res.x - sigma2
+        res = lsq_linear(self.A, self.b, bounds=(0, np.inf), method='bvls')
+        lambdas = res.x
 
         if self.beta > 0:
-            log_lambda0 = np.log(lambdas)
-            res = minimize(fun=self.calc_loss, x0=log_lambda0, method='Powell',
-                            options={'xtol': 1e-8, 'ftol': 1e-8})
+            log_lambda0 = np.log(lambdas + 1e-16)
+            res = minimize(fun=self.calc_loss, jac=True,
+                           x0=log_lambda0, #method='powell',
+                           args=(self.beta, True), 
+                        #    options={'maxiter': 1000, 'tol': 1e-16},
+                           )
             lambdas = np.exp(res.x)
-            
         return(lambdas)
     
     def predict(self, lambdas):

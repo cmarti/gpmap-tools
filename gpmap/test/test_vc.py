@@ -298,6 +298,19 @@ class VCTests(unittest.TestCase):
             cmd = [sys.executable, bin_fpath, data_fpath, '-o', out_fpath, '-r',
                    '--var', '-p', xpred_fpath, '--lambdas', lambdas_fpath]
             check_call(cmd)
+    
+    def test_sd(self):
+        fpath = '/home/martigo/elzar/projects/shine_dalgarno/data/dmsc_processed.csv'
+        df = pd.read_csv(fpath, index_col=0).dropna(subset=['y', 'y_var_post'])
+        # print(df)
+        # exit()
+        X, y, y_var = df.index.values, df.y.values, df.y_var_post.values
+        
+        model = VCregression(beta=1e5)
+        model.fit(X, y, y_var=y_var)
+        print(model.get_variance_component_df(model.lambdas))
+        # model.set_lambdas(model.lambdas + y_var[0])
+        print(model.predict())
             
 
 class SkewedVCTests(unittest.TestCase):
