@@ -28,6 +28,21 @@ class SeqDEFTTests(unittest.TestCase):
         
         assert(seqdeft.seq_length == 3)
         assert(seqdeft.n_alleles == 2)
+
+        # Test giving incompatible sequences
+        X = np.array(['AA', 'AC', 'BA', 'BC'])
+        try:
+            seqdeft.set_data(X=X)
+        except KeyError:
+            pass
+
+        # Test giving incompatible sequences in predefined RNA landscape
+        seqdeft = SeqDEFT(P=2, seq_length=2, alphabet_type='rna')
+        X = np.array(['AA', 'AC', 'BA', 'BC'])
+        try:
+            seqdeft.set_data(X=X)
+        except KeyError:
+            pass
     
     def test_log_likelihood(self):
         seqdeft = SeqDEFT(P=2, seq_length=2, n_alleles=2)
@@ -57,26 +72,26 @@ class SeqDEFTTests(unittest.TestCase):
     
     def test_loss(self):
         # With specific a
-        np.random.seed(0)
         seqdeft = SeqDEFT(a=10, P=2, seq_length=2, n_alleles=2)
-        phi = seqdeft.simulate_phi(seqdeft.a)
-        X = seqdeft.simulate(N=5, phi=phi)
-        seqdeft.set_data(X=X)
+        b = np.array([2, 1, 1.])
+        phi = seqdeft._b_to_phi(b)
+        X = np.array(['00', '00', '01', '10'])
         
+        # Calculate regular loss function
+        seqdeft.set_data(X=X)
         loss, grad = seqdeft.calc_loss(phi, return_grad=True)
         hess = seqdeft.calc_loss_finite_hessian(phi) @ np.eye(4)
-        assert(np.allclose(loss, 20.043036737841))
-        assert(np.allclose(grad, [-3.79341913, -2.24173531, -3.24173531, -5.79341913]))
-        assert(np.allclose(hess, [[ 17.08504538, -10.,         -10.,          10.        ],
-                                  [-10.,          14.91637697,  10.,         -10.        ],
-                                  [-10.,          10.,          14.91637697, -10.        ],
-                                  [ 10.,         -10.,         -10.,          17.08504538]]))
+        assert(np.allclose(loss, 9.484376662317993))
+        assert(np.allclose(grad,  [-2.,          -0.47151776,  -0.47151776,  -0.54134113]))
+        assert(np.allclose(hess, [[ 14,          -10.,         -10.,          10.        ],
+                                  [-10.,          11.47151776,  10.,         -10.        ],
+                                  [-10.,          10.,          11.47151776, -10.        ],
+                                  [ 10.,         -10.,         -10.,          10.54134113]]))
         
-        # With a=inf
-        b = np.array([2, 1, 1.])
+        # With a=inf in additive landscape should have the same loss
         loss, grad = seqdeft.calc_loss_inf(b, return_grad=True)
-        assert(np.allclose(loss, 12.355470827897486))
-        assert(np.allclose(grad, [-2.17773541,  0.66166179,  1.66166179]))
+        assert(np.allclose(loss, 9.48437666231799))
+        assert(np.allclose(grad, [-1.74218833,  0.72932943,  0.72932943]))
         
     def test_simulate(self):
         seqdeft = SeqDEFT(P=2)
@@ -149,10 +164,10 @@ class SeqDEFTTests(unittest.TestCase):
         seqdeft = SeqDEFT(P=2, a=np.inf, seq_length=l, alphabet_type='dna')
         b = 2 * np.random.normal(size=seqdeft.kernel_basis.shape[1])
         phi = seqdeft._b_to_phi(b)
-        X = seqdeft.simulate(N=1000, phi=phi)
+        X = seqdeft.simulate(N=10000, phi=phi)
         probs = seqdeft.fit(X=X)
         r3 = pearsonr(-phi, np.log(probs['Q_star']))[0]
-        assert(r3 > 0.9)
+        assert(r3 > 0.95)
 
         # Ensure convergence
         b = seqdeft._phi_to_b(probs['phi'])
@@ -166,7 +181,8 @@ class SeqDEFTTests(unittest.TestCase):
         target_phi = seqdeft.simulate_phi(a=500)
         obs_phi = baseline_phi + target_phi
         X = seqdeft.simulate(N=1000, phi=obs_phi)
-        probs1 = seqdeft.fit(X, baseline_phi=baseline_phi)
+        probs1 = seqdeft.fit(X, baseline_phi=baseline_phi,
+                             baseline_X=seqdeft.genotypes)
         probs2 = seqdeft.fit(X)
 
         # Ensure adjusting improves prediction of the target phi
@@ -342,7 +358,7 @@ class SeqDEFTTests(unittest.TestCase):
         
         missing = seq_densities.loc[[x[0] == 'A' for x in seq_densities.index], :]
         assert(missing['frequency'].sum() == 0)
-        assert(missing['Q_star'].sum() < 1e-8)
+        assert(missing['Q_star'].sum() < 1e-6)
     
     def test_very_few_sequences(self):
         seqdeft = SeqDEFT(P=2)

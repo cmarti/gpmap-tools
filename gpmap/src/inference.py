@@ -600,6 +600,7 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         optimization_opts['ftol'] = ftol
         optimization_opts['maxiter'] = maxiter
         self.optimization_opts = optimization_opts
+        self.initialized = False
 
         if seq_length is not None:
             self.init(n_alleles=n_alleles, seq_length=seq_length,
@@ -607,11 +608,13 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom'):
-        self.define_space(seq_length=seq_length, n_alleles=n_alleles,
-                          genotypes=genotypes, alphabet_type=alphabet_type)
-        self.set_baseline_phi()
-        self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
-        self.kernel_basis = DeltaKernelBasisOperator(self.n_alleles, self.seq_length, self.P)
+        if not self.initialized:
+            self.define_space(seq_length=seq_length, n_alleles=n_alleles,
+                            genotypes=genotypes, alphabet_type=alphabet_type)
+            self.set_baseline_phi()
+            self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
+            self.kernel_basis = DeltaKernelBasisOperator(self.n_alleles, self.seq_length, self.P)
+            self.initialized = True
 
     def get_a_values(self):
         return(self.get_regularization_constants())
@@ -708,17 +711,17 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         return(phi)
     
     def set_baseline_phi(self, baseline_phi=None, X=None):
+        # TODO: force X to be provided to avoid mistakes
         if baseline_phi is None:
             self.baseline_phi = np.zeros(self.n_genotypes)
         else:
             msg = 'baseline_phi needs to be the size of n_genotypes'
             check_error(baseline_phi.shape[0] == self.n_genotypes, msg=msg)
 
-            if X is None:
-                self.baseline_phi = baseline_phi
-            else:
-                baseline_phi = pd.Series(baseline_phi, index=X)
-                self.baseline_phi = baseline_phi.loc[self.genotypes].values
+            msg = 'Sequences `X` associated to the baseline_phi must be provided'
+            check_error(X is not None, msg=msg)
+
+            self.baseline_phi = pd.Series(baseline_phi, index=X).loc[self.genotypes].values
     
     def _get_lambdas(self, a):
         self.DP.calc_lambdas()
@@ -756,7 +759,11 @@ class SeqDEFT(SeqGaussianProcessRegressor):
     def fill_zeros_counts(self, X, y):
         obs = pd.DataFrame({'x': X, 'y': y}).groupby(['x'])['y'].sum().reset_index()
         data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
-        data.loc[obs['x'].values] = obs['y'].values
+        try:
+            data.loc[obs['x'].values] = obs['y'].values
+        except KeyError:
+            msg = 'Sequences outside of sequence space found'
+            raise KeyError(msg)
         return(data)
     
     def _set_data(self, X, y=None, allele_freqs=None, **kwargs):
