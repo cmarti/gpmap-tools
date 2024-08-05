@@ -43,6 +43,12 @@ class SeqDEFTTests(unittest.TestCase):
             seqdeft.set_data(X=X)
         except KeyError:
             pass
+
+        # Test incomplete definition of sequence space
+        try:
+            seqdeft = SeqDEFT(P=2, alphabet_type='rna')
+        except ValueError:
+            pass
     
     def test_log_likelihood(self):
         seqdeft = SeqDEFT(P=2, seq_length=2, n_alleles=2)
