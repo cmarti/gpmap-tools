@@ -605,6 +605,10 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         if seq_length is not None:
             self.init(n_alleles=n_alleles, seq_length=seq_length,
                       alphabet_type=alphabet_type)
+        elif alphabet_type != 'custom' or n_alleles != None:
+            msg = '`seq_length` must be specified together with'
+            msg += '`n_alleles` or `alphabet_type`'
+            raise ValueError(msg)
         
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom'):
