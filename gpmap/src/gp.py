@@ -479,6 +479,10 @@ class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
         if not res.success:
             res = minimize(fun=self.calc_loss, jac=True,  hessp=self.calc_loss_hessp,
                            x0=phi0, method='trust-krylov', options=opts)
+        
+        if not res.success:
+            raise ValueError(res.message)
+        
         phi = self.get_res_phi(res)
         self.opt_res = res
         return(phi)
