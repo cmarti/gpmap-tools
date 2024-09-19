@@ -4,6 +4,8 @@ from time import time
 
 import numpy as np
 import pandas as pd
+
+from tqdm import tqdm
 from scipy.optimize import minimize
 from scipy.special import logsumexp
 from scipy.stats import norm
@@ -21,7 +23,6 @@ from gpmap.src.linop import (
     DeltaKernelBasisOperator,
     DeltaKernelRegularizerOperator,
     DeltaPOperator,
-    DiagonalOperator,
     ProjectionOperator,
     VarianceComponentKernel,
     calc_covariance_distance,
@@ -442,16 +443,22 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         df = cv_logL_df.groupby('a')['logL'].mean()
         return(df.index[np.argmax(df)])
     
-    def fit_a_cv(self, phi_inf=None):
-        if phi_inf is None:
-            phi_inf = self._fit(np.inf)
-        a_values = self.get_a_values(phi_inf=phi_inf)
+    def calc_cv_loss(self, cv_iter, total_folds):
+        phi0_cache = {}
+        for a, fold, train, test in tqdm(cv_iter, total=total_folds):
+            phi = self.cv_fit(train, a, phi0=phi0_cache.get(fold, None))
+            if np.isinf(a):
+                phi0_cache[fold] = phi
+            loss = self.cv_evaluate(test, phi)
+            yield({'a': a, 'fold': fold, 'logL': loss})
+    
+    def fit_a_cv(self, phi_inf):
+        a_values = np.append(np.inf, self.get_a_values(phi_inf=phi_inf))
+        total_folds = a_values.shape[0] * self.nfolds
 
         cv_splits = get_CV_splits(X=self.X, y=self.y, y_var=self.y_var, nfolds=self.nfolds)
         cv_iter = get_cv_iter(cv_splits, a_values)
-        cv_logL = calc_cv_loss(cv_iter, partial(self.cv_fit, phi0=phi_inf), self.cv_evaluate,
-                               total_folds=a_values.shape[0] * self.nfolds, param_label='a',
-                               loss_label='logL')
+        cv_logL = self.calc_cv_loss(cv_iter, total_folds)
         self.logL_df = self.get_cv_logL_df(cv_logL)    
         self.a = self.get_ml_a(self.logL_df)
     
@@ -634,7 +641,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         phi_inf = self._fit(np.inf)
         
         if not self.a_is_fixed and force_fit_a:
-            self.fit_a_cv(phi_inf=phi_inf)
+            self.fit_a_cv(phi_inf)
             self._set_data(X, y)
         
         # Fit model with a_star or provided a
