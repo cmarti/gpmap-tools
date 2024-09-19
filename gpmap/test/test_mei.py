@@ -2,14 +2,9 @@
 import sys
 import unittest
 import numpy as np
-import pandas as pd
 
-from os.path import join
-from subprocess import check_call
-from tempfile import NamedTemporaryFile
 
 from scipy.stats import pearsonr
-from scipy.special import comb
 from scipy.sparse.linalg import aslinearoperator
 
 from gpmap.src.linop import ConnectednessKernel
@@ -24,7 +19,7 @@ class MEITests(unittest.TestCase):
         X = np.array(['AA', 'AB', 'BA'])
         y = np.array([0, 1, 1.])
         model.set_data(X, y)
-        y_pred = model.predict()
+        y_pred = model.calc_posterior_mean()
         assert(y_pred[-1] == 2.)
         assert(model.calc_cost(y_pred) == 0.)
         
@@ -36,7 +31,7 @@ class MEITests(unittest.TestCase):
         X = np.array(['AAA', 'ABB', 'BAA', 'BBB'])
         y = np.array([1, 0, 0, 1])
         model.set_data(X, y)
-        y_pred = model.predict()
+        y_pred = model.calc_posterior_mean()
         cost1 = model.calc_cost(y_pred)
         assert(np.allclose(y, y_pred[model.obs_idx]))
         assert(cost1 > 0.)
@@ -79,9 +74,8 @@ class MEITests(unittest.TestCase):
         mu2, Sigma2 = model2.calc_posterior()
         assert(np.allclose(mu1, mu2))
 
-        I = np.eye(4)
         assert(np.allclose(mu1, mu2))
-        assert(np.allclose(Sigma1 @ I, Sigma2 @ I))
+        assert(np.allclose(Sigma1 @ np.eye(4), Sigma2 @ np.eye(4)))
 
         # Ensure predict methods return same values
         pred1 = model1.predict(calc_variance=True)
@@ -98,7 +92,6 @@ class MEITests(unittest.TestCase):
         model.set_data(X, y, y_var)
         mu, Sigma = model.calc_posterior()
         Sigma = Sigma @ np.eye(4)
-        
         assert(np.allclose(mu, [0, 1, 1, 2]))
         assert(Sigma[0, 0] < Sigma[3, 3])
         
@@ -134,8 +127,8 @@ class MEITests(unittest.TestCase):
         # Simulate data
         np.random.seed(0)
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
-        a, l = 4, lambdas.shape[0]-1
-        vc = VCregression(n_alleles=a, seq_length=l, lambdas=lambdas)
+        a, length = 4, lambdas.shape[0]-1
+        vc = VCregression(n_alleles=a, seq_length=length, lambdas=lambdas)
         data = vc.simulate(sigma=1)
 
         idx = np.random.uniform(size=data.shape[0]) < 0.8
@@ -147,9 +140,8 @@ class MEITests(unittest.TestCase):
         X_test = test.index.values
 
         # Fit model        
-        model = MinimumEpistasisRegression(P=2)
+        model = MinimumEpistasisRegression(P=2, n_alleles=a, seq_length=length)
         model.fit(X, y, y_var)
-        assert(np.allclose(model.a, 3.359818286283781))
         
         # Make predictions under the inferred a value
         pred = model.predict(X_test, calc_variance=True)

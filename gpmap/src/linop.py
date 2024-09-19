@@ -45,17 +45,20 @@ class ExtendedLinearOperator(_CustomLinearOperator):
         return(np.array(x).T)
 
 class InverseOperator(ExtendedLinearOperator):
-    def __init__(self, linop, method='minres', rtol=1e-4, kwargs={}):
+    def __init__(self, linop, method='minres', atol=1e-4, maxiter=100, kwargs={}):
         # TODO: implement preconditioner option
         self.linop = linop
         self.shape = linop.shape
         self.dtype = linop.dtype
         self.method = method
-        self.rtol= rtol
+        self.atol= atol
+        self.maxiter = maxiter
         self.kwargs = kwargs
 
     def _matvec(self, v):
-        return(inv_dot(self.linop, v, method=self.method, rtol=self.rtol, **self.kwargs))
+        return(inv_dot(self.linop, v, method=self.method,
+                       maxiter=self.maxiter,
+                       atol=self.atol, **self.kwargs))
 
 
 class DiagonalOperator(ExtendedLinearOperator):
@@ -688,8 +691,8 @@ class DeltaKernelBasisOperator(SeqOperator):
     def __init__(self, n_alleles, seq_length, P):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.P = P
-        m = int(np.sum([comb(self.l, k) * (self.alpha - 1) ** k
-                        for k in range(P)]))
+        self.m_k = [comb(self.l, k) * (self.alpha - 1) ** k for k in range(P)]
+        m = int(np.sum(self.m_k))
         self.shape = (self.n, m)
 
     def _matvec(self, v):
@@ -711,6 +714,29 @@ class DeltaKernelBasisOperator(SeqOperator):
             u[start:end] = B.transpose_dot(v)
             start = end
         return(u)
+    
+
+class DeltaKernelRegularizerOperator(ExtendedLinearOperator):
+    def __init__(self, basis, lambdas_inv):
+        s = basis.shape[0]
+        msg = 'Basis size ({}) is different from number of provided lambdas ({})'
+        msg = msg.format(basis.P, lambdas_inv.shape[0])
+        check_error(basis.P == lambdas_inv.shape[0], msg)
+        self.shape = (s, s)
+        self.B = basis
+        self.D = self.set_regularizer(lambdas_inv)
+    
+    def set_regularizer(self, lambdas_inv):
+        reg = []
+        for k, lda  in enumerate(lambdas_inv):
+            reg += [lda] * int(self.B.m_k[k])
+        return(DiagonalOperator(np.array(reg)))
+        
+    def _matvec(self, v):
+        return(self.B @ self.D @ self.B.transpose_dot(v))
+    
+    def beta_dot(self, v):
+        return(self.D @ v)
     
     
 class ProjectionOperator2(SeqOperator):

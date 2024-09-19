@@ -232,9 +232,9 @@ def write_edges(edges, fpath, triangular=True):
         write_dataframe(edges, fpath)
 
 
-def get_CV_splits(X, y, y_var=None, nfolds=10, max_pred=None):
+def get_CV_splits(X, y=None, y_var=None, nfolds=10, max_pred=None):
     msg = 'X and y must have the same size'
-    check_error(X.shape[0] == y.shape[0], msg=msg)
+    check_error(y is None or X.shape[0] == y.shape[0], msg=msg)
     
     msg = 'Number of observations must be >= nfolds'
     check_error(X.shape[0] >= nfolds, msg=msg)

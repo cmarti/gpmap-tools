@@ -36,7 +36,6 @@ AMBIGUOUS_VALUES = {'dna': DNA_AMBIGUOUS_VALUES,
 
 MAX_STATES = 2e7
 U_MAX = 500
-PHI_UB, PHI_LB = 100, 0
 
 NUCLEOTIDES = ['A', 'U', 'G', 'C']
 COMPLEMENT = {'U': 'A', 'A': 'U', 'G': 'C', 'C': 'G', 'N': 'N',

@@ -7,7 +7,8 @@ from scipy.sparse import csr_matrix
 from gpmap.src.matrix import (calc_cartesian_product,
                               calc_cartesian_product_dot, 
                               diag_pre_multiply, diag_post_multiply,
-                              rate_to_jump_matrix, kron, dot_log)
+                              rate_to_jump_matrix, kron, dot_log,
+                              pivoted_cholesky_with_diag)
 
 
 class MatrixTests(unittest.TestCase):
@@ -34,6 +35,33 @@ class MatrixTests(unittest.TestCase):
         
         r = diag_post_multiply(d, m)
         assert(np.allclose(r, np.array([[2, 2], [4, 3]])))
+    
+    def test_pivoted_cholesky(self):
+        np.random.seed(1)
+        M = 0.25 * np.exp(np.random.normal(size=(4, 4)))
+        M = np.eye(4) + M @ M.T
+        
+        rank = 4
+        U, piv = pivoted_cholesky_with_diag(M, np.diag(M), rank=rank)
+        i = np.arange(rank)
+        U[:, i] = U[:, piv]
+        M_reconstructed = U.T @ U
+        L = U.T
+
+        L_inv = np.linalg.inv(L[:rank, :rank])
+        M_inv_approx = L_inv.T @ L_inv
+        P = np.eye(4)[piv]
+        M_inv_reconstructed = P.T @ M_inv_approx @ P
+
+        print('here')
+        print(M)
+        print(M_reconstructed)
+
+        print(M_inv_reconstructed @ M)
+
+        assert(np.allclose(M_reconstructed, M))
+        assert(np.allclose(L @ L.T, M))
+
     
     def test_dot_log(self):
         # Matrix vector test

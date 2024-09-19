@@ -18,6 +18,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              ExtendedDeltaPOperator, MatMulOperator,
                              VjBasisOperator, KernelOperator,
                              EigenBasisOperator, DeltaKernelBasisOperator,
+                             DeltaKernelRegularizerOperator,
                              KronOperator, PolynomialOperator,
                              CovarianceDistanceOperator, CovarianceVjOperator,
                              SelIdxOperator, ExpandIdxOperator,
@@ -101,24 +102,24 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(u1, u3))
 
     def test_laplacian_operator(self):
-        L = LaplacianOperator(2, 2)
+        sl = LaplacianOperator(2, 2)
         
         v = np.ones(4)
-        assert(np.allclose(L.dot(v), 0))
-        assert(np.allclose(L.dot(2*v), 0))
+        assert(np.allclose(sl.dot(v), 0))
+        assert(np.allclose(sl.dot(2*v), 0))
         
         v = np.array([1, 2, 1, 0])
         u = np.array([-1, 3, 1, -3])
-        assert(np.allclose(L.dot(v), u))
+        assert(np.allclose(sl.dot(v), u))
     
-        L = LaplacianOperator(2, 2)
-        assert(np.allclose(L.lambdas, [0, 2, 4]))
+        sl = LaplacianOperator(2, 2)
+        assert(np.allclose(sl.lambdas, [0, 2, 4]))
         
-        L = LaplacianOperator(2, 3)
-        assert(np.allclose(L.lambdas, [0, 2, 4, 6]))
+        sl = LaplacianOperator(2, 3)
+        assert(np.allclose(sl.lambdas, [0, 2, 4, 6]))
         
-        L = LaplacianOperator(3, 2)
-        assert(np.allclose(L.lambdas, [0, 3, 6]))
+        sl = LaplacianOperator(3, 2)
+        assert(np.allclose(sl.lambdas, [0, 3, 6]))
     
     def test_polynomial_operator(self):
         A = np.array([[2, 1.],
@@ -135,9 +136,9 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(P1.dot(v), P2.dot(v)))
         
     def test_projection_operator_coefficients(self):
-        a, l = 4, 5
+        a, sl = 4, 5
         lambdas = 10 ** np.linspace(2, -2, 6)
-        W = ProjectionOperator(a, l, lambdas=lambdas)
+        W = ProjectionOperator(a, sl, lambdas=lambdas)
         V = W.calc_eig_vandermonde_matrix()
         V_inv1 = W.calc_eig_vandermonde_matrix_inverse(numeric=True)
         V_inv2 = W.calc_eig_vandermonde_matrix_inverse(numeric=False)
@@ -200,11 +201,11 @@ class LinOpsTests(unittest.TestCase):
         assert(quad(DP3, v) == 0)
     
         # Test eigenvalues
-        l, a, P = 5, 4, 2
-        DP = DeltaPOperator(P=P, n_alleles=a, seq_length=l)
+        sl, a, P = 5, 4, 2
+        DP = DeltaPOperator(P=P, n_alleles=a, seq_length=sl)
         DP.calc_lambdas()
         
-        for k in range(P, l+1):
+        for k in range(P, sl+1):
             lambda_k = a ** P * comb(k, P)
             assert(DP.lambdas[k] == lambda_k)
     
@@ -255,50 +256,50 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(m.T, K_transpose.todense()))
 
     def test_vj_projection_operator(self):
-        a, l = 2, 2
+        a, sl = 2, 2
         
         # Purely additive function
         y = np.array([-1.5, -0.5, 0.5, 1.5])
         y01 = np.array([-1, -1, 1, 1])
         y10 = np.array([-0.5, 0.5, -0.5, 0.5])
         
-        Pj = VjProjectionOperator(a, l, j=[0])
+        Pj = VjProjectionOperator(a, sl, j=[0])
         f01 = Pj.dot(y)
         assert(np.allclose(f01, y01))
         
-        Pj = VjProjectionOperator(a, l, j=[1])
+        Pj = VjProjectionOperator(a, sl, j=[1])
         f10 = Pj.dot(y)
         assert(np.allclose(f10, y10))
         
-        Pj = VjProjectionOperator(a, l, j=[])
+        Pj = VjProjectionOperator(a, sl, j=[])
         f00 = Pj.dot(y)
         assert(np.allclose(f00, 0))
         
-        Pj = VjProjectionOperator(a, l, j=[0, 1])
+        Pj = VjProjectionOperator(a, sl, j=[0, 1])
         f11 = Pj.dot(y)
         assert(np.allclose(f11, 0))
         
         # Tests that projections add up to the whole subspace in larger case
-        a, l = 4, 5
-        v = np.random.normal(size=a ** l)
+        a, sl = 4, 5
+        v = np.random.normal(size=a ** sl)
 
         for k in range(1, 6):
-            W = ProjectionOperator(a, l, k=k)
+            W = ProjectionOperator(a, sl, k=k)
             u1 = W.dot(v)
             
             u2 = np.zeros(v.shape[0])
             for j in combinations(np.arange(W.l), k):
-                Pj = VjProjectionOperator(a, l, j=list(j))
+                Pj = VjProjectionOperator(a, sl, j=list(j))
                 u2 += Pj.dot(v)
             
             assert(np.allclose(u1, u2))
     
     def test_vj_projection_operator_sq_norm(self):
-        a, l = 2, 2
+        a, sl = 2, 2
         y = np.array([-1.5, -0.5, 0.5, 1.5])
         
         for j in [[], [0], [1], [0, 1]]:
-            Pj = VjProjectionOperator(a, l, j=j)
+            Pj = VjProjectionOperator(a, sl, j=j)
             fsqn = Pj.dot_square_norm(y)
             exp = np.sum(Pj.dot(y) ** 2)
             assert(np.allclose(fsqn, exp))
@@ -338,20 +339,20 @@ class LinOpsTests(unittest.TestCase):
         assert(u.shape[0] == 4 ** 5)
 
     def test_k_eigen_basis_operator(self):
-        a, l = 4, 5
-        v = np.random.normal(size=a ** l)
+        a, sl = 4, 5
+        v = np.random.normal(size=a ** sl)
         
-        for k in range(0, l+1):
-            W = ProjectionOperator(a, l, k=k)
-            B = EigenBasisOperator(a, l, k=k)
+        for k in range(0, sl+1):
+            W = ProjectionOperator(a, sl, k=k)
+            B = EigenBasisOperator(a, sl, k=k)
             u1 = W @ v
             u2 = B @ B.transpose_dot(v)
             assert(np.allclose(u1, u2))
     
     def test_delta_kernel_basis_operator(self):
         # Test small example explicitly
-        a, l, P = 2, 2, 2
-        B = DeltaKernelBasisOperator(a, l, P=P)
+        a, sl, P = 2, 2, 2
+        B = DeltaKernelBasisOperator(a, sl, P=P)
         B_dense = np.array([[1/2,  1/2,  1/2, 1/2],
                             [-1/2, -1/2, 1/2, 1/2],
                             [-1/2, 1/2, -1/2, 1/2]])
@@ -359,11 +360,11 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(b, B_dense))
         
         # Test in a larger case
-        a, l, P = 4, 5, 2
-        B = DeltaKernelBasisOperator(a, l, P=P)
+        a, sl, P = 4, 5, 2
+        B = DeltaKernelBasisOperator(a, sl, P=P)
         
         # Ensure it is in the null space of DeltaP operator
-        DP = DeltaPOperator(a, l, P=P)
+        DP = DeltaPOperator(a, sl, P=P)
         v = np.random.normal(size=B.shape[1])
         f = B.dot(v)
         assert(np.allclose(DP.dot(f), 0.))
@@ -379,26 +380,47 @@ class LinOpsTests(unittest.TestCase):
         u1 = B @ B.transpose_dot(v)
         u2 = 0.
         for k in range(P):
-            W = ProjectionOperator(a, l, k=k)
+            W = ProjectionOperator(a, sl, k=k)
             u2 += W.dot(v)
         assert(np.allclose(u1, u2))
+    
+    def test_delta_kernel_regularizer_operator(self):
+        # Test small example explicitly
+        a, sl, P = 2, 2, 2
+        
+        lda = np.array([1e-16, 1])
+        B = DeltaKernelBasisOperator(a, sl, P=P)
+        b = np.random.normal(scale=[0, 1, 1])
+        phi = B @ b
+        
+        # Ensure it is in the null space
+        DP = DeltaPOperator(a, sl, P)
+        c3 = np.dot(phi, DP @ phi)
+        assert(np.allclose(c3, 0))
+        
+        D = DeltaKernelRegularizerOperator(B, lambdas_inv=lda) 
+        c1 = np.sum(b[1:] ** 2)
+        c2 = np.dot(phi, D @ phi)
+        c3 = np.dot(b, D.beta_dot(b))
+        assert(np.allclose(c1, c2))
+        assert(np.allclose(c1, c3))
     
     def test_rho_projection_operator(self):
         np.random.seed(0)
         
         # Small landscape
-        a, l = 2, 2
-        P = RhoProjectionOperator(a, l, rho=0.5)
+        a, sl = 2, 2
+        P = RhoProjectionOperator(a, sl, rho=0.5)
         v = np.random.normal(size=P.n)
         u1 = P.dot(v)
         
         lambdas = np.array([1, 0.5, 0.25])
-        W = ProjectionOperator(a, l, lambdas=lambdas)
+        W = ProjectionOperator(a, sl, lambdas=lambdas)
         u2 = W.dot(v)
         assert(np.allclose(u1, u2))
         
         # Different rho per site
-        P = RhoProjectionOperator(a, l, rho=[0.5, 0.8])
+        P = RhoProjectionOperator(a, sl, rho=[0.5, 0.8])
         v = np.random.normal(size=P.n)
         u1 = P.dot(v)
         
@@ -407,18 +429,18 @@ class LinOpsTests(unittest.TestCase):
         js = [[], [1], [0], [0, 1]]
         u2 = np.zeros(v.shape)
         for w, j in zip(ws, js): 
-            Pj = VjProjectionOperator(a, l, j=j)
+            Pj = VjProjectionOperator(a, sl, j=j)
             u2 += w * Pj.dot(v)
         assert(np.allclose(u1, u2))
         
         # Larger landscape with single rho model
-        a, l = 4, 6
-        P = RhoProjectionOperator(a, l, rho=0.5)
+        a, sl = 4, 6
+        P = RhoProjectionOperator(a, sl, rho=0.5)
         v = np.random.normal(size=P.shape[1])
         u1 = P.dot(v)
         
-        lambdas = np.array([2**-(i) for i in range(l+1)])
-        W = ProjectionOperator(a, l, lambdas=lambdas)
+        lambdas = np.array([2**-(i) for i in range(sl+1)])
+        W = ProjectionOperator(a, sl, lambdas=lambdas)
         u2 = W.dot(v)
         assert(np.allclose(u1, u2))
         
@@ -478,25 +500,25 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(B.dot(v), K.dot(v)))
     
     def test_covariance_distance_operator(self):
-        a, l = 2, 2
-        v = np.random.normal(size=(a**l, 1))
+        a, sl = 2, 2
+        v = np.random.normal(size=(a**sl, 1))
         S = v @ v.T
 
         # Ensure the sum over all possible distances matches
         ss1 = S.sum()
         ss2 = 0
-        for d in range(l+1):
-            C = CovarianceDistanceOperator(a, l, d)
+        for d in range(sl+1):
+            C = CovarianceDistanceOperator(a, sl, d)
             ss2 += quad(C, v)
         assert(np.allclose(ss1, ss2))
 
         # Check distance=0
         s0 = np.sum(v ** 2)
-        C0 = CovarianceDistanceOperator(a, l, distance=0)
+        C0 = CovarianceDistanceOperator(a, sl, distance=0)
         assert(np.allclose(quad(C0, v), s0))
         
         # Check distance=1
-        C1 = CovarianceDistanceOperator(a, l, distance=1)
+        C1 = CovarianceDistanceOperator(a, sl, distance=1)
         m1 = np.array([[0, 1, 1, 0],
                        [1, 0, 0, 1],
                        [1, 0, 0, 1],
@@ -504,7 +526,7 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(np.sum(m1 * S), quad(C1, v)))
 
         # Check distance=2
-        C2 = CovarianceDistanceOperator(a, l, distance=2)
+        C2 = CovarianceDistanceOperator(a, sl, distance=2)
         m2 = np.array([[0, 0, 0, 1],
                        [0, 0, 1, 0],
                        [0, 1, 0, 0],
@@ -512,19 +534,19 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(np.sum(m2 * S), quad(C2, v)))
 
     def test_covariance_vj_operator(self):
-        a, l = 2, 2
-        sites = np.arange(l)
-        v = np.random.normal(size=(a**l, 1))
+        a, sl = 2, 2
+        sites = np.arange(sl)
+        v = np.random.normal(size=(a**sl, 1))
         S = v @ v.T
 
         # Check 00
         s00 = np.sum(v ** 2)
-        C00 = CovarianceVjOperator(a, l, j=[])
-        assert(np.allclose(np.eye(a ** l), C00.todense()))
+        C00 = CovarianceVjOperator(a, sl, j=[])
+        assert(np.allclose(np.eye(a ** sl), C00.todense()))
         assert(np.allclose(quad(C00, v), s00))
         
         # Check 01
-        C01 = CovarianceVjOperator(a, l, j=[0])
+        C01 = CovarianceVjOperator(a, sl, j=[0])
         m01 = np.array([[0, 0, 1, 0],
                         [0, 0, 0, 1],
                         [1, 0, 0, 0],
@@ -533,7 +555,7 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(np.sum(m01 * S), quad(C01, v)))
 
         # Check 10
-        C10 = CovarianceVjOperator(a, l, j=[1])
+        C10 = CovarianceVjOperator(a, sl, j=[1])
         m10 = np.array([[0, 1, 0, 0],
                         [1, 0, 0, 0],
                         [0, 0, 0, 1],
@@ -542,7 +564,7 @@ class LinOpsTests(unittest.TestCase):
         assert(np.allclose(np.sum(m10 * S), quad(C10, v)))
 
         # Check distance=2
-        C11 = CovarianceVjOperator(a, l, j=(0, 1))
+        C11 = CovarianceVjOperator(a, sl, j=(0, 1))
         m11 = np.array([[0, 0, 0, 1],
                         [0, 0, 1, 0],
                         [0, 1, 0, 0],
@@ -553,52 +575,52 @@ class LinOpsTests(unittest.TestCase):
         # Ensure the sum over all possible distances matches
         ss1 = S.sum()
         ss2 = 0
-        for k in range(l+1):
+        for k in range(sl+1):
             for j in combinations(sites, k):
-                C = CovarianceVjOperator(a, l, j=j)
+                C = CovarianceVjOperator(a, sl, j=j)
                 ss2 += quad(C, v)
         assert(np.allclose(ss1, ss2))
     
     def test_calc_covariance_vjs(self):
         # Test simple cases
-        a, l = 2, 2
+        a, sl = 2, 2
         y = np.array([1, 1, 1, 1])
-        cov, ns, sites = calc_covariance_vjs(y, a, l)
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
         assert(np.allclose(cov, 1))
         assert(np.allclose(ns, 4))
 
         y = np.array([1, -1, 1, -1])
-        cov, ns, sites = calc_covariance_vjs(y, a, l)
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
         assert(np.allclose(cov, [1, 1, -1, -1]))
         assert(np.allclose(ns, 4))
 
         y = np.array([1, 1, -1, -1])
-        cov, ns, sites = calc_covariance_vjs(y, a, l)
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
         assert(np.allclose(cov, [1, -1, 1, -1]))
         assert(np.allclose(ns, 4))
 
         y = np.array([1, 0, 0, -1])
-        cov, ns, sites = calc_covariance_vjs(y, a, l)
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
         assert(np.allclose(cov, [0.5, 0, 0, -0.5]))
         assert(np.allclose(ns, 4))
 
         # Test in a bigger landscape
-        a, l = 4, 5
-        n = a ** l
+        a, sl = 4, 5
+        n = a ** sl
         y = np.random.normal(size=n)
         
         # Verify output shapes
-        cov, ns, sites = calc_covariance_vjs(y, a, l)
-        assert(cov.shape == (2 ** l,))
-        assert(ns.shape == (2 ** l,))
-        assert(sites.shape == (2 ** l, l))
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
+        assert(cov.shape == (2 ** sl,))
+        assert(ns.shape == (2 ** sl,))
+        assert(sites.shape == (2 ** sl, sl))
 
         # Ensure changes when seeing only part of the data        
         idx = np.arange(n)[np.random.uniform(size=n) < 0.9]
-        cov2, ns2, sites2 = calc_covariance_vjs(y[idx], a, l, idx=idx)
-        assert(cov.shape == (2 ** l,))
-        assert(ns.shape == (2 ** l,))
-        assert(sites.shape == (2 ** l, l))
+        cov2, ns2, sites2 = calc_covariance_vjs(y[idx], a, sl, idx=idx)
+        assert(cov.shape == (2 ** sl,))
+        assert(ns.shape == (2 ** sl,))
+        assert(sites.shape == (2 ** sl, sl))
 
         assert(np.all(ns2 <= ns))
         assert(np.all(cov2 != cov))
@@ -624,15 +646,15 @@ class SkewedLinOpsTests(unittest.TestCase):
     def xtest_skewed_kernel_operator(self):
         ps = np.array([[0.3, 0.7], [0.5, 0.5]])
         log_p = np.log(ps)
-        l, a = ps.shape
+        sl, a = ps.shape
         
         # Define Laplacian based kernel
-        L = LaplacianOperator(a, l, ps=ps)
-        W = ProjectionOperator(L=L)
+        sl = LaplacianOperator(a, sl, ps=ps)
+        W = ProjectionOperator(sl=sl)
         K1 = VarianceComponentKernelOperator(W)
         
         # Define full kernel function
-        kernel = VarianceComponentKernel(l, a, use_p=True)
+        kernel = VarianceComponentKernel(sl, a, use_p=True)
         x = np.array(['AA', 'AB', 'BA', 'BB'])
         kernel.set_data(x1=x, alleles=['A', 'B'])
         
@@ -660,25 +682,25 @@ class SkewedLinOpsTests(unittest.TestCase):
         assert(np.allclose(k1, k2))
     
     def xtest_skewed_kernel_operator_big(self):
-        l, a = 4, 4
+        sl, a = 4, 4
         alleles = ALPHABET[:a]
-        ps = np.random.dirichlet(alpha=np.ones(a), size=l)
+        ps = np.random.dirichlet(alpha=np.ones(a), size=sl)
         log_p = np.log(ps)
         
         # Define Laplacian based kernel
-        L = LaplacianOperator(a, l, ps=ps)
-        W = ProjectionOperator(L=L)
+        sl = LaplacianOperator(a, sl, ps=ps)
+        W = ProjectionOperator(sl=sl)
         K1 = VarianceComponentKernelOperator(W)
         I = np.eye(K1.shape[0])
         
         # Define full kernel function
-        kernel = VarianceComponentKernel(l, a, use_p=True)
-        x = np.array([x for x in generate_possible_sequences(l, alleles)])
+        kernel = VarianceComponentKernel(sl, a, use_p=True)
+        x = np.array([x for x in generate_possible_sequences(sl, alleles)])
         kernel.set_data(x1=x, alleles=alleles)
         
         # Test components
-        for k in range(l+1):
-            lambdas = np.zeros(l+1)
+        for k in range(sl+1):
+            lambdas = np.zeros(sl+1)
             lambdas[k] = 1
             K1.set_lambdas(lambdas)
             k1 = K1.dot(I)

@@ -1,227 +1,40 @@
 #!/usr/bin/env python
+from functools import partial
+from time import time
+
 import numpy as np
 import pandas as pd
-
-from time import time
-from tqdm import tqdm
-from functools import partial
 from scipy.optimize import minimize
-from scipy.special import logsumexp, loggamma
-from scipy.stats.stats import pearsonr
+from scipy.special import logsumexp
 from scipy.stats import norm
-from scipy.sparse.linalg import aslinearoperator
+from scipy.stats.stats import pearsonr
 
-from gpmap.src.settings import PHI_LB, PHI_UB
-from gpmap.src.utils import (check_error, get_CV_splits, safe_exp, get_cv_iter,
-                             calc_cv_loss)
-from gpmap.src.seq import (guess_space_configuration, get_alphabet,
-                           get_seqs_from_alleles,  calc_msa_weights,
-                           get_subsequences, calc_allele_frequencies,
-                           calc_expected_logp, calc_genetic_code_aa_freqs)
-from gpmap.src.linop import (DeltaPOperator, calc_covariance_distance,
-                             DeltaKernelBasisOperator, ProjectionOperator,
-                             VarianceComponentKernel, SubMatrixOperator,
-                             DiagonalOperator, IdentityOperator, InverseOperator)
-from gpmap.src.matrix import inv_dot, inv_quad, quad
 from gpmap.src.aligner import VCKernelAligner
-
-
-class SeqGaussianProcessRegressor(object):
-    def __init__(self, expand_alphabet=True):
-        self.expand_alphabet = expand_alphabet
-    
-    def get_regularization_constants(self):
-        return(10**(np.linspace(self.min_log_reg, self.max_log_reg, self.num_reg)))
-    
-    def fit_beta_cv(self):
-        beta_values = self.get_regularization_constants()
-        cv_splits = get_CV_splits(X=self.X, y=self.y, y_var=self.y_var, nfolds=self.nfolds)
-        cv_iter = get_cv_iter(cv_splits, beta_values, process_data=self.process_data)
-        cv_loss = calc_cv_loss(cv_iter, self.cv_fit, self.cv_evaluate,
-                               total_folds=beta_values.shape[0] * self.nfolds)
-        self.cv_loss_df = pd.DataFrame(cv_loss)
-        
-        with np.errstate(divide='ignore'):
-            self.cv_loss_df['log_beta'] = np.log10(self.cv_loss_df['beta'])
-            
-        loss = self.cv_loss_df.groupby('beta')['loss'].mean()
-        self.beta = loss.index[np.argmin(loss)]
-    
-    def define_space(self, seq_length=None, n_alleles=None, genotypes=None,
-                     alphabet_type='custom'):
-        if genotypes is not None:
-            configuration = guess_space_configuration(genotypes,
-                                                      ensure_full_space=False,
-                                                      force_regular=True,
-                                                      force_regular_alleles=False)
-            seq_length = configuration['length']
-            alphabet = [sorted(a) for a in configuration['alphabet']]
-            n_alleles = configuration['n_alleles'][0]
-            n_alleles = len(alphabet[0])
-        else:
-            msg = 'Either seq_length or genotypes must be provided'
-            check_error(seq_length is not None, msg=msg)
-            alphabet = get_alphabet(n_alleles=n_alleles,
-                                    alphabet_type=alphabet_type)
-            n_alleles = len(alphabet)
-            alphabet = [alphabet] * seq_length
-        
-        self.set_config(n_alleles, seq_length, alphabet)
-    
-    def get_obs_idx(self, seqs):
-        obs_idx = self.genotype_idxs[seqs]
-        return(obs_idx)
-    
-    def set_config(self, n_alleles, seq_length, alphabet):
-        self.seq_length = seq_length
-        self.n_alleles = n_alleles
-        self.alphabet = alphabet
-        self.n_genotypes = n_alleles ** seq_length
-        self.genotypes = np.array(list(get_seqs_from_alleles(alphabet)))
-        self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
-                                       index=self.genotypes)
-    
-    def calc_posterior_variance(self, X_pred=None, cg_rtol=1e-4):
-        pred_idx = np.arange(self.n_genotypes) if X_pred is None else self.get_obs_idx(X_pred)
-        if self.progress:
-            pred_idx = tqdm(pred_idx)
-
-        post_vars = np.array([self.calc_posterior_variance_i(i, cg_rtol=cg_rtol)
-                              for i in pred_idx])        
-        return(post_vars)
-
-    def make_contrasts(self, contrast_matrix, cg_rtol=1e-4):
-        """
-        Computes the posterior distribution of linear combinations of genotypes
-        under the specific Gaussian Process prior.
-
-        Parameters
-        ----------
-        contrast_matrix: pd.DataFrame of shape (n_genotypes, n_contrasts)
-            DataFrame containing the linear combinations of genotypes for
-            which to compute the summary of the posterior distribution
-
-        cg_rtol: float
-            Relative tolerance of Conjugate Gradient algorithm used
-            to compute the posterior
-
-        Returns
-        -------
-        contrasts: pd.DataFrame of shape (n_contrasts, 5)
-            DataFrame containing the summary of the posterior for each of
-            the provided contrasts. This includes the estimate, 
-            the posterior standard deviation, lower and upper bound
-            for the 95 % credible interval and the posterior 
-            probability for each quantity to be larger or smaller than 0.
-
-        """
-        X_pred = contrast_matrix.index.values
-        contrast_names = contrast_matrix.columns.values
-        B = contrast_matrix.values.T
-
-        if B.shape[0] == 1:
-            B = np.vstack([B, B])
-            contrast_names = np.append(contrast_names, [None])
-
-        m, S = self.calc_posterior(X_pred=X_pred, B=B, cg_rtol=cg_rtol)
-        S = S @ np.eye(S.shape[1])
-        stderr = np.sqrt(np.diag(S))
-        posterior = norm(m, stderr)
-        p = posterior.cdf(0.)
-        p = np.max(np.vstack([p, 1-p]), axis=0)
-        dm = 2 * stderr
-        result = pd.DataFrame({'estimate' : m, 'std': stderr,
-                               'ci_95_lower': m - dm, 'ci_95_upper': m + dm,
-                               'p(|x|>0)' : p}, index=contrast_names)
-        result = result.loc[contrast_matrix.columns.values, :]
-        return(result)
-
-    def predict(self, X_pred=None, calc_variance=False, cg_rtol=1e-4):
-        """
-        Compute the Maximum a Posteriori (MAP) estimate of the phenotype at 
-        the provided or all genotypes
-        
-        Parameters
-        ----------
-        X_pred : array-like of shape (n_genotypes,)
-            Vector containing the genotypes for which we want to predict the
-            phenotype. If `n_genotypes == None` then predictions are provided
-            for the whole sequence space
-        
-        calc_variance : bool (False)
-            Option to also return the posterior variances for each individual
-            genotype
-        
-        Returns
-        -------
-        function : pd.DataFrame of shape (n_genotypes, 1)
-                   Returns the phenotypic predictions for each input genotype
-                   in the column ``ypred`` and genotype labels as row names.
-                   If ``calc_variance=True``, then it has an additional
-                   column with the posterior variances for each genotype
-        """
-        
-        t0 = time()
-        ypred = self.calc_posterior_mean(cg_rtol=cg_rtol)
-        pred = pd.DataFrame({'y': ypred}, index=self.genotypes)
-        if X_pred is not None:
-            pred = pred.loc[X_pred, :]
-        if calc_variance:
-            pred['y_var'] = self.calc_posterior_variance(X_pred=X_pred, cg_rtol=cg_rtol)
-            pred['std'] = np.sqrt(pred['y_var'])
-            pred['ci_95_lower'] = pred['y'] - 2 * pred['std']
-            pred['ci_95_upper'] = pred['y'] + 2 * pred['std']
-
-        self.pred_time = time() - t0
-        return(pred)
-        
-        
-class SequenceInterpolator(SeqGaussianProcessRegressor):
-    def __init__(self, n_alleles=None, seq_length=None, alphabet_type='custom',
-                 cg_rtol=1e-16, **kwargs):
-        self.cg_rtol = cg_rtol
-        self.kwargs = kwargs
-        
-        self.initialized = False
-        if seq_length is not None and (n_alleles is not None or alphabet_type != 'custom'):
-            self.init(n_alleles=n_alleles, seq_length=seq_length, alphabet_type=alphabet_type)
-            
-    def init(self, seq_length=None, n_alleles=None, genotypes=None, alphabet_type='custom'):
-        if not self.initialized:
-            self.define_space(n_alleles=n_alleles, seq_length=seq_length,
-                              alphabet_type=alphabet_type, genotypes=genotypes)
-            self.define_precision_matrix()
-            self.initialized = True
-    
-    def set_data(self, X, y):
-        if np.any(np.isnan(y)):
-            msg = 'y vector contains nans'
-            raise ValueError(msg)
-        
-        self.init(genotypes=X)
-        self.X = X
-        self.y = y
-        
-        self.n_obs = y.shape[0]
-        self.obs_idx = self.get_obs_idx(X)
-        
-        z = np.full(self.n_genotypes, True)
-        z[self.obs_idx] = False
-        self.pred_idx = np.where(z)[0]
-    
-    def calc_cost(self, y):
-        return(quad(self.C, y))
-        
-    def predict(self):
-        C_II = SubMatrixOperator(self.C, row_idx=self.pred_idx, col_idx=self.pred_idx)
-        C_II_inv = InverseOperator(C_II, method='cg', rtol=self.cg_rtol)
-        C_IB = SubMatrixOperator(self.C, row_idx=self.pred_idx, col_idx=self.obs_idx)
-        b = C_IB @ self.y
-        
-        y_pred = np.zeros(self.n_genotypes)
-        y_pred[self.obs_idx] = self.y
-        y_pred[self.pred_idx] = -C_II_inv @ b
-        return(y_pred)
+from gpmap.src.gp import (
+    GaussianProcessRegressor,
+    GeneralizedGaussianProcessRegressor,
+    MinimizerRegressor,
+    SequenceInterpolator,
+)
+from gpmap.src.likelihood import SeqDEFTLikelihood
+from gpmap.src.linop import (
+    DeltaKernelBasisOperator,
+    DeltaKernelRegularizerOperator,
+    DeltaPOperator,
+    DiagonalOperator,
+    ProjectionOperator,
+    VarianceComponentKernel,
+    calc_covariance_distance,
+)
+from gpmap.src.seq import (
+    get_subsequences,
+)
+from gpmap.src.utils import (
+    calc_cv_loss,
+    check_error,
+    get_cv_iter,
+    get_CV_splits,
+)
 
 
 class MinimumEpistasisInterpolator(SequenceInterpolator):
@@ -239,236 +52,6 @@ class MinimumEpistasisInterpolator(SequenceInterpolator):
     def smooth(self, y_pred):
         y_pred -= 1 / self.p * self.DP @ y_pred
         return(y_pred)
-
-
-class GaussianProcessRegressor(SeqGaussianProcessRegressor):
-    def __init__(self, base_kernel, progress=True):
-        self.K = base_kernel
-        self.progress = progress
-    
-    def set_data(self, X, y, y_var=None):
-        self.define_space(genotypes=X)
-        self.X = X
-        self.y = y
-        
-        if np.any(np.isnan(y)):
-            msg = 'y vector contains nans'
-            raise ValueError(msg)
-        
-        self.n_obs = y.shape[0]
-        self.obs_idx = self.get_obs_idx(X)
-
-        if y_var is None:
-            y_var = np.zeros(y.shape[0])    
-            
-        if np.any(np.isnan(y_var)):
-            msg = 'y_var vector contains nans'
-            raise ValueError(msg)
-                
-        self.y_var = y_var
-        self.D_var = DiagonalOperator(y_var)
-        self._K_BB = None
-    
-    @property
-    def K_BB(self):
-        if not hasattr(self, '_K_BB') or self._K_BB is None:
-            self._K_BB = self.K.compute(self.obs_idx, self.obs_idx, self.D_var)
-        return(self._K_BB)
-    
-    def calc_posterior_mean(self, B=None, cg_rtol=1e-8):
-        K_aB = self.K.compute(x2=self.obs_idx)
-        y_pred = K_aB @ inv_dot(self.K_BB, self.y, method='cg', rtol=cg_rtol)
-        return(y_pred)
-    
-    def calc_posterior_variance_i(self, i, cg_rtol=1e-4):
-        K_i = self.K.get_column(i)
-        K_ii = K_i[i]
-        K_Bi = K_i[self.obs_idx]
-        post_var = K_ii - inv_quad(self.K_BB, K_Bi, method='cg', rtol=cg_rtol)
-        return(post_var)
-    
-    def calc_posterior(self, X_pred=None, B=None, cg_rtol=1e-4):
-        pred_idx = np.arange(self.n_genotypes) if X_pred is None else self.get_obs_idx(X_pred)
-        if B is None:
-            B = IdentityOperator(pred_idx.shape[0])
-        else:
-            B = aslinearoperator(B)
-
-        K_aB = self.K.compute(x1=pred_idx, x2=self.obs_idx)
-        W_aB = B @ K_aB
-
-        # Compute mean
-        K_BB_inv = InverseOperator(self.K_BB, method='cg', rtol=cg_rtol)
-        mean_post = W_aB @ K_BB_inv @ self.y
-
-        # Compute covariance
-        K_aa = self.K.compute(x1=pred_idx, x2=pred_idx)
-        Sigma_post = B @ K_aa @ B.transpose() - W_aB @ K_BB_inv @ W_aB.transpose()
-        return(mean_post, Sigma_post)
-    
-    def sample(self):
-        a = np.random.normal(size=self.K.shape[1])
-        y = self.K.matrix_sqrt() @ a
-        return(y)
-    
-    def simulate(self, sigma=0, p_missing=0):
-        '''
-        Simulates data under the specified Variance component priors
-        
-        Parameters
-        ----------
-        sigma : real
-            Standard deviation of the experimental noise additional to the
-            variance components
-        
-        p_missing : float between 0 and 1
-            Probability of randomly missing genotypes in the simulated output
-            data
-            
-        Returns
-        -------
-        data : pd.DataFrame of shape (n_genotypes, 3)
-            DataFrame with the columns ``y_true``, ``y``and ``var`` corresponding
-            to the true function at each genotype, the observed values and the
-            variance of the measurement respectively for each sequence or 
-            genotype indicated in the ``DataFrame.index`` 
-        
-        '''
-        y_true = self.sample()
-        y = np.random.normal(y_true, sigma) if sigma > 0 else y_true
-        y_var = np.full(self.n_genotypes, sigma ** 2, dtype=float)
-        
-        data = pd.DataFrame({'y_true': y_true,
-                             'y': y, 
-                             'y_var': y_var},
-                            index=self.genotypes)
-
-        if p_missing > 0:
-            idxs = np.random.uniform(size=y.shape[0]) < p_missing
-            data.loc[idxs, ['y', 'y_var']]  = np.nan
-        return(data)
-    
-#     ### Ongoing attempt to do evidence maximization ###
-#     def neg_marginal_log_likelihood(self, params):
-#         self.K.set_params(params)
-#         self.K_inv_y = self.K.inv_dot(self.y)
-#         mll1 = np.dot(self.y, self.K_inv_y) / 2
-#         mll2 = self.K.calc_log_det(method='SLQ', n_vectors=5, degree=10) / 2
-# #         mll3 = self.n / 2 * np.log(2 * np.pi)
-#         mll = mll1 + mll2 
-#         print(params, mll1, mll2)
-#         return(mll)
-    
-#     def neg_marginal_log_likelihood_grad(self, params):
-#         if np.any(params != self.K.get_params()):
-#             self.K.set_params(params)
-#             self.K_inv_y = self.K.inv_dot(self.y)
-            
-#         grad = []
-#         for K_grad in self.K.grad():
-            
-#             def matvec(x):
-#                 v = K_grad.dot(x)
-#                 return(np.dot(self.K_inv_y, v) * self.K_inv_y - self.K.inv_dot(v))
-            
-#             op = ExtendedLinearOperator(matvec=matvec,
-#                                         shape=self.K.shape, dtype=self.K.dtype)
-#             grad.append(op.calc_trace(exact=False, n_vectors=10))
-#         return(-np.array(grad))
-    
-#     def fit(self, X, y, y_var=None):
-#         self.set_data(X, y, y_var=y_var)
-        
-#         x0 = self.K.get_params0()
-#         f = self.neg_marginal_log_likelihood
-#         f_grad = self.neg_marginal_log_likelihood_grad
-#         res = minimize(fun=f, x0=x0,
-#                        jac=f_grad, method='L-BFGS-B')
-#         params = res.x
-#         self.K.set_params(params)
-#         return(params)
-
-
-class MinimizerRegressor(SeqGaussianProcessRegressor):
-    def __init__(self, n_alleles=None, seq_length=None, alphabet_type='custom',
-                 progress=True, cg_rtol=1e-4):
-        self.progress = progress
-        self.cg_rtol = cg_rtol
-        self.initialized = False
-        
-        if seq_length is not None:
-            self.init(n_alleles=n_alleles, seq_length=seq_length,
-                      alphabet_type=alphabet_type)
-    
-    def init(self, seq_length=None, n_alleles=None, genotypes=None,
-             alphabet_type='custom'):
-        if not self.initialized:
-            self.define_space(seq_length=seq_length, n_alleles=n_alleles,
-                              genotypes=genotypes, alphabet_type=alphabet_type)
-            
-    def set_data(self, X, y, y_var=None):
-        if np.any(np.isnan(y)):
-            msg = 'y vector contains nans'
-            raise ValueError(msg)
-
-        if y_var is None:
-            y_var = np.zeros(y.shape[0])    
-            
-        if np.any(np.isnan(y_var)):
-            msg = 'y_var vector contains nans'
-            raise ValueError(msg)
-        
-        self.init(genotypes=X)
-        self.n_obs = y.shape[0]
-        self.obs_idx = self.get_obs_idx(X)
-        
-        self.X = X
-        self.y = y
-        self.y_var = y_var
-        
-        self.y_star = np.zeros(self.n_genotypes)
-        self.y_star[self.obs_idx] = y
-        self.y_var_inv_star = np.zeros(self.n_genotypes)
-        self.y_var_inv_star[self.obs_idx] = 1 / y_var
-        self.D_var_inv_star = DiagonalOperator(self.y_var_inv_star)
-        self._A_inv = None
-    
-    def calc_loss_prior(self, v):
-        return(quad(self.C, v))
-    
-    @property
-    def A_inv(self):
-        if not hasattr(self, '_A_inv') or self._A_inv is None:
-            A = self.C + self.D_var_inv_star
-            self._A_inv = InverseOperator(A, method='cg', rtol=self.cg_rtol)
-        return(self._A_inv)
-
-    def calc_posterior_mean(self, B=None, cg_rtol=1e-8):
-        mean_post = self.A_inv @ self.D_var_inv_star @ self.y_star
-        if B is not None:
-            mean_post = B @ mean_post
-        return(mean_post)
-    
-    def calc_posterior_variance_i(self, i, cg_rtol=1e-4):
-        i = np.array([i])
-        post_var = SubMatrixOperator(self.A_inv, row_idx=i, col_idx=i) @ np.eye(1)
-        return(post_var[0, 0])
-        
-    def calc_posterior(self, X_pred=None, B=None):
-        mean_post = self.A_inv @ self.D_var_inv_star @ self.y_star
-        Sigma_post = self.A_inv
-        
-        if X_pred is not None:
-            pred_idx = self.get_obs_idx(X_pred)
-            mean_post = mean_post[pred_idx]
-            Sigma_post = SubMatrixOperator(Sigma_post, row_idx=pred_idx, col_idx=pred_idx)
-        
-        if B is not None:
-            B = aslinearoperator(B)
-            mean_post = B @ mean_post
-            Sigma_post = B @ Sigma_post @ B.T
-            
-        return(mean_post, Sigma_post)
 
 
 class MinimumEpistasisRegression(MinimizerRegressor):
@@ -740,7 +323,7 @@ class VCregression(GaussianProcessRegressor):
         self.vc_df = self.get_variance_component_df(lambdas)
 
 
-class SeqDEFT(SeqGaussianProcessRegressor):
+class SeqDEFT(GeneralizedGaussianProcessRegressor):
     '''
     Sequence Density Estimation using Field Theory model that allows inference
     of a complete sequence probability distribution under a Gaussian Process prior
@@ -771,13 +354,14 @@ class SeqDEFT(SeqGaussianProcessRegressor):
     
     '''
     def __init__(self, P, n_alleles=None, seq_length=None, alphabet_type='custom',
-                 a=None, num_reg=20, nfolds=5,
+                 a=None, num_reg=20, nfolds=5, lambdas_P_inv=None,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  optimization_opts={}, maxiter=1000, gtol=1e-3, ftol=1e-8):
         super().__init__()
         self.P = P
         self.a = a
         self._a = a
+        self.set_lambdas_P_inv(lambdas_P_inv)
         self.a_is_fixed = a is not None
         self.nfolds = nfolds
         
@@ -794,33 +378,46 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         self.max_a_max = max_a_max
         self.fac_max = fac_max
         self.fac_min = fac_min
+        self.baseline_phi = None
         
         # Optimization attributes
         opts = {'ftol': ftol, 'gtol': gtol, 'maxiter': maxiter}
-        self.optimization_opts = optimization_opts.update(opts)
+        optimization_opts.update(opts)
+        self.optimization_opts = optimization_opts
         self.initialized = False
 
         if seq_length is not None:
             self.init(n_alleles=n_alleles, seq_length=seq_length,
                       alphabet_type=alphabet_type)
-        elif alphabet_type != 'custom' or n_alleles != None:
+        elif alphabet_type != 'custom' or n_alleles is not None:
             msg = '`seq_length` must be specified together with'
             msg += '`n_alleles` or `alphabet_type`'
             raise ValueError(msg)
-        
+    
+    def set_lambdas_P_inv(self, lambdas_P_inv):
+        if lambdas_P_inv is None:
+            self.lambdas_P_inv = None
+        else:
+            msg = 'lambdas_P_inv={} size is different from P={}'.format(lambdas_P_inv.shape[0], self.P)
+            check_error(lambdas_P_inv.shape[0] == self.P, msg)
+            self.lambdas_P_inv = lambdas_P_inv
+    
     def init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom'):
         if not self.initialized:
             self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                               genotypes=genotypes, alphabet_type=alphabet_type)
+            self.likelihood = SeqDEFTLikelihood(self.genotypes)
             self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
             self.kernel_basis = DeltaKernelBasisOperator(self.n_alleles, self.seq_length, self.P)
-            self.baseline_phi = np.zeros(self.n_genotypes)
             self.initialized = True
-
-    def get_a_values(self):
-        return(self.get_regularization_constants())
-    
+            
+            if self.lambdas_P_inv is None:
+                self.kernel_regularizer = None
+            else:    
+                self.kernel_regularizer = DeltaKernelRegularizerOperator(self.kernel_basis,
+                                                                         self.lambdas_P_inv)
+            
     def cv_fit(self, data, a, phi0=None):
         X, y, _ = data
         self._set_data(X=X, y=y)
@@ -830,7 +427,7 @@ class SeqDEFT(SeqGaussianProcessRegressor):
     def cv_evaluate(self, data, phi):
         X, y, _ = data
         self._set_data(X=X, y=y)
-        logL = self.calc_logL(phi)
+        logL = self.likelihood.calc_logL(phi)
         return(logL)
     
     def get_cv_logL_df(self, cv_logL):
@@ -880,7 +477,7 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         
     def get_res_phi(self, res):
         if not res.success:
-            print(res.message)
+            raise ValueError(res.message)
         out = res.x
         
         if np.isinf(self._a):
@@ -892,37 +489,29 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         self._a = a
         
         if a == 0 and hasattr(self, '_fit_a_0'):
-            phi = self._fit_a_0()
+            with np.errstate(divide='ignore'):
+                phi = -np.log(self.R)
+            self.opt_res = None
             
-        elif np.isfinite(a) and self.n_genotypes > 1e4:
-            x0 = self.get_x0(phi0)
-            opts = {k: v for k, v in self.optimization_opts.items()
-                    if k != 'ftol'}
-            res = minimize(fun=self.calc_loss, jac=True, 
-                           hessp=self.calc_loss_finite_hessp,
-                           x0=x0, method='trust-krylov', options=opts)
+        elif np.isfinite(a):
+            phi0 = self.get_x0(phi0)
+            phi = self.calc_posterior_mean(phi0=phi0)
+            
         else:
             x0 = self.get_x0(phi0)
             res = minimize(fun=self.calc_loss, jac=True, 
                            x0=x0, method='L-BFGS-B',
                            options=self.optimization_opts)
-        phi = self.get_res_phi(res)
-        self.opt_res = res
+            phi = self.get_res_phi(res)
+            self.opt_res = res
         return(phi)
-    
-    def set_baseline_phi(self, X, baseline_phi):
-        msg = 'baseline_phi needs to be the size of n_genotypes'
-        check_error(baseline_phi.shape[0] == self.n_genotypes, msg=msg)
-
-        msg = 'Sequences `X` associated to the baseline_phi must be provided'
-        check_error(X is not None, msg=msg)
-
-        self.baseline_phi = pd.Series(baseline_phi, index=X).loc[self.genotypes].values
     
     def _get_lambdas(self, a):
         self.DP.calc_lambdas()
         lambdas = np.zeros(self.DP.lambdas.shape)
         lambdas[self.P:] = self.DP.n_p_faces / (a * self.DP.lambdas[self.P:])
+        if self.lambdas_P_inv is not None:
+            lambdas[:self.P] = 1 / self.lambdas_P_inv
         return(lambdas)
 
     def simulate_phi(self, a):
@@ -952,45 +541,37 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         phi = W_sqrt @ x
         return(phi)
     
-    def fill_zeros_counts(self, X, y):
-        obs = pd.DataFrame({'x': X, 'y': y}).groupby(['x'])['y'].sum().reset_index()
-        data = pd.Series(np.zeros(self.n_genotypes), index=self.genotypes)
-        try:
-            data.loc[obs['x'].values] = obs['y'].values
-        except KeyError:
-            msg = 'Sequences outside of sequence space found'
-            raise KeyError(msg)
-        return(data)
+    def _set_data(self, X, y=None, allele_freqs=None):
+        '''
+        This is the part of data definition that may change during cross-validation
+        '''
+        self.likelihood.set_data(X, y=y, offset=self.baseline, 
+                                 positions=self.positions,
+                                 phylo_correction=self.phylo_correction,
+                                 adjust_freqs=self.adjust_freqs,
+                                 allele_freqs=allele_freqs)
+
+    def set_baseline(self, X=None, baseline_phi=None):
+        if baseline_phi is None:
+            self.baseline = None
+        else:
+            msg = 'Sequences `X` associated to the baseline must be provided'
+            check_error(X is not None, msg=msg)
+            self.baseline = pd.Series(baseline_phi, index=X).loc[self.genotypes].values
     
-    def _set_data(self, X, y=None, allele_freqs=None, **kwargs):
-        if y is None:
-            y = calc_msa_weights(X, phylo_correction=self.phylo_correction)
-        
-        if self.adjust_freqs:
-            if allele_freqs is None:
-                allele_freqs = calc_allele_frequencies(X, y=y)
-            elif isinstance(allele_freqs, dict):
-                self.allele_freqs = allele_freqs
-            else:
-                self.allele_freqs = calc_genetic_code_aa_freqs(allele_freqs)
-            
-        self.X = get_subsequences(X, positions=self.positions)
+    def set_data(self, X, y=None, positions=None,
+                 baseline_X=None, baseline_phi=None,
+                 phylo_correction=False,
+                 adjust_freqs=False, allele_freqs=None):
+        self.X = X
         self.y = y
         self.y_var = None
         
-        data = self.fill_zeros_counts(self.X, y).values
-        self.N = data.sum()
-        self.R = (data / self.N)
-        self.counts = data
-        self.multinomial_constant = loggamma(self.counts.sum() + 1) - loggamma(self.counts + 1).sum()
-        self.obs_idx = data > 0.
-    
-    def set_data(self, X, y=None, positions=None, phylo_correction=False,
-                 adjust_freqs=False, allele_freqs=None):
         self.init(genotypes=get_subsequences(X, positions=positions))
         self.positions = positions
         self.adjust_freqs = adjust_freqs
         self.phylo_correction = phylo_correction
+        self.set_baseline(baseline_X, baseline_phi)
         self._set_data(X, y=y, allele_freqs=allele_freqs)
     
     def fit(self, X, y=None, baseline_phi=None, baseline_X=None,
@@ -1047,9 +628,9 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         
         """
         self.set_data(X, y=y, positions=positions,
+                      baseline_X=baseline_X, baseline_phi=baseline_phi,
                       phylo_correction=phylo_correction,
                       adjust_freqs=adjust_freqs, allele_freqs=allele_freqs)
-        self.set_baseline_phi(baseline_X, baseline_phi)
         phi_inf = self._fit(np.inf)
         
         if not self.a_is_fixed and force_fit_a:
@@ -1062,134 +643,48 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         else:
             phi = phi_inf
 
-        output = self.phi_to_output(phi)
+        output = self.likelihood.phi_to_output(phi)
         return(output)
     
-    def calc_regularization(self, phi):
-        regularizer = 0
-        if np.isfinite(PHI_UB):
-            flags = (phi > PHI_UB)
-            if flags.any() > 0:
-                regularizer += np.sum((phi[flags] - PHI_UB)**2)
-        if np.isfinite(PHI_LB):
-            flags = (phi < PHI_LB)
-            if flags.any() > 0:
-                regularizer += np.sum((phi[flags] - PHI_LB)**2)
-        return(regularizer)
-    
-    def calc_regularization_grad(self, phi):
-        regularizer = np.zeros(self.n_genotypes)
-        if np.isfinite(PHI_UB):
-            flags = (phi > PHI_UB)
-            if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi[flags] - PHI_UB)
-        if np.isfinite(PHI_LB):
-            flags = (phi < PHI_LB)
-            if flags.sum() > 0:
-                regularizer[flags] += 2 * (phi[flags] - PHI_LB)
-        return(regularizer)
-    
-    def calc_regularization_hess(self, phi):
-        regularizer = np.zeros(self.n_genotypes)
-        flags = (phi > PHI_UB) | (phi < PHI_LB)
-        if flags.sum() > 0:
-            regularizer[flags] = 2
-        return(DiagonalOperator(regularizer))
-    
-    def calc_logL(self, phi):
-        c = self.multinomial_constant
-        obs_phi = self.phi_to_obs_phi(phi)
-        logq = self.phi_to_logQ(obs_phi)
-        return(c + np.dot(self.counts[self.obs_idx], logq[self.obs_idx]))
-    
-    def phi_to_obs_phi(self, phi):
-        return(phi + self.baseline_phi)
-    
-    def obs_phi_to_exp_phi(self, obs_phi):
-        return(self.N * safe_exp(-obs_phi))
-    
-    def calc_data_loss(self, obs_phi, exp_phi):
-        return(self.N * np.dot(self.R, obs_phi) + exp_phi.sum())
-    
-    def calc_obs_phi_exp_phi_data_loss(self, phi):
-        obs_phi = self.phi_to_obs_phi(phi)
-        exp_phi = self.obs_phi_to_exp_phi(obs_phi)
-        loss = self.calc_data_loss(obs_phi, exp_phi)
-        if hasattr(self, 'calc_regularization'):
-            loss += self.calc_regularization(obs_phi)
-        return(obs_phi, exp_phi, loss)
-    
-    def calc_data_loss_grad(self, exp_phi):
-        return(self.counts - exp_phi)
-    
     def calc_loss_finite_a(self, phi, return_grad=True, store_hess=True):
-        # Compute loss from the prior
         a_over_s = self._a / self.DP.n_p_faces
-        C = a_over_s * self.DP
-        Cphi = C @ phi
-        loss = 0.5 * np.dot(phi, Cphi)
-
-        # Compute loss from the likelihood
-        res = self.calc_obs_phi_exp_phi_data_loss(phi)
-        obs_phi, exp_phi, data_loss = res
-        loss += data_loss
-        print('Loss evaluation', loss)
         
-        # Store hessian
-        if store_hess:
-            hess = C + DiagonalOperator(exp_phi)
-            if hasattr(self, 'calc_regularization'):
-                hess += self.calc_regularization_hess(obs_phi)
-            self.hess = hess
-        
-        # Compute gradient
-        if return_grad:
-            grad = Cphi + self.calc_data_loss_grad(exp_phi)
-            if hasattr(self, 'calc_regularization'):
-                grad += self.calc_regularization_grad(obs_phi)
-            return(loss, grad)
-    
-        return(loss)
+        if self.kernel_regularizer is None:
+            self.C = a_over_s * self.DP
+        else:
+            self.C = a_over_s * self.DP + self.kernel_regularizer
+            
+        return(super().calc_loss(phi, return_grad=return_grad, store_hess=store_hess))
 
-    def calc_loss_finite_hessp(self, phi, p):
-        return(self.hess @ p)
+    def calc_loss_hessp(self, phi, p):
+        if np.isfinite(self._a):
+            return(self.hess @ p)
+        else:
+            msg = 'Hessian product not implemented for infinite a'
+            raise ValueError(msg)
     
     def calc_loss_inf_a(self, b, return_grad=True):
         phi = self._b_to_phi(b)
+        res = self.likelihood.calc_loss_grad_hess(phi)
+        loss, grad, _ = res
 
-        # Calculate loss
-        res = self.calc_obs_phi_exp_phi_data_loss(phi)
-        obs_phi, exp_phi, loss = res
+        if self.kernel_regularizer is not None:
+            Wb = self.kernel_regularizer.beta_dot(b)
+            loss += np.dot(b, Wb)
         
-        # Calculate gradient
-        print('Loss evaluation', loss)
         if return_grad:
-            # TODO: review for non-zero baselines
-            grad = self.calc_data_loss_grad(exp_phi)
-            if hasattr(self, 'calc_regularization'):
-                grad += self.calc_regularization_grad(obs_phi)
             grad = self._phi_to_b(grad)
+            if self.kernel_regularizer is not None:
+                grad += 2 * Wb
             return(loss, grad)
-        
-        return(loss)
+        else:
+            return(loss)
     
     def calc_loss(self, x, return_grad=True):
         if np.isinf(self._a):
             return(self.calc_loss_inf_a(x, return_grad=return_grad))
         else:
             return(self.calc_loss_finite_a(x, return_grad=return_grad))
-    
-    def phi_to_output(self, phi):
-        Q_star = self.phi_to_Q(phi)
-        seq_densities = pd.DataFrame({'frequency': self.R, 'phi': phi,
-                                      'Q_star': Q_star},
-                                     index=self.genotypes)
-        if self.adjust_freqs:
-            exp_logp = calc_expected_logp(self.genotypes, self.allele_freqs)
-            logp_adj = np.log(Q_star) - exp_logp
-            seq_densities['adjusted_Q_star'] = self.phi_to_Q(-logp_adj)
-        
-        return(seq_densities)
     
     # Optional methods
     def calc_a_max(self, phi_inf):
@@ -1222,6 +717,7 @@ class SeqDEFT(SeqGaussianProcessRegressor):
     def get_a_values(self, phi_inf=None):
         if phi_inf is None:
             phi_inf = self._fit(np.inf)
+            
         a_min = self.calc_a_min(phi_inf) 
         a_max = self.calc_a_max(phi_inf)
         a_values = np.geomspace(a_min, a_max, self.num_reg)
@@ -1229,17 +725,6 @@ class SeqDEFT(SeqGaussianProcessRegressor):
         self.total_folds = self.nfolds * (self.num_reg + 2)
         return(a_values)
 
-    def phi_to_logQ(self, phi):
-        return(-phi - logsumexp(-phi))
-    
-    def phi_to_Q(self, phi):
-        return(np.exp(self.phi_to_logQ(phi + self.baseline_phi)))
-    
-    def _fit_a_0(self):
-        with np.errstate(divide='ignore'):
-            phi = -np.log(self.R)
-        return(phi)
-    
     def simulate(self, N, a=None, phi=None, seed=None):
         '''
         Simulates data under the specified `a` penalization for
@@ -1281,8 +766,7 @@ class SeqDEFT(SeqGaussianProcessRegressor):
             check_error(a is not None, '"a" must be provided if "phi=None"')
             phi = self.simulate_phi(a)
             
-        Q = self.phi_to_Q(phi)
-        X = np.random.choice(self.genotypes, size=N, replace=True, p=Q)
+        X = self.likelihood.sample(phi, N)
         return(X)
     
 

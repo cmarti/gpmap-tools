@@ -48,19 +48,20 @@ def rayleigh_quotient(linop, v, metric=None):
     return(quad(linop, v) / inner_product(v, v, metric=metric))
 
 
-def inv_dot(linop, v, method='minres', rtol=1e-4, **kwargs):
+def inv_dot(linop, v, method='minres', **kwargs):
     if method == 'minres':
         res = minres(linop, v, **kwargs)
     elif method == 'cg':
-        res = cg(linop, v, atol=norm(v) * rtol, **kwargs)
+        res = cg(linop, v, **kwargs)
     else:
         msg = 'Method {} not allowed'.format(method)
         raise ValueError(msg)
+    # print(res[1])
     return(res[0])
 
 
-def inv_quad(linop, v, method='minres', rtol=1e-4, **kwargs):
-    u = inv_dot(linop, v, method, rtol, **kwargs)
+def inv_quad(linop, v, method='minres', **kwargs):
+    u = inv_dot(linop, v, method, **kwargs)
     return(np.sum(v * u))
 
 
@@ -205,3 +206,64 @@ def rate_to_jump_matrix(rate_matrix):
         
     jump_matrix[zero_idxs, zero_idxs] = 1
     return(jump_matrix)
+
+
+def pivoted_cholesky_with_diag(A, D, rank, tol=1e-10):
+    """
+    Compute the low-rank pivoted Cholesky decomposition of a linear operator A
+    with an explicitly given diagonal.
+    
+    Parameters:
+    A : LinearOperator
+        Symmetric positive definite linear operator representing matrix A.
+    D : ndarray
+        The explicit diagonal of the matrix A.
+    rank : int
+        The desired rank for the low-rank approximation.
+    tol : float
+        The tolerance for stopping the algorithm.
+    
+    Returns:
+    L : ndarray
+        The low-rank Cholesky factor (rank x n matrix).
+    piv : list
+        The list of pivot indices.
+    """
+    n = len(D)
+    piv = []
+    L = np.zeros((rank, n))
+    perm = np.arange(n)
+
+    # Start with the precomputed diagonal
+    diagonal = D.copy()
+
+    for k in range(rank):
+        # Pivot step: find the largest diagonal element
+        i = np.argmax(diagonal[k:]) + k
+        if diagonal[i] < tol:
+            # Stop if diagonal element is smaller than tolerance
+            break
+
+        # Swap pivot to the current position
+        perm[[k, i]] = perm[[i, k]]
+        diagonal[[k, i]] = diagonal[[i, k]]
+        if k > 0:
+            L[:k, [k, i]] = L[:k, [i, k]]
+        
+        # Compute the matrix-vector product for the current pivot
+        e_k = np.zeros(n)
+        e_k[perm[k]] = 1
+        v = A @ e_k
+
+        # Compute the current row of L
+        L[k, k] = np.sqrt(diagonal[k])
+        if k < n - 1:
+            L[k, k+1:] = (v[perm[k+1:]] - L[:k, k] @ L[:k, k+1:]) / L[k, k]
+
+        # Update the diagonal entries for the next iteration
+        diagonal[k+1:] -= L[k, k+1:]**2
+
+        # Record the pivot index
+        piv.append(perm[k])
+
+    return L[:k+1, :], piv

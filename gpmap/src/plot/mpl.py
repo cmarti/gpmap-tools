@@ -1162,7 +1162,7 @@ def plot_SeqDEFT_summary(log_Ls, seq_density=None, err_bars='stderr',
             ``fold```
         
         seq_density : pd.DataFrame of shape (n_genotypes, >= 2)
-            DataFrame with column names ``frequency``, ``Q_star`` with the 
+            DataFrame with column names ``frequency``, ``Q`` with the 
             observed frequencies and estimated densities for each possible sequence
             respectively. If not provided only a 1 panel figure with the
             cross-validated likelihood curve will be provided
