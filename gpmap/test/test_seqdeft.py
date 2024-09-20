@@ -337,6 +337,58 @@ class SeqDEFTTests(unittest.TestCase):
         plot_density_vs_frequency(seq_densities, axes)
         axes.grid(alpha=0.2)
     
+    def test_predict(self):
+        np.random.seed(0)
+        a = 200
+        sl = 5
+        seqdeft = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna')
+        phi = seqdeft.simulate_phi(a=a)
+        X = seqdeft.simulate(N=1000, phi=phi)
+        X_pred = np.random.choice(seqdeft.genotypes, 100, replace=False)
+        idx = seqdeft.get_obs_idx(X_pred)
+        phi_test = phi[idx]
+
+        # Infer
+        seqdeft = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna')
+        seqdeft.set_data(X)
+        result = seqdeft.predict(X_pred=X_pred, calc_variance=True)
+        assert(result.shape == (X_pred.shape[0], 5))
+        assert(np.all(result.index == X_pred))
+        
+        c = (phi_test - result['y']).mean()
+        result['phi_true'] = phi_test - c
+        
+        r = pearsonr(result['y'], result['phi_true'])[0]
+        calibration = np.mean((result['ci_95_lower'] < result['phi_true']) & (result['phi_true'] < result['ci_95_upper']))
+        assert(r > 0.65)
+        assert(calibration > 0.9)
+    
+    def test_contrast(self):
+        np.random.seed(0)
+        a = 200
+        sl = 5
+        seqdeft = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna')
+        phi = seqdeft.simulate_phi(a=a)
+        X = seqdeft.simulate(N=1000, phi=phi)
+        
+        seqs = ['AGCTA', 'AGCTG']
+        idx = seqdeft.get_obs_idx(seqs)
+        mut_eff = phi[idx[1]] - phi[idx[0]]
+
+        # Inference
+        seqdeft = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna')
+        seqdeft.set_data(X)
+        
+        # Contrasts
+        contrast = pd.DataFrame({seqs[0]: [-1], seqs[1]: [1]}, index=['G5A']).T
+        result = seqdeft.make_contrasts(contrast)
+        assert(result.shape == (1, 5))
+        assert(result.index[0] == 'G5A')
+        
+        result = result.loc['G5A', :]
+        assert(result['ci_95_lower'] < mut_eff)
+        assert(result['ci_95_upper'] > mut_eff)
+    
     def test_inference_cv(self):
         seqdeft = SeqDEFT(P=2)
         seqdeft.init(seq_length=5, alphabet_type='dna')

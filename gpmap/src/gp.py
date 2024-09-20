@@ -13,6 +13,7 @@ from gpmap.src.linop import (
     IdentityOperator,
     InverseOperator,
     SubMatrixOperator,
+    get_diag,
 )
 from gpmap.src.matrix import inv_dot, inv_quad, quad
 from gpmap.src.seq import (
@@ -83,14 +84,6 @@ class SeqGaussianProcessRegressor(object):
         self.genotype_idxs = pd.Series(np.arange(self.n_genotypes),
                                        index=self.genotypes)
     
-    def calc_posterior_variance(self, X_pred=None):
-        pred_idx = np.arange(self.n_genotypes) if X_pred is None else self.get_obs_idx(X_pred)
-        if self.progress:
-            pred_idx = tqdm(pred_idx)
-
-        post_vars = np.array([self.calc_posterior_variance_i(i) for i in pred_idx])        
-        return(post_vars)
-
     def make_contrasts(self, contrast_matrix):
         """
         Computes the posterior distribution of linear combinations of genotypes
@@ -158,12 +151,13 @@ class SeqGaussianProcessRegressor(object):
         """
         
         t0 = time()
-        ypred = self.calc_posterior_mean()
-        pred = pd.DataFrame({'y': ypred}, index=self.genotypes)
-        if X_pred is not None:
-            pred = pred.loc[X_pred, :]
+        post_mean, Sigma = self.calc_posterior(X_pred=X_pred)
+        
+        seqs = self.genotypes if X_pred is None else X_pred
+        pred = pd.DataFrame({'y': post_mean}, index=seqs)
+        
         if calc_variance:
-            pred['y_var'] = self.calc_posterior_variance(X_pred=X_pred)
+            pred['y_var'] = get_diag(Sigma)
             pred['std'] = np.sqrt(pred['y_var'])
             pred['ci_95_lower'] = pred['y'] - 2 * pred['std']
             pred['ci_95_upper'] = pred['y'] + 2 * pred['std']
@@ -253,18 +247,6 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         if not hasattr(self, '_K_BB') or self._K_BB is None:
             self._K_BB = self.K.compute(self.obs_idx, self.obs_idx, self.D_var)
         return(self._K_BB)
-    
-    def calc_posterior_mean(self):
-        K_aB = self.K.compute(x2=self.obs_idx)
-        y_pred = K_aB @ inv_dot(self.K_BB, self.y, method='cg')
-        return(y_pred)
-    
-    def calc_posterior_variance_i(self, i):
-        K_i = self.K.get_column(i)
-        K_ii = K_i[i]
-        K_Bi = K_i[self.obs_idx]
-        post_var = K_ii - inv_quad(self.K_BB, K_Bi, method='cg')
-        return(post_var)
     
     def calc_posterior(self, X_pred=None, B=None):
         pred_idx = np.arange(self.n_genotypes) if X_pred is None else self.get_obs_idx(X_pred)
@@ -386,17 +368,12 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         mean_post = self.A_inv @ self.b
         return(mean_post)
     
-    def calc_posterior_covariance(self):
+    def calc_posterior_covariance(self, **kwargs):
         return(self.A_inv)
     
-    def calc_posterior_variance_i(self, i):
-        i = np.array([i])
-        post_var = SubMatrixOperator(self.A_inv, row_idx=i, col_idx=i) @ np.eye(1)
-        return(post_var[0, 0])
-        
     def calc_posterior(self, X_pred=None, B=None):
         mean_post = self.calc_posterior_mean()
-        Sigma_post = self.calc_posterior_covariance()
+        Sigma_post = self.calc_posterior_covariance(mean_post=mean_post)
         
         if X_pred is not None:
             pred_idx = self.get_obs_idx(X_pred)
@@ -487,8 +464,8 @@ class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
         self.opt_res = res
         return(phi)
     
-    def calc_posterior_covariance(self, mean):
-        w = self.likelihood.calc_loss_grad_hess(mean)[2]
+    def calc_posterior_covariance(self, mean_post):
+        w = self.likelihood.calc_loss_grad_hess(mean_post)[2]
         D = DiagonalOperator(1 / np.sqrt(w))
         A = D @ self.C @ D + IdentityOperator(self.n_genotypes)
         Sigma = D @ InverseOperator(A, method='cg') @ D

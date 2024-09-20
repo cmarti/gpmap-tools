@@ -827,6 +827,16 @@ class ConnectednessKernel(RhoProjectionOperator,Kernel):
     
     def get_params(self):
         return(self.rho)
+    
+    
+def get_diag(A):
+    s = min(A.shape)
+    d = []
+    for i in range(s):
+        v = np.zeros(s)
+        v[i] = 1.
+        d.append(np.dot(v, A @ v))
+    return(np.array(d))
 
         
 def _get_seq_values_and_obs_seqs(y, n_alleles, seq_length, idx=None):
