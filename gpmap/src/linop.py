@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import numpy as np
 
-from itertools import combinations
+from itertools import combinations, product
 from numpy.linalg.linalg import matrix_power
 from scipy.linalg import lu_factor, lu_solve
 from scipy.linalg import orth
@@ -12,7 +12,8 @@ except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
 from gpmap.src.utils import check_error
-from gpmap.src.matrix import reciprocal, quad, inv_dot
+from gpmap.src.seq import get_product_states
+from gpmap.src.matrix import reciprocal, quad, inv_dot, kron
 
 
 class ExtendedLinearOperator(_CustomLinearOperator):
@@ -82,6 +83,9 @@ class IdentityOperator(DiagonalOperator):
 
     def _matvec(self, v):
         return(v)
+    
+    def _rmatvec(self, B):
+        return B
     
     def _matmat(self, B):
         return(B)
@@ -338,6 +342,7 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.m_k = self.L.lambdas_multiplicity
         self.set_P(P)
         self.calc_kernel_dimension()
+        self.rank = self.n - self.kernel_dimension
         self.calc_n_p_faces()
         self.calc_n_p_faces_genotype()
 
@@ -838,7 +843,7 @@ def get_diag(A):
         d.append(np.dot(v, A @ v))
     return(np.array(d))
 
-        
+
 def _get_seq_values_and_obs_seqs(y, n_alleles, seq_length, idx=None):
     n = n_alleles ** seq_length
     if idx is not None:
@@ -861,6 +866,37 @@ def calc_covariance_distance(y, n_alleles, seq_length, idx=None):
         cov[d] = reciprocal(Pquad, ns[d])
     return(cov, ns)
 
+
+def calc_avg_local_epistatic_coeff(X, y, alphabet, seq_length, P):
+    sites = np.arange(seq_length)
+    v = dict(zip(X, y))
+
+    background_seqs = list(product(alphabet, repeat=seq_length - P))
+    allele_pairs = list(combinations(alphabet, 2))
+    allele_pairs_combs = list(product(allele_pairs, repeat=P))
+    z = kron([[-1, 1]] * P)
+    
+    s, n = 0, 0
+    for target_sites in combinations(sites, P):
+        background_sites = [s for s in sites if s not in target_sites]
+        for background_seq in background_seqs:
+            bc = dict(zip(background_sites, background_seq))
+            for pairs in allele_pairs_combs:
+                seqs = []
+                allele_combs = list(get_product_states(pairs))
+
+                for allele_comb in allele_combs:
+                    seq = bc.copy()
+                    seq.update(dict(zip(target_sites, allele_comb)))
+                    seqs.append(''.join([seq[i] for i in sites]))
+                try:
+                    u = np.array([v[s] for s in seqs])
+                except KeyError:
+                    continue
+                s += np.dot(u, z) ** 2
+                n += 1
+    return(s, n)
+            
 
 def calc_covariance_vjs(y, n_alleles, seq_length, idx=None):
     lp1 = seq_length + 1

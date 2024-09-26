@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from functools import partial
 from time import time
 
 import numpy as np
@@ -25,6 +24,7 @@ from gpmap.src.linop import (
     DeltaPOperator,
     ProjectionOperator,
     VarianceComponentKernel,
+    calc_avg_local_epistatic_coeff,
     calc_covariance_distance,
 )
 from gpmap.src.seq import (
@@ -125,9 +125,10 @@ class MinimumEpistasisRegression(MinimizerRegressor):
                                total_folds=a_values.shape[0] * self.nfolds,
                                param_label='a', loss_label='logL')
         self.logL_df = self.get_cv_logL_df(cv_logL)    
-        self.set_a(self.get_ml_a(self.logL_df))
+        a = self.get_ml_a(self.logL_df)
+        return(a)
     
-    def fit(self, X, y, y_var=None):
+    def fit(self, X, y, y_var=None, cross_validation=False):
         """
         Infers the optimal `a` from the provided data, this is, 
         the magnitude of Pth order local epistatic coefficients 
@@ -156,8 +157,16 @@ class MinimumEpistasisRegression(MinimizerRegressor):
         self.set_data(X, y, y_var=y_var)
         
         if self.a is None:
-            self.fit_a_cv()
-            self.set_data(X, y, y_var=y_var)
+            if cross_validation:
+                a = self.fit_a_cv()
+                self.set_data(X, y, y_var=y_var)
+            else:
+                # TODO: find a better solution for this
+                alphabet = np.unique(self.alphabet)
+                s, n = calc_avg_local_epistatic_coeff(X, y, alphabet=alphabet,
+                                                      seq_length=self.seq_length, P=self.P)
+                a = self.DP.rank * n / s
+            self.set_a(a)
 
 
 class VCregression(GaussianProcessRegressor):
@@ -418,7 +427,13 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             else:    
                 self.kernel_regularizer = DeltaKernelRegularizerOperator(self.kernel_basis,
                                                                          self.lambdas_P_inv)
-            
+    
+    def set_a(self, a):
+        self.a = a
+
+        if a is not None:
+            self.C = a / (2 * self.s) * self.DP
+        
     def cv_fit(self, data, a, phi0=None):
         X, y, _ = data
         self._set_data(X=X, y=y)

@@ -22,7 +22,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              KronOperator, PolynomialOperator,
                              CovarianceDistanceOperator, CovarianceVjOperator,
                              SelIdxOperator, ExpandIdxOperator,
-                             calc_covariance_vjs,
+                             calc_covariance_vjs, calc_avg_local_epistatic_coeff,
                              calc_space_variance_components,
                              calc_space_vjs_variance_components)
 
@@ -498,6 +498,50 @@ class LinOpsTests(unittest.TestCase):
         
         v = np.random.normal(size=K.shape[1])
         assert(np.allclose(B.dot(v), K.dot(v)))
+
+    def test_calc_avg_epistatic_coef(self):
+        alphabet = 'AB'
+        n_alleles = len(alphabet)
+        seq_length = 3
+        X = list(generate_possible_sequences(l=seq_length, alphabet=alphabet))
+        y = np.random.normal(size=len(X))
+
+        # Ensure expected results in complete landscapes
+        P = 2
+        s, n = calc_avg_local_epistatic_coeff(X, y, alphabet=alphabet,
+                                              seq_length=seq_length, P=P)
+        DP = DeltaPOperator(n_alleles, seq_length, P)
+        assert(n == DP.n_p_faces)
+        assert(np.allclose(s, quad(DP, y)))
+
+        # With incomplete data
+        s1, n1 = calc_avg_local_epistatic_coeff(X[1:], y[1:], alphabet=alphabet,
+                                                seq_length=seq_length, P=P)
+        assert(n1 == 3)
+
+        s2, n2 = calc_avg_local_epistatic_coeff(X[:-1], y[:-1], alphabet=alphabet,
+                                                seq_length=seq_length, P=P)
+        assert(n2 == 3)
+        assert(np.allclose(s1 + s2, s))
+
+        # With P=3
+        P = 3
+        s, n = calc_avg_local_epistatic_coeff(X, y, alphabet=alphabet,
+                                              seq_length=seq_length, P=P)
+        DP = DeltaPOperator(n_alleles, seq_length, P)
+        assert n == DP.n_p_faces
+        assert np.allclose(s, quad(DP, y))
+
+        # With more than 2 alleles
+        alphabet = "ABC"
+        n_alleles = len(alphabet)
+        X = list(generate_possible_sequences(l=seq_length, alphabet=alphabet))
+        y = np.random.normal(size=len(X))
+        P = 2
+        s, n = calc_avg_local_epistatic_coeff(X, y, alphabet=alphabet, seq_length=seq_length, P=P)
+        DP = DeltaPOperator(n_alleles, seq_length, P)
+        assert n == DP.n_p_faces
+        assert np.allclose(s, quad(DP, y))
     
     def test_covariance_distance_operator(self):
         a, sl = 2, 2

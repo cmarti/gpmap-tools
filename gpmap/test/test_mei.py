@@ -123,7 +123,7 @@ class MEITests(unittest.TestCase):
         assert(np.allclose(mu, pred['y']))
         assert(np.allclose(post_var, pred['y_var']))
 
-    def test_regression_cv_fit(self):
+    def test_regression_fit(self):
         # Simulate data
         np.random.seed(0)
         lambdas = np.array([1, 200, 20, 2, 0.2, 0.02])
@@ -139,11 +139,21 @@ class MEITests(unittest.TestCase):
         y_var = train['y_var']
         X_test = test.index.values
 
-        # Fit model        
+        # Fit model with empirical epistatic coeffs
         model = MinimumEpistasisRegression(P=2, n_alleles=a, seq_length=length)
-        model.fit(X, y, y_var)
+        model.fit(X, y, y_var, cross_validation=False)
         
-        # Make predictions under the inferred a value
+        pred = model.predict(X_test, calc_variance=True)
+        r = pearsonr(pred['y'], test['y_true'])[0]
+        calibration = np.mean((pred['ci_95_lower'] < test['y_true']) &
+                              (test['y_true'] < pred['ci_95_upper']))
+        assert(r > 0.9)
+        assert(calibration > 0.9)
+
+        # Fit model with cross validation
+        model = MinimumEpistasisRegression(P=2, n_alleles=a, seq_length=length)
+        model.fit(X, y, y_var, cross_validation=True)
+        
         pred = model.predict(X_test, calc_variance=True)
         r = pearsonr(pred['y'], test['y_true'])[0]
         calibration = np.mean((pred['ci_95_lower'] < test['y_true']) &
