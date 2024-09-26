@@ -5,6 +5,7 @@ import numpy as np
 from timeit import timeit
 from itertools import combinations
 from scipy.special import comb
+from scipy.sparse.linalg import aslinearoperator
 
 from gpmap.src.datasets import DataSet
 from gpmap.src.settings import ALPHABET
@@ -22,6 +23,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              KronOperator, PolynomialOperator,
                              CovarianceDistanceOperator, CovarianceVjOperator,
                              SelIdxOperator, ExpandIdxOperator,
+                             StackedOperator,
                              calc_covariance_vjs, calc_avg_local_epistatic_coeff,
                              calc_space_variance_components,
                              calc_space_vjs_variance_components)
@@ -79,6 +81,29 @@ class LinOpsTests(unittest.TestCase):
             M = MatMulOperator([m, m])
         except ValueError:
             pass
+    
+    def test_stacked_operator(self):
+        m = np.array([[1, 2],
+                      [-1, 1],
+                      [2, 0.]])
+
+        A = aslinearoperator(m)
+
+        B = StackedOperator([A, A], axis=1)
+        assert(B.shape == (3, 4))
+        assert np.allclose(B.todense(), np.hstack([m, m]))
+
+        C = StackedOperator([A, A], axis=0)
+        assert C.shape == (6, 2)
+        assert np.allclose(C.todense(), np.vstack([m, m]))
+
+        D = B.transpose()
+        assert D.shape == (4, 3)
+        assert np.allclose(D.todense(), np.hstack([m, m]).T)
+
+        E = C.transpose()
+        assert E.shape == (2, 6)
+        assert np.allclose(E.todense(), np.vstack([m, m]).T)
     
     def test_sel_idxs_operator(self):
         m = np.array([[1, 2, 0],
@@ -346,7 +371,7 @@ class LinOpsTests(unittest.TestCase):
             W = ProjectionOperator(a, sl, k=k)
             B = EigenBasisOperator(a, sl, k=k)
             u1 = W @ v
-            u2 = B @ B.transpose_dot(v)
+            u2 = B @ B.transpose() @ v
             assert(np.allclose(u1, u2))
     
     def test_delta_kernel_basis_operator(self):
@@ -371,13 +396,13 @@ class LinOpsTests(unittest.TestCase):
         
         # Ensure it provides a valid projection matrix
         v = np.random.normal(size=B.shape[0])
-        u1 = B @ B.transpose_dot(v)
-        u2 = B @ B.transpose_dot(u1)
+        u1 = B @ B.transpose() @ v
+        u2 = B @ B.transpose() @ u1
         assert(np.allclose(u1, u2))
         
         # Ensure it provides the right projection matrix
         v = np.random.normal(size=B.shape[0])
-        u1 = B @ B.transpose_dot(v)
+        u1 = B @ B.transpose() @ v
         u2 = 0.
         for k in range(P):
             W = ProjectionOperator(a, sl, k=k)

@@ -122,6 +122,62 @@ class MatMulOperator(ExtendedLinearOperator):
         return(MatMulOperator([x.transpose() for x in self.linops[::-1]]))
 
 
+class StackedOperator(ExtendedLinearOperator):
+    def __init__(self, linops, axis):
+        self.linops = linops
+        self.axis = axis
+        self._init_dtype()
+        ncols = [linop.shape[1] for linop in linops]
+        nrows = [linop.shape[0] for linop in linops]
+
+        if axis == 0:
+            ncol = np.unique(ncols)
+            msg = 'Missmatch in number of columns: {}'.format(ncols)
+            check_error(ncol.shape[0] == 1, msg=msg)
+            self.shape = (np.sum(nrows), ncol[0])
+
+        elif axis == 1:
+            nrow = np.unique(nrows)
+            msg = "Missmatch in number of rows: {}".format(nrows)
+            check_error(nrow.shape[0] == 1, msg=msg)
+            self.shape = (nrow[0], np.sum(ncols))
+        else:
+            raise ValueError('Axis can only take values [0, 1]')
+    
+    def hstack_dot(self, As, v):
+        u = 0
+        start = 0
+        for A in As:
+            end = start + A.shape[1]
+            u += A @ v[start:end]
+            start = end
+        return(u)
+    
+    def vstack_dot(self, As, v):
+        u = np.zeros(self.shape[0])
+        start = 0
+        for A in As:
+            end = start + A.shape[0]
+            u[start:end] += A @ v
+            start = end
+        return(u)
+
+    def _matvec(self, v):
+        if self.axis == 1:
+            return(self.hstack_dot(self.linops, v))
+        elif self.axis == 0:
+            return self.vstack_dot(self.linops, v)
+    
+    def _rmatvec(self, v):
+        if self.axis == 1:
+            return self.vstack_dot([A.transpose() for A in self.linops], v)
+        elif self.axis == 0:
+            return self.hstack_dot([A.transpose() for A in self.linops], v)
+    
+    def transpose(self):
+        return StackedOperator([A.transpose() for A in self.linops], axis=1 - self.axis)
+
+
 class SubMatrixOperator(ExtendedLinearOperator):
     def __init__(self, linop, row_idx=None, col_idx=None):
         self.linop = linop
@@ -667,59 +723,27 @@ class RhoProjectionOperator(ConstantDiagSeqOperator, KronOperator):
         return(RhoProjectionOperator(self.alpha, self.l, rho=self.rho ** b))
 
 
-class EigenBasisOperator(SeqOperator):
+class EigenBasisOperator(StackedOperator):
     def __init__(self, n_alleles, seq_length, k):
-        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        positions = np.arange(seq_length)
         self.k = k
-        self.m = (self.alpha - 1) ** self.k
-        self.shape = (self.n, int(comb(self.l, self.k) * self.m))
-
-    def _matvec(self, v):
-        positions = np.arange(self.l)
-        u = 0
-        for i, j in enumerate(combinations(positions, self.k)):
-            B = VjBasisOperator(self.alpha, self.l, j)
-            v_i = v[self.m*i:self.m*(i+1)]
-            u += B @ v_i
-        return(u)
-    
-    def transpose_dot(self, v):
-        positions = np.arange(self.l)
-        u = np.zeros(self.shape[1])
-        for i, j in enumerate(combinations(positions, self.k)):
-            B_transpose = VjBasisOperator(self.alpha, self.l, j).transpose()
-            u[self.m*i:self.m*(i+1)] = B_transpose.dot(v)
-        return(u)
+        self.n_alleles = n_alleles
+        self.seq_length = seq_length
+        As = [VjBasisOperator(n_alleles, seq_length, j)
+              for j in combinations(positions, k)]
+        super().__init__(linops=As, axis=1)
 
 
-class DeltaKernelBasisOperator(SeqOperator):
+class DeltaKernelBasisOperator(StackedOperator):
     def __init__(self, n_alleles, seq_length, P):
-        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.P = P
-        self.m_k = [comb(self.l, k) * (self.alpha - 1) ** k for k in range(P)]
-        m = int(np.sum(self.m_k))
-        self.shape = (self.n, m)
+        self.n_alleles = n_alleles
+        self.seq_length = seq_length
+        As = [EigenBasisOperator(n_alleles, seq_length, k)
+              for k in range(P)]
+        self.m_k = [A.shape[1] for A in As]
+        super().__init__(linops=As, axis=1)
 
-    def _matvec(self, v):
-        u = 0.
-        start = 0
-        for k in range(self.P):
-            B = EigenBasisOperator(self.alpha, self.l, k=k)
-            end = start + B.shape[1]
-            u += B @ v[start:end]
-            start = end
-        return(u)
-    
-    def transpose_dot(self, v):
-        u = np.zeros(self.shape[1])
-        start = 0
-        for k in range(self.P):
-            B = EigenBasisOperator(self.alpha, self.l, k=k)
-            end = start + B.shape[1]
-            u[start:end] = B.transpose_dot(v)
-            start = end
-        return(u)
-    
 
 class DeltaKernelRegularizerOperator(ExtendedLinearOperator):
     def __init__(self, basis, lambdas_inv):
@@ -738,7 +762,7 @@ class DeltaKernelRegularizerOperator(ExtendedLinearOperator):
         return(DiagonalOperator(np.array(reg)))
         
     def _matvec(self, v):
-        return(self.B @ self.D @ self.B.transpose_dot(v))
+        return(self.B @ self.D @ self.B.transpose() @ v)
     
     def beta_dot(self, v):
         return(self.D @ v)
