@@ -22,6 +22,7 @@ from gpmap.src.linop import (
     DeltaKernelBasisOperator,
     DeltaKernelRegularizerOperator,
     DeltaPOperator,
+    DiagonalOperator,
     ProjectionOperator,
     VarianceComponentKernel,
     calc_avg_local_epistatic_coeff,
@@ -427,6 +428,11 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             else:    
                 self.kernel_regularizer = DeltaKernelRegularizerOperator(self.kernel_basis,
                                                                          self.lambdas_P_inv)
+    @property
+    def dense_kernel_basis(self):
+        if not hasattr(self, '_dense_kernel_basis'):
+            self._dense_kernel_basis = self.kernel_basis.todense()
+        return(self._dense_kernel_basis)
     
     def set_a(self, a):
         self.a = a
@@ -478,10 +484,10 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         self.a = self.get_ml_a(self.logL_df)
     
     def _phi_to_b(self, phi):
-        return(self.kernel_basis.transpose_dot(phi))
+        return(self.kernel_basis.transpose() @ phi)
     
     def _b_to_phi(self, b):
-        return(self.kernel_basis.dot(b))
+        return(self.kernel_basis @ b)
 
     def _a_to_sd(self, a):
         return(np.sqrt(self.DP.n_p_faces / a))
@@ -521,8 +527,9 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             
         else:
             x0 = self.get_x0(phi0)
-            res = minimize(fun=self.calc_loss, jac=True, 
-                           x0=x0, method='L-BFGS-B',
+            res = minimize(fun=self.calc_loss, jac=True,
+                           hessp=self.calc_loss_hessp,
+                           x0=x0, method='Newton-CG',
                            options=self.optimization_opts)
             phi = self.get_res_phi(res)
             self.opt_res = res
@@ -679,16 +686,12 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         return(super().calc_loss(phi, return_grad=return_grad, store_hess=store_hess))
 
     def calc_loss_hessp(self, phi, p):
-        if np.isfinite(self._a):
-            return(self.hess @ p)
-        else:
-            msg = 'Hessian product not implemented for infinite a'
-            raise ValueError(msg)
+        return(self.hess @ p)
     
-    def calc_loss_inf_a(self, b, return_grad=True):
+    def calc_loss_inf_a(self, b, return_grad=True, store_hess=True):
         phi = self._b_to_phi(b)
         res = self.likelihood.calc_loss_grad_hess(phi)
-        loss, grad, _ = res
+        loss, grad, hess = res
 
         if self.kernel_regularizer is not None:
             Wb = self.kernel_regularizer.beta_dot(b)
@@ -698,6 +701,10 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             grad = self._phi_to_b(grad)
             if self.kernel_regularizer is not None:
                 grad += 2 * Wb
+
+            if store_hess:
+                basis = self.kernel_basis
+                self.hess = basis.transpose() @ DiagonalOperator(hess) @ basis
             return(loss, grad)
         else:
             return(loss)
