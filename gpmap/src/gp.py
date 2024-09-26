@@ -242,29 +242,23 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         self.D_var = DiagonalOperator(y_var)
         self._K_BB = None
     
-    @property
-    def K_BB(self):
-        if not hasattr(self, '_K_BB') or self._K_BB is None:
-            self._K_BB = self.K.compute(self.obs_idx, self.obs_idx, self.D_var)
-        return(self._K_BB)
-    
     def calc_posterior(self, X_pred=None, B=None):
         pred_idx = np.arange(self.n_genotypes) if X_pred is None else self.get_obs_idx(X_pred)
-        if B is None:
-            B = IdentityOperator(pred_idx.shape[0])
-        else:
-            B = aslinearoperator(B)
-
+        
         K_aB = self.K.compute(x1=pred_idx, x2=self.obs_idx)
-        W_aB = B @ K_aB
-
-        # Compute mean
-        K_BB_inv = InverseOperator(self.K_BB, method='cg')
-        mean_post = W_aB @ K_BB_inv @ self.y
-
-        # Compute covariance
         K_aa = self.K.compute(x1=pred_idx, x2=pred_idx)
-        Sigma_post = B @ K_aa @ B.transpose() - W_aB @ K_BB_inv @ W_aB.transpose()
+        K_Ba = self.K.compute(x1=self.obs_idx, x2=pred_idx)
+        K_BB = self.K.compute(self.obs_idx, self.obs_idx, self.D_var)
+
+        K_BB_inv = InverseOperator(K_BB, method='cg')
+        mean_post = K_aB @ K_BB_inv @ self.y
+        Sigma_post = K_aa - K_aB @ K_BB_inv @ K_Ba
+
+        if B is not None:
+            B = aslinearoperator(B)
+            mean_post = B @ mean_post
+            Sigma_post = B @ Sigma_post @ B.T
+
         return(mean_post, Sigma_post)
     
     def sample(self):
