@@ -23,7 +23,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              KronOperator, PolynomialOperator,
                              CovarianceDistanceOperator, CovarianceVjOperator,
                              SelIdxOperator, ExpandIdxOperator,
-                             StackedOperator,
+                             StackedOperator, InverseOperator,
                              calc_covariance_vjs, calc_avg_local_epistatic_coeff,
                              calc_space_variance_components,
                              calc_space_vjs_variance_components)
@@ -523,7 +523,24 @@ class LinOpsTests(unittest.TestCase):
         
         v = np.random.normal(size=K.shape[1])
         assert(np.allclose(B.dot(v), K.dot(v)))
-
+    
+    def test_inverse_operator(self):
+        np.random.seed(0)
+        
+        # With small matrix we can verify the inverse
+        A = np.array([[1, 0.5],
+                      [0.5, 1]])
+        A_inv = np.linalg.inv(A)
+        A_inv_op = InverseOperator(aslinearoperator(A), method='cg').todense()
+        assert(np.allclose(A_inv_op, A_inv))
+        
+        # With a large operator
+        A = RhoProjectionOperator(4, 8, rho=0.5)# + D
+        A_inv = InverseOperator(A, method='cg')
+        v = np.random.normal(size=A.shape[1])
+        u = A @ (A_inv @ v)
+        assert(np.allclose(u, v, atol=1e-4))
+        
     def test_calc_avg_epistatic_coef(self):
         alphabet = 'AB'
         n_alleles = len(alphabet)
