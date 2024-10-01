@@ -1,19 +1,20 @@
 #!/usr/bin/env python
-import numpy as np
-
 from itertools import combinations, product
+
+import numpy as np
 from numpy.linalg.linalg import matrix_power
-from scipy.linalg import lu_factor, lu_solve
-from scipy.linalg import orth
+from scipy.linalg import lu_factor, lu_solve, orth
 from scipy.special import comb, factorial
+from tqdm import tqdm
+
 try:
     from scipy.sparse.linalg.interface import _CustomLinearOperator
 except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
-from gpmap.src.utils import check_error
+from gpmap.src.matrix import inv_dot, kron, quad, reciprocal
 from gpmap.src.seq import get_product_states
-from gpmap.src.matrix import reciprocal, quad, inv_dot, kron
+from gpmap.src.utils import check_error
 
 
 class ExtendedLinearOperator(_CustomLinearOperator):
@@ -44,9 +45,10 @@ class ExtendedLinearOperator(_CustomLinearOperator):
         for i in range(B.shape[1]):
             x.append(self._matvec(B[:, i]))
         return(np.array(x).T)
+    
 
 class InverseOperator(ExtendedLinearOperator):
-    def __init__(self, linop, method='minres', atol=1e-4, maxiter=100, kwargs={}):
+    def __init__(self, linop, method='minres', atol=1e-14, maxiter=1000, kwargs={}):
         # TODO: implement preconditioner option
         self.linop = linop
         self.shape = linop.shape
@@ -58,8 +60,8 @@ class InverseOperator(ExtendedLinearOperator):
 
     def _matvec(self, v):
         return(inv_dot(self.linop, v, method=self.method,
-                       maxiter=self.maxiter,
-                       atol=self.atol, **self.kwargs))
+                    maxiter=self.maxiter,
+                    atol=self.atol, **self.kwargs))
 
 
 class DiagonalOperator(ExtendedLinearOperator):
@@ -764,10 +766,22 @@ class DeltaKernelRegularizerOperator(ExtendedLinearOperator):
     def _matvec(self, v):
         return(self.B @ self.D @ self.B.transpose() @ v)
     
-    def beta_dot(self, v):
-        return(self.D @ v)
+    def calc_loss_grad_hess_b(self, b):
+        Wb = self.D @ b
+        loss = np.dot(b, Wb)
+        grad = 2 * Wb
+        hess = self.D
+        return(loss, grad, hess)
     
+    def calc_loss_grad_hess_phi(self, phi):
+        D = self.B @ self.D @ self.B.transpose()
+        Wb = D @ phi
+        loss = np.dot(phi, Wb)
+        grad = 2 * Wb
+        hess = D
+        return (loss, grad, hess)
     
+
 class ProjectionOperator2(SeqOperator):
     def __init__(self, n_alleles, seq_length):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
@@ -858,10 +872,15 @@ class ConnectednessKernel(RhoProjectionOperator,Kernel):
         return(self.rho)
     
     
-def get_diag(A):
+def get_diag(A, progress=False):
     s = min(A.shape)
     d = []
-    for i in range(s):
+    
+    idxs = range(s)
+    if progress:
+        idxs = tqdm(idxs)
+        
+    for i in idxs:
         v = np.zeros(s)
         v[i] = 1.
         d.append(np.dot(v, A @ v))

@@ -367,7 +367,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
     def __init__(self, P, n_alleles=None, seq_length=None, alphabet_type='custom',
                  a=None, num_reg=20, nfolds=5, lambdas_P_inv=None,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
-                 optimization_opts={}, maxiter=1000, gtol=1e-3, ftol=1e-8):
+                 optimization_opts={}, maxiter=10000, gtol=1e-6, ftol=1e-8):
         super().__init__()
         self.P = P
         self.a = a
@@ -527,10 +527,13 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             
         else:
             x0 = self.get_x0(phi0)
-            res = minimize(fun=self.calc_loss, jac=True,
-                           hessp=self.calc_loss_hessp,
-                           x0=x0, method='Newton-CG',
-                           options=self.optimization_opts)
+            res = minimize(
+                fun=self.calc_loss, jac=True,
+                #    hessp=self.calc_loss_hessp, method='newton-CG',
+                method='L-BFGS-B',
+                x0=x0,
+                options=self.optimization_opts,
+            )
             phi = self.get_res_phi(res)
             self.opt_res = res
         return(phi)
@@ -688,23 +691,30 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
     def calc_loss_hessp(self, phi, p):
         return(self.hess @ p)
     
+    def calc_loss_hess(self, phi):
+        return self.hess
+    
     def calc_loss_inf_a(self, b, return_grad=True, store_hess=True):
-        phi = self._b_to_phi(b)
+        basis = self.kernel_basis
+        phi = basis @ b
         res = self.likelihood.calc_loss_grad_hess(phi)
         loss, grad, hess = res
 
         if self.kernel_regularizer is not None:
-            Wb = self.kernel_regularizer.beta_dot(b)
-            loss += np.dot(b, Wb)
+            res = self.kernel_regularizer.calc_loss_grad_hess_b(b)
+            loss_reg, grad_reg, hess_reg = res
+            loss += loss_reg
         
         if return_grad:
-            grad = self._phi_to_b(grad)
+            grad = basis.transpose() @ grad
             if self.kernel_regularizer is not None:
-                grad += 2 * Wb
+                grad += grad_reg
 
             if store_hess:
-                basis = self.kernel_basis
                 self.hess = basis.transpose() @ DiagonalOperator(hess) @ basis
+                if self.kernel_regularizer is not None:
+                    self.hess += hess_reg
+            # print(loss)
             return(loss, grad)
         else:
             return(loss)

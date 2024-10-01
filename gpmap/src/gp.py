@@ -6,7 +6,6 @@ import pandas as pd
 from scipy.sparse.linalg import aslinearoperator
 from scipy.stats import norm
 from scipy.optimize import minimize
-from tqdm import tqdm
 
 from gpmap.src.linop import (
     DiagonalOperator,
@@ -15,7 +14,7 @@ from gpmap.src.linop import (
     SubMatrixOperator,
     get_diag,
 )
-from gpmap.src.matrix import inv_dot, inv_quad, quad
+from gpmap.src.matrix import quad
 from gpmap.src.seq import (
     get_alphabet,
     get_seqs_from_alleles,
@@ -112,9 +111,9 @@ class SeqGaussianProcessRegressor(object):
             B = np.vstack([B, B])
             contrast_names = np.append(contrast_names, [None])
 
-        m, S = self.calc_posterior(X_pred=X_pred, B=B)
-        S = S @ np.eye(S.shape[1])
-        stderr = np.sqrt(np.diag(S))
+        m, Sigma = self.calc_posterior(X_pred=X_pred, B=B)
+        variances = get_diag(Sigma, progress=True)
+        stderr = np.sqrt(variances)
         posterior = norm(m, stderr)
         p = posterior.cdf(0.)
         p = np.max(np.vstack([p, 1-p]), axis=0)
@@ -157,7 +156,7 @@ class SeqGaussianProcessRegressor(object):
         pred = pd.DataFrame({'y': post_mean}, index=seqs)
         
         if calc_variance:
-            pred['y_var'] = get_diag(Sigma)
+            pred['y_var'] = get_diag(Sigma, progress=True)
             pred['std'] = np.sqrt(pred['y_var'])
             pred['ci_95_lower'] = pred['y'] - 2 * pred['std']
             pred['ci_95_upper'] = pred['y'] + 2 * pred['std']
@@ -443,13 +442,16 @@ class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
     
     def calc_posterior_mean(self, phi0=None):
         phi0 = self.get_phi0(phi0)
-        opts = {k: v for k, v in self.optimization_opts.items()
-                if k not in ['ftol', 'gtol']}
-        res = minimize(fun=self.calc_loss, jac=True, hessp=self.calc_loss_hessp,
-                        x0=phi0, method='newton-CG', options=opts)
-        if not res.success:
-            res = minimize(fun=self.calc_loss, jac=True,  hessp=self.calc_loss_hessp,
-                           x0=phi0, method='trust-krylov', options=opts)
+        res = minimize(fun=self.calc_loss, jac=True, #hessp=self.calc_loss_hessp,
+                        x0=phi0, method='L-BFGS-B', options=self.optimization_opts)
+        
+        # opts = {k: v for k, v in self.optimization_opts.items()
+        #         if k not in ['ftol', 'gtol']}
+        # res = minimize(fun=self.calc_loss, jac=True, hessp=self.calc_loss_hessp,
+        #                 x0=phi0, method='newton-CG', options=opts)
+        # if not res.success:
+        #     res = minimize(fun=self.calc_loss, jac=True,  hessp=self.calc_loss_hessp,
+        #                    x0=phi0, method='trust-krylov', options=opts)
         
         if not res.success:
             raise ValueError(res.message)
