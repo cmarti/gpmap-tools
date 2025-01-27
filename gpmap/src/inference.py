@@ -7,8 +7,7 @@ import pandas as pd
 from tqdm import tqdm
 from scipy.optimize import minimize
 from scipy.special import logsumexp
-from scipy.stats import norm
-from scipy.stats.stats import pearsonr
+from scipy.stats import norm, pearsonr
 
 from gpmap.src.aligner import VCKernelAligner
 from gpmap.src.gp import (
@@ -478,7 +477,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             loss = self.cv_evaluate(test, phi)
             yield({'a': a, 'fold': fold, 'logL': loss})
     
-    def fit_a_cv(self, phi_inf):
+    def fit_a_cv(self, phi_inf=None):
         a_values = np.append(np.inf, self.get_a_values(phi_inf=phi_inf))
         total_folds = a_values.shape[0] * self.nfolds
 
@@ -517,7 +516,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
 
         if self.a == 0:
             with np.errstate(divide='ignore'):
-                phi = -np.log(self.R)
+                phi = -np.log(self.likelihood.R)
             self.opt_res = None
             
         elif np.isfinite(self.a):
@@ -710,35 +709,47 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
     
     # Optional methods
     def calc_a_max(self, phi_inf):
+        a_tmp = self.a
         a_max = self.DP.n_p_faces * self.fac_max
         
-        phi_max = self._fit(a_max, phi0=phi_inf)
+        self.set_a(a_max)
+        phi_max = self.calc_posterior_max(phi0=phi_inf)
         distance = D_geo(phi_max, phi_inf)
         
         while distance > self.a_resolution and a_max < self.max_a_max:
             a_max *= 10
-            phi_max = self._fit(a_max, phi0=phi_inf)
+            self.set_a(a_max)
+            phi_max = self.calc_posterior_max(phi0=phi_inf)
             distance = D_geo(phi_max, phi_inf)
             
+        self.set_a(a_tmp)
         return(a_max)
     
-    def calc_a_min(self, phi_inf):
+    def calc_a_min(self, phi_inf=None):
+        a_tmp = self.a
         a_min = self.DP.n_p_faces * self.fac_min
         
-        phi_0 = self._fit(0)
-        phi_min = self._fit(a_min, phi0=phi_inf)
+        self.set_a(0)
+        phi_0 = self.calc_posterior_max(0)
+
+        self.set_a(a_min)
+        phi_min = self.calc_posterior_max(phi0=phi_inf)
         
         distance = D_geo(phi_min, phi_0)
         
         while distance > self.a_resolution:
             a_min /= 10
-            phi_min = self._fit(a_min, phi0=phi_inf)
+            self.set_a(a_min)
+            phi_min = self.calc_posterior_max(phi0=phi_inf)
             distance = D_geo(phi_min, phi_0)
+        
+        self.set_a(a_tmp)
         return(a_min)
 
     def get_a_values(self, phi_inf=None):
         if phi_inf is None:
-            phi_inf = self._fit(np.inf)
+            self.set_a(np.inf)
+            phi_inf = self.calc_posterior_max()
             
         a_min = self.calc_a_min(phi_inf) 
         a_max = self.calc_a_max(phi_inf)

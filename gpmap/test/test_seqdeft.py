@@ -21,9 +21,9 @@ from gpmap.src.plot.mpl import plot_SeqDEFT_summary, savefig, plot_density_vs_fr
 
 class SeqDEFTTests(unittest.TestCase):
     def test_init(self):
-        seqdeft = SeqDEFT(P=2)
         X = np.array(['AAA', 'ACA', 'BAA', 'BCA',
                       'AAD', 'ACD', 'BAD', 'BCD'])
+        seqdeft = SeqDEFT(P=2, genotypes=X)
         seqdeft.set_data(X=X)
         
         assert(seqdeft.seq_length == 3)
@@ -321,9 +321,10 @@ class SeqDEFTTests(unittest.TestCase):
         assert(k3_short > 1e3 * k3)
 
         # Simulate from prior at sl=4 with baseline phi
-        seqdeft = SeqDEFT(P=3, a=seqdeft_a)
-        seqdeft.init(seq_length=sl-out, alphabet_type='rna')
-        phi = seqdeft.simulate_phi(a=seqdeft_a)
+        seqdeft = SeqDEFT(
+            P=3, a=seqdeft_a, seq_length=sl - out, alphabet_type="rna"
+        )
+        phi = seqdeft.simulate_phi()
         X = seqdeft.simulate(N=2000, phi=phi + baseline_phi.values)
 
         # Fit model without baseline
@@ -417,11 +418,11 @@ class SeqDEFTTests(unittest.TestCase):
         assert(result['ci_95_upper'] > mut_eff)
     
     def test_inference_cv(self):
-        seqdeft = SeqDEFT(P=2)
-        seqdeft.init(seq_length=5, alphabet_type='dna')
-        phi = seqdeft.simulate_phi(a=500)
+        seqdeft = SeqDEFT(P=2, a=500, seq_length=5, alphabet_type="dna")
+        phi = seqdeft.simulate_phi()
         X = seqdeft.simulate(N=1000, phi=phi)
         
+        seqdeft = SeqDEFT(P=2, seq_length=5, alphabet_type="dna")
         seq_densities = seqdeft.fit(X=X)
         assert(np.allclose(seq_densities['Q_star'].sum(), 1))
         
@@ -434,9 +435,8 @@ class SeqDEFTTests(unittest.TestCase):
         assert(r > 0.6)
     
     def test_inference_weigths(self):
-        seqdeft = SeqDEFT(P=2)
-        seqdeft.init(seq_length=5, alphabet_type='dna')
-        phi = seqdeft.simulate_phi(a=500)
+        seqdeft = SeqDEFT(P=2, a=500, seq_length=5, alphabet_type="dna")
+        phi = seqdeft.simulate_phi()
         X = seqdeft.simulate(N=1000, phi=phi)
         
         y = np.exp(np.random.normal(size=X.shape[0]))
@@ -450,9 +450,8 @@ class SeqDEFTTests(unittest.TestCase):
         assert(r > 0.4)
     
     def xtest_inference_phylo_correction(self):
-        seqdeft = SeqDEFT(P=2)
-        seqdeft.init(seq_length=5, alphabet_type='dna')
-        phi = seqdeft.simulate_phi(a=500)
+        seqdeft = SeqDEFT(P=2, a=500, seq_length=5, alphabet_type="dna")
+        phi = seqdeft.simulate_phi()
         X = seqdeft.simulate(N=1000, phi=phi)
         X = np.array([x + np.random.choice(X) for x in X])
         positions = np.arange(5)
@@ -468,9 +467,8 @@ class SeqDEFTTests(unittest.TestCase):
         assert(r > 0.6)
         
     def test_inference_adjusted_logq(self):
-        seqdeft = SeqDEFT(P=2, a=500)
-        seqdeft.init(seq_length=4, alphabet_type='dna')
-        phi = seqdeft.simulate_phi(a=500)
+        seqdeft = SeqDEFT(P=2, a=500, seq_length=4, alphabet_type="dna")
+        phi = seqdeft.simulate_phi()
         X = seqdeft.simulate(N=1000, phi=phi)
         X = np.array([x + np.random.choice(X) for x in X])
         positions = np.arange(4)
@@ -491,9 +489,8 @@ class SeqDEFTTests(unittest.TestCase):
         assert(r > 0.6)
     
     def test_missing_alleles(self):
-        seqdeft = SeqDEFT(P=2)
-        seqdeft.init(seq_length=5, alphabet_type='dna')
-        phi = seqdeft.simulate_phi(a=500)
+        seqdeft = SeqDEFT(P=2, a=500, seq_length=5, alphabet_type="dna")
+        phi = seqdeft.simulate_phi()
         X = seqdeft.simulate(N=1000, phi=phi)
         X = X[np.array([x[0] not in ['A', 'C'] for x in X])]
         
@@ -505,9 +502,8 @@ class SeqDEFTTests(unittest.TestCase):
         assert(missing['Q_star'].sum() < 1e-6)
     
     def test_very_few_sequences(self):
-        seqdeft = SeqDEFT(P=2)
-        seqdeft.init(seq_length=5, alphabet_type='dna')
-        phi = seqdeft.simulate_phi(a=500)
+        seqdeft = SeqDEFT(P=2, a=500, seq_length=5, alphabet_type="dna")
+        phi = seqdeft.simulate_phi()
         X = seqdeft.simulate(N=75, phi=phi)
         
         seq_densities = seqdeft.fit(X=X)
@@ -532,10 +528,10 @@ class SeqDEFTTests(unittest.TestCase):
             check_call(cmd)
     
     def test_cv_plot(self):
-        seqdeft = SeqDEFT(P=2)
-        seqdeft.init(seq_length=5, alphabet_type='dna')
-        X = seqdeft.simulate(N=1000, a=500)
+        seqdeft = SeqDEFT(P=2, a=500, seq_length=5, alphabet_type="dna")
+        X = seqdeft.simulate(N=1000)
 
+        seqdeft = SeqDEFT(P=2, seq_length=5, alphabet_type="dna")
         seq_densities = seqdeft.fit(X=X)
         log_Ls = seqdeft.logL_df
 
