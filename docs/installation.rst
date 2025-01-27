@@ -14,6 +14,10 @@ Now you can clone gpmap-tools from `GitHub <https://github.com/cmarti/gpmap-tool
 
     $ git clone https://github.com/cmarti/gpmap-tools.git
 
+or from `GitHub <https://github.com/cmarti/gpmap-tools.git>`_ :
+
+    $ git clone https://github.com/cmarti/gpmap-tools.git
+
 and install it in the current python environment: ::
     
     $ cd gpmap-tools
