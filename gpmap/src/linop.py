@@ -400,12 +400,13 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.m_k = self.L.lambdas_multiplicity
         self.set_P(P)
         self.calc_kernel_dimension()
-        self.rank = self.n - self.kernel_dimension
         self.calc_n_p_faces()
         self.calc_n_p_faces_genotype()
+        self.calc_lambdas()
 
     def calc_kernel_dimension(self):
         self.kernel_dimension = np.sum(self.m_k[:self.P])
+        self.rank = self.n - self.kernel_dimension
         
     def calc_n_p_faces_genotype(self):
         n_mut = self.l * (self.alpha - 1)
@@ -920,7 +921,7 @@ def calc_avg_local_epistatic_coeff(X, y, alphabet, seq_length, P):
     z = kron([[-1, 1]] * P)
     
     s, n = 0, 0
-    for target_sites in combinations(sites, P):
+    for target_sites in tqdm(combinations(sites, P), total=comb(seq_length, P)):
         background_sites = [s for s in sites if s not in target_sites]
         for background_seq in background_seqs:
             bc = dict(zip(background_sites, background_seq))

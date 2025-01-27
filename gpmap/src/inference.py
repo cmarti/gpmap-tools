@@ -54,7 +54,7 @@ class MinimumEpistasisInterpolator(SequenceInterpolator):
     def smooth(self, y_pred):
         y_pred -= 1 / self.p * self.DP @ y_pred
         return(y_pred)
-
+    
 
 class MinimumEpistasisRegression(MinimizerRegressor):
     def __init__(self, P, a=None, n_alleles=None, seq_length=None, alphabet_type='custom',
@@ -100,17 +100,17 @@ class MinimumEpistasisRegression(MinimizerRegressor):
         logL = norm.logpdf(y, loc=y_pred[pred_idx], scale=np.sqrt(y_var)).mean()
         return(logL)
 
-    def _a_to_sd(self, a):
+    def a_to_sd(self, a):
         return(np.sqrt(self.DP.n_p_faces / a))
     
-    def _sd_to_a(self, sd):
+    def sd_to_a(self, sd):
         return(self.DP.n_p_faces / sd ** 2)
     
     def get_cv_logL_df(self, cv_logL):
         with np.errstate(divide = 'ignore'):
             cv_log_L = pd.DataFrame(cv_logL)
             cv_log_L['log_a'] = np.log10(cv_log_L['a'])
-            cv_log_L['sd'] = self._a_to_sd(cv_log_L['a'])
+            cv_log_L['sd'] = self.a_to_sd(cv_log_L['a'])
             cv_log_L['log_sd'] = np.log10(cv_log_L['sd'])
         return(cv_log_L)
     
@@ -365,15 +365,12 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
     
     '''
     def __init__(self, P, n_alleles=None, seq_length=None, alphabet_type='custom',
+                 genotypes=None,
                  a=None, num_reg=20, nfolds=5, lambdas_P_inv=None,
                  a_resolution=0.1, max_a_max=1e12, fac_max=0.1, fac_min=1e-6,
                  optimization_opts={}, maxiter=10000, gtol=1e-6, ftol=1e-8):
         super().__init__()
         self.P = P
-        self.a = a
-        self._a = a
-        self.set_lambdas_P_inv(lambdas_P_inv)
-        self.a_is_fixed = a is not None
         self.nfolds = nfolds
         
         msg = '"a" can only be None or >= 0'
@@ -395,60 +392,68 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         opts = {'ftol': ftol, 'gtol': gtol, 'maxiter': maxiter}
         optimization_opts.update(opts)
         self.optimization_opts = optimization_opts
-        self.initialized = False
 
-        if seq_length is not None:
-            self.init(n_alleles=n_alleles, seq_length=seq_length,
-                      alphabet_type=alphabet_type)
-        elif alphabet_type != 'custom' or n_alleles is not None:
-            msg = '`seq_length` must be specified together with'
-            msg += '`n_alleles` or `alphabet_type`'
-            raise ValueError(msg)
+        self.initialized = False
+        self._init(n_alleles=n_alleles, seq_length=seq_length,
+                  alphabet_type=alphabet_type, genotypes=genotypes)
+        self.set_lambdas_P_inv(lambdas_P_inv)
+        self.set_a(a)
     
-    def set_lambdas_P_inv(self, lambdas_P_inv):
-        if lambdas_P_inv is None:
-            self.lambdas_P_inv = None
-        else:
-            msg = 'lambdas_P_inv={} size is different from P={}'.format(lambdas_P_inv.shape[0], self.P)
-            check_error(lambdas_P_inv.shape[0] == self.P, msg)
-            self.lambdas_P_inv = lambdas_P_inv
-    
-    def init(self, seq_length=None, n_alleles=None, genotypes=None,
+    def _init(self, seq_length=None, n_alleles=None, genotypes=None,
              alphabet_type='custom'):
+        
         if not self.initialized:
             self.define_space(seq_length=seq_length, n_alleles=n_alleles,
                               genotypes=genotypes, alphabet_type=alphabet_type)
             self.likelihood = SeqDEFTLikelihood(self.genotypes)
             self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
+            self.s = self.DP.n_p_faces
             self.kernel_basis = DeltaKernelBasisOperator(self.n_alleles, self.seq_length, self.P)
             self.initialized = True
+
+    def set_lambdas_P_inv(self, lambdas_P_inv):
+        if lambdas_P_inv is None:
+            self.lambdas_P_inv = None
+            self.kernel_regularizer = None
+        else:
+            msg = 'lambdas_P_inv={} size is different from P={}'
+            msg = msg.format(lambdas_P_inv.shape[0], self.P)
+            check_error(lambdas_P_inv.shape[0] == self.P, msg)
+
+            self.lambdas_P_inv = lambdas_P_inv
+            self.kernel_regularizer = DeltaKernelRegularizerOperator(self.kernel_basis,
+                                                                     self.lambdas_P_inv)
             
-            if self.lambdas_P_inv is None:
-                self.kernel_regularizer = None
-            else:    
-                self.kernel_regularizer = DeltaKernelRegularizerOperator(self.kernel_basis,
-                                                                         self.lambdas_P_inv)
-    @property
-    def dense_kernel_basis(self):
-        if not hasattr(self, '_dense_kernel_basis'):
-            self._dense_kernel_basis = self.kernel_basis.todense()
-        return(self._dense_kernel_basis)
-    
     def set_a(self, a):
         self.a = a
 
-        if a is not None:
-            self.C = a / (2 * self.s) * self.DP
-        
+        if a is not None and np.isfinite(a):
+            check_error(a >= 0, msg='"a" must be larger or equal than 0 and finite')
+            if self.lambdas_P_inv is None:
+                self.C = a / self.s * self.DP
+            else:
+                lambdas = a / self.s * self.DP.lambdas
+                lambdas[:self.P] = self.lambdas_P_inv
+                self.C = ProjectionOperator(self.n_alleles, self.seq_length,
+                                            lambdas=lambdas)
+    
+    def cv_set_data(self, X, y):
+        self.likelihood.set_data(X, y=y, offset=self.baseline, 
+                                 positions=self.positions,
+                                 phylo_correction=self.phylo_correction,
+                                 adjust_freqs=self.adjust_freqs,
+                                 allele_freqs=self.allele_freqs)
+
     def cv_fit(self, data, a, phi0=None):
         X, y, _ = data
-        self._set_data(X=X, y=y)
-        phi = self._fit(a, phi0=phi0)
+        self.cv_set_data(X=X, y=y)
+        self.set_a(a)
+        phi = self.calc_posterior_max(phi0=phi0)
         return(phi)
     
     def cv_evaluate(self, data, phi):
         X, y, _ = data
-        self._set_data(X=X, y=y)
+        self.cv_set_data(X=X, y=y)
         logL = self.likelihood.calc_logL(phi)
         return(logL)
     
@@ -456,7 +461,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         with np.errstate(divide = 'ignore'):
             cv_log_L = pd.DataFrame(cv_logL)
             cv_log_L['log_a'] = np.log10(cv_log_L['a'])
-            cv_log_L['sd'] = self._a_to_sd(cv_log_L['a'])
+            cv_log_L['sd'] = self.a_to_sd(cv_log_L['a'])
             cv_log_L['log_sd'] = np.log10(cv_log_L['sd'])
         return(cv_log_L)
     
@@ -481,83 +486,91 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         cv_iter = get_cv_iter(cv_splits, a_values)
         cv_logL = self.calc_cv_loss(cv_iter, total_folds)
         self.logL_df = self.get_cv_logL_df(cv_logL)    
-        self.a = self.get_ml_a(self.logL_df)
+        a = self.get_ml_a(self.logL_df)
+        return(a)
     
-    def _phi_to_b(self, phi):
+    def phi_to_b(self, phi):
         return(self.kernel_basis.transpose() @ phi)
     
-    def _b_to_phi(self, b):
+    def b_to_phi(self, b):
         return(self.kernel_basis @ b)
 
-    def _a_to_sd(self, a):
+    def a_to_sd(self, a):
         return(np.sqrt(self.DP.n_p_faces / a))
     
-    def _sd_to_a(self, sd):
+    def sd_to_a(self, sd):
         return(self.DP.n_p_faces / sd ** 2)
     
-    def get_x0(self, x0=None):
-        if x0 is None:
-            x0 = np.log(self.n_genotypes) * np.ones(self.n_genotypes)
+    def calc_maximum_entropy_model(self, b0=None):
+        res = minimize(fun=self.calc_loss, jac=True,
+                       method='L-BFGS-B', x0=b0,
+                       options=self.optimization_opts)
         
-        if np.isinf(self._a):
-            x0 = self._phi_to_b(x0)
-        return(x0)
-        
-    def get_res_phi(self, res):
         if not res.success:
             raise ValueError(res.message)
-        out = res.x
-        
-        if np.isinf(self._a):
-            out = self._b_to_phi(out)
-        return(out)
+
+        self.opt_res = res
+        return res.x
     
-    def _fit(self, a, phi0=None):
-        check_error(a >= 0, msg='"a" must be larger or equal than 0')
-        self._a = a
-        
-        if a == 0 and hasattr(self, '_fit_a_0'):
+    def calc_posterior_max(self, phi0=None):
+        phi0 = self.get_phi0(phi0=phi0)
+
+        if self.a == 0:
             with np.errstate(divide='ignore'):
                 phi = -np.log(self.R)
             self.opt_res = None
             
-        elif np.isfinite(a):
-            phi0 = self.get_x0(phi0)
+        elif np.isfinite(self.a):
             phi = self.calc_posterior_mean(phi0=phi0)
             
         else:
-            x0 = self.get_x0(phi0)
-            res = minimize(
-                fun=self.calc_loss, jac=True,
-                #    hessp=self.calc_loss_hessp, method='newton-CG',
-                method='L-BFGS-B',
-                x0=x0,
-                options=self.optimization_opts,
-            )
-            phi = self.get_res_phi(res)
-            self.opt_res = res
+            b0 = self.phi_to_b(phi0)
+            b = self.calc_maximum_entropy_model(b0=b0)
+            phi = self.b_to_phi(b)
+            
         return(phi)
     
-    def _get_lambdas(self, a):
+    def mcmc(self, n_samples=1000, n_chains=4, progress=True, 
+             target_accept=0.9, **kwargs):
+    
+        def logp(x):
+            loss, grad = self.calc_loss(x, return_grad=True)
+            return (-loss, -grad)
+        
+        def logp_grad(x):
+            return(-self.calc_grad(x))
+        
+        samples = []
+        sampler = HMC(logp, logp_grad, step_size=0.1, path_length=10)
+        for _ in range(n_chains):
+            x0 = self.simulate_phi()
+            for s in sampler.sample(x0=x0, n_samples=n_samples):
+                samples.append(s)
+
+            # start = {"x": self.simulate_phi(self.a)}
+            # sampler = NUTS(logp, start=start, grad_logp=True, 
+            #                 target_accept=0.9, **kwargs)
+            # for s in sampler.sample(n_chains=1, num=2 * n_samples,
+            #                         progress_bar=progress, burn=n_samples):
+            #     samples.append(s[0])
+        samples = np.array(samples)
+        return samples
+    
+    def get_C_lambdas(self):
+        a = self.a
         self.DP.calc_lambdas()
         lambdas = np.zeros(self.DP.lambdas.shape)
-        lambdas[self.P:] = self.DP.n_p_faces / (a * self.DP.lambdas[self.P:])
+        lambdas[self.P:] = a * self.DP.lambdas[self.P:] / self.DP.n_p_faces
+        
         if self.lambdas_P_inv is not None:
             lambdas[:self.P] = 1 / self.lambdas_P_inv
+
         return(lambdas)
 
-    def simulate_phi(self, a):
+    def simulate_phi(self):
         '''
         Simulates data under the specified `a` penalization for
         local P-epistatic coefficients
-        
-        Parameters
-        ----------
-        a : float
-            Parameter related to the inverse of the variance of the P-order
-            epistatic coefficients that are being penalized. Larger values
-            induce stronger penalization and approximation to the 
-            Maximum-Entropy model of order P-1.
         
         Returns
         -------
@@ -566,23 +579,16 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             sampled from the prior characterized by `a`
         '''
         
-        lambdas = self._get_lambdas(a)
         x = np.random.normal(size=self.n_genotypes)
+        lambdas_inv = self.get_C_lambdas()
+        lambdas = np.zeros_like(lambdas_inv)
+        idx = lambdas_inv != 0
+        lambdas[idx] = 1 / lambdas_inv[idx]
         W_sqrt = ProjectionOperator(self.n_alleles, self.seq_length,
                                     lambdas=lambdas).matrix_sqrt()
         phi = W_sqrt @ x
         return(phi)
     
-    def _set_data(self, X, y=None, allele_freqs=None):
-        '''
-        This is the part of data definition that may change during cross-validation
-        '''
-        self.likelihood.set_data(X, y=y, offset=self.baseline, 
-                                 positions=self.positions,
-                                 phylo_correction=self.phylo_correction,
-                                 adjust_freqs=self.adjust_freqs,
-                                 allele_freqs=allele_freqs)
-
     def set_baseline(self, X=None, baseline_phi=None):
         if baseline_phi is None:
             self.baseline = None
@@ -603,12 +609,17 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         self.positions = positions
         self.adjust_freqs = adjust_freqs
         self.phylo_correction = phylo_correction
+        self.allele_freqs = allele_freqs
         self.set_baseline(baseline_X, baseline_phi)
-        self._set_data(X, y=y, allele_freqs=allele_freqs)
+        self.likelihood.set_data(X, y=y, offset=self.baseline, 
+                                 positions=self.positions,
+                                 phylo_correction=self.phylo_correction,
+                                 adjust_freqs=self.adjust_freqs,
+                                 allele_freqs=self.allele_freqs)
     
     def fit(self, X, y=None, baseline_phi=None, baseline_X=None,
             positions=None, phylo_correction=False,
-            force_fit_a=True, adjust_freqs=False, allele_freqs=None):
+            adjust_freqs=False, allele_freqs=None):
         """
         Infers the sequence-function relationship under the specified
         \Delta^{(P)} prior 
@@ -636,10 +647,6 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         phylo_correction: bool (False)
             Apply phylogenetic correction using the full length sequences
             
-        force_fit_a : bool 
-            Whether to re-fit ``a`` using cross-validation even if it is already
-            defined a priori
-        
         adjust_freqs: bool (False)
             Whether to correct densities by the expected allele frequencies
             in the full length sequences
@@ -651,48 +658,24 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             If `None`, they will be calculated from the full length observed
             sequences.
             
-        Returns
-        -------
-        
-        landscape : pd.DataFrame (n_genotypes, 2)
-            DataFrame containing the estimated function for each possible
-            sequence in the space
-        
         """
         self.set_data(X, y=y, positions=positions,
                       baseline_X=baseline_X, baseline_phi=baseline_phi,
                       phylo_correction=phylo_correction,
                       adjust_freqs=adjust_freqs, allele_freqs=allele_freqs)
-        phi_inf = self._fit(np.inf)
         
-        if not self.a_is_fixed and force_fit_a:
-            self.fit_a_cv(phi_inf)
-            self._set_data(X, y)
+        if self.a is None:
+            a = self.fit_a_cv()
+            self.set_a(a)
+            self.likelihood.set_data(X, y=y, offset=self.baseline, 
+                                     positions=self.positions,
+                                     phylo_correction=self.phylo_correction,
+                                     adjust_freqs=self.adjust_freqs,
+                                     allele_freqs=allele_freqs)
         
-        # Fit model with a_star or provided a
-        if np.isfinite(self.a):
-            phi = self._fit(self.a, phi0=phi_inf)
-        else:
-            phi = phi_inf
-
+        phi = self.calc_posterior_max()
         output = self.likelihood.phi_to_output(phi)
         return(output)
-    
-    def calc_loss_finite_a(self, phi, return_grad=True, store_hess=True):
-        a_over_s = self._a / self.DP.n_p_faces
-        
-        if self.kernel_regularizer is None:
-            self.C = a_over_s * self.DP
-        else:
-            self.C = a_over_s * self.DP + self.kernel_regularizer
-            
-        return(super().calc_loss(phi, return_grad=return_grad, store_hess=store_hess))
-
-    def calc_loss_hessp(self, phi, p):
-        return(self.hess @ p)
-    
-    def calc_loss_hess(self, phi):
-        return self.hess
     
     def calc_loss_inf_a(self, b, return_grad=True, store_hess=True):
         basis = self.kernel_basis
@@ -720,10 +703,10 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             return(loss)
     
     def calc_loss(self, x, return_grad=True):
-        if np.isinf(self._a):
+        if np.isinf(self.a):
             return(self.calc_loss_inf_a(x, return_grad=return_grad))
         else:
-            return(self.calc_loss_finite_a(x, return_grad=return_grad))
+            return(super().calc_loss(x, return_grad=return_grad))
     
     # Optional methods
     def calc_a_max(self, phi_inf):
@@ -764,7 +747,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         self.total_folds = self.nfolds * (self.num_reg + 2)
         return(a_values)
 
-    def simulate(self, N, a=None, phi=None, seed=None):
+    def simulate(self, N, phi=None, seed=None):
         '''
         Simulates data under the specified `a` penalization for
         local P-epistatic coefficients
@@ -773,12 +756,6 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         ----------
         N : int
             Number of total sequences to sample
-        
-        a : float
-            Parameter related to the inverse of the variance of the P-order
-            epistatic coefficients that are being penalized. Larger values
-            induce stronger penalization and approximation to the 
-            Maximum-Entropy model of order P-1.
         
         phi : array-like of shape (n_genotypes,)
             Vector containing values for the field underlying the probability
@@ -802,8 +779,8 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             check_error(phi.shape == (self.n_genotypes,),
                         msg='Ensure "phi" has the shape (n_genotypes,)')
         else:
-            check_error(a is not None, '"a" must be provided if "phi=None"')
-            phi = self.simulate_phi(a)
+            check_error(self.a is not None, '"a" must be provided if "phi=None"')
+            phi = self.simulate_phi()
             
         X = self.likelihood.sample(phi, N)
         return(X)
@@ -815,3 +792,212 @@ def D_geo(phi1, phi2):
     s = np.exp(logsumexp(0.5 * (logQ1 + logQ2)))
     x = min(s, 1)
     return 2 * np.arccos(x)
+
+
+class HMC(object):
+    def __init__(self, logp, logp_grad, step_size, path_length):
+        self.logp = logp
+        self.logp_grad = logp_grad
+        
+        self.step_size = step_size
+        self.path_length = path_length
+        self.max_steps = 100
+        self.n_steps = min(int(self.path_length / self.step_size) - 1, self.max_steps)
+        
+        # self.m = m
+        # self.f = f
+        # self.sqrt_1mf2 = np.sqrt(1 - self.f ** 2)
+        # self.scales = 1 / np.sqrt(hess_diag)
+
+        # step-size tunning parameters
+        self.window = 10
+        self.gamma_old = 1
+        self.gamma_new = 1
+    
+    def sample(self, x0, n_samples=1000):
+        # Initiate iteration
+        position = x0
+        logp, logp_grad = self.logp(position)
+        momentum = self.sample_momentum(position)
+        energy = self.calc_energy(position, momentum, logp)
+
+        # HMC iterations
+        self.acceptance_rates = []
+        self.num_acceptance = 0
+
+        # Warmup
+        tunning = DualAveragingStepSize(self.step_size)
+        for i in tqdm(range(2 * n_samples)):
+            momentum = self.sample_momentum(position)
+            new_position, new_logp_grad, new_energy = self.leapfrog(position, momentum, logp_grad)
+
+            p_accept = min(1, np.exp(new_energy - energy))
+            if np.random.uniform() < p_accept:
+                position, logp_grad, energy = new_position, new_logp_grad, new_energy
+                self.num_acceptance += 1
+        
+            if i < n_samples:
+                if i % self.window == 0:
+                    self.tune_step_size()
+                # self.step_size = tunning.update(p_accept)
+            # elif i == n_samples:
+            #     self.num_acceptance = 0
+            #     self.step_size = tunning.update(p_accept, smoothed=True)
+            else:
+                yield(position)
+
+        # # Sampling        
+        # for _ in tqdm(range(n_samples)):
+        #     phi, psi, grad, log_P = self.step(phi, psi, grad, log_P)
+        #     psi *= -1
+        #     yield(phi)
+
+    def leapfrog(self, position, momentum, logp_grad):
+        step_sizes = self.step_size# * self.scales
+        position, momentum = np.copy(position), np.copy(momentum)
+
+        momentum -= step_sizes * self.logp_grad(position) / 2
+        for _ in range(self.n_steps):
+            position += step_sizes * momentum
+            momentum -= step_sizes * self.logp_grad(position)
+
+        position += step_sizes * momentum
+        logp, logp_grad = self.logp(position)
+        momentum -= step_sizes * logp_grad / 2
+        momentum *= -1
+        
+        energy = self.calc_energy(position, momentum, logp)
+        return (position, logp_grad, energy)
+    
+    def sample_momentum(self, position):
+        return(np.random.normal(size=position.shape))
+    
+    def calc_energy(self, position, momentum, logp=None):
+        if logp is None:
+            logp = self.logp(position)[0]
+        return(-logp - np.sum(momentum ** 2) / 2)
+    
+    def tune_step_size(self):
+        acceptance_rate = self.num_acceptance / self.window
+        new_step_size = self.update_step_size(self.step_size, acceptance_rate)
+
+        exponent = 1 / (self.gamma_old + self.gamma_new)
+        step_size = (self.step_size ** self.gamma_old * new_step_size ** self.gamma_new) ** exponent
+        self.n_steps = min(int(self.path_length / step_size)-1, self.n_steps)
+        self.acceptance_rates.append(acceptance_rate)
+        self.num_acceptance = 0
+        self.step_size = step_size
+    
+    def update_step_size(self, step_size, acceptance_rate):
+        if acceptance_rate < 0.001:
+            step_size *= 0.1
+        elif 0.001 <= acceptance_rate < 0.05:
+            step_size *= 0.5
+        elif 0.05 <= acceptance_rate < 0.2:
+            step_size *= 0.7
+        elif 0.2 <= acceptance_rate < 0.5:
+            step_size *= 0.8
+        elif 0.5 <= acceptance_rate < 0.6:
+            step_size *= 0.9
+        elif 0.6 <= acceptance_rate <= 0.7:
+            step_size *= 1
+        elif 0.7 < acceptance_rate <= 0.8:
+            step_size *= 1.1
+        elif 0.8 < acceptance_rate <= 0.9:
+            step_size *= 1.5
+        elif 0.9 < acceptance_rate <= 0.95:
+            step_size *= 2
+        elif 0.95 < acceptance_rate:
+            step_size *= 3
+        return step_size
+    
+    def compute_R_hat(self, samples):
+
+        # Copy the multi_phi_samples
+        num_chains, G, num_samples_per_chain = samples.shape
+
+        num_subchains, len_subchain = 2 * num_chains, int(num_samples_per_chain/2)
+
+        # Re-shape multi_phi_samples into a shape of (num_subchains, G, len_subchain)
+        a = []
+        for k in range(num_chains):
+            a.append(samples[k,:,:len_subchain])
+            a.append(samples[k,:,len_subchain:])
+        multi_phi_samples_reshaped = np.array(a)
+
+        # Compute R_hat for each component of phi
+        R_hats = []
+        for i in range(G):
+
+            # Collect the (sub)chains of samples of phi_i
+            i_collector = np.zeros([len_subchain,num_subchains])
+            for j in range(num_subchains):
+                i_collector[:,j] = multi_phi_samples_reshaped[j,i,:]
+
+            # Compute the between-(sub)chain variance
+            mean_0 = i_collector.mean(axis=0)
+            mean_01 = mean_0.mean()
+            B = len_subchain/(num_subchains-1) * np.sum((mean_0 - mean_01)**2)
+
+            # Compute the within-(sub)chain variance
+            s2 = np.zeros(num_subchains)
+            for j in range(num_subchains):
+                s2[j] = 1/(len_subchain-1) * np.sum((i_collector[:,j] - mean_0[j])**2)
+            W = s2.mean()
+
+            # Estimate the marginal posterior variance
+            var = (len_subchain-1)/len_subchain * W + 1/len_subchain * B
+
+            # Compute R_hat
+            R_hat = np.sqrt(var/W)
+
+            # Save
+            R_hats.append(R_hat)
+
+        # Return
+        return np.array(R_hats)
+
+class DualAveragingStepSize:
+    """update stepsize for the leapfrog function during tuning steps"""
+    def __init__(
+        self,
+        initial_step_size,
+        target_accept=0.7,
+        gamma=0.05,
+        t0=10.0,
+        kappa=0.75,
+    ):
+        # proposals are biased upwards to stay away from 0.
+        self.mu = np.log(10 * initial_step_size)
+        self.target_accept = target_accept
+        self.gamma = gamma
+        self.t = t0
+        self.kappa = kappa
+        self.error_sum = 0
+        self.log_averaged_step = 0
+
+    def update(self, p_accept, smoothed=False):
+        # Running tally of absolute error. Can be positive or negative. Want to
+        # be 0.
+        self.error_sum += self.target_accept - p_accept
+
+        # This is the next proposed (log) step size. Note it is biased towards
+        # mu.
+        log_step = self.mu - self.error_sum / (np.sqrt(self.t) * self.gamma)
+
+        # Forgetting rate. As `t` gets bigger, `eta` gets smaller.
+        eta = self.t**-self.kappa
+
+        # Smoothed average step size
+        self.log_averaged_step = (
+            eta * log_step + (1 - eta) * self.log_averaged_step
+        )
+
+        # This is a stateful update, so t keeps updating
+        self.t += 1
+
+        # Return both the noisy step size, and the smoothed step size
+        if smoothed:
+            return np.exp(self.log_averaged_step)
+        else:
+            return np.exp(log_step)

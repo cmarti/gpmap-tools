@@ -212,6 +212,26 @@ class SequenceInterpolator(SeqGaussianProcessRegressor):
         y_pred[self.pred_idx] = -C_II_inv @ b
         return(y_pred)
     
+    def predict(self):
+        """
+        Compute the Maximum a Posteriori (MAP) estimate of the phenotype at
+        the provided or all genotypes
+
+        Returns
+        -------
+        function : pd.DataFrame of shape (n_genotypes, 1)
+                   Returns the phenotypic predictions for each input genotype
+                   in the column ``ypred`` and genotype labels as row names.
+                   If ``calc_variance=True``, then it has an additional
+                   column with the posterior variances for each genotype
+        """
+
+        t0 = time()
+        post_mean = self.calc_posterior_mean()
+        pred = pd.DataFrame({"y": post_mean}, index=self.genotypes)
+        self.pred_time = time() - t0
+        return pred
+    
 
 class GaussianProcessRegressor(SeqGaussianProcessRegressor):
     def __init__(self, base_kernel, progress=True):
@@ -386,39 +406,11 @@ class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
         phi = np.zeros(self.n_genotypes) if phi0 is None else phi0
         return(phi)
     
-    def optimize_phi(self, phi0=None, maxiter=100, ftol=1e-4, atol=1e-6, cg_rtol=1e-4):
-        phi = self.get_phi0(phi0)
-        loss = self.calc_loss(phi)[0]
-        for _ in range(maxiter):
-            obs_phi = self.phi_to_obs_phi(phi)
-            exp_phi = self.obs_phi_to_exp_phi(obs_phi)
-            grad = -self.calc_data_loss_grad(obs_phi, exp_phi)
-            w = self.calc_data_loss_hess(obs_phi, exp_phi)
-            
-            w_sqrt = np.sqrt(w)
-            w_sqrt_inv = 1 / w_sqrt
-            b = w_sqrt * phi + w_sqrt_inv * grad
-            W_sqrt_inv = DiagonalOperator(w_sqrt_inv)
+    def calc_grad(self, phi, return_grad=True, store_hess=True):
+        Cphi = self.C @ phi
+        grad = Cphi + self.likelihood.calc_grad(phi)
+        return (grad)
 
-            A = IdentityOperator(self.n_genotypes) + W_sqrt_inv @ self.C @ W_sqrt_inv
-            A_inv = InverseOperator(A, method='cg', atol=cg_rtol)
-            phi_new = W_sqrt_inv @ A_inv @ b
-
-            # b = w * phi + grad
-            # W = DiagonalOperator(w)
-            # A_inv = InverseOperator(C + W, method='cg', atol=1e-4)
-            # phi_new = A_inv @ b
-
-            loss_new = self.calc_loss(phi_new)[0]
-            if loss_new - loss > ftol or np.allclose(loss_new, loss, atol=ftol) or np.allclose(phi_new, phi, atol=atol):
-                return(phi_new)
-            phi = phi_new
-            loss = loss_new
-            
-
-        msg = 'Maximum number of iterations ({}) reached without convergence'.format(maxiter)
-        raise ValueError(msg)
-    
     def calc_loss(self, phi, return_grad=True, store_hess=True):
         # Compute loss from the likelihood
         res = self.likelihood.calc_loss_grad_hess(phi)
@@ -442,21 +434,13 @@ class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
     
     def calc_posterior_mean(self, phi0=None):
         phi0 = self.get_phi0(phi0)
-        res = minimize(fun=self.calc_loss, jac=True, #hessp=self.calc_loss_hessp,
+        res = minimize(fun=self.calc_loss, jac=True,
                         x0=phi0, method='L-BFGS-B', options=self.optimization_opts)
-        
-        # opts = {k: v for k, v in self.optimization_opts.items()
-        #         if k not in ['ftol', 'gtol']}
-        # res = minimize(fun=self.calc_loss, jac=True, hessp=self.calc_loss_hessp,
-        #                 x0=phi0, method='newton-CG', options=opts)
-        # if not res.success:
-        #     res = minimize(fun=self.calc_loss, jac=True,  hessp=self.calc_loss_hessp,
-        #                    x0=phi0, method='trust-krylov', options=opts)
         
         if not res.success:
             raise ValueError(res.message)
         
-        phi = self.get_res_phi(res)
+        phi = res.x
         self.opt_res = res
         return(phi)
     

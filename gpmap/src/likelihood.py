@@ -22,7 +22,21 @@ class PhiRegularizer(object):
         self.phi_upper = phi_upper
         self.phi_lower = phi_lower
         self.n_genotypes = n_genotypes
-        
+
+    def calc_grad(self, phi):
+        grad = np.zeros(self.n_genotypes)
+        idx1 = phi > self.phi_upper
+        idx2 = phi < self.phi_lower
+
+        if idx1.any() > 0:
+            dphi = phi[idx1] - self.phi_upper
+            grad[idx1] += 2 * dphi
+
+        if idx2.any() > 0:
+            dphi = phi[idx2] - self.phi_lower
+            grad[idx2] += 2 * dphi
+        return (grad)
+
     def calc_loss_grad_hess(self, phi):
         loss = 0
         grad = np.zeros(self.n_genotypes)
@@ -101,6 +115,13 @@ class SeqDEFTLikelihood(object):
     def phi_to_phi_obs(self, phi):
         return(phi + self.offset if self.offset is not None else phi)
     
+    def calc_grad(self, phi):
+        obs_phi = self.phi_to_phi_obs(phi)
+        reg_grad = self.regularizer.calc_grad(obs_phi)
+        N_exp_phi = self.N * safe_exp(-obs_phi)
+        grad = self.counts - N_exp_phi + reg_grad
+        return (grad)
+
     def calc_loss_grad_hess(self, phi):
         obs_phi = self.phi_to_phi_obs(phi)
         reg_loss, reg_grad, reg_hess = self.regularizer.calc_loss_grad_hess(obs_phi)

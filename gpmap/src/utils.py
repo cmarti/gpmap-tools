@@ -316,7 +316,7 @@ def generate_p_training_config(ps=None, n_ps=10, n_reps=3,
         n_ps = ps.shape[0]
     ps = np.vstack([ps] * n_reps).T.flatten()
 
-    i = np.arange(ps.shape[0])
+    i = np.arange(1, ps.shape[0] + 1)
     rep = np.hstack([np.arange(n_reps) for j in range(n_ps)])
     data = pd.DataFrame({'id': i, 'p': ps, 'rep': rep})
     return(data)
