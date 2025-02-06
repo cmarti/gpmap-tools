@@ -7,6 +7,7 @@ from itertools import combinations
 from scipy.special import comb
 from scipy.sparse.linalg import aslinearoperator
 from scipy.linalg import solve_triangular
+from scipy.stats import multivariate_normal
 
 from gpmap.src.datasets import DataSet
 from gpmap.src.settings import ALPHABET
@@ -26,6 +27,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              SelIdxOperator, ExpandIdxOperator,
                              StackedOperator, InverseOperator,
                              TriangularInverseOperator, KronTriangularInverseOperator,
+                             MultivariateGaussian,
                              calc_covariance_vjs, calc_avg_local_epistatic_coeff,
                              calc_space_variance_components,
                              calc_space_vjs_variance_components)
@@ -586,6 +588,38 @@ class LinOpsTests(unittest.TestCase):
         v = np.random.normal(size=A.shape[1])
         u = A @ (A_inv @ v)
         assert(np.allclose(u, v, atol=1e-4))
+    
+    def test_mv_gaussian(self):
+        A = np.array([[1, 0.5],
+                      [0.5, 1]])
+        Sigma1 = np.kron(A, A)
+        Sigma2 = KronOperator([A, A])
+        mu = np.zeros(Sigma1.shape[0])
+        x = np.random.normal(size=mu.shape[0])
+        
+        gaussian1 = multivariate_normal(mu, Sigma1)
+        gaussian2 = MultivariateGaussian(mu, Sigma2)
+        logp1 = gaussian1.logpdf(x)
+        logp2 = gaussian2.logp(x)
+        assert(np.allclose(logp1, logp2))
+        
+        # Test sampling
+        x = gaussian2.sample(n_samples=10000)
+        Sigma_hat = np.cov(x)
+        assert(np.allclose(Sigma1, Sigma_hat, atol=0.05))
+        
+        # Test with large matrices
+        Sigma1 = np.kron(Sigma1, Sigma1)
+        Sigma2 = KronOperator([A] * 4)
+        mu = np.zeros(Sigma1.shape[0])
+        x = np.random.normal(size=mu.shape[0])
+        
+        gaussian1 = multivariate_normal(mu, Sigma1)
+        gaussian2 = MultivariateGaussian(mu, Sigma2)
+        logp1 = gaussian1.logpdf(x)
+        logp2 = gaussian2.logp(x)
+        assert(np.allclose(logp1, logp2))
+        
         
     def test_calc_avg_epistatic_coef(self):
         alphabet = 'AB'

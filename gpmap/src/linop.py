@@ -319,7 +319,20 @@ class KronOperator(ExtendedLinearOperator):
     def cholesky(self):
         if self.shape[0] != self.shape[1]:
             raise ValueError('Cannot compute cholesky of non-square matrix')
-        return(KronOperator([np.linalg.cholesky(m) for m in self.matrices]))
+        return(KronSquareTriangularOperator([np.linalg.cholesky(m) for m in self.matrices]))
+
+
+class KronSquareTriangularOperator(KronOperator):
+    def logdet(self):
+        # TODO: needs to be updated to allow arbitrary linops instead of
+        # matrices alone
+        logdet = 0
+        n = self.shape[0]
+        for matrix in self.matrices:
+            is_lower_triangular(matrix)
+            k = n / matrix.shape[0]
+            logdet += np.log(np.diag(matrix)).sum() * k
+        return(logdet)
 
 
 class KronTriangularInverseOperator(KronOperator):
@@ -911,6 +924,41 @@ class ConnectednessKernel(RhoProjectionOperator,Kernel):
     def get_params(self):
         return(self.rho)
     
+
+class MultivariateGaussian(object):
+    def __init__(self, mu, Sigma):
+        msg = 'The size of the mean should match the covariance matrix'
+        check_error(mu.shape[0] == Sigma.shape[0], msg=msg)
+        self.mu = mu
+        self.Sigma = Sigma
+        self.n = mu.shape[0]
+        
+    def get_cholesky(self):
+        if not hasattr(self, 'L'):
+            self.L = self.Sigma.cholesky()
+        return(self.L)
+    
+    def logp(self, x):
+        # This implementation only works when Sigma is a KronOperator
+        n = x.shape[0]
+        logp = -0.5 * n * np.log(2 * np.pi)
+        
+        if hasattr(self.Sigma, 'cholesky'):
+            L = self.get_cholesky()
+            L_inv = KronTriangularInverseOperator(L)
+            z = L_inv @ (x - self.mu)
+            logp -= 0.5 * np.sum(np.square(z)) + L.logdet()
+        else:
+            msg = 'Only covariance matrices with cholesky method are available'
+            raise NotImplementedError(msg)
+        return(logp)
+
+    def sample(self, n_samples):
+        L = self.get_cholesky()
+        x = L @ np.random.normal(size=(self.n, n_samples))
+        return(x)
+            
+
     
 def get_diag(A, progress=False):
     s = min(A.shape)
