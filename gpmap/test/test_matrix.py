@@ -8,7 +8,7 @@ from gpmap.src.matrix import (calc_cartesian_product,
                               calc_cartesian_product_dot, 
                               diag_pre_multiply, diag_post_multiply,
                               rate_to_jump_matrix, kron, dot_log,
-                              pivoted_cholesky_with_diag)
+                              pivoted_cholesky_with_diag, tensordot)
 
 
 class MatrixTests(unittest.TestCase):
@@ -23,6 +23,26 @@ class MatrixTests(unittest.TestCase):
         
         r = diag_pre_multiply(d, m)
         assert(np.allclose(r, np.array([[2, 4], [2, 3]])))
+        
+    def test_tensordot(self):
+        m = np.random.normal(size=(1, 2))
+        
+        v = np.random.normal(size=(2, 2, 4))
+        assert(np.allclose(v, v.reshape(2, 8).reshape(2, 2, 4)))
+        
+        x1 = np.tensordot(m, v, axes=([1], [0]))
+        x2 = tensordot(m, v, axis=0)
+        assert(np.allclose(x1, x2))
+        
+        v = np.random.normal(size=(2, 2, 4))
+        x1 = np.tensordot(m, v, axes=([1], [1]))
+        x2 = tensordot(m, v, axis=1)
+        assert(np.allclose(x1, x2))
+        
+        v = np.random.normal(size=(4, 2, 2))
+        x1 = np.tensordot(m, v, axes=([1], [2]))
+        x2 = tensordot(m, v, axis=2)
+        assert(np.allclose(x1, x2))
         
     def test_diag_post_multiply(self):
         d = np.array([2, 1])

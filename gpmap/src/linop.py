@@ -3,7 +3,7 @@ from itertools import combinations, product
 
 import numpy as np
 from numpy.linalg.linalg import matrix_power
-from scipy.linalg import lu_factor, lu_solve, orth
+from scipy.linalg import lu_factor, lu_solve, orth, solve_triangular
 from scipy.special import comb, factorial
 from tqdm import tqdm
 
@@ -12,7 +12,14 @@ try:
 except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
-from gpmap.src.matrix import inv_dot, kron, quad, reciprocal
+from gpmap.src.matrix import (
+    inv_dot,
+    kron,
+    quad,
+    reciprocal,
+    is_lower_triangular,
+    tensordot
+)
 from gpmap.src.seq import get_product_states
 from gpmap.src.utils import check_error
 
@@ -45,7 +52,21 @@ class ExtendedLinearOperator(_CustomLinearOperator):
         for i in range(B.shape[1]):
             x.append(self._matvec(B[:, i]))
         return(np.array(x).T)
+
+
+class TriangularInverseOperator(ExtendedLinearOperator):
+    def __init__(self, tri):
+        self.tri = tri
+        self.shape = tri.shape
+        self.dtype = tri.dtype
+        self.lower = is_lower_triangular(tri)
+
+    def _matvec(self, b):
+        return solve_triangular(self.tri, b, lower=self.lower)
     
+    def _matmat(self, B):
+        return solve_triangular(self.tri, B, lower=self.lower)
+
 
 class InverseOperator(ExtendedLinearOperator):
     def __init__(self, linop, method='minres', atol=1e-14, maxiter=1000, kwargs={}):
@@ -62,7 +83,7 @@ class InverseOperator(ExtendedLinearOperator):
         return(inv_dot(self.linop, v, method=self.method,
                     maxiter=self.maxiter,
                     atol=self.atol, **self.kwargs))
-
+    
 
 class DiagonalOperator(ExtendedLinearOperator):
     def __init__(self, diag):
@@ -266,19 +287,20 @@ class SelIdxOperator(ExtendedLinearOperator):
 
 
 class KronOperator(ExtendedLinearOperator):
-    symmetric = True
     def __init__(self, matrices):
         self.matrices = matrices
+        self.n_matrices = len(matrices)
         self.v_shape = [m_i.shape[1] for m_i in self.matrices]
         self.shape = (np.prod([m_i.shape[0] for m_i in self.matrices]),
                       np.prod(self.v_shape))
-
+        self.dtype = self.matrices[0].dtype
+    
     def _matvec(self, v):
         check_error(v.shape[0] == self.shape[1],
                     msg='Incorrect dimensions of matrices and `v`')
         u_tensor = v.reshape(self.v_shape)
         for i, m in enumerate(self.matrices):
-            u_tensor = np.tensordot(m, u_tensor, axes=([1], [i]))
+            u_tensor = tensordot(m, u_tensor, i)
         u = u_tensor.transpose().flatten()
         return(u)
     
@@ -294,6 +316,23 @@ class KronOperator(ExtendedLinearOperator):
     def transpose(self):
         return(KronOperator([m.T for m in self.matrices]))
     
+    def cholesky(self):
+        if self.shape[0] != self.shape[1]:
+            raise ValueError('Cannot compute cholesky of non-square matrix')
+        return(KronOperator([np.linalg.cholesky(m) for m in self.matrices]))
+
+
+class KronTriangularInverseOperator(KronOperator):
+    def __init__(self, kron_linop):
+        self.kron_linop = kron_linop
+        self.shape = kron_linop.shape
+        self.dtype = kron_linop.dtype
+        matrices = [
+            TriangularInverseOperator(m)
+            for m in kron_linop.matrices
+        ]
+        KronOperator.__init__(self, matrices)
+
 
 class PolynomialOperator(ExtendedLinearOperator):
     def __init__(self, linop, coeffs):
@@ -504,11 +543,11 @@ class KrawtchoukOperator(SeqOperator, PolynomialOperator):
 
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
-        l, a = self.l, self.alpha
+        sl, a = self.l, self.alpha
         s = 0
         for q in range(k + 1):
-            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(l - d, k - q)
-        return(1 / a**l * s)
+            s += (-1)**q * (a - 1)**(k - q) * comb(d, q) * comb(sl - d, k - q)
+        return(1 / a**sl * s)
     
     def calc_W_kd_matrix(self):
         """return full matrix l+1 by l+1 Krawtchouk matrix"""

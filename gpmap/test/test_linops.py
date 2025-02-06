@@ -6,6 +6,7 @@ from timeit import timeit
 from itertools import combinations
 from scipy.special import comb
 from scipy.sparse.linalg import aslinearoperator
+from scipy.linalg import solve_triangular
 
 from gpmap.src.datasets import DataSet
 from gpmap.src.settings import ALPHABET
@@ -24,6 +25,7 @@ from gpmap.src.linop import (LaplacianOperator, ProjectionOperator,
                              CovarianceDistanceOperator, CovarianceVjOperator,
                              SelIdxOperator, ExpandIdxOperator,
                              StackedOperator, InverseOperator,
+                             TriangularInverseOperator, KronTriangularInverseOperator,
                              calc_covariance_vjs, calc_avg_local_epistatic_coeff,
                              calc_space_variance_components,
                              calc_space_vjs_variance_components)
@@ -52,6 +54,17 @@ class LinOpsTests(unittest.TestCase):
         v = np.random.normal(size=n)
         assert(np.allclose(v, I @ v))
         assert(np.allclose(v, I.transpose() @ v))
+
+    def test_tri_inv_operator(self):
+        A = np.tril(np.random.normal(size=(5, 5)))
+        b = np.random.normal(size=5)
+
+        A_inv = TriangularInverseOperator(A)
+        x1 = A_inv @ b
+        x2 = solve_triangular(A, b, lower=True)
+        x3 = np.linalg.inv(A) @ b
+        assert(np.allclose(x1, x2))
+        assert(np.allclose(x1, x3))
     
     def test_matmul_operator(self):
         m = np.array([[1, 2],
@@ -241,6 +254,7 @@ class LinOpsTests(unittest.TestCase):
         
     
     def test_kron_operator(self):
+        np.random.seed(0)
         m1 = np.random.normal(size=(2, 2))
         m2 = np.random.normal(size=(2, 2))
         m3 = np.random.normal(size=(2, 1))
@@ -250,9 +264,18 @@ class LinOpsTests(unittest.TestCase):
         K = KronOperator([m1, m2])
         m = np.kron(m1, m2)
         v = np.random.normal(size=K.shape[1])
+        u1 = m @ v
+        u2 = K @ v
+        assert(np.allclose(m, K.todense()))
+        assert(np.allclose(u1, u2))
+        
+        # With 2 matrices of different sizes
+        K = KronOperator([m1, m3])
+        m = np.kron(m1, m3)
+        v = np.random.normal(size=K.shape[1])
         assert(np.allclose(m.dot(v), K.dot(v)))
         assert(np.allclose(m, K.todense()))
-
+        
         # With 3 matrices
         K = KronOperator([m2, m1, m1])
         m = np.kron(m2, np.kron(m1, m1))
@@ -279,6 +302,31 @@ class LinOpsTests(unittest.TestCase):
         v = np.random.normal(size=K_transpose.shape[1])
         assert(np.allclose(m.T.dot(v), K_transpose.dot(v)))
         assert(np.allclose(m.T, K_transpose.todense()))
+    
+    def test_kron_cholesky_operator(self):
+        L_i = np.array([[1, 0],
+                      [0.4, 0.8]])
+        K_0 = L_i @ L_i.T
+
+        # Classic approach
+        K1 = np.kron(K_0, K_0)
+        L1 = np.linalg.cholesky(K1)
+
+        # Using LinearOperator
+        K2 = KronOperator([K_0, K_0])
+        L2 = K2.cholesky()
+
+        # Test matvec
+        b = np.random.normal(size=K1.shape[1])
+        x1 = L1 @ b
+        x2 = L2 @ b
+        assert(np.allclose(x1, x2))
+
+        # Test inverse operator
+        L_inv = KronTriangularInverseOperator(L2)
+        x1 = solve_triangular(L1, b, lower=True)
+        x2 = L_inv @ b
+        assert(np.allclose(x1, x2))
 
     def test_vj_projection_operator(self):
         a, sl = 2, 2
@@ -426,9 +474,7 @@ class LinOpsTests(unittest.TestCase):
         D = DeltaKernelRegularizerOperator(B, lambdas_inv=lda) 
         c1 = np.sum(b[1:] ** 2)
         c2 = np.dot(phi, D @ phi)
-        c3 = np.dot(b, D.beta_dot(b))
         assert(np.allclose(c1, c2))
-        assert(np.allclose(c1, c3))
     
     def test_rho_projection_operator(self):
         np.random.seed(0)

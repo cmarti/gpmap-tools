@@ -44,6 +44,24 @@ def quad(linop, v1, v2=None):
     return(np.sum(linop.dot(v1) * v2))
 
 
+def tensordot(linop, v, axis):
+    u = np.moveaxis(v, axis, 0)  # Shape becomes (contract_dim, ...rest_of_dims)
+    u_reshaped = u.reshape(u.shape[0], -1)  # Shape: (contract_dim, rest_product)
+    x = linop @ u_reshaped  # linop shape: (m, contract_dim), result shape: (m, rest_product)
+    final_shape = (linop.shape[0],) + u.shape[1:]  # (m, ...rest_of_dims)
+    x = x.reshape(final_shape)
+    return x
+
+
+def is_lower_triangular(m):
+    if np.all(np.triu(m, k=1) == 0):
+        return(True)
+    elif np.all(np.tril(m, k=1) == 0):
+        return(False)
+    else:
+        raise ValueError('Matrix is not triangular')
+    
+
 def rayleigh_quotient(linop, v, metric=None):
     return(quad(linop, v) / inner_product(v, v, metric=metric))
 
@@ -53,6 +71,8 @@ def inv_dot(linop, v, method='minres', **kwargs):
         res = minres(linop, v, **kwargs)
     elif method == 'cg':
         res = cg(linop, v, **kwargs)
+    elif method == 'direct':
+        res = np.linalg.solve(linop, v)
     else:
         msg = 'Method {} not allowed'.format(method)
         raise ValueError(msg)
