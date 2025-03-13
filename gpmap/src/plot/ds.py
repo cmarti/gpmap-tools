@@ -110,7 +110,7 @@ def savefig(dsg, fpath=None, tight=True, fmt=PLOTS_FORMAT, dpi=360,
         fig.tight_layout()
     
     if figsize is not None:
-        fig.set_size_inches(*figsize)
+        fig.set_size_inches(figsize)
     
     if fpath is not None:
         fpath = '{}.{}'.format(fpath, fmt)
