@@ -73,10 +73,9 @@ def main():
         y = np.array([x.strip() for x in open(y_fpath)])
 
     # Load annotation data
-    seqdeft = SeqDEFT(P, a=a_value, num_reg=num_a)
+    seqdeft = SeqDEFT(P, a=a_value, num_reg=num_a, genotypes=X)
     if get_a_values:
         log.write('Initializint SeqDEFT model')
-        seqdeft.init(genotypes=X)
         seqdeft.set_data(X=X, y=y, phylo_correction=phylo_correction, 
                          positions=positions)
         
