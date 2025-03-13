@@ -141,7 +141,7 @@ class DataSet(object):
     def infer_landscape(self, P=2, vc_cross_validation=True, vc_cv_loss_function='logL'):
         if 'X' in self.data.columns:
             X = self.data.X.values 
-            model = SeqDEFT(P=P)
+            model = SeqDEFT(P=P, genotypes=X)
             pred = model.fit(X=X)
             X, y = pred.index.values, np.log(pred.Q_star.values)
             self.Ns = 1
