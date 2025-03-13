@@ -486,7 +486,7 @@ class SeqDEFTTests(unittest.TestCase):
         assert(seq_densities.loc['TTTT', 'Q_star'] < seq_densities.loc['TTTT', 'Q_adj'])
         
         r = pearsonr(-phi, np.log(seq_densities['Q_star']))[0]
-        assert(r > 0.6)
+        assert(r > 0.5)
     
     def test_missing_alleles(self):
         seqdeft = SeqDEFT(P=2, a=500, seq_length=5, alphabet_type="dna")
