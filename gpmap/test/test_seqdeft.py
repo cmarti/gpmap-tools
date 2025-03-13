@@ -512,9 +512,8 @@ class SeqDEFTTests(unittest.TestCase):
     def test_bin(self):
         bin_fpath = join(BIN_DIR, 'fit_seqdeft.py')
         
-        seqdeft = SeqDEFT(P=2)
-        seqdeft.init(seq_length=5, alphabet_type='dna')
-        X = seqdeft.simulate(N=1000, a=500)
+        seqdeft = SeqDEFT(P=2, seq_length=5, alphabet_type="dna", a=500)
+        X = seqdeft.simulate(N=1000)
         
         with NamedTemporaryFile() as fhand:
 
