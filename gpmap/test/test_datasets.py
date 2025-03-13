@@ -63,8 +63,8 @@ class DatasetsTests(unittest.TestCase):
 
     def test_build_probability_dataset(self):
         np.random.seed(0)
-        model = SeqDEFT(P=2, seq_length=5, alphabet_type='dna')
-        X = model.simulate(N=1000, a=500)
+        model = SeqDEFT(P=2, a=500, seq_length=5, alphabet_type="dna")
+        X = model.simulate(N=1000)
         data = pd.DataFrame({'X': X})
 
         # Build dataset
