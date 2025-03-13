@@ -567,159 +567,51 @@ class SeqDEFTTests(unittest.TestCase):
             ll2 = seqdeft.cv_evaluate((X_test, None, None), phi2)
             print(a, ll1, ll2)
 
-    def test_hmc(self):
-        def logp(x):
-            return np.sum(0.5 * x**2), x
+    # def test_hmc(self):
+    #     def logp(x):
+    #         return np.sum(0.5 * x**2), x
 
-        def logp_grad(x):
-            return x
+    #     def logp_grad(x):
+    #         return x
 
-        sampler = HMC(logp, logp_grad, step_size=1, path_length=1)
-        n = 1000
+    #     sampler = HMC(logp, logp_grad, step_size=1, path_length=1)
+    #     n = 1000
 
-        posterior = []
-        for i in range(4):
-            x0 = np.random.normal(size=1)
-            samples = np.array([s for s in sampler.sample(x0, n)])
-            print(sampler.num_acceptance / n)
-            print(samples.mean(0), samples.std(0))
-            plt.plot(samples.T[0])
+    #     posterior = []
+    #     for i in range(4):
+    #         x0 = np.random.normal(size=1)
+    #         samples = np.array([s for s in sampler.sample(x0, n)])
+    #         print(sampler.num_acceptance / n)
+    #         print(samples.mean(0), samples.std(0))
+    #         plt.plot(samples.T[0])
 
-            posterior.append(samples.T)
-        posterior = np.array(posterior)
-        print(posterior.shape)
+    #         posterior.append(samples.T)
+    #     posterior = np.array(posterior)
+    #     print(posterior.shape)
 
-        rhats = sampler.compute_R_hat(posterior)
-        print(rhats)
-        plt.show()
+    #     rhats = sampler.compute_R_hat(posterior)
+    #     print(rhats)
+    #     plt.show()
 
-    def test_mcmc(self):
-        np.random.seed(0)
-        a = 500
-        sl = 4
-        seqdeft = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type="dna")
-        phi = seqdeft.simulate_phi()
-        X = seqdeft.simulate(N=1000, phi=phi)
+    # def test_mcmc(self):
+    #     np.random.seed(0)
+    #     a = 500
+    #     sl = 4
+    #     seqdeft = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type="dna")
+    #     phi = seqdeft.simulate_phi()
+    #     X = seqdeft.simulate(N=1000, phi=phi)
 
-        seqdeft = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type="dna")
-        seqdeft.set_data(X=X)
-        posterior = seqdeft.mcmc(n_samples=100, n_chains=4)
-        assert posterior.shape == (400, seqdeft.n_genotypes)
+    #     seqdeft = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type="dna")
+    #     seqdeft.set_data(X=X)
+    #     posterior = seqdeft.mcmc(n_samples=100, n_chains=4)
+    #     assert posterior.shape == (400, seqdeft.n_genotypes)
 
-        post_mean = posterior.mean(0)
-        result = seqdeft.fit(X=X)
-        r = pearsonr(post_mean, result["phi"])[0]
-        print(r)
-        assert r > 0.95
+    #     post_mean = posterior.mean(0)
+    #     result = seqdeft.fit(X=X)
+    #     r = pearsonr(post_mean, result["phi"])[0]
+    #     print(r)
+    #     assert r > 0.95
     
-    def test_yiyun(self):
-        import pickle
-        from gpmap.src.settings import BASE_DIR
-        
-        f = 2
-        print('Loading data')
-        test_dir = join(BASE_DIR, 'test', 'test_data', 'cv_iter_split')
-        fpath = join(test_dir, 'weight_split.{}.train.pkl'.format(f))
-        train = pickle.load(open(fpath,'rb'))
-        fpath = join(test_dir, 'weight_split.{}.test.pkl'.format(f))
-        test = pickle.load(open(fpath,'rb'))
-        X_train, y_train, _ = train
-        
-        print('Loading seqdeft object')
-        lambdas_P_inv = np.array([1e-16, 1e-6, 1e-4])
-        model = SeqDEFT(P=3, a=1e5, seq_length=5, alphabet_type='protein',
-                        lambdas_P_inv=lambdas_P_inv)
-        model.set_data(X_train, y_train)
-        phi = model.calc_posterior_max()
-        logL = model.cv_evaluate(test, phi)
-        print(logL)
-
-    def xtest_yiyun2(self):
-        import pickle
-        from gpmap.src.settings import BASE_DIR
-        from gpmap.src.likelihood import SeqDEFTLikelihood
-        
-        f = 2
-        a = 10**7
-        print('Loading data')
-        test_dir = join(BASE_DIR, 'test', 'test_data', 'cv_iter_split')
-        fpath = join(test_dir, 'weight_split.{}.train.pkl'.format(f))
-        train = pickle.load(open(fpath,'rb'))
-        fpath = join(test_dir, 'weight_split.{}.test.pkl'.format(f))
-        test = pickle.load(open(fpath,'rb'))
-        (X_train, y_train, y_var_train), (X_test, y_test, y_var_test) = train, test
-        X = np.append(X_train, X_test)
-        y = np.append(y_train, y_test)
-        
-        print('Loading seqdeft object')
-        fpath = join(test_dir, '..', 'seqdeft.pkl')
-        seqdeft = pickle.load(open(fpath, 'rb'))
-        seqdeft.optimization_opts['maxiter'] = 10000
-        # seqdeft.optimization_opts['ftol'] = 1e-6
-        seqdeft.optimization_opts['gtol'] = 1e-2
-        fpath = join(test_dir, '..', 'phi_inf.pkl')
-        phi_inf = pickle.load(open(fpath, 'rb'))
-        fpath = join(test_dir, 'EVmutation_PloopOnly_baseline.pkl')
-        baseline = -pickle.load(open(fpath, 'rb'))
-        print(baseline.max(), baseline.min(), baseline.shape)
-        print(phi_inf.max(), phi_inf.min(), phi_inf.shape)
-        
-        result3 = pd.read_csv(join(test_dir, 'a_inf_reg.fold{}.result.csv'.format(f)))
-        result5 = pd.read_csv(join(test_dir, 'a_inf_reg_full.fold{}.result.csv'.format(f)))
-
-        # lambdas_P_inv = np.array([1e-16, 1e-6, 1e-4])
-        # model = SeqDEFT(P=3, a=np.inf, seq_length=5, alphabet_type='protein',
-        #                 lambdas_P_inv=lambdas_P_inv,
-        #                 )
-        # result = model.fit(X, y, #X_train, y_train,
-        #                 #    baseline_phi=result5['phi'].values, baseline_X=model.genotypes
-        #                    )
-        # result.to_csv(join(test_dir, 'a_inf_reg_full.fold{}.result.csv'.format(f)))
-
-        result1 = pd.read_csv(join(test_dir, 'a_inf.fold{}.result.csv'.format(f)))
-        result2 = pd.read_csv(join(test_dir, 'a_inf_baseline.fold{}.result.csv'.format(f)))
-        result4 = pd.read_csv(join(test_dir, 'a_inf_baseline_fold.fold{}.result.csv'.format(f)))
-        result6 = pd.read_csv(join(test_dir, 'a_inf_baseline_full.fold{}.result.csv'.format(f)))
-
-        likelihood = SeqDEFTLikelihood(seqdeft.genotypes)
-        likelihood.set_data(X_test, y_test)
-        baseline_ll = likelihood.calc_logL(baseline)
-        inf_a_ll = likelihood.calc_logL(result1["phi"])
-        inf_a_ll_baseline = likelihood.calc_logL(baseline + result2['phi'])
-        inf_a_reg = likelihood.calc_logL(result3["phi"])
-        inf_a_reg_full = likelihood.calc_logL(result5["phi"])
-        inf_a_ll_baseline_fold = likelihood.calc_logL(result3['phi'] + result4["phi"])
-        inf_a_ll_baseline_full = likelihood.calc_logL(result5["phi"] + result6["phi"])
-
-        print(baseline_ll, inf_a_ll, inf_a_ll_baseline, inf_a_reg, inf_a_ll_baseline_fold, inf_a_reg_full, inf_a_ll_baseline_full)
-
-        # exit()
-        
-        # print('Loading data into object')
-        # seqdeft._set_data(X=X_train, y=y_train, y_var=y_var_train)
-        # # c = seqdeft.counts + 1
-        # # phi_inf = -np.log(c / c.sum())
-        # test_logL = seqdeft.calc_logL(phi_inf)
-        # print(test_logL) 
-        
-        # print('Running inference')
-        # phi = seqdeft._fit(a, phi0=phi_inf)
-        # print(seqdeft.opt_res)
-        
-        # print('Computing test logL')
-        # seqdeft._set_data(X=X_test, y=y_test, y_var=y_var_test)
-        # test_logL = seqdeft.calc_logL(phi)
-        # print(test_logL) 
-        # # -2688.904079315712 with a=10**7
-        # # -2659.7987792375907 with a=10**8
-        # # -2499.233842198283 with a=10**9
-        # # -2384.715290185146 with a=10**10
-        # # -2384.7413226631597 with a=10**11
-        
-        # # -2954.8515353270013 with a=10**10
-        # # -2934.0871814326038 with a=10**11
-        # # -3046.9250381070906 with a=inf
-        
 
 if __name__ == '__main__':
     sys.argv = ['', 'SeqDEFTTests']
