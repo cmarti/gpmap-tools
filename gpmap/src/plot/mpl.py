@@ -1072,7 +1072,7 @@ Auxiliary plots
 def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
                        xlabel=r'$\log_{10}(a)$',
                        ylabel='log(L)',  show_folds=True, highlight='max',
-                       legend_loc=1, refx=None):
+                       legend_loc=1, refx=None, size=15):
     
     if refx is not None and np.isin(refx, df[x].values):
         refdf = df.loc[df[x] == refx, :].set_index('fold')[[y]]
@@ -1093,8 +1093,8 @@ def plot_hyperparam_cv(df, axes, x='log_a', y='logL', err_bars='stderr',
                       zorder=1)
         
     axes.plot(sdf['x'], sdf['mean'], color='black', lw=1, zorder=1)
-    axes.scatter(sdf['x'], sdf['mean'], color='black', s=15)
-    axes.scatter(x_star, y_star, color='red', s=25, zorder=10, alpha=1)
+    axes.scatter(sdf['x'], sdf['mean'], color='black', s=size)
+    axes.scatter(x_star, y_star, color='red', s=size+1, zorder=10, alpha=1)
     
     for a, m, s in zip(sdf['x'], sdf['mean'], sdf[err_bars]):
         color = 'red' if a == x_star else 'black'
