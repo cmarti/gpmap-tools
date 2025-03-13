@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 
+import matplotlib
 import matplotlib.pyplot as plt
 import gpmap.src.plot.mpl as mplot
 import gpmap.src.plot.ds as dplot
@@ -114,6 +115,7 @@ def main():
     figsize = (width, height)
     
     if use_datashader:
+        matplotlib.use("Agg") # Needed to resize figure out of datashader
         if alleles_grid:
             dplot.figure_allele_grid(nodes_df, out_fpath, x=x, y=y, edges_df=edges_df,
                                           edges_cmap='grey', background_color='white',
