@@ -160,7 +160,7 @@ class VCTests(unittest.TestCase):
         # Test that the diagonal correspond to the posterior variances calculated individually
         S = S @ np.eye(S.shape[1])
         y_var1 = np.diag(S)
-        y_var2 = vc.calc_posterior_variance(X_pred=X_pred)
+        y_var2 = vc.predict(X_pred=X_pred, calc_variance=True)['y_var']
         assert(np.allclose(y_var1, y_var2))
 
         # Test posterior of linear combination
@@ -299,19 +299,6 @@ class VCTests(unittest.TestCase):
                    '--var', '-p', xpred_fpath, '--lambdas', lambdas_fpath]
             check_call(cmd)
     
-    def test_sd(self):
-        fpath = '/home/martigo/elzar/projects/shine_dalgarno/data/dmsc_processed.csv'
-        df = pd.read_csv(fpath, index_col=0).dropna(subset=['y', 'y_var_post'])
-        # print(df)
-        # exit()
-        X, y, y_var = df.index.values, df.y.values, df.y_var_post.values
-        
-        model = VCregression(beta=1e5)
-        model.fit(X, y, y_var=y_var)
-        print(model.get_variance_component_df(model.lambdas))
-        # model.set_lambdas(model.lambdas + y_var[0])
-        print(model.predict())
-            
 
 class SkewedVCTests(unittest.TestCase):
     def xtest_simulate_skewed_vc(self):  
