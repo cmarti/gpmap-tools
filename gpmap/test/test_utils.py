@@ -77,12 +77,12 @@ class UtilsTests(unittest.TestCase):
 
     def test_generate_p_training_config(self):
         config = generate_p_training_config(n_ps=3, n_reps=2)
-        assert(np.all(config['id'] == np.arange(6))) 
+        assert(np.all(config['id'] == np.arange(1, 7))) 
         assert(np.allclose(config['p'], [0.05, 0.05, 0.5, 0.5, 0.95, 0.95])) 
         assert(np.all(config['rep'] == [0, 1, 0, 1, 0, 1]))    
 
         config = generate_p_training_config(ps=np.array([0.2, 0.5, 0.8]), n_reps=2)
-        assert(np.all(config['id'] == np.arange(6))) 
+        assert(np.all(config['id'] == np.arange(1, 7))) 
         assert(np.allclose(config['p'], [0.2, 0.2, 0.5, 0.5, 0.8, 0.8])) 
         assert(np.all(config['rep'] == [0, 1, 0, 1, 0, 1]))    
 
