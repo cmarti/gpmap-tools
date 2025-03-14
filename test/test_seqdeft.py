@@ -15,7 +15,7 @@ from gpmap.settings import BIN_DIR
 from gpmap.seq import generate_possible_sequences
 from gpmap.matrix import quad
 from gpmap.linop import ProjectionOperator, DeltaKernelRegularizerOperator
-from gpmap.inference import SeqDEFT, HMC
+from gpmap.inference import SeqDEFT
 from gpmap.plot.mpl import plot_SeqDEFT_summary, savefig, plot_density_vs_frequency
 
 
