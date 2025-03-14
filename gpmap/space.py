@@ -634,7 +634,7 @@ class GridSpace(ProductSpace):
         if isinstance(length, int):
             elementary_graphs = [self.calc_elementary_graph(length)] * ndim
         else:
-            elementary_graphs = [self.calc_elementary_graph(l) for l in length]
+            elementary_graphs = [self.calc_elementary_graph(sl) for sl in length]
         super().__init__(elementary_graphs, y=y)
 
     def calc_elementary_graph(self, length):
