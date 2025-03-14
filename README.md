@@ -38,34 +38,29 @@ conda create -n gpmap python=3.8.13
 conda activate gpmap
 ```
 
-### Install from PyPI (old version only)
+### Install from PyPI
 
 ```
 pip install gpmap-tools
 ```
 
-### From latest version in repository (recommended)
+### From from repository
 
 Download the repository using git and cd into it
 
 ```bash
 git clone https://github.com/cmarti/gpmap-tools.git
+pip install gpmap_tools
 ```
 
-Install using setuptools
+### Run tests using pytest
 
 ```bash
-cd gpmap
-python setup.py install
+pytest gpmap_tools/test/
 ```
 
-### Test installation
-
-```bash
-python -m unittest gpmap/test/*py
-```
-
-# Cite
-- Zhou, J.; Wong, M. S.; Chen, W.; Krainer, A. R.; Justin, B.; Mccandlish, D. M. Higher-Order Epistasis and Phenotypic Prediction. PNAS (2022). [doi](https://doi.org/10.1073/pnas.2204233119).
+# References
+- Martí-Gómez, C.; Zhou, J.; Chen W.; Kinney J. B.; Mccandlish, D. M. Inference and visualization of complex genotype-phenotype maps using gpmap-tools. bioRxiv (2025)
+- Zhou, J.; Wong, M. S.; Chen, W.; Krainer, A. R.; Kinney J. B.; Mccandlish, D. M. Higher-Order Epistasis and Phenotypic Prediction. PNAS (2022). [doi](https://doi.org/10.1073/pnas.2204233119).
 - Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM. Field theoretic density estimation for biological sequence space with applications to 5' splice site diversity and aneuploidy in cancer. PNAS (2021). [doi](https://www.pnas.org/doi/10.1073/pnas.2025782118)
 - Mccandlish, D. M. Visualizing fitness landscapes. Evolution (2011). [doi](https://doi.org/10.1111/j.1558-5646.2011.01236.x)
