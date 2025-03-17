@@ -25,21 +25,23 @@ Discrete spaces
 Random walks
 ------------
 
-.. autoclass:: gpmap.randwalk.TimeReversibleRandomWalk
-    :members: calc_visualization, write_tables
-
 .. autoclass:: gpmap.randwalk.WMWalk
-    :members: calc_neutral_mixing_rates, calc_neutral_rate_matrix, 
+    :members: calc_visualization, write_tables, calc_neutral_mixing_rates, calc_neutral_rate_matrix, 
         calc_stationary_frequencies, calc_rate_matrix, calc_model_neutral_rate_matrix
 
 Landscape Inference
 -------------------
+.. autoclass:: gpmap.inference.MinimumEpistasisInterpolator
+    :members: predict, smooth
+
+.. autoclass:: gpmap.inference.MinimumEpistasisRegression
+    :members: fit, predit, make_contrasts
 
 .. autoclass:: gpmap.inference.VCregression
     :members: fit, predict, make_contrasts, lambdas_to_variance, simulate
 
 .. autoclass:: gpmap.inference.SeqDEFT
-    :members: fit, simulate_phi, simulate
+    :members: fit, make_contrasts, simulate_phi, simulate
 
 Sequence utils
 --------------
@@ -62,10 +64,15 @@ Genotypes handling
 Plotting
 --------
 
-.. autofunction:: gpmap.plot.plot_relaxation_times
-.. autofunction:: gpmap.plot.plot_edges
-.. autofunction:: gpmap.plot.plot_nodes
-.. autofunction:: gpmap.plot.plot_interactive
+.. autofunction:: gpmap.plot.mpl.plot_relaxation_times
+.. autofunction:: gpmap.plot.mpl.plot_edges
+.. autofunction:: gpmap.plot.mpl.plot_nodes
+.. autofunction:: gpmap.plot.mpl.plot_visualization
+.. autofunction:: gpmap.plot.mpl.figure_Ns_grid
+.. autofunction:: gpmap.plot.mpl.figure_allele_grid
+.. autofunction:: gpmap.plot.ply.plot_visualization
+.. autofunction:: gpmap.plot.ds.plot_visualization
+.. autofunction:: gpmap.plot.ds.figure_allele_grid
 .. autofunction:: gpmap.plot.plot_SeqDEFT_summary
 
 Datasets
