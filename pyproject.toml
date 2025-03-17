@@ -49,14 +49,10 @@ filter_genotypes = "gpmap.bin.filter_genotypes:main"
 
 [tool.setuptools]
 packages = ["gpmap", "gpmap.bin", "gpmap.plot"]
-
-[tool.setuptools.package-data]
-"datasets" = [
-    "*/serine*",
-    "*/smn1*",
-    "*/5ss*",
-    "*/gb1*",
-]
+package-data = {"gpmap" = ["datasets/data/*",
+                           "datasets/landscapes/*",
+                           "datasets/raw/*",
+                           "datasets/visualizations/*"]}
 
 [project.urls]
 Documentation = "https://gpmap-tools.readthedocs.io"
