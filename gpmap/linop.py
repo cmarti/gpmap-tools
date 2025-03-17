@@ -573,7 +573,7 @@ class KrawtchoukOperator(SeqOperator, PolynomialOperator):
                 for power in idx:
                     p = np.sum(
                         [
-                            np.product(v)
+                            np.prod(v)
                             for v in combinations(k_lambdas, self.l - power)
                         ]
                     )
