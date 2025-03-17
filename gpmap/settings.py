@@ -4,7 +4,7 @@ from Bio.Data import IUPACData
 # Directories
 BASE_DIR = abspath(join(dirname(__file__), ".."))
 BIN_DIR = join(BASE_DIR, 'gpmap', "bin")
-DATASETS_DIR = join(BASE_DIR, "datasets")
+DATASETS_DIR = join(BASE_DIR, 'gpmap', "datasets")
 RAW_DATA_DIR = join(DATASETS_DIR, "raw")
 PROCESSED_DIR = join(DATASETS_DIR, "data")
 LANDSCAPES_DIR = join(DATASETS_DIR, "landscapes")
