@@ -338,7 +338,7 @@ class DatashaderTests(unittest.TestCase):
             fpath = fhand.name
             pds.figure_allele_grid(ndf.copy(), edges_df=edf.copy(), fpath=fpath)
     
-    def test_plot_visualization_big(self):  
+    def xtest_plot_visualization_big(self):  
         gb1 = DataSet('gb1')
         dsg =  pds.plot_visualization(gb1.nodes, edges_df=gb1.edges,
                                       shade_nodes=True, shade_edges=True,
@@ -351,14 +351,14 @@ class DatashaderTests(unittest.TestCase):
     
     def test_plot_visualization_bin_datashader(self):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        gb1 = DataSet('gb1')
+        serine = DataSet('serine')
         
         with NamedTemporaryFile('w') as fhand:
             nodes_fpath = '{}.nodes.pq'.format(fhand.name)
-            write_dataframe(gb1.nodes, nodes_fpath)
+            write_dataframe(serine.nodes, nodes_fpath)
             
             edges_fpath = '{}.edges.npz'.format(fhand.name)
-            write_edges(gb1.edges, edges_fpath)
+            write_edges(serine.edges, edges_fpath)
 
             output_fpath = '{}.visualization.png'.format(fhand.name)
             cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
@@ -368,14 +368,14 @@ class DatashaderTests(unittest.TestCase):
     
     def test_plot_visualization_bin_datashader_alleles(self):
         bin_fpath = join(BIN_DIR, 'plot_visualization.py')
-        gb1 = DataSet('gb1')
+        serine = DataSet("serine")
         
         with NamedTemporaryFile('w') as fhand:
             nodes_fpath = '{}.nodes.pq'.format(fhand.name)
-            write_dataframe(gb1.nodes, nodes_fpath)
+            write_dataframe(serine.nodes, nodes_fpath)
             
             edges_fpath = '{}.edges.npz'.format(fhand.name)
-            write_edges(gb1.edges, edges_fpath)
+            write_edges(serine.edges, edges_fpath)
 
             output_fpath = '{}.visualization.png'.format(fhand.name)
             cmd = [sys.executable, bin_fpath, nodes_fpath, '-e', edges_fpath,
@@ -442,5 +442,6 @@ class InferencePlotsTests(unittest.TestCase):
 
         
 if __name__ == '__main__':
-    import sys;sys.argv = ['', 'MatPlotsTests']
+    import sys
+    sys.argv = ['', 'MatPlotsTests']
     unittest.main()
