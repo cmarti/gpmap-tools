@@ -767,7 +767,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
     ):
         """
         Infers the sequence-function relationship under the specified
-        \Delta^{(P)} prior
+        \\Delta^{(P)} prior
 
         Parameters
         ----------

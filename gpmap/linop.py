@@ -553,7 +553,7 @@ class KrawtchoukOperator(SeqOperator, PolynomialOperator):
         B : array-like of shape (seq_length + 1, seq_length + 1)
             Matrix containing the b_i,k coefficients for power i on rows
             and order k on columns. One can obtain the coefficients for any
-            combination of $\lambda_k$ values by scaling the coefficients
+            combination of $\\lambda_k$ values by scaling the coefficients
             for each eigenspace by its eigenvalue and adding them up across
             different powers
         """

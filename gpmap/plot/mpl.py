@@ -1712,7 +1712,7 @@ def plot_SeqDEFT_summary(
         plot_density_vs_frequency(seq_density, subplots[1])
         axes = subplots[0]
 
-    ylabel = "log(L) relative to a=$\infty$" if normalize_logL else "log(L)"
+    ylabel = r"log(L) relative to a=$\infty$" if normalize_logL else "log(L)"
     plot_hyperparam_cv(
         log_Ls,
         axes,
