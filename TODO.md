@@ -1,5 +1,9 @@
 ### High priority
+- Implement contrast functionality in seqdeft under the laplace approximation (use Inverse Hessian as posterior covariance)
+- Implement calculations with matrices that are better conditioned. Maybe the problems are in the diagonal terms from the likelihood.
+- Review default regularization parameters in the grid in Minimim epistasis regression object with typically large spaces: the scale can also be very different, so it is unclear. Only reasonable calculation is to work from standardized data (or WT centered, and set priors in SD relative to the overall variance in the data: use data distribution to set it for instance)
 - Review typos in documentation
+- API section: need to have plotting functions and docstrings for DataSet methods
 - Merge with master branch and release new stable version to pypi
 - Write __str__ method for DataSet to highlight the main properties of the dataset
 - Make clean and complete datasets
@@ -19,7 +23,6 @@
 - Try to reduce dependencies: networkx, datashader. Make some optional: tqdm, fastparquet, plotly
 - Add documentation for transition path theory
 - Think about separation of basic functionalities that are used in visualization and inference
-- Add return_grad argument to loss function in SeqDEFT
 - Explore why VC regression is so slow now and fix. Guess is the definition of the obs_idx matrix within the KernelOperator or the tolerance required by CG being to strict (most likely)
 
 
