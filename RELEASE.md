@@ -15,12 +15,12 @@ git checkout -b release-x.x dev
 ```
 git checkout master
 git merge --no-ff release-x.x # --no-ff keeps separate branches
-git tag -a 1.2
+git tag -a x.x
 ```
 7. Merge changes into dev branch
 ```
 git checkout dev
-git merge --no-ff release-1.2 
+git merge --no-ff release-x.x 
 ```
 
 # Upload to PyPI
@@ -28,20 +28,24 @@ git merge --no-ff release-1.2
 1. Create new wheel distribution
 2. Test installation from wheel in a new environment and re-run tests
 ```
-conda create -n test_gpmap_release python=3.8.13
+conda create -n test_gpmap_release python=3.8
 conda activate test_gpmap_release
-pip install WHEEL
-python -m unittest test/test_*py
+pip install .
+pytest test
 ```
 2. Upload to TestPyPI and test installation in a new environment
 ```
 python -m build
 twine upload dist/* --repository testpypi
-conda create -n test_gpmap_release python=3.8.13
+conda create -n test_gpmap_release python=3.8
 conda activate test_gpmap_release
-
+pip install -i https://test.pypi.org/simple/ gpmap-tools==x.x --extra-index-url https://pypi.org/simple/
+pytest test 
 ```
 
 3. Upload to PyPI and test installation in a new environment
 ```
+python3 -m twine upload --repository pypi dist/*
+pip install gpmap-tools
+pytest test
 ```
