@@ -78,7 +78,7 @@ class ExtendedLinearOperator(_CustomLinearOperator):
         https://people.inf.ethz.ch/arbenz/ewp/Lnotes/chapter10.pdf
         """
         n_vectors = min(n_vectors, self.shape[1])
-        Q = np.expand_dims(r / norm(r), 1)
+        Q = np.expand_dims(r / np.norm(r), 1)
         H = np.zeros((n_vectors + 1, n_vectors))
 
         for j in range(n_vectors):
@@ -165,7 +165,8 @@ class ExtendedLinearOperator(_CustomLinearOperator):
     ):
         if method == "naive":
             sign, log_det = np.linalg.slogdet(self.todense())
-            msg = "Negative determinant found. Ensure LinearOperator has positive eigenvalues"
+            msg = "Negative determinant found. Ensure LinearOperator"
+            msg += " has positive eigenvalues"
             check_error(sign > 0, msg=msg)
             return log_det
 
@@ -217,30 +218,30 @@ class ExtendedLinearOperator(_CustomLinearOperator):
                 raise ValueError(msg)
 
 
-def lanczos_conjugate_gradient(A, b, tol=1e-6, max_iter=100):
-    x = np.zeros(b.shape)
-    p = b
-    r = b
-    w = 0
-    gamma = 1
-    prev_u = 0
-    u = np.zeros(b.shape)
-    r = A.dot(u) - b
-    r_norm = np.linalg.norm(r)
-    d = r
+# def lanczos_conjugate_gradient(A, b, tol=1e-6, max_iter=100):
+#     x = np.zeros(b.shape)
+#     p = b
+#     r = b
+#     w = 0
+#     gamma = 1
+#     prev_u = 0
+#     u = np.zeros(b.shape)
+#     r = A.dot(u) - b
+#     r_norm = np.linalg.norm(r)
+#     d = r
 
-    for _ in range(max_iter):
-        v = A.dot(r)
-        alpha = r_norm / np.dot(d, v)
-        u = u + alpha * r
-        r = r - alpha * v
-        r_norm_prev = r_norm
-        r_norm = np.linalg.norm(r)
+#     for _ in range(max_iter):
+#         v = A.dot(r)
+#         alpha = r_norm / np.dot(d, v)
+#         u = u + alpha * r
+#         r = r - alpha * v
+#         r_norm_prev = r_norm
+#         r_norm = np.linalg.norm(r)
 
-        if r_norm < tol:
-            break
+#         if r_norm < tol:
+#             break
 
-        beta = r_norm / r_norm_prev
-        d = r - beta * d
+#         beta = r_norm / r_norm_prev
+#         d = r - beta * d
 
-    return u
+#     return u

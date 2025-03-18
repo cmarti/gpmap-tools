@@ -254,7 +254,8 @@ def generate_freq_reduced_code(
 
 def get_custom_codon_table(aa_mapping):
     """
-    Builds a biopython CodonTable to use for translation with a custom genetic code
+    Builds a biopython CodonTable to use for translation with a
+    custom genetic code
 
 
     Parameters
@@ -458,9 +459,9 @@ def msa_to_counts(
                 '"positions" must be provided for phylogenetic correction'
             )
         if y is not None:
-            raise ValueError(
-                'phylogenetic correction can not be calculated when "y" is provided'
-            )
+            msg = 'phylogenetic correction can not be calculated '
+            msg += 'when "y" is provided'
+            raise ValueError(msg)
 
     if y is None:
         y = calc_msa_weights(

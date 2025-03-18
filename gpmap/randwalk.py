@@ -79,7 +79,8 @@ class RandomWalk(object):
 
         if res != 0:
             rmse = np.sqrt(np.mean((U.dot(q_red) - v) ** 2))
-            sys.stderr.write("Warning: BICGSTAB exitCode: {}. RMSE={}\n".format(res, rmse))
+            msg = "Warning: BICGSTAB exitCode: {}. RMSE={}\n".format(res, rmse)
+            sys.stderr.write(msg)
 
         q = np.ones(Q.shape[0])
         q[idx] = q_red
@@ -121,7 +122,8 @@ class TimeReversibleRandomWalk(RandomWalk):
     def calc_eigendecomposition(self, n_components=10, tol=1e-14):
         self.n_components = min(n_components + 1, self.space.n_states - 1)
 
-        # Transform matrix shifting eigenvalues close to 0 to avoid numerical problems
+        # Transform matrix shifting eigenvalues close to 0 to avoid
+        # numerical problems
         upper_bound = np.abs(self.sandwich_rate_matrix).sum(1).max()
         sandwich_aux_matrix = (
             identity(self.space.n_states)
@@ -219,7 +221,8 @@ class TimeReversibleRandomWalk(RandomWalk):
             Genotype stationary frequencies at neutrality to define the
             time reversible neutral dynamics
 
-        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_states, n_states)
+        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of
+                                shape (n_states, n_states)
             Sparse matrix containing the neutral exchange rates for the
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
@@ -277,16 +280,16 @@ class TimeReversibleRandomWalk(RandomWalk):
             Prefix of the files to store the different tables
 
         write_edges: bool (False)
-            Option to write also the information about the adjacency relationships
-            between pairs for states for plotting the edges
+            Option to write also the information about the adjacency
+            relationships between pairs for states for plotting the edges
 
         nodes_format: str {'parquet', 'csv'}
-            Format to store the nodes information. parquet is more efficient but
-            CSV can be used in smaller cases for plain text storage.
+            Format to store the nodes information. parquet is more efficient
+            but CSV can be used in smaller cases for plain text storage.
 
         edges_format: str {'npz', 'csv'}
-            Format to store the edges information. npz is more efficient but CSV
-            can be used in smaller cases for plain text storage.
+            Format to store the edges information. npz is more efficient but
+            CSV can be used in smaller cases for plain text storage.
 
         """
         self.decay_rates_df.to_csv(
@@ -380,9 +383,10 @@ class WMWalk(TimeReversibleRandomWalk):
     Methods
     -------
     set_Ns():
-        Method to specify the scaled effective population size Ns, either directly
-        or by specifying the mean function at stationarity or the percentile
-        it represents from the distribution of functions across sequence space
+        Method to specify the scaled effective population size Ns, either
+        directly or by specifying the mean function at stationarity or the
+        percentile it represents from the distribution of functions across
+        sequence space
 
     calc_stationary_frequencies():
         Calculates the stationary frequencies of the states under the random
@@ -424,7 +428,8 @@ class WMWalk(TimeReversibleRandomWalk):
 
     def calc_neutral_stat_freqs(self, sites_stat_freqs=None):
         """
-        Calculates the neutral stationary frequencies assuming site independence
+        Calculates the neutral stationary frequencies assuming site
+        independence
 
         Parameters
         ----------
@@ -460,7 +465,9 @@ class WMWalk(TimeReversibleRandomWalk):
         self.neutral_exchange_rates = self.calc_exchange_rate_matrix(
             sites_exchange_rates
         )
-        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(sites_stat_freqs)
+        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(
+            sites_stat_freqs
+        )
         return self.calc_gtr_rate_matrix(
             self.neutral_exchange_rates, self.neutral_stat_freqs
         )
@@ -486,9 +493,10 @@ class WMWalk(TimeReversibleRandomWalk):
 
         neutral_site_freqs : list of array-like of shape (n_alleles,)
             List containing vectors with the stationary frequencies under
-            neutrality for each site. They are used to calculate the eigenvalues
-            of the time reversible site specific neutral chain. By default,
-            they are assumed to be uniform across sites and alleles.
+            neutrality for each site. They are used to calculate the
+            eigenvalues of the time reversible site specific neutral chain.
+            By default, they are assumed to be uniform across sites
+            and alleles.
 
         site_weights : array-like of shape (seq_length,)
             Vector containing the relative weight associated to each site. This
@@ -499,8 +507,8 @@ class WMWalk(TimeReversibleRandomWalk):
         Returns
         -------
         neutral_mixing_rate: float
-            Neutral mixing rate as the smallest second largest eigenvalue across
-            sites.
+            Neutral mixing rate as the smallest second largest eigenvalue
+            across sites.
 
         TODO: Re-implement functionality
         """
@@ -603,7 +611,8 @@ class WMWalk(TimeReversibleRandomWalk):
             )
             max_mean_function = self.space.y.max()
 
-            msg = "mean_function must be between the function mean ({:.2f}) and the maximum function value ({:.2f})"
+            msg = "mean_function must be between the function mean "
+            msg += "({:.2f}) and the maximum function value ({:.2f})"
             msg = msg.format(min_mean_function, max_mean_function)
             check_error(
                 mean_function >= min_mean_function
@@ -630,7 +639,7 @@ class WMWalk(TimeReversibleRandomWalk):
 
         if Ns > 0:
             df = self.space.y[j] - self.space.y[i]
-            idxs = np.isclose(df, 0) == False
+            idxs = ~np.isclose(df, 0)
 
             # Calculate selection driven part
             S = Ns * df[idxs]
@@ -667,7 +676,8 @@ class WMWalk(TimeReversibleRandomWalk):
             Genotype stationary frequencies at neutrality to define the
             time reversible neutral dynamics
 
-        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_states, n_states)
+        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape
+                                (n_states, n_states)
             Sparse matrix containing the neutral exchange rates for the
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
@@ -690,7 +700,9 @@ class WMWalk(TimeReversibleRandomWalk):
         m = csr_matrix((values, (i, j)), shape=self.shape).tolil()
 
         # Fill diagonal entries
-        log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs)
+        log_freqs = self.calc_log_stationary_frequencies(
+            Ns, neutral_stat_freqs
+        )
         self.set_stationary_freqs(log_freqs)
         sqrt_freqs = np.exp(0.5 * (log_freqs + np.log(self.space.n_states)))
         m.setdiag(-m.dot(sqrt_freqs) / sqrt_freqs)
@@ -712,7 +724,8 @@ class WMWalk(TimeReversibleRandomWalk):
             Genotype stationary frequencies at neutrality to define the
             time reversible neutral dynamics
 
-        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape (n_states, n_states)
+        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape
+                                (n_states, n_states)
             Sparse matrix containing the neutral exchange rates for the
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
@@ -755,7 +768,8 @@ class WMWalk(TimeReversibleRandomWalk):
 
         Returns
         -------
-        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape (n_states, n_states)
+        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape
+                             (n_states, n_states)
             Sparse matrix containing the neutral transition rates for the
             whole sequence space
 
@@ -834,7 +848,9 @@ class WMWalk(TimeReversibleRandomWalk):
         check_error(np.sum(stat_freqs) == 1, msg=msg)
 
         sites_stat_freqs = [np.array(stat_freqs)] * self.space.seq_length
-        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(sites_stat_freqs)
+        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(
+            sites_stat_freqs
+        )
 
         exchange_rates = [np.array(exchange_rates)] * self.space.seq_length
         self.neutral_exchange_rates = self.calc_exchange_rate_matrix(
@@ -908,7 +924,9 @@ class ReactivePaths(object):
         rmse = np.sqrt(np.mean((U.dot(q_partial) - v) ** 2))
 
         if res != 0:
-            sys.stderr.write("Warning: BICGSTAB exitCode: {}. RMSE={}".format(res, rmse))
+            sys.stderr.write(
+                "Warning: BICGSTAB exitCode: {}. RMSE={}".format(res, rmse)
+            )
 
         return (q_partial, rmse)
 
@@ -983,7 +1001,7 @@ class ReactivePaths(object):
         m = self.eff_flow_matrix.tocoo()
         return pd.DataFrame({"i": m.row, "j": m.col, "eff_flow": m.data})
 
-    ### Methods for bottlenecks and pathways ###
+    # ## Methods for bottlenecks and pathways ###
     def calc_graph(self):
         graph = nx.DiGraph()
         m = self.eff_flow_matrix.tocoo()
@@ -1030,7 +1048,7 @@ class ReactivePaths(object):
         df = pd.DataFrame(steps)
         return df
 
-    ### Methods for simulation ###
+    # ## Methods for simulation ###
     def calc_reactive_rate_matrix(self):
         Q = self.rate_matrix.copy()
         D_q = get_sparse_diag_matrix(self.q_forward[self.not_start])
@@ -1080,7 +1098,9 @@ class TimeReversibleReactivePaths(ReactivePaths):
         rmse = np.sqrt(np.mean((U.dot(q_partial) - v) ** 2))
 
         if res != 0:
-            cmd = "Warning: ConjugateGradient exitCode: {}. RMSE={}".format(res, rmse)
+            cmd = "Warning: ConjugateGradient exitCode: {}. RMSE={}".format(
+                res, rmse
+            )
             sys.stderr.write(cmd)
 
         return (q_partial, rmse)

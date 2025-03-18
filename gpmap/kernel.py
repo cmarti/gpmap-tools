@@ -11,12 +11,12 @@ from gpmap.matrix import inner_product, get_sparse_diag_matrix
 class SequenceKernel(object):
     def __init__(self, n_alleles, seq_length):
         self.alpha = n_alleles
-        self.l = seq_length
-        self.lp1 = self.l + 1
-        self.n = self.alpha**self.l
+        self.seq_length = seq_length
+        self.lp1 = self.seq_length + 1
+        self.n = self.alpha**seq_length
 
     def calc_hamming_distance(self, x1, x2):
-        return self.l - inner_product(x1, x2)
+        return self.seq_length - inner_product(x1, x2)
 
     def get_hamming_distance(self):
         if self._hamming is None:  # this happens when data is re-set
@@ -48,7 +48,7 @@ class VarianceComponentKernel(SequenceKernel):
         self.n_params = self.lp1
 
     def set_extra_data(self):
-        self.same_seq = self.x1.dot(self.x2.T) == self.l
+        self.same_seq = self.x1.dot(self.x2.T) == self.seq_length
 
     def calc_w_kd(self, k, d):
         ss = 0
@@ -57,7 +57,7 @@ class VarianceComponentKernel(SequenceKernel):
                 (-1.0) ** q
                 * (self.alpha - 1.0) ** (k - q)
                 * comb(d, q)
-                * comb(self.l - d, k - q)
+                * comb(self.seq_length - d, k - q)
             )
         return ss / self.n
 
@@ -82,7 +82,7 @@ class VarianceComponentKernel(SequenceKernel):
             )
 
     def get_params0(self):
-        params = np.append([-5], 2 - np.arange(self.l))
+        params = np.append([-5], 2 - np.arange(self.seq_length))
         return params
 
     def transform_params(self, params):
@@ -103,7 +103,7 @@ class ConnectednessKernel(SequenceKernel):
         self.sites_equal = sites_equal
 
     def set_extra_data(self):
-        self.same_seq = self.x1.dot(self.x2.T) == self.l
+        self.same_seq = self.x1.dot(self.x2.T) == self.seq_length
 
     def calc_factor(self, rho):
         return np.log((1 + (self.alpha - 1) * rho) / (1 - rho))
@@ -111,8 +111,8 @@ class ConnectednessKernel(SequenceKernel):
     def get_rho(self, rho):
         rho = np.array(rho)
         if rho.shape[0] == 1:
-            rho = np.full(self.l, rho[0])
-        elif rho.shape[0] != self.l:
+            rho = np.full(self.seq_length, rho[0])
+        elif rho.shape[0] != self.seq_length:
             msg = "Incorrect dimension of rho"
             raise ValueError(msg)
         return rho
@@ -128,7 +128,9 @@ class ConnectednessKernel(SequenceKernel):
             d = self.get_hamming_distance()
             s = np.log((1 + (self.alpha - 1) * rho[0]))
             cov = np.exp(
-                d * (np.log(1 - rho[0]) - s) + self.l * s - np.log(self.n)
+                d * (np.log(1 - rho[0]) - s)
+                + self.seq_length * s
+                - np.log(self.n)
             )
         else:
             metric = self.calc_metric(rho)
@@ -143,10 +145,11 @@ class ConnectednessKernel(SequenceKernel):
 
     def backward(self, **kwargs):
         rho = self.rho
+        sl = self.seq_length
         if self.sites_equal:
             rho = rho[0]
             d = self.get_hamming_distance()
-            n = (self.alpha - 1) / (1 + (self.alpha - 1) * rho) * self.l
+            n = (self.alpha - 1) / (1 + (self.alpha - 1) * rho) * sl
             m = -self.alpha / ((1 - rho) * (1 + (self.alpha - 1) * rho))
             factor = m * d + n
             yield (factor * self.cov * self.transform_params_grad(rho))
@@ -156,12 +159,13 @@ class ConnectednessKernel(SequenceKernel):
                 idx = np.arange(p * self.alpha, (p + 1) * self.alpha)
                 s = inner_product(self.x1[:, idx], self.x2[:, idx])
                 different_factor = -1 / (1 - rho_p)
-                equal_factor = (self.alpha - 1) / (1 + (self.alpha - 1) * rho_p)
+                equal_factor = self.alpha - 1
+                equal_factor /= 1 + (self.alpha - 1) * rho_p
                 factor = equal_factor * s + (1 - s) * different_factor
                 yield (factor * self.cov * self.transform_params_grad(rho_p))
 
     def get_params0(self):
-        s = 1 if self.sites_equal else self.l
+        s = 1 if self.sites_equal else self.seq_length
         params = np.random.normal(size=s)
         return params
 
@@ -187,27 +191,27 @@ class SkewedVarianceComponentKernel(SequenceKernel):
 
         if self.use_p:
             if q is None:
-                q = (self.l - 1) / self.l
+                q = (self.seq_length - 1) / self.seq_length
             self.q = q
-            self.logq = np.log(q)
+            self.seq_lengthogq = np.log(q)
             self.B = self.calc_polynomial_coeffs()
             ks = np.arange(self.lp1)
-            log_q_powers = self.logq * ks
+            log_q_powers = self.seq_lengthogq * ks
             log_1mq_powers = np.append(
                 [-np.inf], np.log(1 - np.exp(log_q_powers[1:]))
             )
-            self.lsf = self.l * log_1mq_powers
-            self.log_odds = log_q_powers - log_1mq_powers
+            self.seq_lengthsf = self.seq_length * log_1mq_powers
+            self.seq_lengthog_odds = log_q_powers - log_1mq_powers
         else:
             self.calc_krawchouk_matrix()
 
         self.n_params = self.lp1
         if use_p:
-            self.n_params += self.l * self.alpha
+            self.n_params += self.seq_length * self.alpha
 
     def calc_polynomial_coeffs(self):
         k = np.arange(self.lp1)
-        lambdas = np.exp(k * self.logq)
+        lambdas = np.exp(k * self.seq_lengthogq)
 
         B = np.zeros((self.lp1, self.lp1))
         idx = np.arange(self.lp1)
@@ -217,14 +221,16 @@ class SkewedVarianceComponentKernel(SequenceKernel):
             norm_factor = 1 / np.prod(k_lambdas - lambdas[k])
 
             for power in idx:
-                lambda_combs = list(combinations(k_lambdas, self.l - power))
+                lambda_combs = list(
+                    combinations(k_lambdas, self.seq_length - power)
+                )
                 p = np.sum([np.prod(v) for v in lambda_combs])
                 B[power, k] = (-1) ** (power) * p * norm_factor
 
         return B
 
     def set_extra_data(self):
-        self.same_seq = self.x1.dot(self.x2.T) == self.l
+        self.same_seq = self.x1.dot(self.x2.T) == self.seq_length
 
     def calc_w_kd(self, k, d):
         ss = 0
@@ -233,7 +239,7 @@ class SkewedVarianceComponentKernel(SequenceKernel):
                 (-1.0) ** q
                 * (self.alpha - 1.0) ** (k - q)
                 * comb(d, q)
-                * comb(self.l - d, k - q)
+                * comb(self.seq_length - d, k - q)
             )
         return ss
 
@@ -254,13 +260,16 @@ class SkewedVarianceComponentKernel(SequenceKernel):
 
         for power in range(1, self.lp1):
             log_factors = np.stack(
-                [self.log_odds[power] - log_p_flat, np.zeros(log_p_flat.shape)],
+                [
+                    self.seq_lengthog_odds[power] - log_p_flat,
+                    np.zeros(log_p_flat.shape),
+                ],
                 1,
             )
             log_factors = logsumexp(log_factors, 1)
             M = np.diag(log_factors)
             m = inner_product(self.x1, self.x2, M)
-            cov += coeffs[power] * np.exp(self.lsf[power] + m)
+            cov += coeffs[power] * np.exp(self.seq_lengthsf[power] + m)
         return cov
 
     def forward(self, lambdas, log_p=None):
@@ -281,16 +290,18 @@ class SkewedVarianceComponentKernel(SequenceKernel):
                 yield (lambda_k * self.W_kd[k, :][hamming_distance])
 
     def get_params0(self):
-        params = np.append([-10], 2 - np.arange(self.l))
+        params = np.append([-10], 2 - np.arange(self.seq_length))
         if self.use_p:
-            params = np.append(params, np.zeros(self.l * self.alpha))
+            params = np.append(params, np.zeros(self.seq_length * self.alpha))
         return params
 
     def split_params(self, params):
         params_dict = {}
         if self.use_p:
             params_dict["lambdas"] = np.exp(params[: self.lp1])
-            log_ps = params[self.lp1 :].reshape(self.l, self.alpha)
+            log_ps = params[self.lp1:].reshape(
+                self.seq_length, self.alpha
+            )
             norm_factors = logsumexp(log_ps, axis=1)
             for i in range(log_ps.shape[1]):
                 log_ps[:, i] -= log_ps[:, i] - norm_factors

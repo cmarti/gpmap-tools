@@ -165,7 +165,8 @@ class SeqDEFTLikelihood(object):
         obs_phi = self.phi_to_phi_obs(phi)
         Q = self.phi_to_Q(obs_phi)
         output = pd.DataFrame(
-            {"frequency": self.R, "phi": phi, "Q_star": Q}, index=self.genotypes
+            {"frequency": self.R, "phi": phi, "Q_star": Q},
+            index=self.genotypes
         )
         if self.adjust_freqs:
             exp_logp = calc_expected_logp(self.genotypes, self.allele_freqs)

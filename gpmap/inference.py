@@ -130,7 +130,8 @@ class MinimumEpistasisRegression(MinimizerRegressor):
     def cv_evaluate(self, data, y_pred):
         X, y, y_var = data
         pred_idx = self.get_obs_idx(X)
-        logL = norm.logpdf(y, loc=y_pred[pred_idx], scale=np.sqrt(y_var)).mean()
+        logL = norm.logpdf(y, loc=y_pred[pred_idx],
+                           scale=np.sqrt(y_var)).mean()
         return logL
 
     def a_to_sd(self, a):
@@ -178,8 +179,8 @@ class MinimumEpistasisRegression(MinimizerRegressor):
         Parameters
         ----------
         X : array-like of shape (n_obs,)
-            Vector containing the genotypes for which have observations provided
-            by `y`
+            Vector containing the genotypes for which have observations
+            provided by `y`
 
         y : array-like of shape (n_obs,)
             Vector containing the observed phenotypes corresponding to `X`
@@ -373,8 +374,8 @@ class VCregression(GaussianProcessRegressor):
         Parameters
         ----------
         X : array-like of shape (n_obs,)
-            Vector containing the genotypes for which have observations provided
-            by `y`
+            Vector containing the genotypes for which have observations
+            provided by `y`
 
         y : array-like of shape (n_obs,)
             Vector containing the observed phenotypes corresponding to `X`
@@ -411,8 +412,8 @@ class VCregression(GaussianProcessRegressor):
 class SeqDEFT(GeneralizedGaussianProcessRegressor):
     """
     Sequence Density Estimation using Field Theory model that allows inference
-    of a complete sequence probability distribution under a Gaussian Process prior
-    parameterized by variance of local epistatic coefficients of order P
+    of a complete sequence probability distribution under a Gaussian Process
+    prior parameterized by variance of local epistatic coefficients of order P
 
     It requires the use of the same number of alleles per sites
 
@@ -683,7 +684,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         a = self.a
         self.DP.calc_lambdas()
         lambdas = np.zeros(self.DP.lambdas.shape)
-        lambdas[self.P :] = a * self.DP.lambdas[self.P :] / self.DP.n_p_faces
+        lambdas[self.P:] = a * self.DP.lambdas[self.P:] / self.DP.n_p_faces
 
         if self.lambdas_P_inv is not None:
             lambdas[: self.P] = 1 / self.lambdas_P_inv
@@ -935,7 +936,8 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         Returns
         -------
         X : array-like of shape (N,)
-            Vector containing the sampled sequences from the probability distribution
+            Vector containing the sampled sequences from the probability
+            distribution
         """
 
         if seed is not None:
@@ -998,7 +1000,7 @@ class HMC(object):
         self.num_acceptance = 0
 
         # Warmup
-        tunning = DualAveragingStepSize(self.step_size)
+        # tunning = DualAveragingStepSize(self.step_size)
         for i in tqdm(range(2 * n_samples)):
             momentum = self.sample_momentum(position)
             new_position, new_logp_grad, new_energy = self.leapfrog(
@@ -1100,7 +1102,8 @@ class HMC(object):
             int(num_samples_per_chain / 2),
         )
 
-        # Re-shape multi_phi_samples into a shape of (num_subchains, G, len_subchain)
+        # Re-shape multi_phi_samples into a
+        # shape of (num_subchains, G, len_subchain)
         a = []
         for k in range(num_chains):
             a.append(samples[k, :, :len_subchain])

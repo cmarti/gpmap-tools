@@ -50,12 +50,13 @@ class VCKernelAligner(object):
         """Construct second order difference matrix for regularization"""
         Diff2 = np.zeros((self.seq_length - 2, self.seq_length))
         for i in range(Diff2.shape[0]):
-            Diff2[i, i : i + 3] = [-1, 2, -1]
+            Diff2[i, i: i + 3] = [-1, 2, -1]
         self.second_order_diff_matrix = Diff2.T.dot(Diff2)
 
     def calc_loss(self, log_lambdas, beta=None, return_grad=False):
-        """Loss function is proportional to the frobenius norm of the difference between
-        the empirical distance-covariance function and the expected under some lambdas"""
+        """Loss function is proportional to the frobenius norm of
+        the difference between the empirical distance-covariance
+        function and the expected under some lambdas"""
         if beta is None:
             beta = self.beta
 
@@ -79,13 +80,13 @@ class VCKernelAligner(object):
 
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
-        l, a = self.seq_length, self.n_alleles
+        sl, a = self.seq_length, self.n_alleles
         s = 0
-        for q in range(l + 1):
-            s += (
-                (-1) ** q * (a - 1) ** (k - q) * comb(d, q) * comb(l - d, k - q)
-            )
-        return s / a**l
+        for q in range(sl + 1):
+            value = (-1) ** q * (a - 1) ** (k - q)
+            n_value = comb(d, q) * comb(sl - d, k - q)
+            s += value * n_value
+        return s / a**sl
 
     def calc_W_kd_matrix(self):
         """return full matrix l+1 by l+1 Krawtchouk matrix"""
@@ -139,10 +140,12 @@ class VjKernelAligner(object):
         self.eta = self.n_alleles - 1
 
     def set_data(self, covs, ns, sites_matrix):
-        msg = "´sites_matrix´ should have a number of columns equal to the sequence length"
+        msg = "´sites_matrix´ should have a number of columns equal"
+        msg += " to the sequence length"
         check_error(sites_matrix.shape[1] == self.seq_length, msg=msg)
 
-        msg = "´sites_matrix´ should have a number of rows equal to the the size of `covs`"
+        msg = "´sites_matrix´ should have a number of rows equal to"
+        msg += " the the size of `covs`"
         check_error(sites_matrix.shape[0] == covs.shape[0], msg=msg)
 
         self.covs = covs
@@ -165,7 +168,8 @@ class VjKernelAligner(object):
         Parameters
         ----------
         covs : array-like of shape (2 ** seq_length)
-            Average empirical second moments at every possible combination of sites
+            Average empirical second moments at every possible
+            combination of sites
         ns : array-like of shape (2 ** seq_length)
             Number of pairs of sequences at every possible combination of sites
         sites_matrix : array-like of shape (2 ** seq_length, seq_length)

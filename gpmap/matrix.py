@@ -39,7 +39,7 @@ def quad(linop, v1, v2=None):
 
 
 def tensordot(linop, v, axis):
-    u = np.moveaxis(v, axis, 0)  # Shape becomes (contract_dim, ...rest_of_dims)
+    u = np.moveaxis(v, axis, 0)  # Shape becomes (contract_dim,...rest_of_dims)
     u_reshaped = u.reshape(
         u.shape[0], -1
     )  # Shape: (contract_dim, rest_product)
@@ -212,12 +212,13 @@ def filter_csr_matrix(matrix, idxs):
 
 def rate_to_jump_matrix(rate_matrix):
     """
-    Converts a given rate matrix into a jump matrix by normalizing transition rates
-    and ensuring valid diagonal entries.
+    Converts a given rate matrix into a jump matrix by normalizing transition
+    rates and ensuring valid diagonal entries.
 
-    The function first removes self-transition rates (diagonal elements set to zero),
-    then normalizes each row so that the sum of transition probabilities equals 1.
-    Any rows with zero transition rates are set to self-transition probability 1.
+    The function first removes self-transition rates (diagonal elements set
+    to zero), then normalizes each row so that the sum of transition
+    probabilities equals 1. Any rows with zero transition rates are set
+    to self-transition probability 1.
 
     Parameters
     ----------
@@ -228,15 +229,18 @@ def rate_to_jump_matrix(rate_matrix):
     Returns
     -------
     jump_matrix : scipy.sparse.lil_matrix
-        A normalized jump matrix where each row sums to 1, ensuring proper probability
-        transitions.
+        A normalized jump matrix where each row sums to 1, ensuring proper
+        probability transitions.
 
     Notes
     -----
     - The input `rate_matrix` should be a sparse matrix.
-    - If `rate_matrix` is not already in LIL format, it is converted before modifications.
-    - The diagonal is modified to ensure correct transition probability behavior.
-    - The output is returned in `lil_matrix` format for efficient further modifications.
+    - If `rate_matrix` is not already in LIL format, it is converted before
+      modifications.
+    - The diagonal is modified to ensure correct transition probability
+      behavior.
+    - The output is returned in `lil_matrix` format for efficient further
+      modifications.
 
     Examples
     --------
@@ -320,7 +324,7 @@ def pivoted_cholesky_with_diag(A, D, rank, tol=1e-10):
         # Compute the current row of L
         L[k, k] = np.sqrt(diagonal[k])
         if k < n - 1:
-            L[k, k + 1 :] = (v[perm[k + 1 :]] - L[:k, k] @ L[:k, k + 1 :]) / L[
+            L[k, k + 1 :] = (v[perm[k + 1 :]] - L[:k, k] @ L[:k, k + 1:]) / L[
                 k, k
             ]
 

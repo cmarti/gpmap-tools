@@ -9,7 +9,6 @@ from scipy.linalg import solve_triangular
 from scipy.stats import multivariate_normal
 
 from gpmap.datasets import DataSet
-from gpmap.settings import ALPHABET
 from gpmap.seq import generate_possible_sequences
 from gpmap.matrix import inv_dot, quad
 from gpmap.linop import (
@@ -18,7 +17,6 @@ from gpmap.linop import (
     VjProjectionOperator,
     DiagonalOperator,
     IdentityOperator,
-    VarianceComponentKernel,
     DeltaPOperator,
     RhoProjectionOperator,
     ExtendedDeltaPOperator,
@@ -714,19 +712,22 @@ class LinOpsTests(unittest.TestCase):
 
         # Check 01
         C01 = CovarianceVjOperator(a, sl, j=[0])
-        m01 = np.array([[0, 0, 1, 0], [0, 0, 0, 1], [1, 0, 0, 0], [0, 1, 0, 0]])
+        m01 = np.array([[0, 0, 1, 0], [0, 0, 0, 1],
+                        [1, 0, 0, 0], [0, 1, 0, 0]])
         assert np.allclose(m01, C01.todense())
         assert np.allclose(np.sum(m01 * S), quad(C01, v))
 
         # Check 10
         C10 = CovarianceVjOperator(a, sl, j=[1])
-        m10 = np.array([[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]])
+        m10 = np.array([[0, 1, 0, 0], [1, 0, 0, 0],
+                        [0, 0, 0, 1], [0, 0, 1, 0]])
         assert np.allclose(m10, C10.todense())
         assert np.allclose(np.sum(m10 * S), quad(C10, v))
 
         # Check distance=2
         C11 = CovarianceVjOperator(a, sl, j=(0, 1))
-        m11 = np.array([[0, 0, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0], [1, 0, 0, 0]])
+        m11 = np.array([[0, 0, 0, 1], [0, 0, 1, 0],
+                        [0, 1, 0, 0], [1, 0, 0, 0]])
         assert np.allclose(m11, C11.todense())
         assert np.allclose(np.sum(m11 * S), quad(C11, v))
 
@@ -800,70 +801,70 @@ class LinOpsTests(unittest.TestCase):
             assert vj2[(2, 3)] >= v
 
 
-class SkewedLinOpsTests(unittest.TestCase):
-    def xtest_skewed_kernel_operator(self):
-        ps = np.array([[0.3, 0.7], [0.5, 0.5]])
-        log_p = np.log(ps)
-        sl, a = ps.shape
+# class SkewedLinOpsTests(unittest.TestCase):
+#     def xtest_skewed_kernel_operator(self):
+#         ps = np.array([[0.3, 0.7], [0.5, 0.5]])
+#         log_p = np.log(ps)
+#         sl, a = ps.shape
 
-        # Define Laplacian based kernel
-        sl = LaplacianOperator(a, sl, ps=ps)
-        W = ProjectionOperator(sl=sl)
-        K1 = VarianceComponentKernelOperator(W)
+#         # Define Laplacian based kernel
+#         sl = LaplacianOperator(a, sl, ps=ps)
+#         W = ProjectionOperator(sl=sl)
+#         K1 = VarianceComponentKernelOperator(W)
 
-        # Define full kernel function
-        kernel = VarianceComponentKernel(sl, a, use_p=True)
-        x = np.array(["AA", "AB", "BA", "BB"])
-        kernel.set_data(x1=x, alleles=["A", "B"])
+#         # Define full kernel function
+#         kernel = VarianceComponentKernel(sl, a, use_p=True)
+#         x = np.array(["AA", "AB", "BA", "BB"])
+#         kernel.set_data(x1=x, alleles=["A", "B"])
 
-        # Constant component
-        lambdas = [1, 0, 0]
-        K1.set_lambdas(lambdas)
-        k1 = K1.todense()
-        assert np.allclose(k1, 1)
+#         # Constant component
+#         lambdas = [1, 0, 0]
+#         K1.set_lambdas(lambdas)
+#         k1 = K1.todense()
+#         assert np.allclose(k1, 1)
 
-        K2 = kernel(lambdas=lambdas, log_p=log_p)
-        assert np.allclose(K2, 1)
+#         K2 = kernel(lambdas=lambdas, log_p=log_p)
+#         assert np.allclose(K2, 1)
 
-        # Additive component
-        lambdas = [0, 1, 0]
-        K1.set_lambdas(lambdas)
-        k1 = K1.todense()
-        k2 = kernel(lambdas=lambdas, log_p=log_p)
-        assert np.allclose(k1, k2)
+#         # Additive component
+#         lambdas = [0, 1, 0]
+#         K1.set_lambdas(lambdas)
+#         k1 = K1.todense()
+#         k2 = kernel(lambdas=lambdas, log_p=log_p)
+#         assert np.allclose(k1, k2)
 
-        # Pairwise component
-        lambdas = [0, 0, 1]
-        K1.set_lambdas(lambdas)
-        k1 = K1.todense()
-        k2 = kernel(lambdas=lambdas, log_p=log_p)
-        assert np.allclose(k1, k2)
+#         # Pairwise component
+#         lambdas = [0, 0, 1]
+#         K1.set_lambdas(lambdas)
+#         k1 = K1.todense()
+#         k2 = kernel(lambdas=lambdas, log_p=log_p)
+#         assert np.allclose(k1, k2)
 
-    def xtest_skewed_kernel_operator_big(self):
-        sl, a = 4, 4
-        alleles = ALPHABET[:a]
-        ps = np.random.dirichlet(alpha=np.ones(a), size=sl)
-        log_p = np.log(ps)
+#     def xtest_skewed_kernel_operator_big(self):
+#         sl, a = 4, 4
+#         alleles = ALPHABET[:a]
+#         ps = np.random.dirichlet(alpha=np.ones(a), size=sl)
+#         log_p = np.log(ps)
 
-        # Define Laplacian based kernel
-        sl = LaplacianOperator(a, sl, ps=ps)
-        W = ProjectionOperator(sl=sl)
-        K1 = VarianceComponentKernelOperator(W)
-        I = np.eye(K1.shape[0])
+#         # Define Laplacian based kernel
+#         sl = LaplacianOperator(a, sl, ps=ps)
+#         W = ProjectionOperator(sl=sl)
+#         K1 = VarianceComponentKernelOperator(W)
+#         I = np.eye(K1.shape[0])
 
-        # Define full kernel function
-        kernel = VarianceComponentKernel(sl, a, use_p=True)
-        x = np.array([x for x in generate_possible_sequences(sl, alleles)])
-        kernel.set_data(x1=x, alleles=alleles)
+#         # Define full kernel function
+#         kernel = VarianceComponentKernel(sl, a, use_p=True)
+#         x = np.array([x for x in generate_possible_sequences(sl, alleles)])
+#         kernel.set_data(x1=x, alleles=alleles)
 
-        # Test components
-        for k in range(sl + 1):
-            lambdas = np.zeros(sl + 1)
-            lambdas[k] = 1
-            K1.set_lambdas(lambdas)
-            k1 = K1.dot(I)
-            k2 = kernel(lambdas=lambdas, log_p=log_p)
-            assert np.allclose(k1, k2)
+#         # Test components
+#         for k in range(sl + 1):
+#             lambdas = np.zeros(sl + 1)
+#             lambdas[k] = 1
+#             K1.set_lambdas(lambdas)
+#             k1 = K1.dot(I)
+#             k2 = kernel(lambdas=lambdas, log_p=log_p)
+#             assert np.allclose(k1, k2)
 
 
 if __name__ == "__main__":

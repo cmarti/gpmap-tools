@@ -421,13 +421,13 @@ class TruncatedMatrixLog(PolynomialOperator):
 class SeqOperator(ExtendedLinearOperator):
     def __init__(self, n_alleles, seq_length):
         self.alpha = n_alleles
-        self.l = seq_length
+        self.seq_length = seq_length
         self.lp1 = seq_length + 1
-        self.n = self.alpha**self.l
+        self.n = self.alpha**seq_length
         self.shape = (self.n, self.n)
         self._init_dtype()
-        self.shape_contracted = tuple([self.alpha] * self.l)
-        self.positions = np.arange(self.l)
+        self.shape_contracted = tuple([self.alpha] * self.seq_length)
+        self.positions = np.arange(self.seq_length)
 
     def contract_v(self, v):
         return v.reshape(self.shape_contracted)
@@ -449,16 +449,17 @@ class LaplacianOperator(ConstantDiagSeqOperator):
 
     def __init__(self, n_alleles, seq_length):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
-        self.d = (self.alpha - 1) * self.l
-        self.lambdas = np.arange(self.l + 1) * self.alpha
+        self.d = (self.alpha - 1) * self.seq_length
+        self.lambdas = np.arange(self.seq_length + 1) * self.alpha
         self.lambdas_multiplicity = [
-            comb(self.l, k) * (self.alpha - 1) ** k for k in range(self.lp1)
+            comb(self.seq_length, k) * (self.alpha - 1) ** k
+            for k in range(self.lp1)
         ]
 
     def _matvec(self, v):
         v = self.contract_v(v)
-        u = self.l * self.alpha * v
-        for i in range(self.l):
+        u = self.seq_length * self.alpha * v
+        for i in range(self.seq_length):
             u -= np.add.reduce(v, axis=i, keepdims=True)
         return self.expand_v(u)
 
@@ -482,13 +483,13 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.rank = self.n - self.kernel_dimension
 
     def calc_n_p_faces_genotype(self):
-        n_mut = self.l * (self.alpha - 1)
+        n_mut = self.seq_length * (self.alpha - 1)
         self.n_p_faces_genotype = float(comb(n_mut, self.P))
 
     def calc_n_p_faces(self):
-        n_p_sites = comb(self.l, self.P)
+        n_p_sites = comb(self.seq_length, self.P)
         n_p_faces_per_sites = comb(self.alpha, 2) ** self.P
-        allelic_comb_remaining_sites = self.alpha ** (self.l - self.P)
+        allelic_comb_remaining_sites = self.alpha ** (self.seq_length - self.P)
         self.n_p_faces = (
             n_p_sites * n_p_faces_per_sites * allelic_comb_remaining_sites
         )
@@ -496,13 +497,14 @@ class DeltaPOperator(ConstantDiagSeqOperator):
     def set_P(self, P):
         self.P = P
         if self.P == (self.lp1):
-            msg = '"P" = l+1, the optimal density is equal to the empirical frequency.'
+            msg = '"P" = l+1, the optimal density is equal '
+            msg += 'to the empirical frequency.'
             raise ValueError(msg)
-        elif not 1 <= self.P <= self.l:
+        elif not 1 <= self.P <= self.seq_length:
             msg = '"P" not in the right range.'
             raise ValueError(msg)
         self.Pfactorial = factorial(self.P)
-        self.d = comb(self.l, self.P) * (self.alpha - 1) ** self.P
+        self.d = comb(self.seq_length, self.P) * (self.alpha - 1) ** self.P
 
     def _L_minus_p_a_dot(self, v, p=0):
         return self.L.dot(v) - p * self.alpha * v
@@ -523,7 +525,7 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.lambdas = np.array(lambdas)
 
     def calc_log_det(self):
-        return self.m_k[self.P :] * np.log(self.lambdas[self.P :])
+        return self.m_k[self.P:] * np.log(self.lambdas[self.P:])
 
 
 class KrawtchoukOperator(SeqOperator, PolynomialOperator):
@@ -574,7 +576,8 @@ class KrawtchoukOperator(SeqOperator, PolynomialOperator):
                     p = np.sum(
                         [
                             np.prod(v)
-                            for v in combinations(k_lambdas, self.l - power)
+                            for v in combinations(k_lambdas,
+                                                  self.seq_length - power)
                         ]
                     )
                     V_inv[power, k] = norm_factor * (-1) ** (power) * p
@@ -585,7 +588,7 @@ class KrawtchoukOperator(SeqOperator, PolynomialOperator):
 
     def calc_w(self, k, d):
         """return value of the Krawtchouk polynomial for k, d"""
-        sl, a = self.l, self.alpha
+        sl, a = self.seq_length, self.alpha
         s = 0
         for q in range(k + 1):
             s += (
@@ -624,7 +627,7 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
         check_error((lambdas is None) ^ (k is None), msg=msg)
 
         if lambdas is None:
-            lambdas = np.zeros(self.l + 1)
+            lambdas = np.zeros(self.lp1)
             lambdas[k] = 1
 
         return lambdas
@@ -648,7 +651,7 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
 
     def inv(self):
         return ProjectionOperator(
-            self.alpha, self.l, lambdas=1.0 / self.lambdas
+            self.alpha, self.seq_length, lambdas=1.0 / self.lambdas
         )
 
     def calc_log_det(self):
@@ -657,11 +660,12 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
         return np.sum(np.log(self.lambdas) * self.m_k)
 
     def power(self, b):
-        return ProjectionOperator(self.alpha, self.l, lambdas=self.lambdas**b)
+        return ProjectionOperator(self.alpha, self.seq_length,
+                                  lambdas=self.lambdas**b)
 
     def matrix_sqrt(self):
         return ProjectionOperator(
-            self.alpha, self.l, lambdas=np.sqrt(self.lambdas)
+            self.alpha, self.seq_length, lambdas=np.sqrt(self.lambdas)
         )
 
     def transpose(self):
@@ -698,7 +702,7 @@ class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
         Column: powers of L.
         Row: Hamming distance"""
 
-        l, a, s = self.l, self.alpha, self.lp1
+        sl, a, s = self.seq_length, self.alpha, self.lp1
 
         # Auxiliary matrices
         C = np.zeros([s, s])
@@ -709,11 +713,11 @@ class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
                 if i == j + 1:
                     C[i, j] = i
                 if i == j - 1:
-                    C[i, j] = (l - j + 1) * (a - 1)
-        D = np.array(np.diag(l * (a - 1) * np.ones(s), 0))
+                    C[i, j] = (sl - j + 1) * (a - 1)
+        D = np.array(np.diag(sl * (a - 1) * np.ones(s), 0))
         B = D - C
         u = np.zeros(s)
-        u[0], u[1] = l * (a - 1), -1
+        u[0], u[1] = sl * (a - 1), -1
 
         # Construct L_powers_d column by column
         L_powers_d = np.zeros([s, s])
@@ -742,7 +746,7 @@ class CovarianceVjOperator(ConstantDiagSeqOperator, KronOperator):
     def get_matrices(self):
         C0 = np.eye(self.alpha)
         C1 = np.ones((self.alpha, self.alpha)) - C0
-        return [C1 if i in self.j else C0 for i in range(self.l)]
+        return [C1 if i in self.j else C0 for i in range(self.seq_length)]
 
 
 class VjOperator(ConstantDiagSeqOperator, KronOperator):
@@ -753,7 +757,7 @@ class VjOperator(ConstantDiagSeqOperator, KronOperator):
         ConstantDiagSeqOperator.__init__(
             self, n_alleles=n_alleles, seq_length=seq_length
         )
-        self.repeats = self.alpha ** (self.l - self.k)
+        self.repeats = self.alpha ** (self.seq_length - self.k)
 
         KronOperator.__init__(self, self.get_matrices(j))
 
@@ -764,20 +768,22 @@ class VjBasisOperator(VjOperator):
             (self.alpha, self.alpha)
         )
         b = [np.full((self.alpha, 1), 1 / np.sqrt(self.alpha)), orth(site_L)]
-        return [b[int(i in j)] for i in range(self.l)]
+        return [b[int(i in j)] for i in range(self.seq_length)]
 
 
 class VjProjectionOperator(VjOperator):
     symmetric = True
 
     def get_matrices(self, j):
-        self.W0 = np.full((self.alpha, self.alpha), fill_value=1.0 / self.alpha)
+        self.W0 = np.full(
+            (self.alpha, self.alpha), fill_value=1.0 / self.alpha
+        )
         self.W1 = np.eye(self.alpha) - self.W0
         W = [self.W0, self.W1]
-        return [W[int(i in j)] for i in range(self.l)]
+        return [W[int(i in j)] for i in range(self.seq_length)]
 
     def dot_square_norm(self, v):
-        axis = tuple([p for p in range(self.l) if p not in self.j])
+        axis = tuple([p for p in range(self.seq_length) if p not in self.j])
         u = self.contract_v(v)
         if axis:
             u = u.mean(axis=axis)
@@ -808,7 +814,7 @@ class RhoProjectionOperator(ConstantDiagSeqOperator, KronOperator):
 
     def check_rho(self, rho, ignore_bound=False):
         msg = "rho vector size must be equal to sequence length"
-        check_error(rho.shape[0] == self.l, msg=msg)
+        check_error(rho.shape[0] == self.seq_length, msg=msg)
 
         checked = rho > 0
         msg = "rho larger than 0"
@@ -819,24 +825,29 @@ class RhoProjectionOperator(ConstantDiagSeqOperator, KronOperator):
 
     def set_rho(self, rho, ignore_bound=False):
         self.rho = (
-            np.full(self.l, rho) if isinstance(rho, float) else np.array(rho)
+            np.full(self.seq_length, rho)
+            if isinstance(rho, float) else np.array(rho)
         )
         self.check_rho(self.rho, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.rho]) / self.n
 
     def inv(self):
-        return RhoProjectionOperator(self.alpha, self.l, 1.0 / self.rho)
+        return RhoProjectionOperator(self.alpha, self.seq_length,
+                                     rho=1.0 / self.rho)
 
     def calc_log_det(self):
         log_rho = np.log(self.rho)
-        k = np.sum([comb(self.l, i - 1) for i in range(self.l)])
+        k = np.sum([comb(self.seq_length, i - 1)
+                    for i in range(self.seq_length)])
         return k * np.sum(log_rho)
 
     def matrix_sqrt(self):
-        return RhoProjectionOperator(self.alpha, self.l, rho=np.sqrt(self.rho))
+        return RhoProjectionOperator(self.alpha, self.seq_length,
+                                     rho=np.sqrt(self.rho))
 
     def matrix_power(self, b):
-        return RhoProjectionOperator(self.alpha, self.l, rho=self.rho**b)
+        return RhoProjectionOperator(self.alpha, self.seq_length,
+                                     rho=self.rho**b)
 
 
 class EigenBasisOperator(StackedOperator):
@@ -909,7 +920,7 @@ class ProjectionOperator2(SeqOperator):
         check_error((lambdas is None) ^ (k is None), msg=msg)
 
         if lambdas is None:
-            lambdas = np.zeros(self.l + 1)
+            lambdas = np.zeros(self.lp1)
             lambdas[k] = 1
 
         self.lambdas = lambdas
@@ -919,7 +930,7 @@ class ProjectionOperator2(SeqOperator):
         b = np.zeros((self.lp1, self.lp1))
         for i in range(self.lp1):
             for k, j in enumerate(range(i, self.lp1)):
-                b[i, j] = (-1) ** k * comb(self.l - i, k)
+                b[i, j] = (-1) ** k * comb(self.seq_length - i, k)
         self.b = b
 
     def lambdas_to_coeffs(self, lambdas):
@@ -1073,7 +1084,9 @@ def calc_avg_local_epistatic_coeff(X, y, alphabet, seq_length, P):
     z = kron([[-1, 1]] * P)
 
     s, n = 0, 0
-    for target_sites in tqdm(combinations(sites, P), total=comb(seq_length, P)):
+    for target_sites in tqdm(
+        combinations(sites, P), total=comb(seq_length, P)
+    ):
         background_sites = [s for s in sites if s not in target_sites]
         for background_seq in background_seqs:
             bc = dict(zip(background_sites, background_seq))
@@ -1160,12 +1173,12 @@ def calc_space_variance_components(space):
     return vc
 
 
-def calc_vjs_variance_components(y, a, l, k):
-    positions = np.arange(l)
+def calc_vjs_variance_components(y, a, sl, k):
+    positions = np.arange(sl)
     dimension = (a - 1) ** float(k)
     variances = {}
     for j in combinations(positions, k):
-        Pj = VjProjectionOperator(a, l, j=j)
+        Pj = VjProjectionOperator(a, sl, j=j)
         variances[j] = np.sum(Pj.dot(y) ** 2) / dimension
     return variances
 
@@ -1179,7 +1192,8 @@ def calc_space_vjs_variance_components(space, k):
     Parameters
     ----------
     space : SequenceSpace
-        SequenceSpace object for which to calculate the Vj's variance components
+        SequenceSpace object for which to calculate the Vj's
+        variance components
 
     k : int from 0 to seq_length + 1
         Order of interaction to calculate
@@ -1200,7 +1214,7 @@ def calc_space_vjs_variance_components(space, k):
     return vc
 
 
-#################### Skewed operators ##################################
+# ################### Skewed operators ##################################
 
 # class SkewedLaplacianOperator(SeqOperator):
 #     def __init__(self, n_alleles, seq_length, ps=None, max_size=None):
@@ -1222,7 +1236,7 @@ def calc_space_vjs_variance_components(space, k):
 #             return(None)
 
 #         size = 1
-#         for k in range(self.l):
+#         for k in range(self.seq_length):
 #             size *= self.alpha
 #             if size >= self.max_size:
 #                 break
@@ -1232,18 +1246,21 @@ def calc_space_vjs_variance_components(space, k):
 #         self.variable_ps = ps is not None
 
 #         if ps is None:
-#             ps = [np.ones(self.alpha)] * self.l
-#         check_error(len(ps) == self.l, msg='Number of ps should be equal to length')
+#             ps = [np.ones(self.alpha)] * self.seq_length
+#         check_error(len(ps) == self.seq_length,
+#                     msg='Number of ps should be equal to length')
 
 #         # Normalize ps to have the eigenvalues in the right scale
 #         self.ps = np.vstack([p / p.sum() * self.alpha for p in ps])
-#         self.pi = calc_tensor_product([p.reshape((p.shape[0], 1)) for p in ps]).flatten()
+#         self.pi = calc_tensor_product([p.reshape((p.shape[0], 1))
+#                                        for p in ps]).flatten()
 
 #     def calc_lambdas(self, ps=None):
-#         self.lambdas = np.arange(self.l + 1) * self.alpha
+#         self.lambdas = np.arange(self.seq_length + 1) * self.alpha
 
 #     def calc_lambdas_multiplicity(self):
-#         self.lambdas_multiplicity = [comb(self.l, k) * (self.alpha-1) ** k
+#         self.lambdas_multiplicity = [comb(self.seq_length, k)
+#                                      * (self.alpha-1) ** k
 #                                      for k in range(self.lp1)]
 
 #     def calc_Kn(self, p):
@@ -1259,8 +1276,9 @@ def calc_space_vjs_variance_components(space, k):
 #         Kns = [self.calc_Kn(p) for p in self.ps]
 #         if self.max_size is not None:
 #             size = self.guess_n_products()
-#             i = self.l - size
-#             Kns = Kns[:i] + [calc_cartesian_product([csr_matrix(m) for m in Kns[i:]]).tocsr()]
+#             i = self.seq_length - size
+#             Kns = Kns[:i] + [calc_cartesian_product([csr_matrix(m)
+#                              for m in Kns[i:]]).tocsr()]
 #         self.Kns = Kns
 #         self.Kns_shape = [x.shape for x in Kns]
 
@@ -1280,7 +1298,8 @@ def calc_space_vjs_variance_components(space, k):
 #     def __init__(self, n_alleles=None, seq_length=None, L=None):
 #         if L is None:
 #             msg = 'either L or both seq_length and n_alleles must be given'
-#             check_error(n_alleles is not None and seq_length is not None, msg=msg)
+#             check_error(n_alleles is not None and seq_length is not None,
+#                         msg=msg)
 #             L = LaplacianOperator(n_alleles, seq_length)
 #         else:
 #             msg = 'either L or both seq_length and n_alleles must be given'
@@ -1292,7 +1311,8 @@ def calc_space_vjs_variance_components(space, k):
 
 
 # class SkewedVjProjectionOperator(LapDepOperator):
-#     def __init__(self, n_alleles=None, seq_length=None, L=None, max_size=None):
+#     def __init__(self, n_alleles=None, seq_length=None, L=None,
+#                  max_size=None):
 #         super().__init__(n_alleles=n_alleles, seq_length=seq_length, L=L)
 #         self.calc_elementary_W()
 #         self.max_size = max_size
@@ -1301,11 +1321,12 @@ def calc_space_vjs_variance_components(space, k):
 
 #     def calc_elementary_W(self):
 #         if self.L.ps is None:
-#             self.b = [np.ones(self.alpha)] * self.l
+#             self.b = [np.ones(self.alpha)] * self.seq_length
 #         else:
 #             self.b = self.L.ps
 #         self.D_pi = [np.diag(b) for b in self.b]
-#         self.pi = calc_tensor_product([b.reshape((b.shape[0], 1)) for b in self.b]).flatten()
+#         self.pi = calc_tensor_product([b.reshape((b.shape[0], 1))
+#                                        for b in self.b]).flatten()
 #         self.W0 = [np.outer(b, b).dot(D) / np.sum(b * D.dot(b))
 #                    for b, D in zip(self.b, self.D_pi)]
 #         self.W1 = [np.eye(self.alpha) - w0 for w0 in self.W0]
@@ -1314,19 +1335,19 @@ def calc_space_vjs_variance_components(space, k):
 #     def get_Vj_matrix(self, js):
 #         js_tuple = tuple(js)
 #         if js_tuple not in self.cache:
-#             m = self.l - self.size
+#             m = self.seq_length - self.size
 #             ms = [self.Ws[m+p][j] for p, j in enumerate(js)]
 #             self.cache[js_tuple] = calc_tensor_product(ms)
 #         return(self.cache[js_tuple])
 
 #     def set_j(self, positions):
-#         js = np.zeros(self.l, dtype=int)
+#         js = np.zeros(self.seq_length, dtype=int)
 #         js[positions] = 1
 
 #         if self.max_size is None:
 #             self.matrices = [self.Ws[p][j] for p, j in enumerate(js)]
 #         else:
-#             m = self.l - self.size
+#             m = self.seq_length - self.size
 #             self.matrices = [self.Ws[p+m][j] for p, j in enumerate(js[:m])]
 #             self.matrices.append(self.get_Vj_matrix(js[m:]))
 
@@ -1335,8 +1356,8 @@ def calc_space_vjs_variance_components(space, k):
 
 #     def dot_square_norm(self, v):
 #         '''
-#         Note: we are calculating the squared D_pi-norm of the projection to be
-#         able to do it directly through recursive product
+#         Note: we are calculating the squared D_pi-norm of the projection to
+#         be able to do it directly through recursive product
 #         '''
 #         return(calc_tensor_product_quad(self.matrices, v1=self.pi * v, v2=v))
 
@@ -1386,7 +1407,8 @@ def calc_space_vjs_variance_components(space, k):
 
 #     def calc_gt_to_data_matrix(self, obs_idx):
 #         n_obs = obs_idx.shape[0]
-#         self.gt2data = csr_matrix((np.ones(n_obs), (obs_idx, np.arange(n_obs))),
+#         self.gt2data = csr_matrix((np.ones(n_obs),
+#                                   (obs_idx, np.arange(n_obs))),
 #                                   shape=(self.n, n_obs))
 
 #     def _matvec(self, v, all_rows=False, add_y_var_diag=True, full_v=False):
@@ -1404,7 +1426,8 @@ def calc_space_vjs_variance_components(space, k):
 #     @property
 #     def Kop(self):
 #         if not hasattr(self, '_Kop'):
-#             self._Kop = LinearOperator((self.n_obs, self.n_obs), matvec=self.dot)
+#             self._Kop = LinearOperator((self.n_obs, self.n_obs),
+#                                        matvec=self.dot)
 #         return(self._Kop)
 
 #     def inv_dot(self, v, show=False):

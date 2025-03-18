@@ -340,7 +340,9 @@ class GeneralSequenceSpace(DiscreteSpace):
                 if isinstance(n_alleles, int)
                 else n_alleles
             )
-            self.alphabet = [[ALPHABET[x] for x in range(a)] for a in n_alleles]
+            self.alphabet = [
+                [ALPHABET[x] for x in range(a)] for a in n_alleles
+            ]
             self.ambiguous_values = [{"X": "".join(a)} for a in self.alphabet]
             for i, alleles in enumerate(self.alphabet):
                 self.ambiguous_values[i].update(dict(zip(alleles, alleles)))
@@ -365,7 +367,7 @@ class GeneralSequenceSpace(DiscreteSpace):
 
         gts1, gts2 = [], []
         for i, seq1 in enumerate(genotypes):
-            for j, seq2 in enumerate(genotypes[i + 1 :]):
+            for j, seq2 in enumerate(genotypes[i + 1:]):
                 j += i + 1
                 if hamming_distance(seq1, seq2) == 1:
                     gts1.extend([i, j])
@@ -406,7 +408,10 @@ class GeneralSequenceSpace(DiscreteSpace):
         )
         nx.set_node_attributes(
             graph,
-            {node: {"weight": w} for node, w in zip(self.state_labels, self.y)},
+            {
+                node: {"weight": w}
+                for node, w in zip(self.state_labels, self.y)
+            },
         )
         return graph
 
@@ -467,7 +472,8 @@ class HammingBallSpace(GeneralSequenceSpace):
     genotypes: array-like of shape (n_genotypes, )
         Genotype labels in the sequence space
 
-    adjacency_matrix: scipy.sparse.csr_matrix of shape (n_genotypes, n_genotypes)
+    adjacency_matrix: scipy.sparse.csr_matrix of shape
+                      (n_genotypes, n_genotypes)
         Sparse matrix representing the adjacency relationships between
         genotypes. The ij'th entry contains a 1 if the genotypes `i` and `j`
         are separated by a single mutation and 0 otherwise
@@ -569,9 +575,9 @@ class ProductSpace(DiscreteSpace):
         product space
 
     y: None or array-like of shape (n,)
-        np.array containing the phenotypic values associated to each combination
-        of states in the resulting space. If `y=None`, no phenotypic values will
-        be stored
+        np.array containing the phenotypic values associated to each
+        combination of states in the resulting space. If `y=None`, no
+        phenotypic values will be stored
 
     state_labels: None or list
         List with the labels associated to each of the possible states
@@ -634,7 +640,9 @@ class GridSpace(ProductSpace):
         if isinstance(length, int):
             elementary_graphs = [self.calc_elementary_graph(length)] * ndim
         else:
-            elementary_graphs = [self.calc_elementary_graph(sl) for sl in length]
+            elementary_graphs = [
+                self.calc_elementary_graph(sl) for sl in length
+            ]
         super().__init__(elementary_graphs, y=y)
 
     def calc_elementary_graph(self, length):
@@ -712,7 +720,8 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
     genotypes: array-like of shape (n_genotypes, )
         Genotype labels in the sequence space
 
-    adjacency_matrix: scipy.sparse.csr_matrix of shape (n_genotypes, n_genotypes)
+    adjacency_matrix: scipy.sparse.csr_matrix of shape
+                      (n_genotypes, n_genotypes)
         Sparse matrix representing the adjacency relationships between
         genotypes. The ij'th entry contains a 1 if the genotypes `i` and `j`
         are separated by a single mutation and 0 otherwise
@@ -826,7 +835,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         data = []
         for i in range(self.seq_length):
             alleles = self.alphabet[i]
-            mutants = [sequence[:i] + a + sequence[i + 1 :] for a in alleles]
+            mutants = [sequence[:i] + a + sequence[i + 1:] for a in alleles]
             dy = self.get_y(mutants) - seqy
             if center:
                 dy = dy - dy.mean()

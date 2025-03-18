@@ -358,10 +358,10 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         Returns
         -------
         data : pd.DataFrame of shape (n_genotypes, 3)
-            DataFrame with the columns ``y_true``, ``y``and ``var`` corresponding
-            to the true function at each genotype, the observed values and the
-            variance of the measurement respectively for each sequence or
-            genotype indicated in the ``DataFrame.index``
+            DataFrame with the columns ``y_true``, ``y``and ``var``
+            corresponding to the true function at each genotype, the
+            observed values and the variance of the measurement respectively
+            for each sequence or genotype indicated in the ``DataFrame.index``
 
         """
         y_true = self.sample()

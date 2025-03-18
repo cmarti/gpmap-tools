@@ -14,7 +14,8 @@ from gpmap.space import SequenceSpace
 from gpmap.matrix import filter_csr_matrix
 
 
-def get_edges_coords(nodes_df, edges_df, x="1", y="2", z=None, avoid_dups=True):
+def get_edges_coords(nodes_df, edges_df, x="1", y="2",
+                     z=None, avoid_dups=True):
     edf = edges_df
 
     if avoid_dups:
@@ -91,7 +92,8 @@ def get_nodes_df_highlight(
 
 def select_edges_from_genotypes(nodes_idxs, edges):
     if isinstance(edges, pd.DataFrame):
-        m = filter_csr_matrix(edges_df_to_csr_matrix(edges), nodes_idxs).tocoo()
+        m = filter_csr_matrix(edges_df_to_csr_matrix(edges),
+                              nodes_idxs).tocoo()
         edges = edges.iloc[m.data, :].copy()
         edges["i"] = m.row
         edges["j"] = m.col
@@ -226,20 +228,25 @@ def select_path(nodes_df, path):
 
 def select_d_neighbors(nodes_df, genotype_labels, d=1, edges=None):
     """
-    Selects genotypes that are within a specified Hamming distance from given genotype labels.
+    Selects genotypes that are within a specified Hamming distance
+    from given genotype labels.
 
     Parameters
     ----------
         nodes_df (pd.DataFrame): DataFrame containing genotypes as index.
-        genotype_labels (list of str): List of genotype sequences to compare against.
+            genotype_labels (list of str): List of genotype sequences to
+            compare against.
+
         d (int, optional): Maximum Hamming distance to consider. Defaults to 1.
-        edges (optional): Additional parameter to pass to the select_genotypes function. Defaults to None.
+        edges (optional): Additional parameter to pass to the select_genotypes
+            function. Defaults to None.
 
     Returns
     -------
-        pd.DataFrame: DataFrame containing selected genotypes within the specified Hamming distance.
+        pd.DataFrame: DataFrame containing selected genotypes within
+            the specified Hamming distance.
     """
-    
+
     seq_matrix = np.array([[s for s in seq] for seq in nodes_df.index])
     distances = np.array(
         [
@@ -304,8 +311,8 @@ def marginalize_landscape_positions(
     nodes_df, keep_pos=None, skip_pos=None, return_edges=False
 ):
     """
-    Averages out some positions in the sequences for all numeric values provided
-    in the input dataframe
+    Averages out some positions in the sequences for all numeric values
+    provided in the input dataframe
 
     Parameters
     ----------

@@ -240,9 +240,9 @@ def get_CV_splits(X, y=None, y_var=None, nfolds=10, max_pred=None):
 
     for j in range(nfolds):
         i = j * n_test
-        test_data = get_data_subset(data, order[i : i + n_test])
+        test_data = get_data_subset(data, order[i: i + n_test])
         train_data = get_data_subset(
-            data, np.append(order[:i], order[i + n_test :])
+            data, np.append(order[:i], order[i + n_test:])
         )
         test_data = subsample_data(test_data, n=max_pred)
         yield (j, train_data, test_data)
@@ -292,9 +292,9 @@ def generate_p_training_config(
     Parameters
     ----------
     ps : array-like, optional
-        Array containing the specific training proportions to use, by default None. In
-        that case, a uniform set of proportions between `pmin` and `pmax`
-        will be generated
+        Array containing the specific training proportions to use, by default
+        None. In that case, a uniform set of proportions between `pmin` and
+        `pmax` will be generated
     n_ps : int, optional
         Number of different training proportions to use, by default 10
     n_reps : int, optional
@@ -346,7 +346,8 @@ def get_training_p_splits(
     max_pred : int, optional
         Maximum number of test points to return for each split, by default None
     fixed_test : bool, optional
-        Whether to use the same test data across each of the replicates, by default False
+        Whether to use the same test data across each of the replicates,
+        by default False
     """
     msg = "X and y must have the same size"
     check_error(X.shape[0] == y.shape[0], msg=msg)
