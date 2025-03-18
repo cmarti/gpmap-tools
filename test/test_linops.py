@@ -365,7 +365,7 @@ class LinOpsTests(unittest.TestCase):
             u1 = W.dot(v)
 
             u2 = np.zeros(v.shape[0])
-            for j in combinations(np.arange(W.l), k):
+            for j in combinations(np.arange(W.seq_length), k):
                 Pj = VjProjectionOperator(a, sl, j=list(j))
                 u2 += Pj.dot(v)
 
