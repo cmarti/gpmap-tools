@@ -192,11 +192,11 @@ class SeqDEFTTests(unittest.TestCase):
         _, grad = seqdeft.calc_loss(b)
         assert(np.allclose(grad, 0, atol=1e-2))
     
-    def test_inerence_reg_null_space(self):
+    def test_inference_reg_null_space(self):
         np.random.seed(0)
         a = 500
-        sl = 2
-        lambdas_P_inv = np.array([1e-16, 1])
+        sl = 4
+        lambdas_P_inv = np.array([1e-16, 50])
         
         model1 = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna')
         model2 = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna', 
@@ -211,17 +211,28 @@ class SeqDEFTTests(unittest.TestCase):
         # Ensure regularizing works better
         r1 = pearsonr(res1['phi'], phi)[0]
         r2 = pearsonr(res2['phi'], phi)[0]
+        assert(r1 > 0.4)
         assert(r2 > r1)
         
         # Fit a=inf models
-        a = np.inf
-        model1 = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna')
-        model2 = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna', 
-                         lambdas_P_inv=lambdas_P_inv)
-        res1 = model1.fit(X)
-        res2 = model2.fit(X)
-        r1 = pearsonr(res1['phi'], phi)[0]
-        r2 = pearsonr(res2['phi'], phi)[0]
+        sl = 4
+        r1, r2 = [], []
+        for i in range(10):
+            model = SeqDEFT(P=2, a=1e4, seq_length=sl, alphabet_type='dna', 
+                            lambdas_P_inv=lambdas_P_inv)
+            phi = model.simulate_phi()
+            X = model.simulate(N=50, phi=phi)
+            
+            a = np.inf
+            model1 = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna')
+            model2 = SeqDEFT(P=2, a=a, seq_length=sl, alphabet_type='dna', 
+                            lambdas_P_inv=lambdas_P_inv)
+            res1 = model1.fit(X)
+            res2 = model2.fit(X)
+            r1.append(pearsonr(res1['phi'], phi)[0])
+            r2.append(pearsonr(res2['phi'], phi)[0])
+        r1, r2 = np.mean(r1), np.mean(r2)
+        assert(r1 > 0.2)
         assert(r2 > r1)
     
     def test_inference_baseline(self):
