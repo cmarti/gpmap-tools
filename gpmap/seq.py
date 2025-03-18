@@ -124,8 +124,8 @@ def guess_space_configuration(
     Returns
     -------
     config: dict with keys {'length', 'n_alleles', 'alphabet'}
-            Returns a dictionary with the inferred configuration of the discrete
-            space where the sequences come from.
+            Returns a dictionary with the inferred configuration of the
+            discrete space where the sequences come from.
 
     """
 
@@ -140,15 +140,11 @@ def guess_space_configuration(
     if ensure_full_space:
         n_exp = np.prod(n_alleles)
         n_obs = seqs.shape[0]
-        msg = "Number of genotypes ({}) does not match the expected ".format(
-            n_obs
-        )
-        msg += (
-            "from the observed alleles in the provided sequences ({}). ".format(
-                n_exp
-            )
-        )
-        msg += "Provide phenotypes for every possible sequence in the space or "
+        msg = "Number of genotypes ({}) does not match ".format(n_obs)
+        msg += "the expected from the observed alleles in the "
+        msg += "provided sequences ({}).".format(n_exp)
+        msg += "Provide phenotypes for every possible "
+        msg += 'sequence in the space or '
         msg += "set `ensure_full_space=False` to avoid this error"
         check_error(n_exp == n_obs, msg)
 
@@ -190,8 +186,8 @@ def generate_freq_reduced_code(
 ):
     """
     Returns a list of dictionaries with the mapping from each allele in the
-    observed sequences to a reduced alphabet with at most ``n_alleles`` per site.
-    The least frequent alleles are pooled together into a single allele
+    observed sequences to a reduced alphabet with at most ``n_alleles`` per
+    site. The least frequent alleles are pooled together into a single allele
 
     Parameters
     ----------
@@ -201,17 +197,17 @@ def generate_freq_reduced_code(
         number of times a certain sequence appears in the data
 
     n_alleles : int or array-like of shape (seq_length, )
-        Maximal number of alleles per site allowed. If a list or array is provided
-        each site will use the specified number of alleles. Otherwise, all
-        sites will have the same maximum number of alleles
+        Maximal number of alleles per site allowed. If a list or array is
+        provided each site will use the specified number of alleles. Otherwise,
+        all sites will have the same maximum number of alleles
 
     counts : None or array-like of shape (n_genotypes, )
         Number of times every sequence in ``seqs`` appears in the data. If
         not provided, every provided sequence is assumed to appear exactly once
 
     keep_allele_names : bool
-        If ``keep_allele_names=True``, then allele names are preserved. Otherwise
-        they are replace by new alleles taken from the alphabet
+        If ``keep_allele_names=True``, then allele names are preserved.
+        Otherwise they are replace by new alleles taken from the alphabet
 
     last_character : str
         Character to use for remaining alleles when ``keep_allele_names=True``

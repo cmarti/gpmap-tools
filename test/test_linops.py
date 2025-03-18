@@ -2,7 +2,6 @@
 import unittest
 import numpy as np
 
-from timeit import timeit
 from itertools import combinations
 from scipy.special import comb
 from scipy.sparse.linalg import aslinearoperator
@@ -64,10 +63,10 @@ class LinOpsTests(unittest.TestCase):
 
     def test_identity_operator(self):
         n = 3
-        I = IdentityOperator(n)
+        Identity = IdentityOperator(n)
         v = np.random.normal(size=n)
-        assert np.allclose(v, I @ v)
-        assert np.allclose(v, I.transpose() @ v)
+        assert np.allclose(v, Identity @ v)
+        assert np.allclose(v, Identity.transpose() @ v)
 
     def test_tri_inv_operator(self):
         A = np.tril(np.random.normal(size=(5, 5)))
@@ -627,7 +626,7 @@ class LinOpsTests(unittest.TestCase):
         alphabet = "AB"
         n_alleles = len(alphabet)
         seq_length = 3
-        X = list(generate_possible_sequences(l=seq_length, alphabet=alphabet))
+        X = list(generate_possible_sequences(seq_length, alphabet=alphabet))
         y = np.random.normal(size=len(X))
 
         # Ensure expected results in complete landscapes
@@ -663,7 +662,7 @@ class LinOpsTests(unittest.TestCase):
         # With more than 2 alleles
         alphabet = "ABC"
         n_alleles = len(alphabet)
-        X = list(generate_possible_sequences(l=seq_length, alphabet=alphabet))
+        X = list(generate_possible_sequences(seq_length, alphabet=alphabet))
         y = np.random.normal(size=len(X))
         P = 2
         s, n = calc_avg_local_epistatic_coeff(
