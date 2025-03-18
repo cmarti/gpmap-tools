@@ -3,16 +3,16 @@
 Installation Instructions
 =========================
 
-Soon but not yet, using the ``pip`` package manager by executing the following at the
-command line: ::
+We recommend using an new independent environment with python3.8, as used during 
+development and testing of gpmap-tools to minimize problems with dependencies. For instance,
+one can create and activate a new conda environment as follows: ::
 
-    $ pip install gpmap-tools
+    $ conda create -n gpmap python=3.8
+    $ conda activate gpmap
 
-Alternatively, you can clone GPMAP-tools from
-`BitBucket <https://bitbucket.org/cmartiga/gpmap_tools/src/master/>`_ by doing
-this at the command line: ::
+Now you can clone gpmap-tools from `GitHub <https://github.com/cmarti/gpmap-tools>`_ as follows: ::
 
-    $ git clone git@bitbucket.org:cmartiga/gpmap_tools.git
+    $ git clone https://github.com/cmarti/gpmap-tools.git
 
 or from `GitHub <https://github.com/cmarti/gpmap-tools.git>`_ :
 
@@ -20,10 +20,24 @@ or from `GitHub <https://github.com/cmarti/gpmap-tools.git>`_ :
 
 and install it in the current python environment: ::
     
-    $ python setup.py install
+    $ cd gpmap-tools
+    $ pip install .
 
-There are sometimes problems with the installation of `datashader <https://datashader.org/>` 
-and their own dependencies. We are still trying to figure out incompatibilities
+An older version of gpmap-tools is availabel in PyPI and installable through ``pip`` package
+manager, but we recommend using the most recent version from GitHub so far: ::
+
+    $ pip install gpmap-tools
+
+While this should install all required dependencies automatically, there are sometimes
+problems with the installation of `datashader <https://datashader.org/>`_ and their own
+dependencies. We are still trying to figure out incompatibilities
 in the dependencies but generally we find that installing it first seems to work: ::
     
     $ pip install datashader==0.13
+
+For using the last version of the library install `GitHub <https://github.com/cmarti/gpmap-tools>`_ and switch to
+the `dev` branch. To test installation is working properly you can run all tests or a
+subset of them. Running all of them may take some time. ::
+
+    $ python -m unittest gpmap/test/*py
+

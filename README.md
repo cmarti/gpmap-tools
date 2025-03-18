@@ -1,127 +1,67 @@
-# Visualizing fitness landscapes
+# gpmap-tools: tools for inference and visualization of complex genotype-phenotype maps
+
+gpmap-tools is a python library containing a suite of tools for inference and visualization of
+large and complex genotype-phenotype maps for genotypic spaces containing 
+up to several million genotypes. 
+
+gpmap-tools uses Gaussian process models to infer complete genotype-phenotype maps in the presence
+of genetic interactions of every possible order from high throughput experimental data and observations of
+natural sequences. gpmap-tools enables the statistical analysis of features
+of these complex objects by handling the high dimensional posterior distribution over
+the set of genotype-phenotype maps. 
+
+gpmap-tools provides an open-source and easy to use interface of a slightly
+modified version of the original method. Briefly, genotypes are embedded into a 
+low dimensional coordinate system where the square distances are proportional to the required time
+to evolve from one genotype to another under a Weak Mutation evolutionary model. This technique highlights
+regions of sequence space that are highly inaccessible to each other and display the main qualitative
+features of genotype-phenotype maps. 
+
+gpmap-tools is written for Python 3 and is provided under an MIT open source license.
+The documentation provided [here](https://gpmap-tools.readthedocs.io) is meant guide users through the basic principles underlying 
+the method as well as explain how to use it for calculating the embedding coordinates and use
+the functionalities provided for advanced plotting of their own fitness landscapes. 
+
+- For technical assistance or to report bugs, please contact Carlos Martí-Gómez (<martigo@cshl.edu>)
+- For more general correspondence, please contact David M. McCandlish (<mccandlish@cshl.edu>)
 
 
 ## Installation
 
-Create a python3 conda environment and activate it
+### Create a new environment and activate it
 
-```bash
-conda create -n gpmap python=3.7
+The library has only been tested with specific versions of the dependent libraries, so we recommend the same to be used to avoid potential incompatibilities.
+
+```
+conda create -n gpmap python=3.8
 conda activate gpmap
 ```
+
+### Users: install from PyPI
+
+```
+pip install gpmap-tools
+```
+
+### Developers: from from repository
 
 Download the repository using git and cd into it
 
 ```bash
-git clone git@bitbucket.org:cmartiga/gpmap_tools.git
-```
-
-Install using setuptools
-```bash
+git clone https://github.com/cmarti/gpmap-tools.git
 cd gpmap_tools
-pip install -r requirements.txt
-python setup.py install
+pip install .
 ```
 
-Test installation
+Run tests using pytest
 
 ```bash
-python -m unittest gpmap/test/*py
+pytest test
 ```
 
-# Command line usage
-
-The basic functionality is available through few utilities in the command line after installation. 
-
-
-## Calculating diffusion map
-
-To check all the options available run
-```bash
-calc_visualization -h
-```
-
-We provide with a small case use for the Serine fitness landscape. We have to provide a few options:
-
-- input file: csv separated file with sequence and function relationship sorted in a lexicographic order
-- alphabet type: -A rna, dna, protein or custom. In the latter case, we also have to specify number of alleles with -a
-- number of diffusion axis to calculate (5)
-- effective population size: it can be provided directly with -Ns option, or through setting the mean function at stationarity at a certain value (-m) or percetile (-p)
-- store also edges connecting the different genotypes for later plotting. This only needs to be done once even if we change the effective population size, as the connectivity among genotypes remains unchanged
-
-```bash
-cd gpmap/test/data
-calc_visualization serine.csv -o serine -A rna -p 90 -e -k 20
-```
-
-The script outputs several files with different information:
-
-- serine.nodes.csv: CSV file containing coordinates in each of the calculated diffusion axis for each genotype
-- serine.edges.npz: npz file containing the sparse matrix encoding genotype connectivity. It could be given in CSV format also but it is less efficient for storage, reading and writting
-- serine.decay_rates.csv: CSV file containing the decay rates of the different components
-
-These files use standard formats so one could use any other custom script or language to plot the diffusion map
-
-## Plotting the decay rates
-
-Generally, for the visualization to be as representative as possible, we want the diffusion axis that we plot to decay as slower as possible compared with the remaining dimensions. This way we ensure that most of the long term deviations from stationarity are shown in the visualization. While this is a very simple plot to do, we also provide a command line utility to do so.
-
-```bash
-plot_decay_rates serine.decay_rates.csv -o serine.decay_rates
-```
-
-![Decay rates](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.decay_rates.png)
-
-
-## Plotting the fitness landscape
-
-To check all the options available run
-```bash
-plot_visualization -h
-```
-
-For our case
-
-```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine -nc function -s function
-```
-
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.png)
-
-Additionally, one can highlight specific genotypes with a comma separated list IUPAC encoded genotypes. For instance, if we want to highlight the different types of codons encoding Serine:
-
-```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.2sets -nc function -s function -g UCN,AGY
-```
-
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.2sets.png)
-
-Or highlight directly the sequences that encode different aminoacid sequences under a specific genetic code e.g. S and L
-
-```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot.aa -nc function -s function -g S,L -A protein --protein_seq
-```
-
-![Serine landscape](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.aa.png)
-
-
-## Interactive 3D maps
-
-We make use of [plotly](https://plotly.com/python/) to make an interactive 3D plot of the fitness landscape that we can rotate and hover over the genotypes to show their corresponding sequences.
-
-```bash
-plot_visualization serine.nodes.csv -e serine.edges.npz -o serine.plot -nc function -s function --interactive
-```
-
-Click [here](https://bitbucket.org/cmartiga/gpmap_tools/raw/master/gpmap/test/data/serine.plot.html) for interactive visualization of the Serine landscape
-
-
-## Plotting very big landscapes
-
-For bigger landscapes, rendering can become very time consuming, specially due to the high number of edges. For this cases, one may want to explore different population sizes using only the nodes for plotting. Alternatively, we have implemented the --datashader option to use datashader library to pre-render the edges into bins for faster plotting. This option still has limited functionality compared to matplotlib based plotting e.g. genotype highlighting is not available yet
-
-
-
-# Cite
-
-- Mccandlish, D. M. (2011). Visualizing fitness landscapes. Evolution, 65(6), 1544–1558. [https://doi.org/10.1111/j.1558-5646.2011.01236.x](https://doi.org/10.1111/j.1558-5646.2011.01236.x)
+# References
+- Martí-Gómez, C.; Zhou, J.; Chen W.; Kinney J. B.; Mccandlish, D. M. Inference and visualization of complex genotype-phenotype maps using gpmap-tools. bioRxiv (2025). [doi](https://www.biorxiv.org/content/10.1101/2025.03.09.642267v2)
+- Zhou, J.; McCandlish D. M.; Minimum epistasis interpolation for sequence-function relationships. Nat. Comm. (2020) [doi](https://www.nature.com/articles/s41467-020-15512-5)
+- Zhou, J.; Wong, M. S.; Chen, W.; Krainer, A. R.; Kinney J. B.; Mccandlish, D. M. Higher-Order Epistasis and Phenotypic Prediction. PNAS (2022). [doi](https://doi.org/10.1073/pnas.2204233119).
+- Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM. Field theoretic density estimation for biological sequence space with applications to 5' splice site diversity and aneuploidy in cancer. PNAS (2021). [doi](https://www.pnas.org/doi/10.1073/pnas.2025782118)
+- Mccandlish, D. M. Visualizing fitness landscapes. Evolution (2011). [doi](https://doi.org/10.1111/j.1558-5646.2011.01236.x)
