@@ -50,14 +50,17 @@ Sequence utils
 .. autofunction:: gpmap.seq.get_custom_codon_table
 .. autofunction:: gpmap.seq.get_one_hot_from_alleles
 .. autofunction:: gpmap.seq.get_alphabet
-.. autofunction:: gpmap.seq.generate_freq_reduced_alphabet
+.. autofunction:: gpmap.seq.generate_freq_reduced_code
+.. autofunction:: gpmap.seq.transcribe_seqs
+.. autofunction:: gpmap.seq.translate_seqs
 .. autofunction:: gpmap.seq.msa_to_counts
 
 Genotypes handling
 ------------------
 
+.. autofunction:: gpmap.utils.read_dataframe
+.. autofunction:: gpmap.utils.read_edges
 .. autofunction:: gpmap.genotypes.select_genotypes
-.. autofunction:: gpmap.genotypes.read_edges
 .. autofunction:: gpmap.genotypes.get_genotypes_from_region
 .. autofunction:: gpmap.genotypes.marginalize_landscape_positions
 
@@ -73,7 +76,7 @@ Plotting
 .. autofunction:: gpmap.plot.ply.plot_visualization
 .. autofunction:: gpmap.plot.ds.plot_visualization
 .. autofunction:: gpmap.plot.ds.figure_allele_grid
-.. autofunction:: gpmap.plot.plot_SeqDEFT_summary
+.. autofunction:: gpmap.plot.mpl.plot_SeqDEFT_summary
 
 Datasets
 --------

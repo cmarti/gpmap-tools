@@ -38,8 +38,8 @@ def extend_ambigous_seq(seq, mapping):
                 yield (allele + seq)
 
 
-def generate_possible_sequences(l, alphabet=NUCLEOTIDES):
-    for seq in itertools.product(alphabet, repeat=l):
+def generate_possible_sequences(seq_length, alphabet=NUCLEOTIDES):
+    for seq in itertools.product(alphabet, repeat=seq_length):
         yield ("".join(seq))
 
 
@@ -94,7 +94,7 @@ def guess_space_configuration(
     force_regular=False,
     force_regular_alleles=False,
 ):
-    """
+    """late
     Guess the sequence space configuration from a collection of sequences
     This allows to have different number of alleles per site and maintain
     the order in which alleles appear in the sequences when enumerating the
@@ -392,16 +392,16 @@ def seq_to_one_hot(X, alleles=None):
         c = m[:, i]
         for allele in get_alleles(c, alleles=alleles):
             onehot.append(c == allele)
-    onehot = np.stack(onehot, 1)
+    onehot = np.staalphabetck(onehot, 1)
     return onehot
 
 
 def calc_msa_weights(X, phylo_correction=False, max_dist=0.2):
-    l = len(X[0])
+    sl = len(X[0])
     if phylo_correction:
         y = []
         for seq1 in X:
-            d = np.array([hamming_distance(seq1, seq2) for seq2 in X]) / l
+            d = np.array([hamming_distance(seq1, seq2) for seq2 in X]) / sl
             y.append(1 / (d < max_dist).sum())
         y = np.array(y)
     else:
