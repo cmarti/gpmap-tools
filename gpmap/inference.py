@@ -10,11 +10,11 @@ from scipy.special import logsumexp
 from scipy.stats import norm, pearsonr
 
 from gpmap.aligner import VCKernelAligner
+from gpmap.matrix import quad
 from gpmap.gp import (
     GaussianProcessRegressor,
     GeneralizedGaussianProcessRegressor,
     MinimizerRegressor,
-    SequenceInterpolator,
 )
 from gpmap.likelihood import SeqDEFTLikelihood
 from gpmap.linop import (
@@ -24,75 +24,34 @@ from gpmap.linop import (
     DiagonalOperator,
     ProjectionOperator,
     VarianceComponentKernel,
-    calc_avg_local_epistatic_coeff,
     calc_covariance_distance,
 )
 from gpmap.seq import (
     get_subsequences,
 )
 from gpmap.utils import (
-    calc_cv_loss,
     check_error,
     get_cv_iter,
     get_CV_splits,
 )
 
 
-class MinimumEpistasisInterpolator(SequenceInterpolator):
+class MinimumEpistasisInterpolator(MinimizerRegressor):
     def __init__(
         self,
         P=2,
         n_alleles=None,
         seq_length=None,
         alphabet_type="custom",
+        a=None,
         cg_rtol=1e-16,
     ):
         self.P = P
-        super().__init__(
-            n_alleles=n_alleles,
-            seq_length=seq_length,
-            alphabet_type=alphabet_type,
-            cg_rtol=cg_rtol,
-        )
-
-    def define_precision_matrix(self):
-        self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
-        self.C = 1 / self.DP.n_p_faces * self.DP
-        self.p = self.DP.n_p_faces_genotype
-
-    def smooth(self, y_pred):
-        y_pred -= 1 / self.p * self.DP @ y_pred
-        return y_pred
-
-
-class MinimumEpistasisRegression(MinimizerRegressor):
-    def __init__(
-        self,
-        P,
-        a=None,
-        n_alleles=None,
-        seq_length=None,
-        alphabet_type="custom",
-        nfolds=5,
-        num_reg=20,
-        min_log_reg=-2,
-        max_log_reg=6,
-        progress=True,
-        cg_rtol=1e-4,
-    ):
         self.a = a
-        self.P = P
-
-        self.nfolds = nfolds
-        self.num_reg = num_reg
-        self.total_folds = self.nfolds * self.num_reg
-        self.min_log_reg = min_log_reg
-        self.max_log_reg = max_log_reg
         super().__init__(
             n_alleles=n_alleles,
             seq_length=seq_length,
             alphabet_type=alphabet_type,
-            progress=progress,
             cg_rtol=cg_rtol,
         )
 
@@ -112,6 +71,7 @@ class MinimumEpistasisRegression(MinimizerRegressor):
             )
             self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
             self.s = self.DP.n_p_faces
+            self.p = self.DP.n_p_faces_genotype
             self.initialized = True
             self.set_a(self.a)
 
@@ -119,62 +79,36 @@ class MinimumEpistasisRegression(MinimizerRegressor):
         self.a = a
         if a is not None:
             self.C = self.a / self.s * self.DP
+        else:
+            self.C = 1 / self.s * self.DP
 
-    def cv_fit(self, data, a):
-        X, y, y_var = data
-        self.set_a(a)
-        self.set_data(X, y, y_var)
-        y_pred = self.calc_posterior()[0]
+    def smooth(self, y_pred):
+        y_pred -= 1 / self.p * self.DP @ y_pred
         return y_pred
 
-    def cv_evaluate(self, data, y_pred):
-        X, y, y_var = data
-        pred_idx = self.get_obs_idx(X)
-        logL = norm.logpdf(y, loc=y_pred[pred_idx],
-                           scale=np.sqrt(y_var)).mean()
-        return logL
+    def calc_posterior_covariance(self):
+        if self.a is None:
+            msg = "a must be defined to compute posterior covariance"
+            raise ValueError(msg)
+        else:
+            return super().calc_posterior_covariance()
 
-    def a_to_sd(self, a):
-        return np.sqrt(self.DP.n_p_faces / a)
-
-    def sd_to_a(self, sd):
-        return self.DP.n_p_faces / sd**2
-
-    def get_cv_logL_df(self, cv_logL):
-        with np.errstate(divide="ignore"):
-            cv_log_L = pd.DataFrame(cv_logL)
-            cv_log_L["log_a"] = np.log10(cv_log_L["a"])
-            cv_log_L["sd"] = self.a_to_sd(cv_log_L["a"])
-            cv_log_L["log_sd"] = np.log10(cv_log_L["sd"])
-        return cv_log_L
-
-    def get_ml_a(self, cv_logL_df):
-        df = cv_logL_df.groupby("a")["logL"].mean()
-        return df.index[np.argmax(df)]
-
-    def fit_a_cv(self):
-        a_values = self.get_regularization_constants()
-        cv_splits = get_CV_splits(
-            X=self.X, y=self.y, y_var=self.y_var, nfolds=self.nfolds
+    def calc_posterior(self, X_pred=None, B=None):
+        mean_post = self.calc_posterior_mean()
+        if self.a is None:
+            Sigma_post = None
+        else:
+            Sigma_post = self.calc_posterior_covariance()
+        return self.transform_posterior(
+            mean_post, Sigma_post, X_pred=X_pred, B=B
         )
-        cv_iter = get_cv_iter(cv_splits, a_values)
-        cv_logL = calc_cv_loss(
-            cv_iter,
-            self.cv_fit,
-            self.cv_evaluate,
-            total_folds=a_values.shape[0] * self.nfolds,
-            param_label="a",
-            loss_label="logL",
-        )
-        self.logL_df = self.get_cv_logL_df(cv_logL)
-        a = self.get_ml_a(self.logL_df)
-        return a
 
-    def fit(self, X, y, y_var=None, cross_validation=False):
+    def fit(self, X, y, y_var=None):
         """
-        Infers the optimal `a` from the provided data, this is,
-        the magnitude of Pth order local epistatic coefficients
-        that maximize predictive performance in held out data
+        Infers the optimal `a` from the provided data by computing the
+        Minimum epistasis interpolation solution and finds the `a` such
+        that the expected average squared Pth epistatic coefficients
+        match that of the MEI solution.
 
         Parameters
         ----------
@@ -190,30 +124,12 @@ class MinimumEpistasisRegression(MinimizerRegressor):
             Vector containing the empirical or experimental known variance for
             the measurements in `y`
 
-        Returns
-        -------
-        a : float
-            Optimal `a` value maximing the cross-validated log-likelihood
-
         """
+        self.set_data(X, y)
+        mean = self.calc_posterior_mean()
+        a_star = self.DP.rank * self.s / quad(self.DP, mean)
         self.set_data(X, y, y_var=y_var)
-
-        if self.a is None:
-            if cross_validation:
-                a = self.fit_a_cv()
-                self.set_data(X, y, y_var=y_var)
-            else:
-                # TODO: find a better solution for this
-                alphabet = np.unique(self.alphabet)
-                s, n = calc_avg_local_epistatic_coeff(
-                    X,
-                    y,
-                    alphabet=alphabet,
-                    seq_length=self.seq_length,
-                    P=self.P,
-                )
-                a = self.DP.rank * n / s
-            self.set_a(a)
+        self.set_a(a_star)
 
 
 class VCregression(GaussianProcessRegressor):
@@ -684,7 +600,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         a = self.a
         self.DP.calc_lambdas()
         lambdas = np.zeros(self.DP.lambdas.shape)
-        lambdas[self.P:] = a * self.DP.lambdas[self.P:] / self.DP.n_p_faces
+        lambdas[self.P :] = a * self.DP.lambdas[self.P :] / self.DP.n_p_faces
 
         if self.lambdas_P_inv is not None:
             lambdas[: self.P] = 1 / self.lambdas_P_inv
