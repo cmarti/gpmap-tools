@@ -96,6 +96,7 @@ class DiagonalOperator(ExtendedLinearOperator):
     def __init__(self, diag):
         self.diag = diag
         self.shape = (diag.shape[0], diag.shape[0])
+        self._init_dtype()
 
     def _matvec(self, v):
         return self.diag * v
@@ -288,6 +289,7 @@ class SelIdxOperator(ExtendedLinearOperator):
         self.n = n
         self.idx = idx
         self.shape = (self.idx.shape[0], n)
+        self._init_dtype()
 
     def _matvec(self, v):
         return v[self.idx]

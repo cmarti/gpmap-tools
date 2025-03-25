@@ -11,7 +11,7 @@ from gpmap.linop import (
     DiagonalOperator,
     IdentityOperator,
     InverseOperator,
-    SubMatrixOperator,
+    SelIdxOperator,
     get_diag,
 )
 from gpmap.matrix import quad
@@ -102,6 +102,28 @@ class SeqGaussianProcessRegressor(object):
             np.arange(self.n_genotypes), index=self.genotypes
         )
 
+    def _transform_posterior(self, mean, cov, B):
+        mean = B @ mean
+        if cov is not None:
+            cov = B @ cov @ B.transpose()
+        return (mean, cov)
+
+    def transform_posterior(self, mean_post, Sigma_post, X_pred=None, B=None):
+        if X_pred is not None:
+            pred_idx = self.get_obs_idx(X_pred)
+            Z = SelIdxOperator(self.n_genotypes, pred_idx)
+            mean_post, Sigma_post = self._transform_posterior(
+                mean_post, Sigma_post, Z
+            )
+
+        if B is not None:
+            B = aslinearoperator(B)
+            mean_post, Sigma_post = self._transform_posterior(
+                mean_post, Sigma_post, B
+            )
+
+        return (mean_post, Sigma_post)
+
     def make_contrasts(self, contrast_matrix):
         """
         Computes the posterior distribution of linear combinations of genotypes
@@ -187,100 +209,6 @@ class SeqGaussianProcessRegressor(object):
             pred["ci_95_lower"] = pred["y"] - 2 * pred["std"]
             pred["ci_95_upper"] = pred["y"] + 2 * pred["std"]
 
-        self.pred_time = time() - t0
-        return pred
-
-
-class SequenceInterpolator(SeqGaussianProcessRegressor):
-    def __init__(
-        self,
-        n_alleles=None,
-        seq_length=None,
-        alphabet_type="custom",
-        cg_rtol=1e-16,
-        **kwargs,
-    ):
-        self.cg_rtol = cg_rtol
-        self.kwargs = kwargs
-
-        self.initialized = False
-        if seq_length is not None and (
-            n_alleles is not None or alphabet_type != "custom"
-        ):
-            self.init(
-                n_alleles=n_alleles,
-                seq_length=seq_length,
-                alphabet_type=alphabet_type,
-            )
-
-    def init(
-        self,
-        seq_length=None,
-        n_alleles=None,
-        genotypes=None,
-        alphabet_type="custom",
-    ):
-        if not self.initialized:
-            self.define_space(
-                n_alleles=n_alleles,
-                seq_length=seq_length,
-                alphabet_type=alphabet_type,
-                genotypes=genotypes,
-            )
-            self.define_precision_matrix()
-            self.initialized = True
-
-    def set_data(self, X, y):
-        if np.any(np.isnan(y)):
-            msg = "y vector contains nans"
-            raise ValueError(msg)
-
-        self.init(genotypes=X)
-        self.X = X
-        self.y = y
-
-        self.n_obs = y.shape[0]
-        self.obs_idx = self.get_obs_idx(X)
-
-        z = np.full(self.n_genotypes, True)
-        z[self.obs_idx] = False
-        self.pred_idx = np.where(z)[0]
-
-    def calc_cost(self, y):
-        return quad(self.C, y)
-
-    def calc_posterior_mean(self):
-        C_II = SubMatrixOperator(
-            self.C, row_idx=self.pred_idx, col_idx=self.pred_idx
-        )
-        C_II_inv = InverseOperator(C_II, method="cg")
-        C_IB = SubMatrixOperator(
-            self.C, row_idx=self.pred_idx, col_idx=self.obs_idx
-        )
-        b = C_IB @ self.y
-
-        y_pred = np.zeros(self.n_genotypes)
-        y_pred[self.obs_idx] = self.y
-        y_pred[self.pred_idx] = -C_II_inv @ b
-        return y_pred
-
-    def predict(self):
-        """
-        Compute the Maximum a Posteriori (MAP) estimate of the phenotype at
-        the provided or all genotypes
-
-        Returns
-        -------
-        function : pd.DataFrame of shape (n_genotypes, 1)
-                   Returns the phenotypic predictions for each input genotype
-                   in the column ``ypred`` and genotype labels as row names.
-                   If ``calc_variance=True``, then it has an additional
-                   column with the posterior variances for each genotype
-        """
-
-        t0 = time()
-        post_mean = self.calc_posterior_mean()
-        pred = pd.DataFrame({"y": post_mean}, index=self.genotypes)
         self.pred_time = time() - t0
         return pred
 
@@ -418,13 +346,6 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
             msg = "y vector contains nans"
             raise ValueError(msg)
 
-        if y_var is None:
-            y_var = np.zeros(y.shape[0])
-
-        if np.any(np.isnan(y_var)):
-            msg = "y_var vector contains nans"
-            raise ValueError(msg)
-
         self.init(genotypes=X)
         self.n_obs = y.shape[0]
         self.obs_idx = self.get_obs_idx(X)
@@ -433,47 +354,51 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         self.y = y
         self.y_var = y_var
 
-        y_var_inv_star = np.zeros(self.n_genotypes)
-        y_var_inv_star[self.obs_idx] = 1 / y_var
-        self.D_var_inv_star = DiagonalOperator(y_var_inv_star)
-        self.b = np.zeros(self.n_genotypes)
-        self.b[self.obs_idx] = y / y_var
-        self._A_inv = None
+        self.n_obs = y.shape[0]
+        z = np.full(self.n_genotypes, True)
+        z[self.obs_idx] = False
+        self.pred_idx = np.where(z)[0]
+        self.Xop = SelIdxOperator(self.n_genotypes, self.obs_idx)
+        self.Zop = SelIdxOperator(self.n_genotypes, self.pred_idx)
+
+        if y_var is not None:
+            if np.any(np.isnan(y_var)):
+                msg = "y_var vector contains nans"
+                raise ValueError(msg)
+            self.D_var_inv = DiagonalOperator(1. / y_var)
+            self.D = self.Xop.transpose() @ self.D_var_inv @ self.Xop
 
     def calc_loss_prior(self, v):
         return quad(self.C, v)
 
-    @property
-    def A_inv(self):
-        if not hasattr(self, "_A_inv") or self._A_inv is None:
-            A = self.C + self.D_var_inv_star
-            self._A_inv = InverseOperator(A, method="cg")
-        return self._A_inv
-
     def calc_posterior_mean(self):
-        mean_post = self.A_inv @ self.b
+        if self.y_var is None:
+            C_zz = self.Zop @ self.C @ self.Zop.transpose()
+            C_zz_inv = InverseOperator(C_zz, method="cg")
+            C_zx = self.Zop @ self.C @ self.Xop.transpose()
+            mean_post = self.Xop.transpose() @ self.y
+            mean_post -= self.Zop.transpose() @ C_zz_inv @ C_zx @ self.y
+        else:
+            A = InverseOperator(self.C + self.D, method="cg")
+            mean_post = A @ self.Xop.transpose() @ self.D_var_inv @ self.y
         return mean_post
 
-    def calc_posterior_covariance(self, **kwargs):
-        return self.A_inv
+    def calc_posterior_covariance(self):
+        if self.y_var is None:
+            C_zz = self.Zop @ self.C @ self.Zop.transpose()
+            C_zz_inv = InverseOperator(C_zz, method="cg")
+            Sigma_post = self.Zop.transpose() @ C_zz_inv @ self.Zop
+        else:
+            Sigma_post = InverseOperator(self.C + self.D, method="cg")
+        return Sigma_post
 
     def calc_posterior(self, X_pred=None, B=None):
         mean_post = self.calc_posterior_mean()
-        Sigma_post = self.calc_posterior_covariance(mean_post=mean_post)
+        Sigma_post = self.calc_posterior_covariance()
 
-        if X_pred is not None:
-            pred_idx = self.get_obs_idx(X_pred)
-            mean_post = mean_post[pred_idx]
-            Sigma_post = SubMatrixOperator(
-                Sigma_post, row_idx=pred_idx, col_idx=pred_idx
-            )
-
-        if B is not None:
-            B = aslinearoperator(B)
-            mean_post = B @ mean_post
-            Sigma_post = B @ Sigma_post @ B.T
-
-        return (mean_post, Sigma_post)
+        return self.transform_posterior(
+            mean_post, Sigma_post, X_pred=X_pred, B=B
+        )
 
 
 class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
@@ -516,17 +441,23 @@ class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
             method="L-BFGS-B",
             options=self.optimization_opts,
         )
-
         if not res.success:
             raise ValueError(res.message)
-
-        phi = res.x
         self.opt_res = res
-        return phi
+        mean_post = res.x
+        return mean_post
 
     def calc_posterior_covariance(self, mean_post):
         w = self.likelihood.calc_loss_grad_hess(mean_post)[2]
         D = DiagonalOperator(1 / np.sqrt(w))
         A = D @ self.C @ D + IdentityOperator(self.n_genotypes)
-        Sigma = D @ InverseOperator(A, method="cg") @ D
-        return Sigma
+        Sigma_post = D @ InverseOperator(A, method="cg") @ D
+        return Sigma_post
+    
+    def calc_posterior(self, X_pred=None, B=None):
+        mean_post = self.calc_posterior_mean()
+        Sigma_post = self.calc_posterior_covariance(mean_post)
+
+        return self.transform_posterior(
+            mean_post, Sigma_post, X_pred=X_pred, B=B
+        )
