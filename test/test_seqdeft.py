@@ -400,6 +400,7 @@ class SeqDEFTTests(unittest.TestCase):
         r = pearsonr(result['y'], result['phi_true'])[0]
         calibration = np.mean((result['ci_95_lower'] < result['phi_true']) & (result['phi_true'] < result['ci_95_upper']))
         assert(r > 0.65)
+        print(calibration)
         assert(calibration > 0.9)
     
     def test_contrast(self):
