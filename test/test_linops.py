@@ -502,6 +502,10 @@ class LinOpsTests(unittest.TestCase):
         v = np.random.normal(size=P.n)
         u1 = P.dot(v)
 
+        # Test inverse operator
+        P_inv = P.inv()
+        assert(np.allclose(P_inv @ P @ v, v))
+
         # Do calculations using Vj Projections
         ws = [1 * 1, 1 * 0.8, 0.5 * 1, 0.8 * 0.5]
         js = [[], [1], [0], [0, 1]]
@@ -521,6 +525,8 @@ class LinOpsTests(unittest.TestCase):
         W = ProjectionOperator(a, sl, lambdas=lambdas)
         u2 = W.dot(v)
         assert np.allclose(u1, u2)
+
+        # Test inverse operator
 
     def test_kernel_operator(self):
         A = np.array([[1.0, 0.5, 0.5], [0.5, 1.0, 0.5], [0.5, 0.5, 1.0]])
