@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.special import loggamma, logsumexp
 
+from gpmap.linop import SelIdxOperator, DiagonalOperator, IdentityOperator
 from gpmap.seq import (
     calc_allele_frequencies,
     calc_expected_logp,
@@ -166,7 +167,7 @@ class SeqDEFTLikelihood(object):
         Q = self.phi_to_Q(obs_phi)
         output = pd.DataFrame(
             {"frequency": self.R, "phi": phi, "Q_star": Q},
-            index=self.genotypes
+            index=self.genotypes,
         )
         if self.adjust_freqs:
             exp_logp = calc_expected_logp(self.genotypes, self.allele_freqs)
@@ -181,3 +182,109 @@ class SeqDEFTLikelihood(object):
         Q = self.phi_to_Q(phi)
         X = np.random.choice(self.genotypes, size=N, replace=True, p=Q)
         return X
+
+
+class GaussianLikelihood(object):
+    def __init__(self, genotypes):
+        self.genotypes = genotypes
+        self.n_genotypes = genotypes.shape[0]
+
+    def set_data(self, X, y, y_var=None):
+        if y is None:
+            y = np.zeros(X.shape[0])
+        
+        if np.any(np.isnan(y)):
+            msg = "y vector contains nans"
+            raise ValueError(msg)
+
+        self.X = X
+        self.y = y
+        self.zero_var = y_var is None
+        self.y_var = np.zeros_like(y) if y_var is None else y_var
+        self.n_obs = self.X.shape[0]
+        self.constant = 0.5 * self.n_obs * np.log(2 * np.pi)
+
+        self.idx = pd.Series(np.arange(self.n_genotypes), index=self.genotypes)
+        self.Xop = SelIdxOperator(self.n_genotypes, self.idx.loc[X])
+
+        self._Zop = None
+        self._D = None
+        self._D_var = None
+        self._D_var_inv = None
+        self._D_var_inv_sqrt = None
+        self._D_var_sqrt = None
+        self._logdet = None
+
+    @property
+    def Zop(self):
+        if not hasattr(self, "_Zop") or self._Zop is None:
+            z = np.full(self.n_genotypes, True)
+            z[self.idx.loc[self.X]] = False
+            self.pred_idx = np.where(z)[0]
+            self._Zop = SelIdxOperator(self.n_genotypes, self.pred_idx)
+        return self._Zop
+
+    @property
+    def D_var(self):
+        if not hasattr(self, "_D_var") or self._D_var is None:
+            self._D_var = DiagonalOperator(self.y_var)
+        return self._D_var
+
+    @property
+    def D_var_inv(self):
+        if not hasattr(self, "_D_var_inv") or self._D_var_inv is None:
+            if np.any(self.y_var == 0):
+                raise ValueError("y_var cannot contain zero values")
+            self._D_var_inv = DiagonalOperator(1.0 / self.y_var)
+        return self._D_var_inv
+
+    @property
+    def D_var_inv_sqrt(self):
+        if (
+            not hasattr(self, "_D_var_inv_sqrt")
+            or self._D_var_inv_sqrt is None
+        ):
+            if np.any(self.y_var == 0):
+                raise ValueError("y_var cannot contain zero values")
+            self._D_var_inv_sqrt = DiagonalOperator(1.0 / np.sqrt(self.y_var))
+        return self._D_var_inv_sqrt
+
+    @property
+    def D_var_sqrt(self):
+        if not hasattr(self, "_D_var_sqrt") or self._D_var_sqrt is None:
+            self._D_var_sqrt = DiagonalOperator(np.sqrt(self.y_var))
+        return self._D_var_sqrt
+
+    @property
+    def D(self):
+        if not hasattr(self, "_D") or self._D is None:
+            self._D = self.Xop.transpose() @ self.D_var_inv @ self.Xop
+        return self._D
+
+    @property
+    def logdet(self):
+        if not hasattr(self, "_logdet") or self._logdet is None:
+            self._logdet = self.D_var.logdet()
+        return self._logdet
+
+    def calc_loss_grad_hess(self, phi):
+        # TODO: reivew when we need to express it as a function of complete phi
+        # all unobserved entries are 0 anyway
+        diff = self.Xop.transpose() @ (self.y - self.Xop @ phi)
+        grad = self.D @ diff
+        loss = 0.5 * np.dot(phi, grad)
+        return (loss, grad, self.D)
+
+    def calc_logL(self, phi):
+        loss = self.calc_loss_grad_hess(phi)[0]
+        logL = -0.5 * self.logdet - loss - self.constant
+        return logL
+
+    def sample(self, phi, seed=None):
+        if seed is not None:
+            np.random.seed(seed)
+
+        z = np.random.normal(size=self.n_obs)
+        D = DiagonalOperator(np.sqrt(self.y_var))
+        y = self.Xop @ phi + D @ z
+        return y
