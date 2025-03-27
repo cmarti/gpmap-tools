@@ -68,6 +68,12 @@ def inv_dot(linop, v, method="minres", **kwargs):
     if method == "minres":
         res = minres(linop, v, **kwargs)
     elif method == "cg":
+        # iters = 0
+        # def nonlocal_iterate(arr):
+        #     nonlocal iters
+        #     iters+=1
+        # res = cg(linop, v, callback=nonlocal_iterate,  **kwargs)
+        # print('n iters', iters)
         res = cg(linop, v, **kwargs)
     elif method == "direct":
         res = np.linalg.solve(linop, v)
