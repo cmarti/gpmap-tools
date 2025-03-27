@@ -70,7 +70,7 @@ class TriangularInverseOperator(ExtendedLinearOperator):
 
 class InverseOperator(ExtendedLinearOperator):
     def __init__(
-        self, linop, method="minres", atol=1e-14, maxiter=1000, kwargs={}
+        self, linop, method="minres", atol=1e-14, maxiter=1000, **kwargs
     ):
         # TODO: implement preconditioner option
         self.linop = linop
@@ -106,6 +106,14 @@ class DiagonalOperator(ExtendedLinearOperator):
 
     def transpose(self):
         return self
+
+    def logdet(self):
+        msg = "All diagonal entries must be larger than 0 to compute logdet"
+        check_error(np.all(self.diag > 0), msg=msg)
+        return np.sum(np.log(self.diag))
+
+    def det(self):
+        return np.product(self.diag)
 
 
 class IdentityOperator(DiagonalOperator):
@@ -500,7 +508,7 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.P = P
         if self.P == (self.lp1):
             msg = '"P" = l+1, the optimal density is equal '
-            msg += 'to the empirical frequency.'
+            msg += "to the empirical frequency."
             raise ValueError(msg)
         elif not 1 <= self.P <= self.seq_length:
             msg = '"P" not in the right range.'
@@ -527,7 +535,7 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.lambdas = np.array(lambdas)
 
     def calc_log_det(self):
-        return self.m_k[self.P:] * np.log(self.lambdas[self.P:])
+        return self.m_k[self.P :] * np.log(self.lambdas[self.P :])
 
 
 class KrawtchoukOperator(SeqOperator, PolynomialOperator):
@@ -578,8 +586,9 @@ class KrawtchoukOperator(SeqOperator, PolynomialOperator):
                     p = np.sum(
                         [
                             np.prod(v)
-                            for v in combinations(k_lambdas,
-                                                  self.seq_length - power)
+                            for v in combinations(
+                                k_lambdas, self.seq_length - power
+                            )
                         ]
                     )
                     V_inv[power, k] = norm_factor * (-1) ** (power) * p
@@ -662,8 +671,9 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
         return np.sum(np.log(self.lambdas) * self.m_k)
 
     def power(self, b):
-        return ProjectionOperator(self.alpha, self.seq_length,
-                                  lambdas=self.lambdas**b)
+        return ProjectionOperator(
+            self.alpha, self.seq_length, lambdas=self.lambdas**b
+        )
 
     def matrix_sqrt(self):
         return ProjectionOperator(
@@ -777,9 +787,7 @@ class VjProjectionOperator(VjOperator):
     symmetric = True
 
     def get_matrices(self, j):
-        self.W0 = np.full(
-            (self.alpha, self.alpha), fill_value=1.0 / self.alpha
-        )
+        self.W0 = np.full((self.alpha, self.alpha), fill_value=1.0 / self.alpha)
         self.W1 = np.eye(self.alpha) - self.W0
         W = [self.W0, self.W1]
         return [W[int(i in j)] for i in range(self.seq_length)]
@@ -825,31 +833,36 @@ class RhoProjectionOperator(ConstantDiagSeqOperator, KronOperator):
             msg = "rho must be between 0 and 1"
         check_error(np.all(checked), msg=msg)
 
-    def set_rho(self, rho, ignore_bound=False):
+    def set_rho(self, rho, ignore_bound=True):
         self.rho = (
             np.full(self.seq_length, rho)
-            if isinstance(rho, float) else np.array(rho)
+            if isinstance(rho, float)
+            else np.array(rho)
         )
         self.check_rho(self.rho, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.rho]) / self.n
 
     def inv(self):
-        return RhoProjectionOperator(self.alpha, self.seq_length,
-                                     rho=1.0 / self.rho)
+        return RhoProjectionOperator(
+            self.alpha, self.seq_length, rho=1.0 / self.rho
+        )
 
     def calc_log_det(self):
         log_rho = np.log(self.rho)
-        k = np.sum([comb(self.seq_length, i - 1)
-                    for i in range(self.seq_length)])
+        k = np.sum(
+            [comb(self.seq_length, i - 1) for i in range(self.seq_length)]
+        )
         return k * np.sum(log_rho)
 
     def matrix_sqrt(self):
-        return RhoProjectionOperator(self.alpha, self.seq_length,
-                                     rho=np.sqrt(self.rho))
+        return RhoProjectionOperator(
+            self.alpha, self.seq_length, rho=np.sqrt(self.rho)
+        )
 
     def matrix_power(self, b):
-        return RhoProjectionOperator(self.alpha, self.seq_length,
-                                     rho=self.rho**b)
+        return RhoProjectionOperator(
+            self.alpha, self.seq_length, rho=self.rho**b
+        )
 
 
 class EigenBasisOperator(StackedOperator):
@@ -1086,9 +1099,7 @@ def calc_avg_local_epistatic_coeff(X, y, alphabet, seq_length, P):
     z = kron([[-1, 1]] * P)
 
     s, n = 0, 0
-    for target_sites in tqdm(
-        combinations(sites, P), total=comb(seq_length, P)
-    ):
+    for target_sites in tqdm(combinations(sites, P), total=comb(seq_length, P)):
         background_sites = [s for s in sites if s not in target_sites]
         for background_seq in background_seqs:
             bc = dict(zip(background_sites, background_seq))
