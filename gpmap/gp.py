@@ -7,6 +7,7 @@ from scipy.sparse.linalg import aslinearoperator
 from scipy.stats import norm
 from scipy.optimize import minimize
 
+from gpmap.likelihood import GaussianLikelihood
 from gpmap.linop import (
     DiagonalOperator,
     IdentityOperator,
@@ -40,7 +41,10 @@ class SeqGaussianProcessRegressor(object):
     def fit_beta_cv(self):
         beta_values = self.get_regularization_constants()
         cv_splits = get_CV_splits(
-            X=self.X, y=self.y, y_var=self.y_var, nfolds=self.nfolds
+            X=self.likelihood.X,
+            y=self.likelihood.y,
+            y_var=self.likelihood.y_var,
+            nfolds=self.nfolds,
         )
         cv_iter = get_cv_iter(
             cv_splits, beta_values, process_data=self.process_data
@@ -102,6 +106,93 @@ class SeqGaussianProcessRegressor(object):
             np.arange(self.n_genotypes), index=self.genotypes
         )
 
+    def sample_prior(self):
+        """
+        Samples from the prior distribution.
+
+        This method generates a sample from the prior distribution by drawing
+        random values from a standard normal distribution and transforming them
+        using the square root of the covariance matrix.
+
+        Returns:
+            numpy.ndarray: A sample from the prior distribution of shape (n_genotypes,)
+        """
+        a = np.random.normal(size=self.n_genotypes)
+        y = self.get_K_sqrt() @ a
+        return y
+
+    def _simulate(self, seed=None, **kwargs):
+        if seed is not None:
+            np.random.seed(seed)
+        phi = self.sample_prior()
+        y = self.likelihood.sample(phi, **kwargs)
+        return phi, y
+
+    def simulate(self, X=None, y_var=0.0, p_missing=0, seed=None):
+        """
+        Simulates data under the specified prior allowing for the addition of
+        experimental Gaussian noise and the random omission of genotypes in
+        the output data.
+
+        X : array-like, optional
+            Input sequences for which to generate the measurements `y`.
+            If `None`, genotypes are randomly selected based on the missing
+            probability `p_missing`. Default is `None`.
+        y_var : float or array-like, optional
+            Standard deviation of the experimental noise to be added to the
+            variance components. If a float is provided, it is broadcast to
+            match the shape of `X`. If an array is provided, its shape must
+            match either the number of genotypes or the shape of `X`.
+            Default is `0.`.
+        p_missing : float, optional
+            Probability (between 0 and 1) of randomly omitting genotypes in the
+            simulated output data. Default is `0`.
+        seed : float, optional
+            Random seed for reproducibility. Default is `None`.
+
+        Returns
+        -------
+        y_true : array-like
+            The true simulated measurements without experimental noise.
+        X : array-like
+            The input sequences used for the simulation.
+        y : array-like
+            The simulated measurements with experimental noise added.
+        y_var : array-like
+            The standard deviation of the experimental noise for each input
+            sequence.
+        Raises
+        ------
+        ValueError
+            If the shape of `y_var` does not match the expected dimensions.
+
+        Examples
+        --------
+        Simulate data with default parameters:
+        >>> y_true, X, y, y_var = gp.simulate()
+        Simulate data with custom noise and missing probability:
+        >>> y_true, X, y, y_var = gp.simulate(y_var=0.1, p_missing=0.2, seed=42)
+        """
+
+        if X is None:
+            u = np.random.uniform(size=self.n_genotypes)
+            X = self.genotypes[u > p_missing]
+
+        if not hasattr(self, "likelihood"):
+            self.likelihood = GaussianLikelihood(self.genotypes)
+            self.likelihood.set_data(X, None, None)
+
+        if isinstance(y_var, float):
+            y_var = np.full(X.shape, y_var)
+        elif y_var.shape[0] == self.n_genotypes:
+            y_var = self.likelihood.Xop @ y_var
+        elif y_var.shape[0] != X.shape[0]:
+            msg = "y_var shape should match X shape"
+            raise ValueError(msg)
+        self.likelihood.set_data(X, None, y_var)
+        y_true, y = self._simulate(seed=seed)
+        return (y_true, X, y, y_var)
+
     def _transform_posterior(self, mean, cov, B):
         mean = B @ mean
         if cov is not None:
@@ -123,6 +214,30 @@ class SeqGaussianProcessRegressor(object):
             )
 
         return (mean_post, Sigma_post)
+
+    def calc_posterior(self, X_pred=None, B=None):
+        """
+        Calculate the posterior distribution for the given inputs.
+        This method computes the posterior mean and covariance.
+        Parameters
+        ----------
+        X_pred (optional): Prediction points where the posterior is
+            evaluated. Defaults to None.
+        B (optional): Linear transformation to apply to the posterior over
+            the complete space of possible sequences. Defaults to None.
+
+        Returns
+        -------
+        mu, Sigma: Transformed posterior distribution in the form of
+            a tuple containing the transformed mean and covariance.
+        """
+
+        mean_post = self.calc_posterior_mean()
+        Sigma_post = self.calc_posterior_covariance()
+
+        return self.transform_posterior(
+            mean_post, Sigma_post, X_pred=X_pred, B=B
+        )
 
     def make_contrasts(self, contrast_matrix):
         """
@@ -216,189 +331,94 @@ class SeqGaussianProcessRegressor(object):
 class GaussianProcessRegressor(SeqGaussianProcessRegressor):
     def __init__(self, base_kernel, progress=True):
         self.K = base_kernel
+        self.n_genotypes = self.K.shape[0]
         self.progress = progress
 
     def set_data(self, X, y, y_var=None):
         self.define_space(genotypes=X)
-        self.X = X
-        self.y = y
+        self.likelihood = GaussianLikelihood(self.genotypes)
+        self.likelihood.set_data(X, y, y_var)
+        self.X = self.likelihood.Xop
+        self.X_t = self.X.transpose()
 
-        if np.any(np.isnan(y)):
-            msg = "y vector contains nans"
-            raise ValueError(msg)
+    @property
+    def K_xx_inv(self):
+        if np.any(self.likelihood.y_var == 0.):
+            K_xx = self.X @ self.K @ self.X_t + self.likelihood.D_var
+            K_xx_inv = InverseOperator(K_xx, method="cg")
+        else:
+            # This formulation is better conditioned with heterogenous variances
+            D_sqrt = self.likelihood.D_var_inv_sqrt
+            Identity = IdentityOperator(self.likelihood.n_obs)
+            A = D_sqrt @ self.X @ self.K @ self.X_t @ D_sqrt + Identity
+            K_xx_inv = D_sqrt @ InverseOperator(A, method="cg") @ D_sqrt
+        return(K_xx_inv)
 
-        self.n_obs = y.shape[0]
-        self.obs_idx = self.get_obs_idx(X)
+    def calc_posterior_mean(self):
+        mean_post = self.K @ self.X_t @ self.K_xx_inv @ self.likelihood.y
+        return mean_post
 
-        if y_var is None:
-            y_var = np.zeros(y.shape[0])
-
-        if np.any(np.isnan(y_var)):
-            msg = "y_var vector contains nans"
-            raise ValueError(msg)
-
-        self.y_var = y_var
-        self.D_var = DiagonalOperator(y_var)
-        self._K_BB = None
-
-    def calc_posterior(self, X_pred=None, B=None):
-        pred_idx = (
-            np.arange(self.n_genotypes)
-            if X_pred is None
-            else self.get_obs_idx(X_pred)
+    def calc_posterior_covariance(self):
+        Sigma_post = (
+            self.K - self.K @ self.X_t @ self.K_xx_inv @ self.X @ self.K
         )
+        return Sigma_post
 
-        K_aB = self.K.compute(x1=pred_idx, x2=self.obs_idx)
-        K_aa = self.K.compute(x1=pred_idx, x2=pred_idx)
-        K_Ba = self.K.compute(x1=self.obs_idx, x2=pred_idx)
-        K_BB = self.K.compute(self.obs_idx, self.obs_idx, self.D_var)
-
-        K_BB_inv = InverseOperator(K_BB, method="cg")
-        mean_post = K_aB @ K_BB_inv @ self.y
-        Sigma_post = K_aa - K_aB @ K_BB_inv @ K_Ba
-
-        if B is not None:
-            B = aslinearoperator(B)
-            mean_post = B @ mean_post
-            Sigma_post = B @ Sigma_post @ B.T
-
-        return (mean_post, Sigma_post)
-
-    def sample(self):
-        a = np.random.normal(size=self.K.shape[1])
-        y = self.K.matrix_sqrt() @ a
-        return y
-
-    def simulate(self, sigma=0, p_missing=0):
-        """
-        Simulates data under the specified Variance component priors
-
-        Parameters
-        ----------
-        sigma : real
-            Standard deviation of the experimental noise additional to the
-            variance components
-
-        p_missing : float between 0 and 1
-            Probability of randomly missing genotypes in the simulated output
-            data
-
-        Returns
-        -------
-        data : pd.DataFrame of shape (n_genotypes, 3)
-            DataFrame with the columns ``y_true``, ``y``and ``var``
-            corresponding to the true function at each genotype, the
-            observed values and the variance of the measurement respectively
-            for each sequence or genotype indicated in the ``DataFrame.index``
-
-        """
-        y_true = self.sample()
-        y = np.random.normal(y_true, sigma) if sigma > 0 else y_true
-        y_var = np.full(self.n_genotypes, sigma**2, dtype=float)
-
-        data = pd.DataFrame(
-            {"y_true": y_true, "y": y, "y_var": y_var}, index=self.genotypes
-        )
-
-        if p_missing > 0:
-            idxs = np.random.uniform(size=y.shape[0]) < p_missing
-            data.loc[idxs, ["y", "y_var"]] = np.nan
-        return data
+    def get_K_sqrt(self):
+        return self.K.matrix_sqrt()
 
 
 class MinimizerRegressor(SeqGaussianProcessRegressor):
     def __init__(
         self,
-        n_alleles=None,
-        seq_length=None,
-        alphabet_type="custom",
-        progress=True,
-        cg_rtol=1e-4,
-    ):
-        self.progress = progress
-        self.cg_rtol = cg_rtol
-        self.initialized = False
-
-        if seq_length is not None:
-            self.init(
-                n_alleles=n_alleles,
-                seq_length=seq_length,
-                alphabet_type=alphabet_type,
-            )
-
-    def init(
-        self,
         seq_length=None,
         n_alleles=None,
         genotypes=None,
         alphabet_type="custom",
+        progress=True,
+        cg_rtol=1e-16,
     ):
-        if not self.initialized:
-            self.define_space(
-                seq_length=seq_length,
-                n_alleles=n_alleles,
-                genotypes=genotypes,
-                alphabet_type=alphabet_type,
-            )
+        self.progress = progress
+        self.cg_rtol = cg_rtol
+        self.define_space(
+            seq_length=seq_length,
+            n_alleles=n_alleles,
+            genotypes=genotypes,
+            alphabet_type=alphabet_type,
+        )
 
     def set_data(self, X, y, y_var=None):
-        if np.any(np.isnan(y)):
-            msg = "y vector contains nans"
-            raise ValueError(msg)
-
-        self.init(genotypes=X)
-        self.n_obs = y.shape[0]
-        self.obs_idx = self.get_obs_idx(X)
-
-        self.X = X
-        self.y = y
-        self.y_var = y_var
-
-        self.n_obs = y.shape[0]
-        z = np.full(self.n_genotypes, True)
-        z[self.obs_idx] = False
-        self.pred_idx = np.where(z)[0]
-        self.Xop = SelIdxOperator(self.n_genotypes, self.obs_idx)
-        self.Zop = SelIdxOperator(self.n_genotypes, self.pred_idx)
-
-        if y_var is not None:
-            if np.any(np.isnan(y_var)):
-                msg = "y_var vector contains nans"
-                raise ValueError(msg)
-            self.D_var_inv = DiagonalOperator(1. / y_var)
-            self.D = self.Xop.transpose() @ self.D_var_inv @ self.Xop
+        self.define_space(genotypes=X)
+        self.likelihood = GaussianLikelihood(self.genotypes)
+        self.likelihood.set_data(X, y, y_var)
 
     def calc_loss_prior(self, v):
         return quad(self.C, v)
 
     def calc_posterior_mean(self):
-        if self.y_var is None:
-            C_zz = self.Zop @ self.C @ self.Zop.transpose()
-            C_zz_inv = InverseOperator(C_zz, method="cg")
-            C_zx = self.Zop @ self.C @ self.Xop.transpose()
-            mean_post = self.Xop.transpose() @ self.y
-            mean_post -= self.Zop.transpose() @ C_zz_inv @ C_zx @ self.y
+        X_t = self.likelihood.Xop.transpose()
+        y = self.likelihood.y
+        if self.likelihood.zero_var:
+            Z = self.likelihood.Zop
+            Z_t = self.likelihood.Zop.transpose()
+            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg")
+            b = Z @ self.C @ X_t @ y
+            mean_post = X_t @ y - Z_t @ C_zz_inv @ b
         else:
-            A = InverseOperator(self.C + self.D, method="cg")
-            mean_post = A @ self.Xop.transpose() @ self.D_var_inv @ self.y
+            A = InverseOperator(self.C + self.likelihood.D, method="cg")
+            mean_post = A @ X_t @ self.likelihood.D_var_inv @ y
         return mean_post
 
     def calc_posterior_covariance(self):
-        if self.y_var is None:
-            C_zz = self.Zop @ self.C @ self.Zop.transpose()
-            C_zz_inv = InverseOperator(C_zz, method="cg")
-            Sigma_post = self.Zop.transpose() @ C_zz_inv @ self.Zop
+        if self.likelihood.zero_var:
+            Z = self.likelihood.Zop
+            Z_t = self.likelihood.Zop.transpose()
+            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg")
+            Sigma_post = Z_t @ C_zz_inv @ Z
         else:
-            Sigma_post = InverseOperator(self.C + self.D, method="cg")
+            D = self.likelihood.D
+            Sigma_post = InverseOperator(self.C + D, method="cg")
         return Sigma_post
-
-    def calc_posterior(self, X_pred=None, B=None):
-        mean_post = self.calc_posterior_mean()
-        Sigma_post = self.calc_posterior_covariance()
-
-        return self.transform_posterior(
-            mean_post, Sigma_post, X_pred=X_pred, B=B
-        )
 
 
 class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
@@ -453,7 +473,7 @@ class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
         A = D @ self.C @ D + IdentityOperator(self.n_genotypes)
         Sigma_post = D @ InverseOperator(A, method="cg") @ D
         return Sigma_post
-    
+
     def calc_posterior(self, X_pred=None, B=None):
         mean_post = self.calc_posterior_mean()
         Sigma_post = self.calc_posterior_covariance(mean_post)

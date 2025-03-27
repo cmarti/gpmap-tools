@@ -69,7 +69,7 @@ def main():
     )
 
     # Create VC model, fit and predict
-    vc = VCregression(cross_validation=regularize)
+    vc = VCregression(genotypes=X, cross_validation=regularize)
 
     if lambdas_fpath is None:
         log.write("Estimate variance components through kernel alignment")

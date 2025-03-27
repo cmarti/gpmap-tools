@@ -181,6 +181,7 @@ class DataSet(object):
                 else None
             )
             model = VCregression(
+                genotypes=X,
                 cross_validation=vc_cross_validation,
                 cv_loss_function=vc_cv_loss_function,
             )

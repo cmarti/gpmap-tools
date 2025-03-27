@@ -36,44 +36,58 @@ from gpmap.utils import (
 )
 
 
-class MinimumEpistasisInterpolator(MinimizerRegressor):
+class _DeltaPpriorGP(object):
+    def get_C_lambdas(self):
+        a = self.a
+        msg = "a needs to be defined"
+        check_error(a is not None, msg=msg)
+        self.DP.calc_lambdas()
+        lambdas = np.zeros(self.DP.lambdas.shape)
+        lambdas[self.DP.P :] = (
+            self.DP.lambdas[self.DP.P :] * a / self.DP.n_p_faces
+        )
+
+        if hasattr(self, "lambdas_P_inv") and self.lambdas_P_inv is not None:
+            lambdas[: self.DP.P] = 1 / self.lambdas_P_inv
+
+        return lambdas
+
+    def get_K_sqrt(self):
+        lambdas_inv = self.get_C_lambdas()
+        lambdas = np.zeros_like(lambdas_inv)
+        idx = lambdas_inv != 0
+        lambdas[idx] = 1 / lambdas_inv[idx]
+        W_sqrt = ProjectionOperator(
+            self.n_alleles, self.seq_length, lambdas=lambdas
+        ).matrix_sqrt()
+        return W_sqrt
+
+
+class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
+    """ """
+
     def __init__(
         self,
         P=2,
         n_alleles=None,
         seq_length=None,
+        genotypes=None,
         alphabet_type="custom",
         a=None,
         cg_rtol=1e-16,
     ):
-        self.P = P
-        self.a = a
         super().__init__(
-            n_alleles=n_alleles,
             seq_length=seq_length,
+            n_alleles=n_alleles,
+            genotypes=genotypes,
             alphabet_type=alphabet_type,
             cg_rtol=cg_rtol,
         )
-
-    def init(
-        self,
-        seq_length=None,
-        n_alleles=None,
-        genotypes=None,
-        alphabet_type="custom",
-    ):
-        if not self.initialized:
-            self.define_space(
-                seq_length=seq_length,
-                n_alleles=n_alleles,
-                genotypes=genotypes,
-                alphabet_type=alphabet_type,
-            )
-            self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
-            self.s = self.DP.n_p_faces
-            self.p = self.DP.n_p_faces_genotype
-            self.initialized = True
-            self.set_a(self.a)
+        self.DP = DeltaPOperator(self.n_alleles, self.seq_length, P)
+        self.s = self.DP.n_p_faces
+        self.p = self.DP.n_p_faces_genotype
+        self.initialized = True
+        self.set_a(a)
 
     def set_a(self, a):
         self.a = a
@@ -145,9 +159,10 @@ class VCregression(GaussianProcessRegressor):
 
     def __init__(
         self,
-        lambdas=None,
         n_alleles=None,
         seq_length=None,
+        genotypes=None,
+        lambdas=None,
         alphabet_type="custom",
         beta=0,
         cross_validation=False,
@@ -170,14 +185,12 @@ class VCregression(GaussianProcessRegressor):
         self.run_cv = cross_validation
         self.set_cv_loss_function(cv_loss_function)
 
-        if seq_length is not None and (
-            n_alleles is not None or alphabet_type != "custom"
-        ):
-            self.define_space(
-                n_alleles=n_alleles,
-                seq_length=seq_length,
-                alphabet_type=alphabet_type,
-            )
+        self.define_space(
+            n_alleles=n_alleles,
+            seq_length=seq_length,
+            genotypes=genotypes,
+            alphabet_type=alphabet_type,
+        )
 
         if lambdas is not None:
             self.set_lambdas(lambdas)
@@ -188,7 +201,6 @@ class VCregression(GaussianProcessRegressor):
         K = VarianceComponentKernel(
             self.n_alleles, self.seq_length, lambdas=lambdas, k=k
         )
-        self._K_BB = None
         self.lambdas = K.lambdas
         super().__init__(base_kernel=K, progress=self.progress)
 
@@ -271,8 +283,10 @@ class VCregression(GaussianProcessRegressor):
 
         cov, ns, sigma2 = self.cov, self.ns, self.sigma2
         if cov is None or ns is None:
-            cov, ns = self.calc_covariance_distance(self.X, self.y)
-            sigma2 = np.nanmin(self.y_var)
+            cov, ns = self.calc_covariance_distance(
+                self.likelihood.X, self.likelihood.y
+            )
+            sigma2 = np.nanmin(self.likelihood.y_var)
 
         self.kernel_aligner.set_beta(beta)
         lambdas = self.kernel_aligner.fit(cov, ns, sigma2=sigma2)
@@ -325,7 +339,7 @@ class VCregression(GaussianProcessRegressor):
         self.vc_df = self.get_variance_component_df(lambdas)
 
 
-class SeqDEFT(GeneralizedGaussianProcessRegressor):
+class SeqDEFT(GeneralizedGaussianProcessRegressor, _DeltaPpriorGP):
     """
     Sequence Density Estimation using Field Theory model that allows inference
     of a complete sequence probability distribution under a Gaussian Process
@@ -358,11 +372,11 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
 
     def __init__(
         self,
-        P,
         n_alleles=None,
         seq_length=None,
         alphabet_type="custom",
         genotypes=None,
+        P=2,
         a=None,
         num_reg=20,
         nfolds=5,
@@ -376,7 +390,12 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         gtol=1e-6,
         ftol=1e-8,
     ):
-        super().__init__()
+        super().__init__(
+            seq_length=seq_length,
+            n_alleles=n_alleles,
+            genotypes=genotypes,
+            alphabet_type=alphabet_type,
+        )
         self.P = P
         self.nfolds = nfolds
 
@@ -399,38 +418,14 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         opts = {"ftol": ftol, "gtol": gtol, "maxiter": maxiter}
         optimization_opts.update(opts)
         self.optimization_opts = optimization_opts
-
-        self.initialized = False
-        self._init(
-            n_alleles=n_alleles,
-            seq_length=seq_length,
-            alphabet_type=alphabet_type,
-            genotypes=genotypes,
+        self.likelihood = SeqDEFTLikelihood(self.genotypes)
+        self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
+        self.s = self.DP.n_p_faces
+        self.kernel_basis = DeltaKernelBasisOperator(
+            self.n_alleles, self.seq_length, self.P
         )
         self.set_lambdas_P_inv(lambdas_P_inv)
         self.set_a(a)
-
-    def _init(
-        self,
-        seq_length=None,
-        n_alleles=None,
-        genotypes=None,
-        alphabet_type="custom",
-    ):
-        if not self.initialized:
-            self.define_space(
-                seq_length=seq_length,
-                n_alleles=n_alleles,
-                genotypes=genotypes,
-                alphabet_type=alphabet_type,
-            )
-            self.likelihood = SeqDEFTLikelihood(self.genotypes)
-            self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
-            self.s = self.DP.n_p_faces
-            self.kernel_basis = DeltaKernelBasisOperator(
-                self.n_alleles, self.seq_length, self.P
-            )
-            self.initialized = True
 
     def set_lambdas_P_inv(self, lambdas_P_inv):
         if lambdas_P_inv is None:
@@ -512,7 +507,10 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         total_folds = a_values.shape[0] * self.nfolds
 
         cv_splits = get_CV_splits(
-            X=self.X, y=self.y, y_var=self.y_var, nfolds=self.nfolds
+            X=self.likelihood.X,
+            y=self.likelihood.y,
+            y_var=None,
+            nfolds=self.nfolds,
         )
         cv_iter = get_cv_iter(cv_splits, a_values)
         cv_logL = self.calc_cv_loss(cv_iter, total_folds)
@@ -583,11 +581,11 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         samples = []
         sampler = HMC(logp, logp_grad, step_size=0.1, path_length=10)
         for _ in range(n_chains):
-            x0 = self.simulate_phi()
+            x0 = self.sample_prior()
             for s in sampler.sample(x0=x0, n_samples=n_samples):
                 samples.append(s)
 
-            # start = {"x": self.simulate_phi(self.a)}
+            # start = {"x": self.sample_prior(self.a)}
             # sampler = NUTS(logp, start=start, grad_logp=True,
             #                 target_accept=0.9, **kwargs)
             # for s in sampler.sample(n_chains=1, num=2 * n_samples,
@@ -595,40 +593,6 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             #     samples.append(s[0])
         samples = np.array(samples)
         return samples
-
-    def get_C_lambdas(self):
-        a = self.a
-        self.DP.calc_lambdas()
-        lambdas = np.zeros(self.DP.lambdas.shape)
-        lambdas[self.P :] = a * self.DP.lambdas[self.P :] / self.DP.n_p_faces
-
-        if self.lambdas_P_inv is not None:
-            lambdas[: self.P] = 1 / self.lambdas_P_inv
-
-        return lambdas
-
-    def simulate_phi(self):
-        """
-        Simulates data under the specified `a` penalization for
-        local P-epistatic coefficients
-
-        Returns
-        -------
-        phi : array-like of shape (n_genotypes,)
-            Vector containing values for the latent phenotype or field
-            sampled from the prior characterized by `a`
-        """
-
-        x = np.random.normal(size=self.n_genotypes)
-        lambdas_inv = self.get_C_lambdas()
-        lambdas = np.zeros_like(lambdas_inv)
-        idx = lambdas_inv != 0
-        lambdas[idx] = 1 / lambdas_inv[idx]
-        W_sqrt = ProjectionOperator(
-            self.n_alleles, self.seq_length, lambdas=lambdas
-        ).matrix_sqrt()
-        phi = W_sqrt @ x
-        return phi
 
     def set_baseline(self, X=None, baseline_phi=None):
         if baseline_phi is None:
@@ -651,11 +615,6 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         adjust_freqs=False,
         allele_freqs=None,
     ):
-        self.X = X
-        self.y = y
-        self.y_var = None
-
-        self.init(genotypes=get_subsequences(X, positions=positions))
         self.positions = positions
         self.adjust_freqs = adjust_freqs
         self.phylo_correction = phylo_correction
@@ -830,7 +789,7 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         self.total_folds = self.nfolds * (self.num_reg + 2)
         return a_values
 
-    def simulate(self, N, phi=None, seed=None):
+    def simulate(self, N, seed=None):
         """
         Simulates data under the specified `a` penalization for
         local P-epistatic coefficients
@@ -840,38 +799,19 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         N : int
             Number of total sequences to sample
 
-        phi : array-like of shape (n_genotypes,)
-            Vector containing values for the field underlying the probability
-            distribution from which to sample sequences. If provided, they
-            will be used instead of sampling them from the prior characterized
-            by the given `a`.
-
         seed: int (None)
             Random seed to use for simulation
 
         Returns
         -------
+        phi : array-like of shape (N,)
+            Vector containing the true phie from which samples were generated
         X : array-like of shape (N,)
             Vector containing the sampled sequences from the probability
             distribution
         """
-
-        if seed is not None:
-            np.random.seed(seed)
-
-        if phi is not None:
-            check_error(
-                phi.shape == (self.n_genotypes,),
-                msg='Ensure "phi" has the shape (n_genotypes,)',
-            )
-        else:
-            check_error(
-                self.a is not None, '"a" must be provided if "phi=None"'
-            )
-            phi = self.simulate_phi()
-
-        X = self.likelihood.sample(phi, N)
-        return X
+        phi, X = self._simulate(seed=seed, N=N)
+        return phi, X
 
 
 def D_geo(phi1, phi2):
