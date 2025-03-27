@@ -154,7 +154,7 @@ class MEITests(unittest.TestCase):
         model2.set_data(X, y, y_var)
         model2.C = kernel.inv()
         mu2, Sigma2 = model2.calc_posterior()
-        assert(np.allclose(mu1, mu2, atol=1e-4))
+        assert np.allclose(mu1, mu2, atol=1e-4)
 
     def test_regression(self):
         # Partial dataset that can recapitulate MEI
@@ -208,7 +208,7 @@ class MEITests(unittest.TestCase):
             seq_length=seq_length,
             a=a,
         )
-        y_true, X, y, y_var = model.simulate(y_var=1.)
+        y_true, X, y, y_var = model.simulate(y_var=1.0)
         idx = np.random.uniform(size=X.shape[0]) < 0.98
         X_test, y_test_true = X[~idx], y_true[~idx]
         X, y, y_var = X[idx], y[idx], y_var[idx]
@@ -250,6 +250,48 @@ class MEITests(unittest.TestCase):
             & (y_test_true < pred["ci_95_upper"])
         )
         assert calibration > 0.9
+
+    def test_mei_predict(self):
+        np.random.seed(0)
+        model = MinimumEpistasisInterpolator(
+            seq_length=5, alphabet_type="dna", a=100
+        )
+        f, X, y, y_var = model.simulate(y_var=0.1, p_missing=0.1)
+        idx = model.genotype_idxs.loc[X]
+        X_test = np.delete(model.genotypes, idx)
+        f_test = np.delete(f, idx)
+
+        # Interpolation solution
+        model.set_data(X, y)
+        pred = model.predict(X_test)
+        r = pearsonr(pred["y"], f_test)[0]
+        assert r > 0.5
+
+        # Interpolation solution with variances
+        model = MinimumEpistasisInterpolator(
+            seq_length=5, alphabet_type="dna", a=100
+        )
+        model.set_data(X, y)
+        pred = model.predict(X_test, calc_variance=True)
+        r = pearsonr(pred["y"], f_test)[0]
+        p = np.mean(
+            (pred["ci_95_lower"] < f_test) & (f_test < pred["ci_95_upper"])
+        )
+        assert r > 0.5
+        assert p > 0.9
+        
+        # GP with precision matrix and experimental variances
+        model = MinimumEpistasisInterpolator(
+            seq_length=5, alphabet_type="dna", a=100
+        )
+        model.set_data(X, y, y_var)
+        pred = model.predict(X_test, calc_variance=True)
+        r = pearsonr(pred["y"], f_test)[0]
+        p = np.mean(
+            (pred["ci_95_lower"] < f_test) & (f_test < pred["ci_95_upper"])
+        )
+        assert r > 0.5
+        assert p > 0.9
 
 
 if __name__ == "__main__":
