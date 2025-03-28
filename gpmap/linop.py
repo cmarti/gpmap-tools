@@ -492,6 +492,9 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.kernel_dimension = np.sum(self.m_k[: self.P])
         self.rank = self.n - self.kernel_dimension
 
+    def calc_kernel_basis(self):
+        return DeltaKernelBasisOperator(self.alpha, self.seq_length, self.P)
+
     def calc_n_p_faces_genotype(self):
         n_mut = self.seq_length * (self.alpha - 1)
         self.n_p_faces_genotype = float(comb(n_mut, self.P))
@@ -885,6 +888,7 @@ class DeltaKernelBasisOperator(StackedOperator):
         self.seq_length = seq_length
         As = [EigenBasisOperator(n_alleles, seq_length, k) for k in range(P)]
         self.m_k = [A.shape[1] for A in As]
+        self.rank = np.sum(self.m_k)
         super().__init__(linops=As, axis=1)
 
 
