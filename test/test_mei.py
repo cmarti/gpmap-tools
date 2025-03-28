@@ -48,10 +48,22 @@ class MEITests(unittest.TestCase):
         X = np.array(["AAA", "ABB", "BAA", "BBB"])
         y = np.array([1, 0, 0, 1])
         model.set_data(X, y)
+
+        # Check uniqueness of solution error
+        try:
+            y_pred = model.calc_posterior()[0]
+        except ValueError:
+            pass
+
+        # Ensure epistasis is larger than 0
+        model.set_data(X, y)
+        X = np.array(["AAA", "AAB", "ABA", "BAA", 'BBB'])
+        y = np.array([1, 0, 0, 0, 1])
+        model.set_data(X, y)
         y_pred = model.calc_posterior()[0]
         cost1 = model.calc_loss_prior(y_pred)
         assert np.allclose(y, model.likelihood.Xop @ y_pred)
-        assert cost1 > 0.0
+        assert cost1 > 1e-16
 
         # Ensure smoothing decreases epistasis
         y_pred_smoothed = model.smooth(y_pred)

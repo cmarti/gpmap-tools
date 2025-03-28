@@ -107,7 +107,18 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
         else:
             return super().calc_posterior_covariance()
 
+    def check_unique_solution(self):
+        basis = self.DP.calc_kernel_basis()
+        r1 = basis.rank
+        r2 = np.linalg.matrix_rank(
+            self.likelihood.Xop @ basis @ np.eye(basis.shape[1])
+        )
+        if r2 < r1:
+            msg = "Minimum epistasis interpolation does not have a unique solution"
+            raise ValueError(msg)
+
     def calc_posterior(self, X_pred=None, B=None):
+        self.check_unique_solution()
         mean_post = self.calc_posterior_mean()
         if self.a is None:
             Sigma_post = None
