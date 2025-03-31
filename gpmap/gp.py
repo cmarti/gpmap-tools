@@ -70,6 +70,42 @@ class SeqGaussianProcessRegressor(object):
         genotypes=None,
         alphabet_type="custom",
     ):
+        """
+        Define the genotype space configuration for the object.
+
+        This method sets up the genotype space by either inferring it from
+        provided genotypes or constructing it based on sequence length and
+        the number of alleles.
+
+        seq_length : int, optional
+            The length of the sequences in the genotype space. Required if
+            `genotypes` is not provided. Defaults to None.
+        n_alleles : int, optional
+            The number of alleles per position in the sequence. Required if
+            `genotypes` is not provided. Defaults to None.
+        genotypes : list of str, optional
+            A list of genotypes to infer the space configuration from. If
+            provided, `seq_length` and `n_alleles` will be inferred from
+            this list. Defaults to None.
+        alphabet_type: str
+            The type of alphabet to use when constructing the genotype space.
+            Options include "custom", "dna", "rna", or "protein". Defaults to "custom".
+
+        Raises
+        ------
+        ValueError
+            If neither `seq_length` nor `genotypes` is provided.
+
+        Notes
+        -----
+        - If `genotypes` is provided, the method will attempt to infer the
+          sequence length, alphabet, and number of alleles from the given
+          genotypes.
+        - If `genotypes` is not provided, the method will construct the
+          genotype space using the specified `seq_length`, `n_alleles`, and
+          `alphabet_type`.
+
+        """
         if genotypes is not None:
             configuration = guess_space_configuration(
                 genotypes,
@@ -108,18 +144,24 @@ class SeqGaussianProcessRegressor(object):
 
     def sample_prior(self):
         """
-        Samples from the prior distribution.
+        Generate a sample from the prior distribution.
 
-        This method generates a sample from the prior distribution by drawing
-        random values from a standard normal distribution and transforming them
-        using the square root of the covariance matrix.
+        This method samples from the prior distribution by drawing random values
+        from a standard normal distribution and transforming them using the square
+        root of the covariance matrix. The resulting sample represents a realization
+        of the prior distribution over genotypes.
 
-        Returns:
-            numpy.ndarray: A sample from the prior distribution of shape (n_genotypes,)
+        Returns
+        -------
+            f: numpy.ndarray
+                A 1D array of shape (n_genotypes,) representing a sample from the prior
+                distribution. Each element corresponds to a genotype's value drawn from
+                the prior.
+
         """
         a = np.random.normal(size=self.n_genotypes)
-        y = self.get_K_sqrt() @ a
-        return y
+        f = self.get_K_sqrt() @ a
+        return f
 
     def _simulate(self, seed=None, **kwargs):
         if seed is not None:
@@ -152,7 +194,7 @@ class SeqGaussianProcessRegressor(object):
 
         Returns
         -------
-        y_true : array-like
+        f : array-like
             The true simulated measurements without experimental noise.
         X : array-like
             The input sequences used for the simulation.
@@ -169,9 +211,9 @@ class SeqGaussianProcessRegressor(object):
         Examples
         --------
         Simulate data with default parameters:
-        >>> y_true, X, y, y_var = gp.simulate()
+        >>> f, X, y, y_var = gp.simulate()
         Simulate data with custom noise and missing probability:
-        >>> y_true, X, y, y_var = gp.simulate(y_var=0.1, p_missing=0.2, seed=42)
+        >>> f, X, y, y_var = gp.simulate(y_var=0.1, p_missing=0.2, seed=42)
         """
 
         if X is None:
@@ -190,8 +232,8 @@ class SeqGaussianProcessRegressor(object):
             msg = "y_var shape should match X shape"
             raise ValueError(msg)
         self.likelihood.set_data(X, None, y_var)
-        y_true, y = self._simulate(seed=seed)
-        return (y_true, X, y, y_var)
+        f, y = self._simulate(seed=seed)
+        return (f, X, y, y_var)
 
     def _transform_posterior(self, mean, cov, B):
         mean = B @ mean
@@ -218,18 +260,51 @@ class SeqGaussianProcessRegressor(object):
     def calc_posterior(self, X_pred=None, B=None):
         """
         Calculate the posterior distribution for the given inputs.
-        This method computes the posterior mean and covariance.
+
+        This method computes the posterior mean and covariance for the 
+        specified prediction points or the entire sequence space. Optionally, 
+        a linear transformation can be applied to the posterior distribution.
+
         Parameters
         ----------
-        X_pred (optional): Prediction points where the posterior is
-            evaluated. Defaults to None.
-        B (optional): Linear transformation to apply to the posterior over
-            the complete space of possible sequences. Defaults to None.
+        X_pred : array-like, optional
+            Prediction points (genotypes) where the posterior distribution 
+            is evaluated. If `None`, the posterior is computed for the entire 
+            sequence space. Default is `None`.
+        B : array-like or scipy.sparse.linalg.LinearOperator, optional
+            Linear transformation to apply to the posterior distribution over 
+            the complete space of possible sequences. If `None`, no 
+            transformation is applied. Default is `None`.
 
         Returns
         -------
-        mu, Sigma: Transformed posterior distribution in the form of
-            a tuple containing the transformed mean and covariance.
+        mu : numpy.ndarray
+            The transformed posterior mean, either for the specified prediction 
+            points or the entire sequence space.
+        Sigma : numpy.ndarray or scipy.sparse.linalg.LinearOperator
+            The transformed posterior covariance matrix, either for the 
+            specified prediction points or the entire sequence space.
+
+        Notes
+        -----
+        - The posterior mean and covariance are computed using the Gaussian 
+          Process prior and the observed data.
+        - If `X_pred` is provided, the posterior is evaluated only for the 
+          specified prediction points.
+        - If `B` is provided, the posterior distribution is transformed using 
+          the specified linear operator or matrix.
+
+        Examples
+        --------
+        Compute the posterior distribution for the entire sequence space:
+        >>> mu, Sigma = gp.calc_posterior()
+
+        Compute the posterior distribution for specific prediction points:
+        >>> mu, Sigma = gp.calc_posterior(X_pred=["AAA", "AAC"])
+
+        Apply a linear transformation to the posterior distribution:
+        >>> B = np.array([[1, 0, 0], [0, 1, 0]])
+        >>> mu, Sigma = gp.calc_posterior(B=B)
         """
 
         mean_post = self.calc_posterior_mean()
@@ -242,22 +317,30 @@ class SeqGaussianProcessRegressor(object):
     def make_contrasts(self, contrast_matrix):
         """
         Computes the posterior distribution of linear combinations of genotypes
-        under the specific Gaussian Process prior.
+        under the specified Gaussian Process prior.
+
+        This method calculates the posterior mean, standard deviation, 
+        95% credible intervals, and the posterior probability for each 
+        linear combination of genotypes defined in the contrast matrix.
 
         Parameters
         ----------
-        contrast_matrix: pd.DataFrame of shape (n_genotypes, n_contrasts)
-            DataFrame containing the linear combinations of genotypes for
-            which to compute the summary of the posterior distribution
+        contrast_matrix : pd.DataFrame of shape (n_genotypes, n_contrasts)
+            A DataFrame where each column represents a linear combination 
+            of genotypes (contrast) for which the posterior distribution 
+            is to be computed. The index should correspond to the genotypes.
 
         Returns
         -------
-        contrasts: pd.DataFrame of shape (n_contrasts, 5)
-            DataFrame containing the summary of the posterior for each of
-            the posterior standard deviation, lower and upper bound
-            for the 95 % credible interval and the posterior
-            probability for each quantity to be larger or smaller than 0.
-
+        contrasts : pd.DataFrame of shape (n_contrasts, 5)
+            A DataFrame summarizing the posterior distribution for each 
+            contrast. The columns include:
+            - ``estimate``: Posterior mean for each contrast.
+            - ``std``: Posterior standard deviation for each contrast.
+            - ``ci_95_lower``: Lower bound of the 95% credible interval.
+            - ``ci_95_upper``: Upper bound of the 95% credible interval.
+            - ``p(|x|>0)``: Posterior probability that the absolute value 
+              of the contrast is greater than 0.
         """
         X_pred = contrast_matrix.index.values
         contrast_names = contrast_matrix.columns.values
@@ -289,40 +372,58 @@ class SeqGaussianProcessRegressor(object):
 
     def predict(self, X_pred=None, calc_variance=False):
         """
-        Compute the Maximum a Posteriori (MAP) estimate of the phenotype at
-        the provided or all genotypes
+        Compute the Maximum a Posteriori (MAP) estimate of the phenotype for 
+        the specified genotypes or the entire genotype space.
 
         Parameters
         ----------
-        X_pred : array-like of shape (n_genotypes,)
-            Vector containing the genotypes for which we want to predict the
-            phenotype. If `n_genotypes == None` then predictions are provided
-            for the whole sequence space
+        X_pred : array-like of shape (n_genotypes,), optional
+            Array containing the genotypes for which the phenotype predictions 
+            are desired. If `X_pred` is None, predictions are computed for the 
+            entire sequence space.
 
-        calc_variance : bool (False)
-            Option to also return the posterior variances for each individual
-            genotype
+        calc_variance : bool, optional, default=False
+            If True, the posterior variances and standard deviations for each 
+            genotype are also computed and included in the output.
 
         Returns
         -------
-        function : pd.DataFrame of shape (n_genotypes, 1)
-                   Returns the phenotypic predictions for each input genotype
-                   in the column ``ypred`` and genotype labels as row names.
-                   If ``calc_variance=True``, then it has an additional
-                   column with the posterior variances for each genotype
+        pred : pd.DataFrame of shape (n_genotypes, n_columns)
+            A DataFrame containing the predicted phenotypes for each input 
+            genotype in the column ``f``. If ``calc_variance=True``, additional 
+            columns are included:
+            - ``f_var``: Posterior variance for each genotype.
+            - ``f_std``: Posterior standard deviation for each genotype.
+            - ``ci_95_lower``: Lower bound of the 95% credible interval.
+            - ``ci_95_upper``: Upper bound of the 95% credible interval.
+            The genotype labels are used as the row index.
+
+        Notes
+        -----
+        - The MAP estimate is computed using the posterior mean.
+        - If `calc_variance` is enabled, the credible intervals are calculated 
+          as mean ± 2 * standard deviation.
+
+        Examples
+        --------
+        Predict phenotypes for the entire genotype space:
+        >>> pred = model.predict()
+
+        Predict phenotypes for specific genotypes with variance:
+        >>> pred = model.predict(X_pred=["AAA", "AAC"], calc_variance=True)
         """
 
         t0 = time()
         post_mean, Sigma = self.calc_posterior(X_pred=X_pred)
 
         seqs = self.genotypes if X_pred is None else X_pred
-        pred = pd.DataFrame({"y": post_mean}, index=seqs)
+        pred = pd.DataFrame({"f": post_mean}, index=seqs)
 
         if calc_variance:
-            pred["y_var"] = get_diag(Sigma, progress=True)
-            pred["std"] = np.sqrt(pred["y_var"])
-            pred["ci_95_lower"] = pred["y"] - 2 * pred["std"]
-            pred["ci_95_upper"] = pred["y"] + 2 * pred["std"]
+            pred["f_var"] = get_diag(Sigma, progress=True)
+            pred["f_std"] = np.sqrt(pred["f_var"])
+            pred["ci_95_lower"] = pred["f"] - 2 * pred["f_std"]
+            pred["ci_95_upper"] = pred["f"] + 2 * pred["f_std"]
 
         self.pred_time = time() - t0
         return pred
