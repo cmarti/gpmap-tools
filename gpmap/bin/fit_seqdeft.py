@@ -104,9 +104,10 @@ def main():
                 fhand.write("{}\n".format(a_value))
     else:
         log.write("Fitting SeqDEFT model to observed data")
-        result = seqdeft.fit(
+        seqdeft.fit(
             X=X, y=y, phylo_correction=phylo_correction, positions=positions
         )
+        result = seqdeft.predict()
 
         log.write("Writing output to {}".format(out_fpath))
         write_dataframe(result, out_fpath)
