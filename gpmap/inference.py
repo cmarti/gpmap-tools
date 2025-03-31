@@ -26,9 +26,6 @@ from gpmap.linop import (
     VarianceComponentKernel,
     calc_covariance_distance,
 )
-from gpmap.seq import (
-    get_subsequences,
-)
 from gpmap.utils import (
     check_error,
     get_cv_iter,
@@ -36,44 +33,91 @@ from gpmap.utils import (
 )
 
 
-class MinimumEpistasisInterpolator(MinimizerRegressor):
+class _DeltaPpriorGP(object):
+    def get_C_lambdas(self):
+        a = self.a
+        msg = "a needs to be defined"
+        check_error(a is not None, msg=msg)
+        self.DP.calc_lambdas()
+        lambdas = np.zeros(self.DP.lambdas.shape)
+        lambdas[self.DP.P :] = (
+            self.DP.lambdas[self.DP.P :] * a / self.DP.n_p_faces
+        )
+
+        if hasattr(self, "lambdas_P_inv") and self.lambdas_P_inv is not None:
+            lambdas[: self.DP.P] = 1 / self.lambdas_P_inv
+
+        return lambdas
+
+    def get_K_sqrt(self):
+        lambdas_inv = self.get_C_lambdas()
+        lambdas = np.zeros_like(lambdas_inv)
+        idx = lambdas_inv != 0
+        lambdas[idx] = 1 / lambdas_inv[idx]
+        W_sqrt = ProjectionOperator(
+            self.n_alleles, self.seq_length, lambdas=lambdas
+        ).matrix_sqrt()
+        return W_sqrt
+
+
+class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
+    """
+    A class for performing Minimum Epistasis Interpolation (MEI) to infer
+    complete genotype-phenotype maps from incomplete and noisy data. This
+    model applies a prior that penalizes local epistatic coefficients of
+    order P and infers the posterior distribution based on experimental
+    data for a subset of sequences.
+
+    Parameters
+    ----------
+    n_alleles : int, optional
+        The number of alleles per site. If not provided, it will be inferred
+        from the data.
+
+    seq_length : int, optional
+        The length of the genotype sequences. If not provided, it will be
+        inferred from the data.
+
+    genotypes : array-like, optional
+        A list or array of genotypes to be used in the interpolation.
+
+    alphabet_type : str, optional
+        The type of alphabet used for genotypes. Default is "custom".
+
+    P : int, optional
+        The order of epistasis to consider. Default is 2.
+
+    a : float, optional
+        The regularization parameter. If not provided, it will be inferred
+        during fitting.
+
+    cg_rtol : float, optional
+        The relative tolerance for the conjugate gradient solver. Default is
+        1e-16.
+    """
+
     def __init__(
         self,
-        P=2,
         n_alleles=None,
         seq_length=None,
+        genotypes=None,
         alphabet_type="custom",
+        P=2,
         a=None,
         cg_rtol=1e-16,
     ):
-        self.P = P
-        self.a = a
         super().__init__(
-            n_alleles=n_alleles,
             seq_length=seq_length,
+            n_alleles=n_alleles,
+            genotypes=genotypes,
             alphabet_type=alphabet_type,
             cg_rtol=cg_rtol,
         )
-
-    def init(
-        self,
-        seq_length=None,
-        n_alleles=None,
-        genotypes=None,
-        alphabet_type="custom",
-    ):
-        if not self.initialized:
-            self.define_space(
-                seq_length=seq_length,
-                n_alleles=n_alleles,
-                genotypes=genotypes,
-                alphabet_type=alphabet_type,
-            )
-            self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
-            self.s = self.DP.n_p_faces
-            self.p = self.DP.n_p_faces_genotype
-            self.initialized = True
-            self.set_a(self.a)
+        self.DP = DeltaPOperator(self.n_alleles, self.seq_length, P)
+        self.s = self.DP.n_p_faces
+        self.p = self.DP.n_p_faces_genotype
+        self.initialized = True
+        self.set_a(a)
 
     def set_a(self, a):
         self.a = a
@@ -93,7 +137,18 @@ class MinimumEpistasisInterpolator(MinimizerRegressor):
         else:
             return super().calc_posterior_covariance()
 
+    def check_unique_solution(self):
+        basis = self.DP.calc_kernel_basis()
+        r1 = basis.rank
+        r2 = np.linalg.matrix_rank(
+            self.likelihood.Xop @ basis @ np.eye(basis.shape[1])
+        )
+        if r2 < r1:
+            msg = "Minimum epistasis interpolation does not have a unique solution"
+            raise ValueError(msg)
+
     def calc_posterior(self, X_pred=None, B=None):
+        self.check_unique_solution()
         mean_post = self.calc_posterior_mean()
         if self.a is None:
             Sigma_post = None
@@ -105,25 +160,28 @@ class MinimumEpistasisInterpolator(MinimizerRegressor):
 
     def fit(self, X, y, y_var=None):
         """
-        Infers the optimal `a` from the provided data by computing the
-        Minimum epistasis interpolation solution and finds the `a` such
-        that the expected average squared Pth epistatic coefficients
-        match that of the MEI solution.
+        Fits the Minimum Epistasis Interpolation (MEI) model hyperparameter
+        to the provided data.
+
+        This method infers the optimal regularization parameter `a` by computing
+        the Minimum Epistasis Interpolation solution. It determines the value of `a`
+        such that the expected average squared Pth epistatic coefficients match
+        those of the MEI solution.
 
         Parameters
         ----------
         X : array-like of shape (n_obs,)
-            Vector containing the genotypes for which have observations
-            provided by `y`
+            Array containing the genotypes for which observations are provided
+            in `y`.
 
         y : array-like of shape (n_obs,)
-            Vector containing the observed phenotypes corresponding to `X`
-            sequences
+            Array containing the observed phenotypes corresponding to the
+            genotypes in `X`.
 
-        y_var : array-like of shape (n_obs,)
-            Vector containing the empirical or experimental known variance for
-            the measurements in `y`
-
+        y_var : array-like of shape (n_obs,), optional
+            Array containing the empirical or experimental variance for the
+            measurements in `y`. If not provided, it is assumed to be uniform
+            or unknown.
         """
         self.set_data(X, y)
         mean = self.calc_posterior_mean()
@@ -134,21 +192,70 @@ class MinimumEpistasisInterpolator(MinimizerRegressor):
 
 class VCregression(GaussianProcessRegressor):
     """
-    Variance Component regression model that allows inference and prediction
-    of a scalar function in sequence spaces under a Gaussian Process prior
-    parametrized by the contribution of the different orders of interaction
-    to the observed genetic variability of a continuous phenotype
+    Variance Component regression model for sequence-function relationships.
 
-    It requires the use of the same number of alleles per sites
+    This model enables the inference and prediction of a scalar function in
+    sequence spaces under a Gaussian Process prior. The prior is parameterized
+    by the contribution of different orders of interaction to the observed
+    genetic variability of a continuous phenotype.
 
+    Parameters
+    ----------
+    n_alleles : int, optional
+        The number of alleles per site. If not provided, it will be inferred
+        from the data.
+
+    seq_length : int, optional
+        The length of the genotype sequences. If not provided, it will be
+        inferred from the data.
+
+    genotypes : array-like, optional
+        A list or array of genotypes to be used in the interpolation.
+
+    alphabet_type : str, optional
+        The type of alphabet used for genotypes. Default is "custom".
+
+    lambdas : array-like, optional
+        Variance components for each order of interaction. If not provided,
+        they will be inferred during fitting.
+
+    beta : float, optional
+        The regularization parameter for the kernel alignment. Default is 0.
+
+    cross_validation : bool, optional
+        Whether to perform cross-validation to select the best penalization
+        constant for regularized variance component inference. Default is False.
+
+    nfolds : int, optional
+        The number of folds for cross-validation. Default is 5.
+
+    cv_loss_function : str, optional
+        The loss function to use during cross-validation. Options are 
+        "frobenius_norm", "logL", or "r2". Default is "frobenius_norm".
+
+    num_beta : int, optional
+        The number of beta values to evaluate during cross-validation. Default is 20.
+
+    min_log_beta : float, optional
+        The minimum log10(beta) value for cross-validation. Default is -2.
+
+    max_log_beta : float, optional
+        The maximum log10(beta) value for cross-validation. Default is 7.
+
+    cg_rtol : float, optional
+        The relative tolerance for the conjugate gradient solver. Default is 1e-16.
+
+    progress : bool, optional
+        Whether to display progress bars during fitting. Default is True.
     """
 
     def __init__(
         self,
-        lambdas=None,
         n_alleles=None,
         seq_length=None,
+        genotypes=None,
         alphabet_type="custom",
+        lambdas=None,
         beta=0,
         cross_validation=False,
         nfolds=5,
@@ -170,14 +277,12 @@ class VCregression(GaussianProcessRegressor):
         self.run_cv = cross_validation
         self.set_cv_loss_function(cv_loss_function)
 
-        if seq_length is not None and (
-            n_alleles is not None or alphabet_type != "custom"
-        ):
-            self.define_space(
-                n_alleles=n_alleles,
-                seq_length=seq_length,
-                alphabet_type=alphabet_type,
-            )
+        self.define_space(
+            n_alleles=n_alleles,
+            seq_length=seq_length,
+            genotypes=genotypes,
+            alphabet_type=alphabet_type,
+        )
 
         if lambdas is not None:
             self.set_lambdas(lambdas)
@@ -188,11 +293,38 @@ class VCregression(GaussianProcessRegressor):
         K = VarianceComponentKernel(
             self.n_alleles, self.seq_length, lambdas=lambdas, k=k
         )
-        self._K_BB = None
         self.lambdas = K.lambdas
         super().__init__(base_kernel=K, progress=self.progress)
 
     def set_data(self, X, y, y_var=None, cov=None, ns=None):
+        """
+        Set the data for the Variance Component regression model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Array containing the genotypes for which observations are provided.
+
+        y : array-like of shape (n_obs,)
+            Array containing the observed phenotypes corresponding to the genotypes in `X`.
+
+        y_var : array-like of shape (n_obs,), optional
+            Array containing the empirical or experimental variance for the measurements in `y`.
+            If not provided, it is assumed to be uniform or unknown.
+
+        cov : array-like, optional
+            Precomputed covariance matrix or related data. If not provided, it will be calculated
+            from the input data.
+
+        ns : array-like, optional
+            Additional data or parameters related to the model. If not provided, it will be
+            calculated from the input data.
+
+        Notes
+        -----
+        - Providing `cov` and `ns` can save computational resources, as they will not be recalculated
+          from the input data.
+        """
         super().set_data(X, y, y_var=y_var)
         self.cov = cov
         self.ns = ns
@@ -253,7 +385,7 @@ class VCregression(GaussianProcessRegressor):
 
         else:
             self.set_lambdas(lambdas)
-            ypred = self.predict(X)["y"].values
+            ypred = self.predict(X)["f"].values
 
             if self.cv_loss_function == "logL":
                 loss = -norm.logpdf(y, loc=ypred, scale=np.sqrt(y_var)).sum()
@@ -271,8 +403,10 @@ class VCregression(GaussianProcessRegressor):
 
         cov, ns, sigma2 = self.cov, self.ns, self.sigma2
         if cov is None or ns is None:
-            cov, ns = self.calc_covariance_distance(self.X, self.y)
-            sigma2 = np.nanmin(self.y_var)
+            cov, ns = self.calc_covariance_distance(
+                self.likelihood.X, self.likelihood.y
+            )
+            sigma2 = np.nanmin(self.likelihood.y_var)
 
         self.kernel_aligner.set_beta(beta)
         lambdas = self.kernel_aligner.fit(cov, ns, sigma2=sigma2)
@@ -280,33 +414,32 @@ class VCregression(GaussianProcessRegressor):
 
     def fit(self, X, y, y_var=None):
         """
-        Infers the variance components from the provided data, this is,
-        the relative contribution of the different orders of interaction
-        to the variability in the sequence-function relationships
+        Infers the Variance Components from the provided data.
 
-        Stores learned `lambdas` in the attribute VCregression.lambdas
-        to use internally for predictions and returns them as output
+        This method infers the variance components, which represent the relative
+        contribution of different orders of interaction to the variability in the
+        sequence-function relationships. Variance components are determined through
+        kernel alignment with the empirical distance-covariance function.
+
+        After fitting, the optimal variance components (`lambdas`) are stored in
+        the `VCregression.lambdas` attribute for use in predictions.
 
         Parameters
         ----------
         X : array-like of shape (n_obs,)
-            Vector containing the genotypes for which have observations
-            provided by `y`
+            Array containing the genotypes for which observations are provided
+            in `y`.
 
         y : array-like of shape (n_obs,)
-            Vector containing the observed phenotypes corresponding to `X`
-            sequences
+            Array containing the observed phenotypes corresponding to the
+            genotypes in `X`.
 
-        y_var : array-like of shape (n_obs,)
-            Vector containing the empirical or experimental known variance for
-            the measurements in `y`
-
-        Returns
-        -------
-        lambdas: array-like of shape (seq_length + 1,)
-            Variances for each order of interaction k inferred from the data
-
+        y_var : array-like of shape (n_obs,), optional
+            Array containing the empirical or experimental variance for the
+            measurements in `y`. If not provided, it is assumed to be uniform
+            or unknown.
         """
+
         t0 = time()
         self.define_space(genotypes=X)
         self.kernel_aligner = VCKernelAligner(
@@ -325,44 +458,74 @@ class VCregression(GaussianProcessRegressor):
         self.vc_df = self.get_variance_component_df(lambdas)
 
 
-class SeqDEFT(GeneralizedGaussianProcessRegressor):
+class SeqDEFT(GeneralizedGaussianProcessRegressor, _DeltaPpriorGP):
     """
-    Sequence Density Estimation using Field Theory model that allows inference
-    of a complete sequence probability distribution under a Gaussian Process
-    prior parameterized by variance of local epistatic coefficients of order P
+    Model for inference of a genotype-phenotype map from observations of sequences.
 
-    It requires the use of the same number of alleles per sites
+    Sequence Density Estimation using Field Theory (SeqDEFT) model for inferring
+    a complete sequence probability distribution under a Gaussian Process prior.
+    The prior is parameterized by the variance of local epistatic coefficients
+    of order P.
 
     Parameters
     ----------
     P : int
-        Order of the local interaction coefficients that we are penalized
-        under the prior i.e. `P=2` penalizes local pairwise interaction
-        across all posible faces of the Hamming graph while `P=3` penalizes
-        local 3-way interactions across all possible cubes.
+        The order of local interaction coefficients penalized under the prior.
+        For example, `P=2` penalizes local pairwise interactions across all
+        possible faces of the Hamming graph, while `P=3` penalizes local
+        3-way interactions across all possible cubes.
 
-    a : float (None)
-        Parameter related to the inverse of the variance of the P-order
-        epistatic coefficients that are being penalized. Larger values
-        induce stronger penalization and approximation to the
-        Maximum-Entropy model of order P-1. If `a=None` the best a is found
-        through cross-validation
+    a : float, optional, default=None
+        A parameter related to the inverse variance of the P-order epistatic
+        coefficients being penalized. Larger values induce stronger penalization,
+        approximating the Maximum-Entropy model of order P-1. If `a=None`, the
+        optimal value of `a` is determined through cross-validation.
 
-    num_reg : int (20)
-        Number of a values to evaluate through cross-validation
+    num_reg : int, optional, default=20
+        The number of `a` values to evaluate during the cross-validation procedure.
 
-    nfolds: int (5)
-        Number of folds to use in the cross-validation procedure
+    nfolds : int, optional, default=5
+        The number of folds to use in the cross-validation procedure.
 
+    lambdas_P_inv : array-like, optional, default=None
+        The inverse of the variance components for the first P orders of interaction.
+        If provided, these values are used to regularize the kernel basis.
+
+    a_resolution : float, optional, default=0.1
+        The resolution for determining the range of `a` values during cross-validation.
+
+    max_a_max : float, optional, default=1e12
+        The maximum value of `a` to consider during cross-validation.
+
+    fac_max : float, optional, default=0.1
+        A factor to determine the maximum value of `a` relative to the number of
+        P-order faces in the Hamming graph.
+
+    fac_min : float, optional, default=1e-6
+        A factor to determine the minimum value of `a` relative to the number of
+        P-order faces in the Hamming graph.
+
+    optimization_opts : dict, optional, default={}
+        A dictionary of options for the optimization procedure used to calculate
+        the maximum entropy model.
+
+    maxiter : int, optional, default=10000
+        The maximum number of iterations for the optimization procedure.
+
+    gtol : float, optional, default=1e-6
+        The gradient tolerance for the optimization procedure.
+
+    ftol : float, optional, default=1e-8
+        The function tolerance for the optimization procedure.
     """
 
     def __init__(
         self,
-        P,
         n_alleles=None,
         seq_length=None,
         alphabet_type="custom",
         genotypes=None,
+        P=2,
         a=None,
         num_reg=20,
         nfolds=5,
@@ -376,7 +539,12 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         gtol=1e-6,
         ftol=1e-8,
     ):
-        super().__init__()
+        super().__init__(
+            seq_length=seq_length,
+            n_alleles=n_alleles,
+            genotypes=genotypes,
+            alphabet_type=alphabet_type,
+        )
         self.P = P
         self.nfolds = nfolds
 
@@ -399,38 +567,14 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         opts = {"ftol": ftol, "gtol": gtol, "maxiter": maxiter}
         optimization_opts.update(opts)
         self.optimization_opts = optimization_opts
-
-        self.initialized = False
-        self._init(
-            n_alleles=n_alleles,
-            seq_length=seq_length,
-            alphabet_type=alphabet_type,
-            genotypes=genotypes,
+        self.likelihood = SeqDEFTLikelihood(self.genotypes)
+        self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
+        self.s = self.DP.n_p_faces
+        self.kernel_basis = DeltaKernelBasisOperator(
+            self.n_alleles, self.seq_length, self.P
         )
         self.set_lambdas_P_inv(lambdas_P_inv)
         self.set_a(a)
-
-    def _init(
-        self,
-        seq_length=None,
-        n_alleles=None,
-        genotypes=None,
-        alphabet_type="custom",
-    ):
-        if not self.initialized:
-            self.define_space(
-                seq_length=seq_length,
-                n_alleles=n_alleles,
-                genotypes=genotypes,
-                alphabet_type=alphabet_type,
-            )
-            self.likelihood = SeqDEFTLikelihood(self.genotypes)
-            self.DP = DeltaPOperator(self.n_alleles, self.seq_length, self.P)
-            self.s = self.DP.n_p_faces
-            self.kernel_basis = DeltaKernelBasisOperator(
-                self.n_alleles, self.seq_length, self.P
-            )
-            self.initialized = True
 
     def set_lambdas_P_inv(self, lambdas_P_inv):
         if lambdas_P_inv is None:
@@ -512,7 +656,10 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         total_folds = a_values.shape[0] * self.nfolds
 
         cv_splits = get_CV_splits(
-            X=self.X, y=self.y, y_var=self.y_var, nfolds=self.nfolds
+            X=self.likelihood.X,
+            y=self.likelihood.y,
+            y_var=None,
+            nfolds=self.nfolds,
         )
         cv_iter = get_cv_iter(cv_splits, a_values)
         cv_logL = self.calc_cv_loss(cv_iter, total_folds)
@@ -583,11 +730,11 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         samples = []
         sampler = HMC(logp, logp_grad, step_size=0.1, path_length=10)
         for _ in range(n_chains):
-            x0 = self.simulate_phi()
+            x0 = self.sample_prior()
             for s in sampler.sample(x0=x0, n_samples=n_samples):
                 samples.append(s)
 
-            # start = {"x": self.simulate_phi(self.a)}
+            # start = {"x": self.sample_prior(self.a)}
             # sampler = NUTS(logp, start=start, grad_logp=True,
             #                 target_accept=0.9, **kwargs)
             # for s in sampler.sample(n_chains=1, num=2 * n_samples,
@@ -595,40 +742,6 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
             #     samples.append(s[0])
         samples = np.array(samples)
         return samples
-
-    def get_C_lambdas(self):
-        a = self.a
-        self.DP.calc_lambdas()
-        lambdas = np.zeros(self.DP.lambdas.shape)
-        lambdas[self.P :] = a * self.DP.lambdas[self.P :] / self.DP.n_p_faces
-
-        if self.lambdas_P_inv is not None:
-            lambdas[: self.P] = 1 / self.lambdas_P_inv
-
-        return lambdas
-
-    def simulate_phi(self):
-        """
-        Simulates data under the specified `a` penalization for
-        local P-epistatic coefficients
-
-        Returns
-        -------
-        phi : array-like of shape (n_genotypes,)
-            Vector containing values for the latent phenotype or field
-            sampled from the prior characterized by `a`
-        """
-
-        x = np.random.normal(size=self.n_genotypes)
-        lambdas_inv = self.get_C_lambdas()
-        lambdas = np.zeros_like(lambdas_inv)
-        idx = lambdas_inv != 0
-        lambdas[idx] = 1 / lambdas_inv[idx]
-        W_sqrt = ProjectionOperator(
-            self.n_alleles, self.seq_length, lambdas=lambdas
-        ).matrix_sqrt()
-        phi = W_sqrt @ x
-        return phi
 
     def set_baseline(self, X=None, baseline_phi=None):
         if baseline_phi is None:
@@ -651,11 +764,45 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         adjust_freqs=False,
         allele_freqs=None,
     ):
-        self.X = X
-        self.y = y
-        self.y_var = None
+        """
+        Set the data for the SeqDEFT model, including observed sequences,
+        weights, and optional baseline information.
 
-        self.init(genotypes=get_subsequences(X, positions=positions))
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Array containing the observed sequences.
+
+        y : array-like of shape (n_obs,), optional
+            Array containing the weights for each observed sequence. By default,
+            each sequence is assigned a weight of 1. These weights can be computed
+            using phylogenetic correction.
+
+        positions : array-like of shape (n_pos,), optional
+            If provided, subsequences at these positions in the input sequences
+            will be used as input. Default is None.
+
+        baseline_X : array-like of shape (n_genotypes,), optional
+            Array containing the sequences associated with `baseline_phi`. Default
+            is None.
+
+        baseline_phi : array-like of shape (n_genotypes,), optional
+            Array containing the baseline values (`baseline_phi`) to include in
+            the model. Default is None.
+
+        phylo_correction : bool, optional, default=False
+            Whether to apply phylogenetic correction using the full-length sequences.
+
+        adjust_freqs : bool, optional, default=False
+            Whether to adjust densities by the expected allele frequencies in the
+            full-length sequences.
+
+        allele_freqs : dict or codon_table, optional
+            Dictionary containing the expected allele frequencies for each allele
+            in the set of possible sequences, or a codon table to generate expected
+            amino acid frequencies. If `None`, these frequencies will be calculated
+            from the full-length observed sequences. Default is None.
+        """
         self.positions = positions
         self.adjust_freqs = adjust_freqs
         self.phylo_correction = phylo_correction
@@ -683,43 +830,45 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         allele_freqs=None,
     ):
         """
-        Infers the sequence-function relationship under the specified
-        \\Delta^{(P)} prior
+        Infers the SeqDEFT model hyperparameter `a` from the provided data.
+
+        This method determines the optimal regularization parameter `a` by evaluating
+        the log-likelihood of held-out sequences under a grid search for `a` in
+        cross-validation settings.
 
         Parameters
         ----------
         X : array-like of shape (n_obs,)
-            Vector containing the observed sequences
+            Array containing the observed sequences.
 
         y : array-like of shape (n_obs,)
-            Vector containing the weights for each observed sequence.
-            By default, each sequence takes a weight of 1. These weights
-            can be calculated using phylogenetic correction
+            Array containing the weights for each observed sequence.
+            By default, each sequence is assigned a weight of 1. These weights
+            can be computed using phylogenetic correction.
 
-        baseline_X: array-like of shape (n_genotypes,)
-            Vector containing the sequences associated with baseline_phi
+        baseline_X : array-like of shape (n_genotypes,), optional
+            Array containing the sequences associated with `baseline_phi`.
 
-        baseline_phi: array-like of shape (n_genotypes,)
-            Vector containing the baseline_phi to include in the model
+        baseline_phi : array-like of shape (n_genotypes,), optional
+            Array containing the baseline values (`baseline_phi`) to include
+            in the model.
 
-        positions: array-like of shape (n_pos,)
-            If provided, subsequences at these positions in the provided
-            input sequences will be used as input
+        positions : array-like of shape (n_pos,), optional
+            If provided, subsequences at these positions in the input sequences
+            will be used as input.
 
-        phylo_correction: bool (False)
-            Apply phylogenetic correction using the full length sequences
+        phylo_correction : bool, optional, default=False
+            Whether to apply phylogenetic correction using the full-length sequences.
 
-        adjust_freqs: bool (False)
-            Whether to correct densities by the expected allele frequencies
-            in the full length sequences
+        adjust_freqs : bool, optional, default=False
+            Whether to adjust densities by the expected allele frequencies in the
+            full-length sequences.
 
-        allele_freqs: dict or codon_table
-            Dictionary containing the allele expected frequencies frequencies
-            for every allele in the set of possible sequences or the codon
-            table to use to genereate expected aminoacid frequencies
-            If `None`, they will be calculated from the full length observed
-            sequences.
-
+        allele_freqs : dict or codon_table, optional
+            Dictionary containing the expected allele frequencies for each allele
+            in the set of possible sequences, or a codon table to generate expected
+            amino acid frequencies. If `None`, these frequencies will be calculated
+            from the full-length observed sequences.
         """
         self.set_data(
             X,
@@ -745,9 +894,63 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
                 allele_freqs=allele_freqs,
             )
 
-        phi = self.calc_posterior_max()
-        output = self.likelihood.phi_to_output(phi)
-        return output
+    def predict(self, X_pred=None, calc_variance=False):
+        """
+        Compute the Maximum a Posteriori (MAP) estimate of the phenotype for
+        the specified genotypes or the entire genotype space.
+
+        Parameters
+        ----------
+        X_pred : array-like of shape (n_genotypes,), optional
+            Array containing the genotypes for which the phenotype predictions
+            are desired. If `X_pred` is None, predictions are computed for the
+            entire sequence space.
+
+        calc_variance : bool, optional, default=False
+            If True, the posterior variances and standard deviations for each
+            genotype are also computed and included in the output.
+
+        Returns
+        -------
+        pred : pd.DataFrame of shape (n_genotypes, n_columns)
+            A DataFrame containing the predicted phenotypes for each input
+            genotype in the column ``f``. If ``calc_variance=True``, additional
+            columns are included:
+            - ``f_var``: Posterior variance for each genotype.
+            - ``f_std``: Posterior standard deviation for each genotype.
+            - ``ci_95_lower``: Lower bound of the 95% credible interval.
+            - ``ci_95_upper``: Upper bound of the 95% credible interval.
+            The genotype labels are used as the row index.
+
+            If neither `X_pred` nor `calc_variance` are provided, the output
+            DataFrame includes additional columns:
+            - ``freq``: Empirical frequencies of the genotypes.
+            - ``Q_star``: Estimated genotype probabilities.
+
+        Notes
+        -----
+        - The MAP estimate is computed using the posterior mean.
+        - If `calc_variance` is enabled, the credible intervals are calculated
+          as mean ± 2 * standard deviation.
+        - When neither `X_pred` nor `calc_variance` are provided, the additional
+          columns for empirical frequencies and estimated probabilities are
+          included to provide further insights into the genotype distribution.
+
+        Examples
+        --------
+        Predict phenotypes for the entire genotype space:
+        >>> pred = model.predict()
+
+        Predict phenotypes for specific genotypes with variance:
+        >>> pred = model.predict(X_pred=["AAA", "AAC"], calc_variance=True)
+        """
+
+        if X_pred is not None or calc_variance:
+            return super().predict(X_pred, calc_variance)
+        else:
+            phi = self.calc_posterior_max()
+            output = self.likelihood.phi_to_output(phi)
+            return output
 
     def calc_loss_inf_a(self, b, return_grad=True, store_hess=True):
         basis = self.kernel_basis
@@ -830,48 +1033,37 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor):
         self.total_folds = self.nfolds * (self.num_reg + 2)
         return a_values
 
-    def simulate(self, N, phi=None, seed=None):
+    def simulate(self, N, seed=None):
         """
         Simulates data under the specified `a` penalization for
-        local P-epistatic coefficients
+        local P-epistatic coefficients.
 
         Parameters
         ----------
         N : int
-            Number of total sequences to sample
+            Number of total sequences to sample.
 
-        phi : array-like of shape (n_genotypes,)
-            Vector containing values for the field underlying the probability
-            distribution from which to sample sequences. If provided, they
-            will be used instead of sampling them from the prior characterized
-            by the given `a`.
-
-        seed: int (None)
-            Random seed to use for simulation
+        seed : int, optional (default=None)
+            Random seed to use for simulation.
 
         Returns
         -------
+        phi : array-like of shape (N,)
+            Vector containing the true phi values from which samples were generated.
+
         X : array-like of shape (N,)
             Vector containing the sampled sequences from the probability
-            distribution
+            distribution.
+
+        Example
+        -------
+        >>> model = SeqDEFT(n_alleles=4, seq_length=5, P=2, a=1.0)
+        >>> phi, X = model.simulate(N=100, seed=42)
+        >>> print("Simulated phi:", phi[:5])
+        >>> print("Simulated sequences:", X[:5])
         """
-
-        if seed is not None:
-            np.random.seed(seed)
-
-        if phi is not None:
-            check_error(
-                phi.shape == (self.n_genotypes,),
-                msg='Ensure "phi" has the shape (n_genotypes,)',
-            )
-        else:
-            check_error(
-                self.a is not None, '"a" must be provided if "phi=None"'
-            )
-            phi = self.simulate_phi()
-
-        X = self.likelihood.sample(phi, N)
-        return X
+        phi, X = self._simulate(seed=seed, N=N)
+        return phi, X
 
 
 def D_geo(phi1, phi2):

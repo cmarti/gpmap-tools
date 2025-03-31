@@ -121,26 +121,29 @@ def read_dataframe(fpath):
 def read_edges(fpath, log=None, return_df=True):
     """
     Reads the incidence matrix containing the adjacency information among
-    genotypes from a sequence space
+    genotypes from a sequence space.
 
     Parameters
     ----------
     fpath : str
         File path containing the edges of a sequence space. The extension will
-        be used to differentiate between csv and the more efficient npz
-        format
+        be used to differentiate between csv, parquet, and the more efficient
+        npz format.
 
-    return_df : bool (True)
-        Whether to return a pd.DataFrame with the edges. Alternatively
-        it will return a csr_matrix
+    log : LogTrack, optional
+        Logger instance to log messages. Default is None.
+
+    return_df : bool, default=True
+        Whether to return a pandas DataFrame with the edges. If False,
+        it will return a csr_matrix.
 
     Returns
     -------
-    edges_df : pd.DataFrame of shape (n_edges, 2) or csr_matrix
-        DataFrame with column names ``i`` and ``j`` containing the indexes
-        of the genotypes that are separated by a single mutation in a
-        sequence space
-
+    edges_df : pd.DataFrame or csr_matrix
+        If `return_df` is True, returns a DataFrame with columns ``i`` and ``j``
+        containing the indices of the genotypes that are separated by a single
+        mutation in a sequence space. If `return_df` is False, returns a
+        csr_matrix representation of the edges.
     """
     if fpath is not None:
         write_log(log, "Reading edges data from {}".format(fpath))
@@ -183,22 +186,23 @@ def csr_matrix_to_edges_df(A):
 
 def write_edges(edges, fpath, triangular=True):
     """
-    Writes the incidence matrix containing the adjacency information among
-    genotypes from a sequence space.
+    Save the incidence matrix containing adjacency information among genotypes
+    in a sequence space to a file.
 
     Parameters
     ----------
     edges : csr_matrix or pd.DataFrame
-        edges object to write into a file.
+        The edges object to save. Can be a sparse matrix (csr_matrix) or a
+        DataFrame containing edge information.
 
     fpath : str
-        File path containing the edges of a sequence space. The extension will
-        be used to differentiate between csv or pq and the more efficient npz
-        format
+        The file path where the edges will be saved. The file extension
+        determines the format: 'csv', 'pq' (Parquet), or 'npz' (sparse matrix).
 
-    triangular : bool (True)
-        Whether to write only the upper triangular for more efficient storing
-        of the adjacency relationships when plotting.
+    triangular : bool, default=True
+        If True, only the upper triangular part of the adjacency matrix is
+        saved. This is useful for efficient storage when visualizing adjacency
+        relationships.
     """
     # Transform into the right object given a format
     fmt = fpath.split(".")[-1]
@@ -240,9 +244,9 @@ def get_CV_splits(X, y=None, y_var=None, nfolds=10, max_pred=None):
 
     for j in range(nfolds):
         i = j * n_test
-        test_data = get_data_subset(data, order[i: i + n_test])
+        test_data = get_data_subset(data, order[i : i + n_test])
         train_data = get_data_subset(
-            data, np.append(order[:i], order[i + n_test:])
+            data, np.append(order[:i], order[i + n_test :])
         )
         test_data = subsample_data(test_data, n=max_pred)
         yield (j, train_data, test_data)
@@ -286,30 +290,30 @@ def generate_p_training_config(
     ps=None, n_ps=10, n_reps=3, pmin=0.05, pmax=0.95
 ):
     """
-    Returns a pd.DataFrame with the configuration to generate data
-    splits with different proportions of the training data
+    Generate a configuration DataFrame for creating data splits with varying
+    proportions of training data.
 
     Parameters
     ----------
     ps : array-like, optional
-        Array containing the specific training proportions to use, by default
-        None. In that case, a uniform set of proportions between `pmin` and
-        `pmax` will be generated
+        Array specifying the training proportions to use. If None, a uniform
+        set of proportions between `pmin` and `pmax` will be generated.
+        Default is None.
     n_ps : int, optional
-        Number of different training proportions to use, by default 10
+        Number of distinct training proportions to generate. Default is 10.
     n_reps : int, optional
-        Number of replicates for each training propotion, by default 3
+        Number of replicates for each training proportion. Default is 3.
     pmin : float, optional
-        Minimum proportion of training data to use, by default 0.05
+        Minimum training proportion. Default is 0.05.
     pmax : float, optional
-        Maximum proportion of training data to use, by default 0.95
+        Maximum training proportion. Default is 0.95.
 
     Returns
     -------
     data : pd.DataFrame
-        DataFrame containing the configuration for the different subdatasets
-        and the corresponding training fractions and replicate information.
-        To be used as input for `get_training_p_splits`
+        A DataFrame containing the configuration for the different subsets,
+        including training proportions and replicate information. This can
+        be used as input for `get_training_p_splits`.
     """
 
     if ps is None:
@@ -328,26 +332,34 @@ def get_training_p_splits(
     config, X, y, y_var=None, max_pred=None, fixed_test=False
 ):
     """
-    Given a training proportion configuration dataframe generated
-    by `generate_p_training_config`, returns a generator of data
-    splits into training and test subsets of the desired sizes
+    Generate data splits into training and test subsets based on a training
+    proportion configuration.
 
     Parameters
     ----------
     config : pd.DataFrame
-        DataFrame containing the training proportions configuration
+        DataFrame containing the training proportions configuration, typically
+        generated by `generate_p_training_config`.
     X : array-like of str
-        Array containing the set of sequences from which to sample
+        Array containing the set of sequences from which to sample.
     y : array-like of float
-        Array containing the corresponding quantitiative information
-        associated to each sequence
+        Array containing the corresponding quantitative information
+        associated with each sequence.
     y_var : array-like of float, optional
-        Variance associated to each measurement `y`, by default None
+        Variance associated with each measurement in `y`. Default is None.
     max_pred : int, optional
-        Maximum number of test points to return for each split, by default None
+        Maximum number of test points to return for each split. Default is None.
     fixed_test : bool, optional
-        Whether to use the same test data across each of the replicates,
-        by default False
+        Whether to use the same test data across each of the replicates.
+        Default is False.
+
+    Yields
+    ------
+    tuple
+        A tuple containing:
+        - int: The split ID.
+        - tuple: The training data subset.
+        - tuple: The test data subset.
     """
     msg = "X and y must have the same size"
     check_error(X.shape[0] == y.shape[0], msg=msg)

@@ -10,21 +10,21 @@ class VCKernelAligner(object):
     """
     Class to perform kernel alignment of empirical
     covariance-distance relationships with the Variance Components
-    that can generate them by minimizing the Frobenius norm
-    of the resulting matrices
+    that generate them by minimizing the Frobenius norm
+    of the resulting matrices.
 
     Parameters
     ----------
     n_alleles: int
-        Number of alleles per site
+        Number of alleles per site.
 
     seq_length: int
-        Number of sites in sequence
+        Number of sites in the sequence.
 
     beta: float
         Regularization constant to penalize deviations from
-        linear decay of the log lambdas. By default, it does
-        not perform regularization (beta=0)
+        the linear decay of the log lambdas. By default, it does
+        not perform regularization (beta=0).
     """
 
     def __init__(self, n_alleles, seq_length, beta=0):
@@ -97,20 +97,25 @@ class VCKernelAligner(object):
 
     def fit(self, covs, ns, sigma2=0):
         """
-        Fit Variance Component kernel by minizing the Frobenious Norm
-        with the covariance at each possible distance
+        Fit the Variance Component kernel by minimizing the Frobenius Norm
+        with the covariance at each possible distance.
 
         Parameters
         ----------
         covs : array-like of shape (seq_length + 1)
-            Average empirical second moments at every possible distance
+            Average empirical second moments at every possible distance.
         ns : array-like of shape (seq_length + 1)
-            Number of pairs of sequences at each possible distance
+            Number of pairs of sequences at each possible distance.
 
         Returns
         -------
-        lambdas: array-like of shape (seq_length + 1)
-            lambdas that best fit the empirical second moments
+        lambdas : array-like of shape (seq_length + 1)
+            Lambda values that best fit the empirical second moments.
+
+        Example
+        -------
+        >>> aligner = VCKernelAligner(n_alleles=4, seq_length=4, beta=10)
+        >>> lambdas = aligner.fit(covs, ns)
         """
         self.set_data(covs, ns, sigma2=sigma2)
 
@@ -134,6 +139,19 @@ class VCKernelAligner(object):
 
 
 class VjKernelAligner(object):
+    """
+    Class to perform kernel alignment by matching the empirical
+    covariances for pairs of sequences that differ at specific
+    subsets of sites.
+
+    Parameters
+    ----------
+    n_alleles : int
+        The number of alleles per site.
+
+    seq_length : int
+        The number of sites in the sequence.
+    """
     def __init__(self, n_alleles, seq_length):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
@@ -162,24 +180,25 @@ class VjKernelAligner(object):
 
     def fit(self, covs, ns, sites_matrix):
         """
-        Fit Connectedness kernel by minizing the Frobenious Norm
-        with the covariance at sequences matching subsets of sites
+        Fits kernel parameters by minimizing the Frobenius Norm
+        with the empirical covariance at sequences matching subsets
+        of sites.
 
         Parameters
         ----------
         covs : array-like of shape (2 ** seq_length)
             Average empirical second moments at every possible
-            combination of sites
+            combination of sites.
         ns : array-like of shape (2 ** seq_length)
-            Number of pairs of sequences at every possible combination of sites
+            Number of pairs of sequences at every possible combination of sites.
         sites_matrix : array-like of shape (2 ** seq_length, seq_length)
-            Matrix encoding the sites that are in commong for every
-            provided empirical second moment class
+            Matrix encoding the sites that are in common for every
+            provided empirical second moment class.
 
         Returns
         -------
-        params: array-like or tuple of array-like
-            Parameter values that best fit the empirical second moments
+        params : array-like or tuple of array-like
+            Parameter values that best fit the empirical second moments.
         """
 
         self.set_data(covs, ns, sites_matrix)
@@ -200,23 +219,17 @@ class VjKernelAligner(object):
 
 class RhoKernelAligner(VjKernelAligner):
     """
-    Class to perform kernel alignment of empirical
-    covariance-distance relationships with the Variance Components
-    that can generate them by minimizing the Frobenius norm
-    of the resulting matrices
+    Class to determine the parameters of the Connectedness model 
+    that best align with the empirical covariances for sequences 
+    matching at all possible combinations of sites.
 
     Parameters
     ----------
-    n_alleles: int
-        Number of alleles per site
+    n_alleles : int
+        The number of alleles per site.
 
-    seq_length: int
-        Number of sites in sequence
-
-    beta: float
-        Regularization constant to penalize deviations from
-        linear decay of the log lambdas. By default, it does
-        not perform regularization (beta=0)
+    seq_length : int
+        The number of sites in the sequence.
     """
 
     def x_to_params(self, x):

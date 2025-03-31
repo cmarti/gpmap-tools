@@ -70,7 +70,7 @@ class TriangularInverseOperator(ExtendedLinearOperator):
 
 class InverseOperator(ExtendedLinearOperator):
     def __init__(
-        self, linop, method="minres", atol=1e-14, maxiter=1000, kwargs={}
+        self, linop, method="minres", atol=1e-14, maxiter=1000, **kwargs
     ):
         # TODO: implement preconditioner option
         self.linop = linop
@@ -106,6 +106,14 @@ class DiagonalOperator(ExtendedLinearOperator):
 
     def transpose(self):
         return self
+
+    def logdet(self):
+        msg = "All diagonal entries must be larger than 0 to compute logdet"
+        check_error(np.all(self.diag > 0), msg=msg)
+        return np.sum(np.log(self.diag))
+
+    def det(self):
+        return np.product(self.diag)
 
 
 class IdentityOperator(DiagonalOperator):
@@ -484,6 +492,9 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.kernel_dimension = np.sum(self.m_k[: self.P])
         self.rank = self.n - self.kernel_dimension
 
+    def calc_kernel_basis(self):
+        return DeltaKernelBasisOperator(self.alpha, self.seq_length, self.P)
+
     def calc_n_p_faces_genotype(self):
         n_mut = self.seq_length * (self.alpha - 1)
         self.n_p_faces_genotype = float(comb(n_mut, self.P))
@@ -500,7 +511,7 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.P = P
         if self.P == (self.lp1):
             msg = '"P" = l+1, the optimal density is equal '
-            msg += 'to the empirical frequency.'
+            msg += "to the empirical frequency."
             raise ValueError(msg)
         elif not 1 <= self.P <= self.seq_length:
             msg = '"P" not in the right range.'
@@ -527,7 +538,7 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         self.lambdas = np.array(lambdas)
 
     def calc_log_det(self):
-        return self.m_k[self.P:] * np.log(self.lambdas[self.P:])
+        return self.m_k[self.P :] * np.log(self.lambdas[self.P :])
 
 
 class KrawtchoukOperator(SeqOperator, PolynomialOperator):
@@ -578,8 +589,9 @@ class KrawtchoukOperator(SeqOperator, PolynomialOperator):
                     p = np.sum(
                         [
                             np.prod(v)
-                            for v in combinations(k_lambdas,
-                                                  self.seq_length - power)
+                            for v in combinations(
+                                k_lambdas, self.seq_length - power
+                            )
                         ]
                     )
                     V_inv[power, k] = norm_factor * (-1) ** (power) * p
@@ -662,8 +674,9 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
         return np.sum(np.log(self.lambdas) * self.m_k)
 
     def power(self, b):
-        return ProjectionOperator(self.alpha, self.seq_length,
-                                  lambdas=self.lambdas**b)
+        return ProjectionOperator(
+            self.alpha, self.seq_length, lambdas=self.lambdas**b
+        )
 
     def matrix_sqrt(self):
         return ProjectionOperator(
@@ -777,9 +790,7 @@ class VjProjectionOperator(VjOperator):
     symmetric = True
 
     def get_matrices(self, j):
-        self.W0 = np.full(
-            (self.alpha, self.alpha), fill_value=1.0 / self.alpha
-        )
+        self.W0 = np.full((self.alpha, self.alpha), fill_value=1.0 / self.alpha)
         self.W1 = np.eye(self.alpha) - self.W0
         W = [self.W0, self.W1]
         return [W[int(i in j)] for i in range(self.seq_length)]
@@ -825,31 +836,36 @@ class RhoProjectionOperator(ConstantDiagSeqOperator, KronOperator):
             msg = "rho must be between 0 and 1"
         check_error(np.all(checked), msg=msg)
 
-    def set_rho(self, rho, ignore_bound=False):
+    def set_rho(self, rho, ignore_bound=True):
         self.rho = (
             np.full(self.seq_length, rho)
-            if isinstance(rho, float) else np.array(rho)
+            if isinstance(rho, float)
+            else np.array(rho)
         )
         self.check_rho(self.rho, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.rho]) / self.n
 
     def inv(self):
-        return RhoProjectionOperator(self.alpha, self.seq_length,
-                                     rho=1.0 / self.rho)
+        return RhoProjectionOperator(
+            self.alpha, self.seq_length, rho=1.0 / self.rho
+        )
 
     def calc_log_det(self):
         log_rho = np.log(self.rho)
-        k = np.sum([comb(self.seq_length, i - 1)
-                    for i in range(self.seq_length)])
+        k = np.sum(
+            [comb(self.seq_length, i - 1) for i in range(self.seq_length)]
+        )
         return k * np.sum(log_rho)
 
     def matrix_sqrt(self):
-        return RhoProjectionOperator(self.alpha, self.seq_length,
-                                     rho=np.sqrt(self.rho))
+        return RhoProjectionOperator(
+            self.alpha, self.seq_length, rho=np.sqrt(self.rho)
+        )
 
     def matrix_power(self, b):
-        return RhoProjectionOperator(self.alpha, self.seq_length,
-                                     rho=self.rho**b)
+        return RhoProjectionOperator(
+            self.alpha, self.seq_length, rho=self.rho**b
+        )
 
 
 class EigenBasisOperator(StackedOperator):
@@ -872,6 +888,7 @@ class DeltaKernelBasisOperator(StackedOperator):
         self.seq_length = seq_length
         As = [EigenBasisOperator(n_alleles, seq_length, k) for k in range(P)]
         self.m_k = [A.shape[1] for A in As]
+        self.rank = np.sum(self.m_k)
         super().__init__(linops=As, axis=1)
 
 
@@ -1086,9 +1103,7 @@ def calc_avg_local_epistatic_coeff(X, y, alphabet, seq_length, P):
     z = kron([[-1, 1]] * P)
 
     s, n = 0, 0
-    for target_sites in tqdm(
-        combinations(sites, P), total=comb(seq_length, P)
-    ):
+    for target_sites in tqdm(combinations(sites, P), total=comb(seq_length, P)):
         background_sites = [s for s in sites if s not in target_sites]
         for background_seq in background_seqs:
             bc = dict(zip(background_sites, background_seq))
@@ -1144,24 +1159,24 @@ def calc_variance_components(y, n_alleles, seq_length):
 
 def calc_space_variance_components(space):
     """
-    Calculates the variance components associated to the function
-    along the SequenceSpace. It returns the squared module of the
-    projection into each of the l+1 eigenspaces of the graph Laplacian
-    representing the variance associated to epistatic interations of order k
+    Calculates the variance components associated with the function
+    along the SequenceSpace. It returns the squared magnitude of the
+    projection into each of the l+1 eigenspaces of the graph Laplacian,
+    representing the variance associated with epistatic interactions of order k.
 
-    See Zhou et al. 2021
+    This method is based on the work by Zhou et al. (2021):
     https://www.pnas.org/doi/suppl/10.1073/pnas.2204233119
 
     Parameters
     ----------
     space : SequenceSpace
-        SequenceSpace object for which to calculate the variance components
+        A SequenceSpace object for which to calculate the variance components.
 
     Returns
     -------
-    lambdas: array-like of shape (seq_length + 1, )
-        Vector containing the squared module of the projections into the
-        k'th eigenspaces in increasing order of k.
+    vc : array-like of shape (seq_length + 1,)
+        A vector containing the squared magnitude of the projections into the
+        k-th eigenspaces in increasing order of k.
 
     """
     n_alleles = np.unique(space.n_alleles)
@@ -1185,26 +1200,27 @@ def calc_vjs_variance_components(y, a, sl, k):
     return variances
 
 
-def calc_space_vjs_variance_components(space, k):
+def calc_space_vjs_variance_components(space, k=None):
     """
-    Calculates the squared module of the projection into the `Vj` subspaces
-    of order `k` defined by each individual combination of `k` sites as
-    defined by `j`
+    Calculates the squared magnitude of the projection into the `Vj` subspaces
+    of order `k`, defined by each individual combination of `k` sites as
+    specified by `j`.
 
     Parameters
     ----------
     space : SequenceSpace
         SequenceSpace object for which to calculate the Vj's
-        variance components
+        variance components.
 
-    k : int from 0 to seq_length + 1
-        Order of interaction to calculate
+    k : int or None
+        If provided, restricts the variance components calculation to subspaces
+        of order k.
 
     Returns
     -------
-    lambdas: dict
-        Dictionary with combinations of `k` sites as keys and the associated
-        squared modules of the projection into the individual subspaces
+    vc: dict
+        Dictionary with combinations of sites as keys and the associated
+        squared magnitudes of the projection into the individual subspaces.
     """
 
     n_alleles = np.unique(space.n_alleles)

@@ -32,16 +32,13 @@ Random walks
 Landscape Inference
 -------------------
 .. autoclass:: gpmap.inference.MinimumEpistasisInterpolator
-    :members: predict, smooth
-
-.. autoclass:: gpmap.inference.MinimumEpistasisRegression
-    :members: fit, predit, make_contrasts
+    :members: fit, predict, make_contrasts, sample_prior, simulate, smooth
 
 .. autoclass:: gpmap.inference.VCregression
-    :members: fit, predict, make_contrasts, lambdas_to_variance, simulate
+    :members: fit, predict, make_contrasts, sample_prior, simulate, lambdas_to_variance
 
 .. autoclass:: gpmap.inference.SeqDEFT
-    :members: fit, make_contrasts, simulate_phi, simulate
+    :members: fit, predict, make_contrasts, sample_prior, simulate
 
 Sequence utils
 --------------

@@ -22,25 +22,24 @@ from gpmap.inference import VCregression, SeqDEFT
 
 class DataSet(object):
     """
-    DataSet object that allows convenient manipulation of the different
-    objets related with a given dataset. This includes the original data,
-    the reconstructed landscape, visualization coordinates
+    DataSet object for managing and manipulating various components 
+    related to a specific dataset. This includes the original data, 
+    reconstructed landscape, and visualization coordinates.
 
     Parameters
     ----------
     dataset_name : str
-        Name of the dataset to load from the built-in list. If `data`
-        or `landscape` are provided, it will be the name given to the
-        new dataset
+        The name of the dataset to load from the built-in list. If `data`
+        or `landscape` are provided, this will be the name assigned to 
+        the new dataset.
 
-    data: pd.DataFrame of shape (n_obs, n_features)
-        Dataframe containing the experimental data using
-        genotypes as index
+    data : pd.DataFrame, shape (n_obs, n_features), optional
+        A DataFrame containing the experimental data with genotypes 
+        as the index.
 
-    landscape: pd.DataFrame of shape (n_genotypes, 1)
-        Dataframe containing the complete combinatorial landscape
-        from which to build the remaining objects of the dataset
-
+    landscape : pd.DataFrame, shape (n_genotypes, 1), optional
+        A DataFrame containing the complete combinatorial landscape 
+        used to build the remaining components of the dataset.
     """
 
     def __init__(self, dataset_name, data=None, landscape=None):
@@ -138,6 +137,17 @@ class DataSet(object):
         return self._relaxation_times
 
     def to_sequence_space(self):
+        """
+        Generate a SequenceSpace object from the dataset's landscape.
+
+        This method constructs a SequenceSpace object using the genotypes 
+        and their corresponding values from the dataset's landscape.
+
+        Returns
+        -------
+        SequenceSpace
+            A SequenceSpace object representing the dataset's landscape.
+        """
         space = SequenceSpace(
             X=self.landscape.index.values, y=self.landscape.iloc[:, 0].values
         )
@@ -163,12 +173,13 @@ class DataSet(object):
         self._relaxation_times = rw.decay_rates_df
 
     def infer_landscape(
-        self, P=2, vc_cross_validation=True, vc_cv_loss_function="logL"
+        self, P=2, vc_cross_validation=False, vc_cv_loss_function="logL"
     ):
         if "X" in self.data.columns:
             X = self.data.X.values
             model = SeqDEFT(P=P, genotypes=X)
-            pred = model.fit(X=X)
+            model.fit(X=X)
+            pred = model.predict()
             X, y = pred.index.values, np.log(pred.Q_star.values)
             self.Ns = 1
 
@@ -181,12 +192,13 @@ class DataSet(object):
                 else None
             )
             model = VCregression(
+                genotypes=X,
                 cross_validation=vc_cross_validation,
                 cv_loss_function=vc_cv_loss_function,
             )
             model.fit(X=X, y=y, y_var=y_var)
             pred = model.predict()
-            X, y = pred.index.values, pred.y.values
+            X, y = pred.index.values, pred.f.values
 
         else:
             msg = "Model could not be selected for the provided data table. "
@@ -253,7 +265,14 @@ class DataSet(object):
 
 def list_available_datasets():
     """
-    Returns a list with the names of all available built-in datasets
+    Retrieve the names of all available built-in datasets.
+
+    This function scans the directory specified by `LANDSCAPES_DIR` and 
+    extracts the names of all files present, excluding their extensions. 
+    It returns these names as a list.
+
+    Returns:
+        list: A list of strings, where each string is the name of a built-in dataset.
     """
     dataset_names = [
         ".".join(fname.split(".")[:-1]) for fname in listdir(LANDSCAPES_DIR)
