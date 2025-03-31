@@ -22,14 +22,14 @@ class MEITests(unittest.TestCase):
         X = np.array(["AA", "AB", "BA"])
         y = np.array([0, 1, 1.0])
         model.set_data(X, y)
-        y_pred = model.calc_posterior_mean()
-        assert y_pred[-1] == 2.0
-        assert model.calc_loss_prior(y_pred) == 0.0
+        f_pred = model.calc_posterior_mean()
+        assert f_pred[-1] == 2.0
+        assert model.calc_loss_prior(f_pred) == 0.0
 
         # Ensure smoothing does not change predictions
-        y_pred = model.smooth(y_pred)
-        assert np.allclose(y_pred, [0, 1, 1, 2])
-        assert model.calc_loss_prior(y_pred) == 0.0
+        f_pred = model.smooth(f_pred)
+        assert np.allclose(f_pred, [0, 1, 1, 2])
+        assert model.calc_loss_prior(f_pred) == 0.0
 
         # Compute posterior variance under a=1
         try:
@@ -51,7 +51,7 @@ class MEITests(unittest.TestCase):
 
         # Check uniqueness of solution error
         try:
-            y_pred = model.calc_posterior()[0]
+            f_pred = model.calc_posterior()[0]
         except ValueError:
             pass
 
@@ -60,18 +60,18 @@ class MEITests(unittest.TestCase):
         X = np.array(["AAA", "AAB", "ABA", "BAA", 'BBB'])
         y = np.array([1, 0, 0, 0, 1])
         model.set_data(X, y)
-        y_pred = model.calc_posterior()[0]
-        cost1 = model.calc_loss_prior(y_pred)
-        assert np.allclose(y, model.likelihood.Xop @ y_pred)
+        f_pred = model.calc_posterior()[0]
+        cost1 = model.calc_loss_prior(f_pred)
+        assert np.allclose(y, model.likelihood.Xop @ f_pred)
         assert cost1 > 1e-16
 
         # Ensure smoothing decreases epistasis
-        y_pred_smoothed = model.smooth(y_pred)
-        cost2 = model.calc_loss_prior(y_pred_smoothed)
+        f_pred_smoothed = model.smooth(f_pred)
+        cost2 = model.calc_loss_prior(f_pred_smoothed)
         Z = model.likelihood.Zop
         X = model.likelihood.Xop
-        assert np.allclose(Z @ y_pred_smoothed, Z @ y_pred)
-        assert not np.allclose(y, X @ y_pred_smoothed)
+        assert np.allclose(Z @ f_pred_smoothed, Z @ f_pred)
+        assert not np.allclose(y, X @ f_pred_smoothed)
         assert cost1 > 0
         assert cost2 < cost1
 
@@ -155,10 +155,10 @@ class MEITests(unittest.TestCase):
         )
         model1 = GaussianProcessRegressor(kernel)
         model1.define_space(seq_length=seq_length, n_alleles=n_alleles)
-        y_true, X, y, y_var = model1.simulate(y_var=sigma2, p_missing=0.1)
+        f, X, y, y_var = model1.simulate(y_var=sigma2, p_missing=0.1)
         model1.set_data(X, y, y_var)
         mu1, Sigma1 = model1.calc_posterior()
-        r1 = pearsonr(mu1, y_true)[0]
+        r1 = pearsonr(mu1, f)[0]
         assert r1 > 0.4
 
         # With operator inverse method
@@ -206,8 +206,8 @@ class MEITests(unittest.TestCase):
         # Check predict function works as expected
         post_var = np.diag(Sigma @ np.eye(4))
         pred = model.predict(calc_variance=True)
-        assert np.allclose(mu, pred["y"])
-        assert np.allclose(post_var, pred["y_var"])
+        assert np.allclose(mu, pred["f"])
+        assert np.allclose(post_var, pred["f_var"])
 
     def test_regression_fit(self):
         # Simulate data
@@ -220,9 +220,9 @@ class MEITests(unittest.TestCase):
             seq_length=seq_length,
             a=a,
         )
-        y_true, X, y, y_var = model.simulate(y_var=1.0)
+        f, X, y, y_var = model.simulate(y_var=1.0)
         idx = np.random.uniform(size=X.shape[0]) < 0.98
-        X_test, y_test_true = X[~idx], y_true[~idx]
+        X_test, y_test_true = X[~idx], f[~idx]
         X, y, y_var = X[idx], y[idx], y_var[idx]
 
         # Make interpolation predictions
@@ -230,16 +230,16 @@ class MEITests(unittest.TestCase):
         pred = model.predict()
 
         # Ensure matching the data
-        assert np.allclose(pred.loc[idx, "y"], y)
+        assert np.allclose(pred.loc[idx, "f"], y)
 
         # Ensure good predictions in test data
-        r = pearsonr(pred.loc[X_test, "y"], y_test_true)[0]
+        r = pearsonr(pred.loc[X_test, "f"], y_test_true)[0]
         assert r > 0.5
 
         # Make predictions with noisy data
         model.set_data(X, y, y_var)
         pred = model.predict()
-        r = pearsonr(pred["y"], y_true)[0]
+        r = pearsonr(pred["f"], f)[0]
         assert r > 0.5
 
         # Fit model with empirical epistatic coeffs
@@ -251,11 +251,11 @@ class MEITests(unittest.TestCase):
 
         # Make predictions with empirical a
         pred = model.predict()
-        r = pearsonr(pred.loc[X_test, "y"], y_test_true)[0]
+        r = pearsonr(pred.loc[X_test, "f"], y_test_true)[0]
         assert r > 0.5
 
         pred = model.predict(X_test, calc_variance=True)
-        r = pearsonr(pred["y"], y_test_true)[0]
+        r = pearsonr(pred["f"], y_test_true)[0]
 
         calibration = np.mean(
             (pred["ci_95_lower"] < y_test_true)
@@ -276,7 +276,7 @@ class MEITests(unittest.TestCase):
         # Interpolation solution
         model.set_data(X, y)
         pred = model.predict(X_test)
-        r = pearsonr(pred["y"], f_test)[0]
+        r = pearsonr(pred["f"], f_test)[0]
         assert r > 0.5
 
         # Interpolation solution with variances
@@ -285,7 +285,7 @@ class MEITests(unittest.TestCase):
         )
         model.set_data(X, y)
         pred = model.predict(X_test, calc_variance=True)
-        r = pearsonr(pred["y"], f_test)[0]
+        r = pearsonr(pred["f"], f_test)[0]
         p = np.mean(
             (pred["ci_95_lower"] < f_test) & (f_test < pred["ci_95_upper"])
         )
@@ -298,7 +298,7 @@ class MEITests(unittest.TestCase):
         )
         model.set_data(X, y, y_var)
         pred = model.predict(X_test, calc_variance=True)
-        r = pearsonr(pred["y"], f_test)[0]
+        r = pearsonr(pred["f"], f_test)[0]
         p = np.mean(
             (pred["ci_95_lower"] < f_test) & (f_test < pred["ci_95_upper"])
         )

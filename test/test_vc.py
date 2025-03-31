@@ -202,7 +202,7 @@ class VCTests(unittest.TestCase):
 
         # Test that the diagonal correspond to the posterior variances calculated individually
         y_var1 = np.diag(S @ np.eye(S.shape[1]))
-        y_var2 = vc.predict(X_pred=X_test, calc_variance=True)["y_var"]
+        y_var2 = vc.predict(X_pred=X_test, calc_variance=True)["f_var"]
         assert np.allclose(y_var1, y_var2)
 
         # Test posterior of linear combination
@@ -261,17 +261,17 @@ class VCTests(unittest.TestCase):
         # Using the a priori known variance components
         vc.set_data(X, y, y_var)
         pred = vc.predict()
-        mse = np.mean((pred["y"] - f) ** 2)
-        rho = pearsonr(pred["y"], f)[0]
+        mse = np.mean((pred["f"] - f) ** 2)
+        rho = pearsonr(pred["f"], f)[0]
         assert rho > 0.95
         assert mse < 0.05
 
         # Estimate posterior variances
         pred = vc.predict(X_pred=X_test, calc_variance=True)
-        r = pearsonr(pred['y'], f_test)[0]
+        r = pearsonr(pred['f'], f_test)[0]
         p = np.mean((pred['ci_95_lower'] < f_test) & (f_test < pred['ci_95_upper']))
-        assert "y_var" in pred.columns
-        assert np.all(pred["y_var"] > 0)
+        assert "f_var" in pred.columns
+        assert np.all(pred["f_var"] > 0)
         assert r > 0.9
         assert p > 0.9
 
