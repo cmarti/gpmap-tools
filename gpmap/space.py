@@ -35,40 +35,39 @@ from gpmap.graph import calc_max_min_path
 
 class DiscreteSpace(object):
     """
-    Class to define an arbitrary discrete space characterized uniquely by the
-    connectivity between the different states and optionally by the function
-    e.g. fitness or energy at each state of the discrete space
+    Class to define an arbitrary discrete space characterized by the
+    connectivity between different states and optionally by a scalar value
+    (e.g. fitness or energy) associated with each state.
 
     Parameters
     ----------
-    adjacency_matrix: scipy.sparse.csr_matrix of shape (n_states, n_states)
+    adjacency_matrix : scipy.sparse.csr_matrix of shape (n_states, n_states)
         Sparse matrix representing the adjacency relationships between
-        states. The ij'th entry contains a 1 if the states `i` and `j`
-        are connected and 0 otherwise
+        states. The (i, j) entry contains a 1 if states `i` and `j`
+        are connected, and 0 otherwise.
 
-    y: array-like of shape (n_states,)
-        Quantitative property associated to each state
+    y : array-like of shape (n_states,), optional
+        Function value associated with each state.
 
-    state_labels: array-like of shape (n_genotypes, )
-        State labels in the sequence space
+    state_labels : array-like of shape (n_states,), optional
+        Labels for the states in the discrete space.
 
     Attributes
     ----------
-    n_states: int
-        Number of states in the discrete space
+    n_states : int
+        Number of states in the discrete space.
 
-    state_labels: array-like of shape (n_genotypes, )
-        State labels in the sequence space
+    state_labels : array-like of shape (n_states,)
+        Labels for the states in the discrete space.
 
-    state_idxs: pd.Series of shape (n_genotypes, )
-        pd.Series containing the index of each state. It has state_labels as
-        index of the Series and can be used to quickly extract the index
-        corresponding to a set of state labels
+    state_idxs : pd.Series of shape (n_states,)
+        A pandas Series mapping state labels to their corresponding indices.
+        The index of the Series is `state_labels`, allowing quick lookup
+        of indices for a given set of state labels.
 
-    is_regular: bool
-        Boolean variable storing whether the resulting graph is regular
-        or not, this is, whether each node has the same number of neighbors
-
+    is_regular : bool
+        Indicates whether the graph is regular, i.e., whether each node
+        has the same number of neighbors.
     """
 
     def __init__(self, adjacency_matrix, y=None, state_labels=None):
@@ -197,23 +196,23 @@ class DiscreteSpace(object):
 
     def get_neighbors(self, states, max_distance=1):
         """
-        Returns the unique state labels corresponding to the d-neighbors of the
-        provided states, where the distance is specified by `max_distance`
+        Retrieve the unique state labels corresponding to the neighbors of the
+        provided states within a specified maximum distance.
 
         Parameters
         ----------
         states : array-like of shape (state_number,)
-            np.array or list of states from which to select the neighbors
+            A list or numpy array of state labels from which to find neighbors.
 
-        max_distance : int (1)
-            The maximal distance at which neighbors from the provided states
-            will be returned
+        max_distance : int, optional, default=1
+            The maximum distance within which neighbors of the provided states
+            will be included.
 
         Returns
         -------
         neighbor_states : np.array
-            Array containing the state labels in the d-neighborhood of `states
-
+            An array containing the state labels of all unique neighbors within
+            the specified distance from the input states.
         """
         idxs = self.get_state_idxs(states)
         adj_csr = self.adjacency_matrix.tocsr()
@@ -223,8 +222,14 @@ class DiscreteSpace(object):
 
     def get_neighbor_pairs(self):
         """
-        Returns a tuple with two arrays of indexes corresponding to the states
-        that are connected to each other in the DiscreteSpace
+        Retrieve pairs of indices representing connected states in the DiscreteSpace.
+
+        Returns
+        -------
+        tuple of np.ndarray
+            Two arrays of indices, where the first array contains the source
+            indices and the second array contains the target indices of the
+            connections.
         """
 
         if not hasattr(self, "neighbor_pairs"):
@@ -237,6 +242,19 @@ class DiscreteSpace(object):
         return self.neighbor_pairs
 
     def get_edges_df(self):
+        """
+        Generate a DataFrame representing the edges of the adjacency graph.
+
+        This method retrieves pairs of neighboring nodes from the adjacency matrix
+        and constructs a DataFrame where each row represents an edge between two nodes.
+
+        Returns
+        -------
+        edges_df : pd.DataFrame
+            A DataFrame with two columns:
+            - 'i': The source node of the edge.
+            - 'j': The target node of the edge.
+        """
         i, j = self.get_neighbor_pairs()
         edges_df = pd.DataFrame({"i": i, "j": j})
         return edges_df
@@ -340,9 +358,7 @@ class GeneralSequenceSpace(DiscreteSpace):
                 if isinstance(n_alleles, int)
                 else n_alleles
             )
-            self.alphabet = [
-                [ALPHABET[x] for x in range(a)] for a in n_alleles
-            ]
+            self.alphabet = [[ALPHABET[x] for x in range(a)] for a in n_alleles]
             self.ambiguous_values = [{"X": "".join(a)} for a in self.alphabet]
             for i, alleles in enumerate(self.alphabet):
                 self.ambiguous_values[i].update(dict(zip(alleles, alleles)))
@@ -367,7 +383,7 @@ class GeneralSequenceSpace(DiscreteSpace):
 
         gts1, gts2 = [], []
         for i, seq1 in enumerate(genotypes):
-            for j, seq2 in enumerate(genotypes[i + 1:]):
+            for j, seq2 in enumerate(genotypes[i + 1 :]):
                 j += i + 1
                 if hamming_distance(seq1, seq2) == 1:
                     gts1.extend([i, j])
@@ -408,10 +424,7 @@ class GeneralSequenceSpace(DiscreteSpace):
         )
         nx.set_node_attributes(
             graph,
-            {
-                node: {"weight": w}
-                for node, w in zip(self.state_labels, self.y)
-            },
+            {node: {"weight": w} for node, w in zip(self.state_labels, self.y)},
         )
         return graph
 
@@ -434,58 +447,53 @@ class GeneralSequenceSpace(DiscreteSpace):
 
 class HammingBallSpace(GeneralSequenceSpace):
     """
-    Class for the space representing the Hamming ball around a target sequence
-    up to a certain number of mutations from it.
+    Discrete space representing a Hamming ball space around a target
+    sequence, including all sequences within a specified maximum Hamming distance.
 
     Parameters
     ----------
-    X0: str
-        Focal sequence around which to build the Hamming ball space
+    X0 : str
+        The focal sequence around which the Hamming ball space is constructed.
 
-    X: array-like of shape (n_genotypes,)
-        Sequences to use as state labels of the discrete sequence space
+    X : array-like of shape (n_genotypes,), optional
+        Sequences to use as state labels for the discrete sequence space.
 
-    y: array-like of shape (n_genotypes,)
-        Quantitative phenotype or fitness associated to each genotype
+    y : array-like of shape (n_genotypes,), optional
+        Quantitative phenotype or fitness values associated with each genotype.
 
-    d: int (None)
-        Maximum distance from the focal sequence to include in the space
+    d : int, optional
+        The maximum Hamming distance from the focal sequence to include in the space.
 
-    n_alleles: list of size `seq_length` (None)
-        List containing the number of alleles present in each of the sites
-        of the sequence space. It can only be specified for
-        `alphabet_type=custom`
+    n_alleles : list of int, optional
+        A list specifying the number of alleles present at each site of the sequence.
+        This can only be specified for `alphabet_type='custom'`.
 
-    alphabet_type: str ('dna')
-        Sequence type: {'dna', 'rna', 'protein', 'custom'}
+    alphabet_type : str, default='dna'
+        The type of sequence. Options are {'dna', 'rna', 'protein', 'custom'}.
 
-    alphabet: list of `seq_length' lists
-        Every element of the list is itself a list containing the different
-        alleles allowed in each site. Note that the number and type of alleles
-        can be different for every site.
+    alphabet : list of lists, optional
+        A list where each element is itself a list containing the different alleles
+        allowed at each site. The number and type of alleles can vary across sites.
 
     Attributes
     ----------
-    n_genotypes: int
-        Number of states in the complete sequence space
+    n_genotypes : int
+        The total number of states (genotypes) in the Hamming ball space.
 
-    genotypes: array-like of shape (n_genotypes, )
-        Genotype labels in the sequence space
+    genotypes : array-like of shape (n_genotypes,)
+        The genotype labels in the Hamming ball space.
 
-    adjacency_matrix: scipy.sparse.csr_matrix of shape
-                      (n_genotypes, n_genotypes)
-        Sparse matrix representing the adjacency relationships between
-        genotypes. The ij'th entry contains a 1 if the genotypes `i` and `j`
-        are separated by a single mutation and 0 otherwise
+    adjacency_matrix : scipy.sparse.csr_matrix of shape (n_genotypes, n_genotypes)
+        A sparse matrix representing the adjacency relationships between genotypes.
+        The (i, j) entry contains a 1 if genotypes `i` and `j` differ by a single
+        mutation, and 0 otherwise.
 
-    y: array-like of shape (n_genotypes,)
-        Quantitative phenotype or fitness associated to each genotype
+    y : array-like of shape (n_genotypes,), optional
+        Quantitative phenotype or fitness values associated with each genotype.
 
-    is_regular: bool
-        Boolean variable storing whether the resulting Hamming graph is regular
-        or not. In other words, whether every site has the same number of
-        alleles
-
+    is_regular : bool
+        Indicates whether the resulting Hamming graph is regular, i.e., whether
+        every site has the same number of alleles.
     """
 
     def __init__(
@@ -565,24 +573,23 @@ class HammingBallSpace(GeneralSequenceSpace):
 
 class ProductSpace(DiscreteSpace):
     """
-    General class for spaces that can be built as cartesian products
-    of smaller subspaces characterized by a set of elementary graphs
+    General class for constructing spaces as Cartesian products
+    of smaller subspaces, each characterized by a set of elementary graphs.
 
     Parameters
     ----------
-    elementary_graphs: csr_matrices
-        List csr_matrices for the adjacency matrices from which to build the
-        product space
+    elementary_graphs : list of scipy.sparse.csr_matrix
+        List of adjacency matrices (in CSR format) representing the elementary
+        graphs that define the subspaces.
 
-    y: None or array-like of shape (n,)
-        np.array containing the phenotypic values associated to each
-        combination of states in the resulting space. If `y=None`, no
-        phenotypic values will be stored
+    y : array-like of shape (n,), optional
+        Array containing the phenotypic values associated with each
+        combination of states in the resulting space. If `y` is None,
+        no phenotypic values will be stored.
 
-    state_labels: None or list
-        List with the labels associated to each of the possible states
-        `a` in each of the `l` elements of the product space. If
-        `state_labels=None`, numeric labels will be given by default.
+    state_labels : list, optional
+        List of labels associated with each possible state in the product space.
+        If `state_labels` is None, numeric labels will be assigned by default.
 
     """
 
@@ -614,22 +621,24 @@ class ProductSpace(DiscreteSpace):
 
 class GridSpace(ProductSpace):
     """
-    Class for creating an N-dimensional grid discrete space
+    N-dimensional grid discrete space.
+
+    A discrete space formed by the Cartesian product of one-dimensional
+    spaces of ordered n-states, represented by a line graph.
 
     Parameters
     ----------
     length: int or array-like
-        Number of states across each dimension of the grid. If an integer is
-        provided, all dimensions of the grid will have the same length. If
-        a series of lengths is provided, they will be used to form a grid of
-        dimensions with the specified lengths and the `ndim` argument will be
-        ignored
+        The number of states across each dimension of the grid. If an integer
+        is provided, all dimensions of the grid will have the same length. If
+        an array-like of lengths is provided, they will be used to form a grid
+        with the specified dimensions, and the `ndim` argument will be ignored.
 
     ndim: int
-        Number of dimensions in the grid with a single `length` value.
+        The number of dimensions in the grid when a single `length` value is provided.
 
     y: array-like of shape (length ** ndim,) or None
-        Phenotypic values associated to each possible state
+        Phenotypic values associated with each possible state.
 
     """
 
@@ -674,66 +683,64 @@ class GridSpace(ProductSpace):
 
 class SequenceSpace(GeneralSequenceSpace, ProductSpace):
     """
+    Space of all possible sequences of certain length.
+
     Class for creating a Sequence space characterized by having sequences as
     states. States are connected in the discrete space if they differ by a
     single position in the sequence. It can be created in two different ways:
 
-        - From a set of sequences and function values X, y
-        - By specifying the properties of the sequence space (alphabet,
-          sequence length, number of alleles per site and type of alphabet).
+    1. From a set of sequences and function values (`X`, `y`).
+    2. By specifying the properties of the sequence space (alphabet, sequence
+       length, number of alleles per site, and type of alphabet).
 
     Parameters
     ----------
-    X: array-like of shape (n_genotypes,)
-        Sequences to use as state labels of the discrete sequence space
+    X : array-like of shape (n_genotypes,), optional
+        Sequences to use as state labels of the discrete sequence space.
 
-    y: array-like of shape (n_genotypes,)
-        Quantitative phenotype or fitness associated to each genotype
+    y : array-like of shape (n_genotypes,), optional
+        Quantitative phenotype or fitness associated with each genotype.
 
-    seq_length: int (None)
-        Length of the sequences in the sequence space. If not given, it will be
-        guessed from `alphabet` or `n_alleles`
+    seq_length : int, optional
+        Length of the sequences in the sequence space. If not provided, it will
+        be inferred from `alphabet` or `n_alleles`.
 
-    n_alleles: list of size `seq_length` (None)
-        List containing the number of alleles present in each of the sites
-        of the sequence space. It can only be specified for
-        `alphabet_type=custom`
+    n_alleles : list of int, optional
+        List containing the number of alleles present at each site in the
+        sequence space. This can only be specified for `alphabet_type='custom'`.
 
-    alphabet_type: str ('dna')
-        Sequence type: {'dna', 'rna', 'protein', 'custom'}
+    alphabet_type : str, default='dna'
+        Type of sequence. Options are {'dna', 'rna', 'protein', 'custom'}.
 
-    alphabet: list of `seq_length' lists
-        Every element of the list is itself a list containing the different
-        alleles allowed in each site. Note that the number and type of alleles
-        can be different for every site.
+    alphabet : list of lists, optional
+        A list where each element is itself a list containing the different
+        alleles allowed at each site. The number and type of alleles can vary
+        across sites.
 
-    stop_y: float (None)
-        Value of the function given for protein sequence with an
-        in-frame stop codon. If given, it will increase the protein
-        alphabet to incorporate `*` for stops
+    stop_y : float, optional
+        Value of the function assigned to protein sequences with an in-frame
+        stop codon. If provided, the protein alphabet will be extended to
+        include `*` for stop codons.
 
     Attributes
     ----------
-    n_genotypes: int
-        Number of states in the complete sequence space
+    n_genotypes : int
+        Number of states in the complete sequence space.
 
-    genotypes: array-like of shape (n_genotypes, )
-        Genotype labels in the sequence space
+    genotypes : array-like of shape (n_genotypes,)
+        Genotype labels in the sequence space.
 
-    adjacency_matrix: scipy.sparse.csr_matrix of shape
-                      (n_genotypes, n_genotypes)
-        Sparse matrix representing the adjacency relationships between
-        genotypes. The ij'th entry contains a 1 if the genotypes `i` and `j`
-        are separated by a single mutation and 0 otherwise
+    adjacency_matrix : scipy.sparse.csr_matrix of shape (n_genotypes, n_genotypes)
+        Sparse matrix representing the adjacency relationships between genotypes.
+        The (i, j) entry contains a 1 if genotypes `i` and `j` differ by a single
+        mutation, and 0 otherwise.
 
-    y: array-like of shape (n_genotypes,)
-        Quantitative phenotype or fitness associated to each genotype
+    y : array-like of shape (n_genotypes,), optional
+        Quantitative phenotype or fitness associated with each genotype.
 
-    is_regular: bool
-        Boolean variable storing whether the resulting Hamming graph is regular
-        or not. In other words, whether every site has the same number of
-        alleles
-
+    is_regular : bool
+        Indicates whether the resulting Hamming graph is regular, i.e., whether
+        every site has the same number of alleles.
     """
 
     def __init__(
@@ -812,30 +819,30 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
 
     def get_single_mutant_matrix(self, sequence, center=False):
         """
-        Returns the effects of single point mutations from a focal sequences
+        Calculate the effects of single point mutations from a focal sequence.
 
         Parameters
         ----------
-        sequence: str
-            String encoding the sequence from which to report all single point
-            mutant effects
+        sequence : str
+            The sequence from which to compute all single point mutant effects.
 
-        center: bool (False)
-            If True, results will be centered by position, so that the mean
-            of allelic effects is 0. If False, the focal sequence will have 0
-            and values would represent mutational effects from it
+        center : bool, optional, default=False
+            If True, the results will be centered by position, ensuring that the
+            mean of allelic effects at each position is 0. If False, the focal
+            sequence will have a value of 0, and the results will represent
+            mutational effects relative to it.
 
         Returns
         -------
-        output: pd.DataFrame of shape (seq_length, total_alleles)
-            pd.DataFrame containin the mutational or allelic effects
-            for each allele across all sequence positions
+        output : pd.DataFrame of shape (seq_length, total_alleles)
+            A DataFrame containing the mutational or allelic effects for each
+            allele across all sequence positions.
         """
         seqy = self.get_y([sequence])
         data = []
         for i in range(self.seq_length):
             alleles = self.alphabet[i]
-            mutants = [sequence[:i] + a + sequence[i + 1:] for a in alleles]
+            mutants = [sequence[:i] + a + sequence[i + 1 :] for a in alleles]
             dy = self.get_y(mutants) - seqy
             if center:
                 dy = dy - dy.mean()
@@ -845,24 +852,28 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
 
     def to_nucleotide_space(self, codon_table="Standard", alphabet_type="dna"):
         """
-        Transforms a protein space into a nucleotide space using a codon table
-        for translating the sequence
+        Convert a protein sequence space into a nucleotide sequence space.
+
+        This method transforms a protein sequence space into a nucleotide sequence
+        space using a specified codon table for translation. The resulting nucleotide
+        space will have 4 alleles per site and 3 times the number of sites as the
+        original protein space. It assumes that the function associated with each
+        nucleotide sequence depends only on the protein sequence it encodes.
 
         Parameters
         ----------
-        codon_table: str or Bio.Data.CodonTable
-            NCBI code for an existing genetic code or a custom CodonTable
-            object to translate nucleotide sequences into protein
+        codon_table : str or Bio.Data.CodonTable
+            The NCBI code for an existing genetic code or a custom CodonTable
+            object used to translate nucleotide sequences into proteins.
 
-        alphabet_type: str ('dna')
-            Sequence type to use in the resulting nucleotide space
-            It can only take one of the following values {'dna', 'rna'}
+        alphabet_type : str, optional, default='dna'
+            The type of nucleotide sequence to use in the resulting space.
+            Must be one of {'dna', 'rna'}.
 
         Returns
         -------
         SequenceSpace
-            Nucleotide sequence space with 4 alleles per site and 3 times
-            the number of sites of the current space
+            A nucleotide sequence space with the specified properties.
         """
 
         msg = "Only protein spaces can be transformed to nucleotide space"
@@ -894,15 +905,19 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
 
     def remove_codon_incompatible_transitions(self, codon_table="Standard"):
         """
-        Recalculates the adjacency matrix of the discrete space to only allow
-        transitions that are compatible with the specified codon table
+        Recalculate the adjacency matrix to allow only codon-compatible transitions
+        in a protein sequence space.
+
+        This method updates the adjacency matrix of the sequence space to ensure
+        that transitions between states are compatible with the specified codon table.
+        Only transitions that result in valid amino acid substitutions according to
+        the codon table will be allowed.
 
         Parameters
         ----------
-        codon_table: str or Bio.Data.CodonTable
-            NCBI code for an existing genetic code or a custom CodonTable
-            object to translate nucleotide sequences into protein
-
+        codon_table : str or Bio.Data.CodonTable
+            The NCBI code for an existing genetic code or a custom CodonTable
+            object used to translate nucleotide sequences into proteins.
         """
         msg = "alphabet must be at least a subset of the protein alphabet"
         check_error(guess_alphabet_type(self.alphabet) == "protein", msg)

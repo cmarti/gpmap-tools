@@ -1159,24 +1159,24 @@ def calc_variance_components(y, n_alleles, seq_length):
 
 def calc_space_variance_components(space):
     """
-    Calculates the variance components associated to the function
-    along the SequenceSpace. It returns the squared module of the
-    projection into each of the l+1 eigenspaces of the graph Laplacian
-    representing the variance associated to epistatic interations of order k
+    Calculates the variance components associated with the function
+    along the SequenceSpace. It returns the squared magnitude of the
+    projection into each of the l+1 eigenspaces of the graph Laplacian,
+    representing the variance associated with epistatic interactions of order k.
 
-    See Zhou et al. 2021
+    This method is based on the work by Zhou et al. (2021):
     https://www.pnas.org/doi/suppl/10.1073/pnas.2204233119
 
     Parameters
     ----------
     space : SequenceSpace
-        SequenceSpace object for which to calculate the variance components
+        A SequenceSpace object for which to calculate the variance components.
 
     Returns
     -------
-    lambdas: array-like of shape (seq_length + 1, )
-        Vector containing the squared module of the projections into the
-        k'th eigenspaces in increasing order of k.
+    vc : array-like of shape (seq_length + 1,)
+        A vector containing the squared magnitude of the projections into the
+        k-th eigenspaces in increasing order of k.
 
     """
     n_alleles = np.unique(space.n_alleles)
@@ -1200,26 +1200,27 @@ def calc_vjs_variance_components(y, a, sl, k):
     return variances
 
 
-def calc_space_vjs_variance_components(space, k):
+def calc_space_vjs_variance_components(space, k=None):
     """
-    Calculates the squared module of the projection into the `Vj` subspaces
-    of order `k` defined by each individual combination of `k` sites as
-    defined by `j`
+    Calculates the squared magnitude of the projection into the `Vj` subspaces
+    of order `k`, defined by each individual combination of `k` sites as
+    specified by `j`.
 
     Parameters
     ----------
     space : SequenceSpace
         SequenceSpace object for which to calculate the Vj's
-        variance components
+        variance components.
 
-    k : int from 0 to seq_length + 1
-        Order of interaction to calculate
+    k : int or None
+        If provided, restricts the variance components calculation to subspaces
+        of order k.
 
     Returns
     -------
-    lambdas: dict
-        Dictionary with combinations of `k` sites as keys and the associated
-        squared modules of the projection into the individual subspaces
+    vc: dict
+        Dictionary with combinations of sites as keys and the associated
+        squared magnitudes of the projection into the individual subspaces.
     """
 
     n_alleles = np.unique(space.n_alleles)

@@ -94,39 +94,45 @@ def guess_space_configuration(
     force_regular=False,
     force_regular_alleles=False,
 ):
-    """late
-    Guess the sequence space configuration from a collection of sequences
-    This allows to have different number of alleles per site and maintain
-    the order in which alleles appear in the sequences when enumerating the
-    alleles per position
+    """
+    Infer the sequence space configuration from a collection of sequences.
+
+    This function determines the sequence space configuration, allowing for
+    different numbers of alleles per site while maintaining the order in which
+    alleles appear in the sequences. It can also enforce constraints such as
+    ensuring a full sequence space or a constant number of alleles per site.
 
     Parameters
     ----------
-    seqs: array-like of shape (n_genotypes,)
-        Vector or list containing the sequences from which we want to infer
-        the space configuration
+    seqs : array-like of shape (n_genotypes,)
+        A list or array containing the sequences from which the space
+        configuration is to be inferred.
 
-    ensure_full_space: bool
-        Option to ensure that the whole sequence space must be represented by
-        the set of provided sequences. This is a useful feature to identify
-        whether there are missing genotypes before defining the space and
-        random walk to visualize the full landscape.
+    ensure_full_space : bool, optional, default=True
+        If True, ensures that the entire sequence space is represented by
+        the provided sequences. This is useful for identifying missing
+        genotypes before defining the space.
 
-    force_regular: bool
-        Option to ensure that there are the same number of alleles per
-        site. New allele names will be added to sites with less than the
-        maximum number of alleles across sites
+    force_regular : bool, optional, default=False
+        If True, ensures that all sites have the same number of alleles.
+        New allele names will be added to sites with fewer alleles than
+        the maximum across all sites.
 
-    force_regular_alleles: bool
-        Option to additionally ensure that the same alleles are
-        common across all sites
+    force_regular_alleles : bool, optional, default=False
+        If True, ensures that the same alleles are used across all sites,
+        in addition to enforcing the same number of alleles per site.
 
     Returns
     -------
-    config: dict with keys {'length', 'n_alleles', 'alphabet'}
-            Returns a dictionary with the inferred configuration of the
-            discrete space where the sequences come from.
-
+    config : dict
+        A dictionary with the inferred configuration of the sequence space.
+        Keys include:
+        - 'length': The length of the sequences.
+        - 'n_alleles': A list containing the number of alleles per site.
+        - 'alphabet': A list of lists, where each inner list contains the
+          alleles for a specific site.
+        - 'alphabet_type': The inferred type of alphabet ('dna', 'rna',
+          'protein', or 'custom').
     """
 
     alleles = defaultdict(dict)
@@ -144,7 +150,7 @@ def guess_space_configuration(
         msg += "the expected from the observed alleles in the "
         msg += "provided sequences ({}).".format(n_exp)
         msg += "Provide phenotypes for every possible "
-        msg += 'sequence in the space or '
+        msg += "sequence in the space or "
         msg += "set `ensure_full_space=False` to avoid this error"
         check_error(n_exp == n_obs, msg)
 
@@ -185,39 +191,39 @@ def generate_freq_reduced_code(
     seqs, n_alleles, counts=None, keep_allele_names=True, last_character="X"
 ):
     """
-    Returns a list of dictionaries with the mapping from each allele in the
-    observed sequences to a reduced alphabet with at most ``n_alleles`` per
-    site. The least frequent alleles are pooled together into a single allele
+    Generate a mapping from each allele in the observed sequences to a reduced
+    alphabet with at most ``n_alleles`` per site. The least frequent alleles
+    are grouped into a single allele.
 
     Parameters
     ----------
     seqs : array-like of shape (n_genotypes,) or (n_obs,)
-        Observed sequences. If ``counts=None``, then every sequence is counted
-        once. Otherwise, frequencies are calculated using the counts as the
-        number of times a certain sequence appears in the data
+        Observed sequences. If ``counts`` is None, each sequence is assumed to
+        appear once. Otherwise, frequencies are calculated using the counts
+        as the number of times a sequence appears in the data.
 
-    n_alleles : int or array-like of shape (seq_length, )
-        Maximal number of alleles per site allowed. If a list or array is
-        provided each site will use the specified number of alleles. Otherwise,
-        all sites will have the same maximum number of alleles
+    n_alleles : int or array-like of shape (seq_length,)
+        Maximum number of alleles allowed per site. If an array is provided,
+        each site will use the specified number of alleles. Otherwise, all
+        sites will have the same maximum number of alleles.
 
-    counts : None or array-like of shape (n_genotypes, )
-        Number of times every sequence in ``seqs`` appears in the data. If
-        not provided, every provided sequence is assumed to appear exactly once
+    counts : None or array-like of shape (n_genotypes,)
+        Number of times each sequence in ``seqs`` appears in the data. If not
+        provided, each sequence is assumed to appear exactly once.
 
-    keep_allele_names : bool
-        If ``keep_allele_names=True``, then allele names are preserved.
-        Otherwise they are replace by new alleles taken from the alphabet
+    keep_allele_names : bool, optional
+        If True, allele names are preserved. Otherwise, they are replaced by
+        new alleles taken from the alphabet. Default is True.
 
-    last_character : str
-        Character to use for remaining alleles when ``keep_allele_names=True``
+    last_character : str, optional
+        Character to use for pooled alleles when ``keep_allele_names`` is True.
+        Default is "X".
 
     Returns
     -------
     code : list of dict of length seq_length
-        List of dictionaries containing the new allele corresponding to each
-        of the original alleles for each site.
-
+        A list of dictionaries, where each dictionary maps the original alleles
+        to the new reduced alphabet for each site.
     """
 
     if counts is None:
@@ -254,21 +260,19 @@ def generate_freq_reduced_code(
 
 def get_custom_codon_table(aa_mapping):
     """
-    Builds a biopython CodonTable to use for translation with a
-    custom genetic code
-
+    Constructs a Biopython CodonTable for translation using a custom genetic code.
 
     Parameters
     ----------
-    aa_mapping: pd.DataFrame
-        pandas DataFrame with columns "Codon" and "Letter" representing the
-        genetic code correspondence. Stop codons should appear as "*"
+    aa_mapping : pd.DataFrame
+        A pandas DataFrame with columns "Codon" and "Letter" representing the
+        genetic code mapping. Stop codons should be denoted with "*".
 
     Returns
     -------
-    codon_table: Bio.Data.CodonTable.CodonTable object
-        Standard bioptython codon table object to use for translating sequences
-
+    codon_table : Bio.Data.CodonTable.CodonTable
+        A Biopython CodonTable object that can be used for translating sequences
+        with the specified custom genetic code.
     """
     aa_mapping["Codon"] = [x.replace("U", "T") for x in aa_mapping["Codon"]]
     stop_codons = aa_mapping.loc[aa_mapping["Letter"] == "*", "Codon"].tolist()
@@ -304,20 +308,28 @@ def get_seqs_from_alleles(alphabet):
 
 def get_one_hot_from_alleles(alphabet):
     """
-    Returns a one hot encoding CSR matrix for a complete combinatorial space
-    It uses a fast recursive method to avoid repetition of building
-    common blocks in the full matrix
+    Generate a one-hot encoding CSR matrix for a complete combinatorial space.
+
+    This function uses a fast recursive method to construct the one-hot
+    encoding matrix, avoiding redundant computations for common blocks
+    in the full matrix.
 
     Parameters
     ----------
     alphabet : list of list
-        List containing lists of alleles per site in a sequence space
+        A list where each inner list contains the alleles for a specific
+        site in the sequence space.
 
-    Returns : scipy.sparse.csr_matrix of shape (n_genotypes, total_n_alleles)
-        csr matrix containing the one hot encoding of the full sequence space
-        as with genotypes sorted lexicographically
-
+    Returns
+    -------
+    scipy.sparse.csr_matrix
+        A CSR matrix of shape (n_genotypes, total_n_alleles), where
+        `n_genotypes` is the total number of genotypes in the sequence
+        space and `total_n_alleles` is the sum of alleles across all sites.
+        The matrix contains the one-hot encoding of the full sequence space,
+        with genotypes sorted lexicographically.
     """
+
     if not alphabet:
         raise ValueError("alphabet must not be empty")
 
@@ -340,23 +352,23 @@ def get_one_hot_from_alleles(alphabet):
 
 def get_alphabet(n_alleles=None, alphabet_type=None):
     """
-    Returns the resulting alphabet from specifying either the type or the
-    number of alleles per site
+    Generate an alphabet based on the specified number of alleles or alphabet type.
 
     Parameters
     ----------
     n_alleles : int
-        Number of alleles per site
+        The number of alleles per site. If `alphabet_type` is not specified,
+        this determines the size of the custom alphabet.
 
-    alphabet_type : str
-        Type of alphabet to use out of {None, 'dna', 'rna', 'protein'}
+    alphabet_type : str, optional
+        The type of alphabet to use. Must be one of {None, 'dna', 'rna', 'protein'}.
+        If None or 'custom', a custom alphabet is generated based on `n_alleles`.
 
     Returns
     -------
-
     alphabet : list
-        List containing the alleles in the desired alphabet
-
+        A list containing the alleles in the desired alphabet. For custom alphabets,
+        the alleles are represented as strings of numbers or characters.
     """
 
     if alphabet_type is None or alphabet_type == "custom":
@@ -416,42 +428,40 @@ def msa_to_counts(
     X, y=None, positions=None, phylo_correction=False, max_dist=0.2
 ):
     """
-    Obtains a series of sequences and their counts from a Multiple Sequence
-    Alignment (MSA) provided as a list of sequences. It can select subsequences
-    by selecting which positions to look at in the MSA and do sequence
-    identity re-weighting by considering the sequence similarities across the
-    full length sequence
+    Extracts unique sequences and their counts from a Multiple Sequence
+    Alignment (MSA). Optionally, subsequences can be selected based on
+    specific positions, and sequence identity re-weighting can be applied
+    to account for sequence similarities across the full alignment.
 
     Parameters
     ----------
     X : array-like of aligned sequences
-        Input sequences from which to extract counts
+        Input sequences from which to extract unique sequences and counts.
 
-    y : array-like of weights (None)
-        Pre-calculated weights associated to the input sequences
+    y : array-like of weights, optional (default=None)
+        Pre-calculated weights associated with the input sequences. If not
+        provided, weights are calculated based on sequence identity.
 
-    positions : array-like of positions (None)
-        If provided, subsequences at this subset of positions will be used
-        to provide counts or re-weighted counts
+    positions : array-like of int, optional (default=None)
+        Subset of positions to extract subsequences from the MSA. If not
+        provided, the full sequences are used.
 
-    phylo_correction : bool (False)
-        If True, observations will be re-weighted using sequence
-        similarity along the whole sequence as 1 over the number of similar
-        sequences in the MSA. Similar sequences are defined as those that
-        differ less from each other than the specified ```max_dist```
+    phylo_correction : bool, optional (default=False)
+        If True, applies sequence identity re-weighting. Observations are
+        weighted as 1 divided by the number of similar sequences in the MSA.
+        Similar sequences are defined based on the `max_dist` parameter.
 
-    max_dist : float (0.2)
-        Pairs of sequences that differ more than this value will be consired
-        similar for re-weighting
+    max_dist : float, optional (default=0.2)
+        Maximum sequence identity distance for considering sequences as
+        similar during re-weighting. Only used if `phylo_correction` is True.
 
     Returns
     -------
-    X: np.array of shape (n_unique_seqs, )
-        Unique subsequences at the specified positions in the MSA
+    X : np.array of shape (n_unique_seqs,)
+        Unique subsequences at the specified positions in the MSA.
 
-    y: np.array of shape (n_unique_seqs, )
-        Counts or re-weighted counts for each of the unique subsequences in
-        the MSA
+    y : np.array of shape (n_unique_seqs,)
+        Counts or re-weighted counts for each unique subsequence in the MSA.
     """
     if phylo_correction:
         if not positions:
@@ -459,7 +469,7 @@ def msa_to_counts(
                 '"positions" must be provided for phylogenetic correction'
             )
         if y is not None:
-            msg = 'phylogenetic correction can not be calculated '
+            msg = "phylogenetic correction can not be calculated "
             msg += 'when "y" is provided'
             raise ValueError(msg)
 

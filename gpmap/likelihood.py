@@ -185,11 +185,41 @@ class SeqDEFTLikelihood(object):
 
 
 class GaussianLikelihood(object):
+    """
+    GaussianLikelihood class for modeling Gaussian likelihoods.
+
+    This class provides methods for setting data, calculating loss, gradients,
+    and Hessians, as well as sampling from the Gaussian likelihood.
+
+    Parameters
+    ----------
+    genotypes : array-like
+        List of genotypes in the sequence space.
+
+    """
     def __init__(self, genotypes):
         self.genotypes = genotypes
         self.n_genotypes = genotypes.shape[0]
 
     def set_data(self, X, y, y_var=None):
+        '''
+        Set the data for the Gaussian likelihood model.
+
+        Parameters
+        ----------
+        X : array-like
+            Observed genotypes or input data.
+        y : array-like
+            Observed values corresponding to the input data X.
+        y_var : array-like, optional
+            Variance of the observed values y. If not provided, it is assumed
+            to be zero (no variance).
+
+        Raises
+        ------
+        ValueError
+            If the y vector contains NaN values.
+        '''
         if y is None:
             y = np.zeros(X.shape[0])
         
@@ -281,6 +311,22 @@ class GaussianLikelihood(object):
         return logL
 
     def sample(self, phi, seed=None):
+        '''
+        Generate samples from the Gaussian likelihood model.
+
+        Parameters
+        ----------
+        phi : array-like
+            The mean function used to sample data with added noise.
+        seed : int, optional
+            A random seed for reproducibility. If None, the random number generator
+            will not be seeded.
+
+        Returns
+        -------
+        array-like
+            Samples generated from the Gaussian likelihood model.
+        '''
         if seed is not None:
             np.random.seed(seed)
 
