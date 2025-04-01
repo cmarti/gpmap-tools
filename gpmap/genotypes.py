@@ -110,30 +110,32 @@ def select_edges_from_genotypes(nodes_idxs, edges):
 
 def get_genotypes_from_region(nodes_df, max_values={}, min_values={}):
     """
-    Returns the genotype labels matching the specified conditions
-    as maximum and minimum values of the dataframe
+    Filters and returns the genotype labels that satisfy the specified 
+    conditions based on maximum and minimum values for the columns in 
+    the input DataFrame.
 
     Parameters
     ----------
-    nodes_df: pd.DataFrame of shape (n_genotypes, n_features)
-        DataFrame with the genotypes from a full sequence space as index
-        Typically, it will contain, at least, the coordinates of the
-        visualization for each genotype, but it will keep any other column
-        in the DataFrame for later use
+    nodes_df : pd.DataFrame
+        A DataFrame with genotypes as the index and various features as columns.
+        Typically, it contains at least the coordinates for visualization, 
+        but it may also include other metadata.
 
-    max_values : dict
-        Dictionary with column names as keys and max values to filter
-        genotypes as values
+    max_values : dict, optional
+        A dictionary where keys are column names and values are the maximum 
+        thresholds for filtering genotypes. Genotypes with values greater 
+        than these thresholds in the specified columns will be excluded.
 
-    min_values : dict
-        Dictionary with column names as keys and min values to filter
-        genotypes as values
+    min_values : dict, optional
+        A dictionary where keys are column names and values are the minimum 
+        thresholds for filtering genotypes. Genotypes with values less than 
+        these thresholds in the specified columns will be excluded.
 
     Returns
     -------
-    genotypes : array-like of shape (n_selected,)
-        Array containing the selected genotypes from the input dataframe
-
+    genotypes : pd.Index
+        An index containing the labels of genotypes that meet the specified 
+        filtering criteria.
     """
     sel = np.full(nodes_df.shape[0], True)
 
@@ -148,37 +150,34 @@ def get_genotypes_from_region(nodes_df, max_values={}, min_values={}):
 
 def select_genotypes(nodes_df, genotypes, edges=None, is_idx=False):
     """
-    Selects the provided genotypes from nodes_df with the corresponding
-    edges among the remaining genotypes if edges are provided
+    Selects the specified genotypes from `nodes_df`, along with the corresponding
+    edges among the remaining genotypes if `edges` are provided.
 
     Parameters
     ----------
     nodes_df: pd.DataFrame of shape (n_genotypes, n_features)
-        DataFrame with the genotypes from a full sequence space as index
-        Typically, it will contain, at least, the coordinates of the
-        visualization for each genotype, but it will keep any other column
-        in the DataFrame for later use
+        DataFrame containing the genotypes from a full sequence space as the index.
+        Typically, it includes at least the coordinates for visualization of each genotype,
+        but it may also retain any other columns for later use.
 
     genotypes: array-like of shape (n_genotypes,)
-        Array of ordered genotypes to select from the starting landscape
-        It should contain the genotype labels by default, or indexes if
-        option `is_idx` is provided
+        Array of genotypes to select from the input landscape. By default, it should
+        contain genotype labels, or indexes if the `is_idx` option is set to True.
 
     edges: pd.DataFrame of shape (n_edges, 2) or scipy.sparse.csr_matrix
-           of shape (n_genotypes, n_genotypes)
-        DataFrame or csr_matrix containing the adjacency relationships
-        among genotypes provided in `nodes_df` in the discrete space
+           of shape (n_genotypes, n_genotypes), optional
+        DataFrame or csr_matrix representing the adjacency relationships
+        among genotypes provided in `nodes_df` within the discrete space.
 
-    is_idx: bool
-        The genotypes argument is an array of indexes instead of an
-        array of genotype labels to select genotypes
+    is_idx: bool, optional
+        Indicates whether the `genotypes` argument is an array of indexes
+        instead of an array of genotype labels.
 
     Returns
     -------
     output: (nodes_df, edges)
-        Filtered landscape containing the selected genotypes and the
-        adjacency relationships between them given as a tuple
-
+        A tuple containing the filtered landscape with the selected genotypes
+        and the adjacency relationships between them.
     """
 
     size = nodes_df.shape[0]
@@ -200,25 +199,25 @@ def select_genotypes(nodes_df, genotypes, edges=None, is_idx=False):
 
 def select_path(nodes_df, path):
     """
-    Function that returns the nodes and edges dataframes for plotting a path
+    Returns the nodes and edges DataFrames for plotting a path defined by a 
+    sequence of genotypes.
 
     Parameters
     ----------
-    nodes_df: pd.DataFrame of shape (n_genotypes, n_features)
-        DataFrame with the genotypes from a full sequence space as index
-        Typically, it will contain, at least, the coordinates of the
-        visualization for each genotype, but it will keep any other column
-        in the DataFrame for later use
+    nodes_df : pd.DataFrame of shape (n_genotypes, n_features)
+        DataFrame containing the genotypes from a complete sequence space as the index.
+        Typically, it includes at least the coordinates for visualizing each genotype,
+        but it may also retain other columns for additional metadata.
+
     path : array-like
-        Array-like containing the series of states comprising a path in the
-        discrete space
+        Array-like object containing the sequence of states that form a path in the
+        discrete space.
 
     Returns
     -------
-    output: (nodes_df, edges)
-        Landscape containing the selected genotypes in the path and the
-        edges that specify the connections between them
-
+    output : (nodes_df, edges)
+        A tuple containing the filtered DataFrame with the selected genotypes in the path
+        and the edges that define the connections between them.
     """
     ndf = nodes_df.loc[path, :]
     ncol = ndf.shape[0]
@@ -228,23 +227,26 @@ def select_path(nodes_df, path):
 
 def select_d_neighbors(nodes_df, genotype_labels, d=1, edges=None):
     """
-    Selects genotypes that are within a specified Hamming distance
-    from given genotype labels.
+    Select genotypes within a specified Hamming distance from given genotype labels.
 
     Parameters
     ----------
-        nodes_df (pd.DataFrame): DataFrame containing genotypes as index.
-            genotype_labels (list of str): List of genotype sequences to
-            compare against.
+    nodes_df : pd.DataFrame
+        DataFrame containing genotypes as the index.
 
-        d (int, optional): Maximum Hamming distance to consider. Defaults to 1.
-        edges (optional): Additional parameter to pass to the select_genotypes
-            function. Defaults to None.
+    genotype_labels : list of str
+        List of genotype sequences to compare against.
+
+    d : int, optional
+        Maximum Hamming distance to consider. Defaults to 1.
+
+    edges : pd.DataFrame or scipy.sparse matrix, optional
+        Additional parameter to pass to the `select_genotypes` function. Defaults to None.
 
     Returns
     -------
-        pd.DataFrame: DataFrame containing selected genotypes within
-            the specified Hamming distance.
+    pd.DataFrame
+        DataFrame containing selected genotypes within the specified Hamming distance.
     """
 
     seq_matrix = np.array([[s for s in seq] for seq in nodes_df.index])
@@ -311,35 +313,37 @@ def marginalize_landscape_positions(
     nodes_df, keep_pos=None, skip_pos=None, return_edges=False
 ):
     """
-    Averages out some positions in the sequences for all numeric values
-    provided in the input dataframe
+    Marginalizes specific positions in the sequences and averages numeric values
+    across the remaining genetic backgrounds.
 
     Parameters
     ----------
     nodes_df : pd.DataFrame
-        DataFrame with sequence names as index and at least one numeric
-        column to calculate the average across the selected backgrounds
+        DataFrame with sequence names as the index and at least one numeric
+        column to calculate the average across the selected genetic backgrounds.
 
-    keep_pos : array-like (None)
-        If provided, list of 0-index positions that are to
-        be preserved and averaged across all genetic backgrounds specified
-        by the remaining positions
+    keep_pos : array-like, optional
+        List of 0-indexed positions to preserve. The sequences will be averaged
+        across all genetic backgrounds specified by the remaining positions.
+        If not provided, `skip_pos` must be specified.
 
-    skip_pos : array-like (None)
-        If provided, list of 0-index positions to average out
+    skip_pos : array-like, optional
+        List of 0-indexed positions to marginalize out. The sequences will be
+        averaged across these positions. If not provided, `keep_pos` must be specified.
 
-    return_edges : bool (False)
-        Return also an edges_df DataFrame to use directly for visualization
+    return_edges : bool, optional, default=False
+        If True, returns an additional DataFrame containing the edges of the
+        reduced sequence space for visualization.
 
     Returns
     -------
-    nodes_df :  pd.DataFrame
+    nodes_df : pd.DataFrame
         DataFrame containing the average value of every numeric column in the
-        input DataFrame with the subsequences at the desired positions as index
+        input DataFrame, with the subsequences at the desired positions as the index.
 
-    edges_df :  pd.DataFrame
-        DataFrame containing the edges of the reduced sequence space. It
-        will only be provided if ```return_edges=True```
+    edges_df : pd.DataFrame, optional
+        DataFrame containing the edges of the reduced sequence space. This is
+        only returned if `return_edges=True`.
     """
 
     # Select only numeric fields for averaging

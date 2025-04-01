@@ -39,8 +39,8 @@ Please do not hesitate to contact us with any questions or suggestions for impro
     quickstart
     inference
     visualization
-    datasets
     evolution
+    datasets
     api 
 
 References

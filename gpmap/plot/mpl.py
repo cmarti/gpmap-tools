@@ -392,99 +392,94 @@ def plot_nodes(
     edgecolor="black",
     legend=True,
     legend_loc=0,
+    rasterized=False,
 ):
     """
     Plots the nodes representing the states of the discrete space on the
-    provided coordinates
+    provided coordinates.
 
     Parameters
     ----------
-    axes : matplotlib ``Axes`` in which to plot the nodes or states.
+    axes : matplotlib.axes.Axes
+        The matplotlib Axes object in which to plot the nodes or states.
 
-    nodes_df : pd.DataFrame of shape (n_genotypes, n_components + 2)
-        ``pd.DataFrame`` containing the coordinates in every of the ``n_components``
-        in addition to the "function" and "stationary_freq" columns. Additional
-        columns are also allowed
+    nodes_df : pandas.DataFrame
+        DataFrame of shape (n_genotypes, n_components + 2) containing the coordinates
+        in each of the `n_components`, along with additional columns such as
+        "function" and "stationary_freq". Additional columns are also allowed.
 
-    x : str ('1')
-        Column in ``nodes_df`` to use for plotting the genotypes on the x-axis
+    x : str, default='1'
+        Column in `nodes_df` to use for plotting the genotypes on the x-axis.
 
-    y : str ('2')
-        Column in ``nodes_df`` to use for plotting the genotypes on the y-axis
+    y : str, default='2'
+        Column in `nodes_df` to use for plotting the genotypes on the y-axis.
 
-    z : str (None)
-        Column in ``nodes_df`` to use for plotting the genotypes on the z-axis.
-        If provided, then a 3D plot will be produced as long as the provided
-        ``axes`` object allows it.
+    z : str, optional
+        Column in `nodes_df` to use for plotting the genotypes on the z-axis.
+        If provided, a 3D plot will be produced, provided the `axes` object supports it.
 
-    alpha : float (1)
-        Transparency of markers representing the nodes
+    alpha : float, default=1
+        Transparency of markers representing the nodes.
 
-    zorder : int (2)
+    zorder : int, default=2
         Order in which the nodes will be rendered relative to other elements.
-        Generally, we would want this to be bigger than the ``zorder``
-        used for plotting the edges
+        Typically, this should be greater than the `zorder` used for plotting edges.
 
-    color : str  ('grey')
-        Column name for the values according to which states will be colored or
-        the specific color to use for plotting the states
+    color : str, default='grey'
+        Column name in `nodes_df` for the values used to color the nodes, or a specific
+        color to use for all nodes.
 
-    vcenter : bool (False)
-        Center the color scale around the 0 value
+    vcenter : bool, default=False
+        Whether to center the color scale around the 0 value.
 
-    vmax : float
-        Maximum value to show in the colormap
+    vmax : float, optional
+        Maximum value for the colormap.
 
-    vmin : float
-        Minimum value to show in the colormap
+    vmin : float, optional
+        Minimum value for the colormap.
 
-    cmap : colormap or str
-        Colormap to use for coloring the nodes according to column ``color``
+    cmap : str or matplotlib.colors.Colormap, default='viridis'
+        Colormap to use for coloring the nodes based on the `color` column.
 
-    cbar : bool
-        Boolean variable representing whether to show the colorbar
+    cbar : bool, default=True
+        Whether to display the colorbar.
 
-    cbar_label : str
-        Label for the colorbar associated to the nodes color scale
+    cbar_label : str, optional
+        Label for the colorbar associated with the nodes' color scale.
 
-    cbar_axes : matplotlib ``Axes``
+    cbar_axes : matplotlib.axes.Axes, optional
         Axes to plot the colorbar. If not provided, it will be automatically
-        adjusted to the current Axes
+        adjusted to the current Axes.
 
-    palette : dict
-        Dictionary containing the colors associated to the categories specified
-        by the column ``color`` in ``nodes_df``, if they express categories
-        rather than numerical values
+    palette : dict, optional
+        Dictionary mapping categories in the `color` column to specific colors,
+        if the column represents categorical data.
 
-    size : float (2.5)
-        Size of the markers provided for plotting to ``axes.scatter``. If a
-        ``float`` is provided, that will be the size used to plot every nodes.
-        If ``str``, then node sizes will be scaled according to the
-        corresponding column in ``nodes_df``.
+    size : float or str, default=2.5
+        Size of the markers for the nodes. If a float is provided, it will be used
+        for all nodes. If a string is provided, node sizes will be scaled based
+        on the corresponding column in `nodes_df`.
 
-    max_size : float (1)
-        Maximum linewidth for the edges when scaled by
+    max_size : float, default=40
+        Maximum size for the nodes when scaled.
 
-    min_size : float (0.1)
-        Maximum linewidth for the edges when scaled by
+    min_size : float, default=1
+        Minimum size for the nodes when scaled.
 
-    lw : float (0)
-        Width of the line edges delimiting the markers representing the nodes
+    lw : float, default=0
+        Line width of the edges around the markers representing the nodes.
 
-    edgecolor : str ('black')
-        Color of the line edges delimiting the markers representing the nodes
+    edgecolor : str, default='black'
+        Color of the edges around the markers representing the nodes.
 
-    legend: bool (True)
-        Show legend on the plot
+    legend : bool, default=True
+        Whether to display a legend on the plot.
 
-    legend_loc : int or tuple
-        Location of the legend in case of coloring according to a categoric
-        variable
+    legend_loc : int or tuple, default=0
+        Location of the legend if coloring is based on a categorical variable.
 
-    Returns
-    -------
-    line_collection : LineCollection or Line3DCollection
-
+    rasterized : bool, default=False
+        Whether to rasterize the scatterplot when rendering the plot in vector format.
     """
 
     ndf = sort_nodes(nodes_df, sort_by, sort_ascending, color)
@@ -527,6 +522,23 @@ def plot_nodes(
 
 
 def plot_color_hist(axes, values, cmap="viridis", bins=50, fontsize=None):
+    """
+    Plot a histogram with bars colored according to a colormap.
+
+    Parameters
+    ----------
+    axes : matplotlib.axes.Axes
+        The matplotlib axes object where the histogram will be plotted.
+    values : array-like
+        The data values to be plotted in the histogram.
+    cmap : str, optional
+        The name of the colormap to use for coloring the bars. Defaults to "viridis".
+    bins : int, optional
+        The number of bins to use for the histogram. Defaults to 50.
+    fontsize : int or None, optional
+        Font size for the y-axis label. If None, the default font size is used.
+
+    """
     _, bins, bars = axes.hist(values, bins=bins)
     values = 0.5 * (bins[1:] + bins[:-1])
     values = (values - bins[0]) / (bins[-1] - bins[0])
@@ -882,96 +894,148 @@ def plot_visualization(
     inset_cbar=False,
     inset_pos=(0.7, 0.7),
     prev_nodes_df=None,
+    rasterized=False,
 ):
     """
     Plots the nodes representing the states of the discrete space on the
     provided coordinates and the edges representing the connections between
-    states that are conneted if provided
+    states if provided.
 
     Parameters
     ----------
-    axes : matplotlib
-        matplotlib ``Axes`` in which to plot the edges.
-    pd.DataFrame of shape (n_genotypes, n_variables)
-        ``pd.DataFrame`` containing the coordinates in every of the ``n_components``
+    axes : matplotlib.axes.Axes
+        Matplotlib `Axes` object in which to plot the edges and nodes.
+
+    nodes_df : pd.DataFrame of shape (n_genotypes, n_variables)
+        DataFrame containing the coordinates in each of the `n_components`,
         in addition to the "function" and "stationary_freq" columns. Additional
-        columns are also allowed
-    pd.DataFrame of shape (n_edges, 2)
-        ``pd.DataFrame`` the connectivity information between states of the
+        columns are also allowed.
+
+    edges_df : pd.DataFrame of shape (n_edges, 2), optional
+        DataFrame containing the connectivity information between states of the
         discrete space to plot. It has columns "i" and "j" for the indexes
-        of the pairs of states that are connected.
-    x : str, optional
-        _description_, by default '1'
-    y : str, optional
-        _description_, by default '2'
-    z : _type_, optional
-        _description_, by default None
-    nodes_alpha : int, optional
-        _description_, by default 1
-    nodes_zorder : int, optional
-        _description_, by default 2
-    nodes_color : str, optional
-        _description_, by default 'function'
-    nodes_cmap : str, optional
-        _description_, by default 'viridis'
-    nodes_palette : _type_, optional
-        _description_, by default None
-    nodes_vmin : _type_, optional
-        _description_, by default None
-    nodes_vmax : _type_, optional
-        _description_, by default None
-    nodes_vcenter : bool, optional
-        _description_, by default False
-    nodes_cbar : bool, optional
-        _description_, by default True
-    nodes_cbar_axes : _type_, optional
-        _description_, by default None
-    nodes_cmap_label : str, optional
-        _description_, by default 'Function'
-    nodes_size : float, optional
-        _description_, by default 2.5
-    nodes_min_size : int, optional
-        _description_, by default 1
-    nodes_max_size : int, optional
-        _description_, by default 40
-    nodes_lw : int, optional
-        _description_, by default 0
-    nodes_edgecolor : str, optional
-        _description_, by default 'black'
-    edges_alpha : float, optional
-        _description_, by default 0.1
-    edges_zorder : int, optional
-        _description_, by default 1
-    edges_color : str, optional
-        _description_, by default 'grey'
-    edges_cmap : str, optional
-        _description_, by default 'binary'
-    edges_palete : _type_, optional
-        _description_, by default None
-    edges_cbar : bool, optional
-        _description_, by default False
-    edges_cbar_axes : _type_, optional
-        _description_, by default None
-    edges_width : float, optional
-        _description_, by default 0.5
-    edges_max_width : int, optional
-        _description_, by default 1
-    edges_min_width : float, optional
-        _description_, by default 0.1
-    sort_by : _type_, optional
-        _description_, by default None
-    sort_ascending : bool, optional
-        _description_, by default False
-    center_spines : bool, optional
-        _description_, by default False
-    add_hist : bool, optional
-        _description_, by default False
-    inset_cbar : bool, optional
-        _description_, by default False
-    inset_pos : tuple, optional
-        _description_, by default (0.7, 0.7)
-    prev_nodes_df : _type_, optional
-        _description_, by default None
+        of the pairs of states that are connected. If not provided, only nodes
+        will be plotted.
+
+    x : str, optional, default='1'
+        Column in `nodes_df` to use for plotting the genotypes on the x-axis.
+
+    y : str, optional, default='2'
+        Column in `nodes_df` to use for plotting the genotypes on the y-axis.
+
+    z : str, optional, default=None
+        Column in `nodes_df` to use for plotting the genotypes on the z-axis.
+        If provided, a 3D plot will be produced.
+
+    nodes_alpha : float, optional, default=1
+        Transparency of the markers representing the nodes.
+
+    nodes_zorder : int, optional, default=2
+        Order in which the nodes will be rendered relative to other elements.
+
+    nodes_color : str, optional, default='function'
+        Column name in `nodes_df` for the values used to color the nodes, or a
+        specific color to use for all nodes.
+
+    nodes_cmap : str, optional, default='viridis'
+        Colormap to use for coloring the nodes based on the `nodes_color` column.
+
+    nodes_palette : dict, optional, default=None
+        Dictionary mapping categories in the `nodes_color` column to specific colors,
+        if the column represents categorical data.
+
+    nodes_vmin : float, optional, default=None
+        Minimum value for the colormap.
+
+    nodes_vmax : float, optional, default=None
+        Maximum value for the colormap.
+
+    nodes_vcenter : bool, optional, default=False
+        Whether to center the color scale around the 0 value.
+
+    nodes_cbar : bool, optional, default=True
+        Whether to display the colorbar for the nodes.
+
+    nodes_cbar_axes : matplotlib.axes.Axes, optional, default=None
+        Axes to plot the colorbar. If not provided, it will be automatically
+        adjusted to the current Axes.
+
+    nodes_cmap_label : str, optional, default='Function'
+        Label for the colorbar associated with the nodes' color scale.
+
+    nodes_size : float, optional, default=2.5
+        Size of the markers for the nodes.
+
+    nodes_min_size : float, optional, default=1
+        Minimum size for the nodes when scaled.
+
+    nodes_max_size : float, optional, default=40
+        Maximum size for the nodes when scaled.
+
+    nodes_lw : float, optional, default=0
+        Line width of the edges around the markers representing the nodes.
+
+    nodes_edgecolor : str, optional, default='black'
+        Color of the edges around the markers representing the nodes.
+
+    edges_alpha : float, optional, default=0.1
+        Transparency of the lines representing the edges.
+
+    edges_zorder : int, optional, default=1
+        Order in which the edges will be rendered relative to other elements.
+
+    edges_color : str, optional, default='grey'
+        Column name in `edges_df` for the values used to color the edges, or a
+        specific color to use for all edges.
+
+    edges_cmap : str, optional, default='binary'
+        Colormap to use for coloring the edges based on the `edges_color` column.
+
+    edges_palette : dict, optional, default=None
+        Dictionary mapping categories in the `edges_color` column to specific colors,
+        if the column represents categorical data.
+
+    edges_cbar : bool, optional, default=False
+        Whether to display the colorbar for the edges.
+
+    edges_cbar_axes : matplotlib.axes.Axes, optional, default=None
+        Axes to plot the colorbar for the edges. If not provided, it will be
+        automatically adjusted to the current Axes.
+
+    edges_width : float, optional, default=0.5
+        Width of the lines representing the edges.
+
+    edges_max_width : float, optional, default=1
+        Maximum width for the edges when scaled.
+
+    edges_min_width : float, optional, default=0.1
+        Minimum width for the edges when scaled.
+
+    sort_by : str, optional, default=None
+        Column in `nodes_df` to use for sorting the nodes before plotting.
+
+    sort_ascending : bool, optional, default=False
+        Whether to sort the nodes in ascending order based on the `sort_by` column.
+
+    center_spines : bool, optional, default=False
+        Whether to center the spines of the plot at (0, 0).
+
+    add_hist : bool, optional, default=False
+        Whether to add a histogram inset showing the distribution of node colors.
+
+    inset_cbar : bool, optional, default=False
+        Whether to add an inset colorbar for the nodes.
+
+    inset_pos : tuple, optional, default=(0.7, 0.7)
+        Position of the inset colorbar or histogram as a fraction of the Axes.
+
+    prev_nodes_df : pd.DataFrame, optional, default=None
+        DataFrame containing the previous positions of the nodes. If provided,
+        the current nodes will be aligned to minimize their distance from the
+        previous positions.
+
+    rasterized : bool, optional, default=False
+        Whether to rasterize the plot for better performance with large datasets.
     """
 
     if prev_nodes_df is not None:
@@ -1675,35 +1739,47 @@ def plot_SeqDEFT_summary(
     normalize_logL=True,
 ):
     """
-    Generates a 2 panel figure showing how the cross-validated likelihood
-    changes with ``a`` hyperparameter and the best selected value for model
-    fitting.
+    Generates a 2-panel figure summarizing the SeqDEFT model results.
+
+    The first panel shows how the cross-validated likelihood changes with the
+    ``a`` hyperparameter and highlights the best-selected value for model fitting.
+    If sequence density data is provided, the second panel visualizes the relationship
+    between observed sequence frequencies and estimated densities.
 
     Parameters
     ----------
-        log_Ls : pd.DataFrame of shape (num_a, 3)
-            DataFrame containing the column names ``a``, ``logL`` and
-            ``fold```
+    log_Ls : pd.DataFrame
+        A DataFrame of shape (num_a, 3) containing the columns:
+        - ``a``: The hyperparameter values.
+        - ``logL``: The log-likelihood values.
+        - ``fold``: The cross-validation fold identifiers.
 
-        seq_density : pd.DataFrame of shape (n_genotypes, >= 2)
-            DataFrame with column names ``frequency``, ``Q`` with the
-            observed frequencies and estimated densities for each possible sequence
-            respectively. If not provided only a 1 panel figure with the
-            cross-validated likelihood curve will be provided
+    seq_density : pd.DataFrame, optional
+        A DataFrame of shape (n_genotypes, >= 2) with the following columns:
+        - ``frequency``: Observed frequencies for each sequence.
+        - ``Q``: Estimated densities for each sequence.
+        If not provided, only a single-panel figure with the cross-validated
+        likelihood curve will be generated.
 
-        err_bars : str
-            What to show in the error bars: sd standard deviation across the
-            different folds or stderr for standard error of the mean
+    err_bars : str, default='stderr'
+        Specifies the type of error bars to display:
+        - ``'sd'``: Standard deviation across the different folds.
+        - ``'stderr'``: Standard error of the mean.
 
-        show_folds: bool
-            Whether to show the out of sample log likelihoods for the different
-            folds in the cross-validation procedure separately
+    show_folds : bool, default=False
+        Whether to display the out-of-sample log-likelihoods for the individual
+        folds in the cross-validation procedure.
+
+    legend_loc : int, default=1
+        The location of the legend in the plot. Follows matplotlib's legend location codes.
+
+    normalize_logL : bool, default=True
+        If True, normalizes the log-likelihood values relative to the value at ``a = ∞``.
 
     Returns
     -------
-        fig : matplotlib.figure object
-            ``Figure`` object containing the resulting plots
-
+    fig : matplotlib.figure.Figure
+        The resulting figure object containing the generated plots.
     """
     if seq_density is None:
         fig, axes = init_fig(1, 1, colsize=5, rowsize=4.3)

@@ -17,7 +17,7 @@ class GPTests(unittest.TestCase):
         # Sample from fixed rho kernel
         kernel = ConnectednessKernel(a, seq_length, rho=0.5)
         model = GaussianProcessRegressor(kernel)
-        y = model.sample()
+        y = model.sample_prior()
         assert y.shape[0] == a**seq_length
         
         # Sample from variable rho kernel
@@ -25,7 +25,7 @@ class GPTests(unittest.TestCase):
             a, seq_length, rho=np.array([0.2, 0.1, 0.8, 0.4, 0.5])
         )
         model = GaussianProcessRegressor(kernel)
-        y = model.sample()
+        y = model.sample_prior()
         assert y.shape[0] == a**seq_length
         
         # Sample from VC kernel
@@ -33,7 +33,7 @@ class GPTests(unittest.TestCase):
             a, seq_length, lambdas=2.0 ** -np.arange(seq_length + 1)
         )
         model = GaussianProcessRegressor(kernel)
-        y = model.sample()
+        y = model.sample_prior()
         assert y.shape[0] == a**seq_length
         
     def xtest_gp_fit(self):

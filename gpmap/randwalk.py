@@ -194,38 +194,55 @@ class TimeReversibleRandomWalk(RandomWalk):
         """
         Calculates the state coordinates to use for visualization
         of the provided discrete space under a given time-reversible
-        random walk. The coordinates consist on the right eigenvectors
-        of the associate rate matrix `Q`, re-scaled by the corresponding
+        random walk. The coordinates consist of the right eigenvectors
+        of the associated rate matrix `Q`, re-scaled by the corresponding
         quantity so that the embedding is in units of square root of
-        time
+        time.
 
         Parameters
         ----------
-        Ns : float
+        Ns : float, optional
             Scaled effective population size to use in the underlying
-            evolutionary model
+            evolutionary model. If not provided, it will be derived
+            from `mean_function` or `mean_function_perc`.
 
-        mean_function : float
-            Mean function at stationarity to derive the associated Ns
+        mean_function : float, optional
+            Mean function at stationarity to derive the associated Ns.
+            Either this or `mean_function_perc` must be provided if
+            `Ns` is not specified.
 
-        mean_function_perc: float
+        mean_function_perc : float, optional
             Percentile that the mean function at stationarity takes within
-            the distribution of function values along sequence space e.g.
-            if `mean_function_perc=98`, then the mean function at stationarity
-            is set to be at the 98th percentile across all the function values
+            the distribution of function values along sequence space. For
+            example, if `mean_function_perc=98`, then the mean function at
+            stationarity is set to be at the 98th percentile across all
+            the function values. Either this or `mean_function` must be
+            provided if `Ns` is not specified.
 
-        n_components: int (10)
-            Number of eigenvectors or diffusion axis to calculate
+        n_components : int, default=10
+            Number of eigenvectors or Diffusion axes to calculate.
 
-        neutral_stat_freqs : array-like of shape (n_states,)
+        neutral_stat_freqs : array-like of shape (n_states,), optional
             Genotype stationary frequencies at neutrality to define the
-            time reversible neutral dynamics
+            time-reversible neutral dynamics. If not provided, uniform
+            stationary frequencies are assumed.
 
-        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of
-                                shape (n_states, n_states)
+        neutral_exchange_rates : scipy.sparse.csr.csr_matrix of shape 
+            (n_states, n_states), optional
             Sparse matrix containing the neutral exchange rates for the
-            whole sequence space. If not provided, uniform mutational dynamics
-            are assumed.
+            whole sequence space. If not provided, uniform mutational
+            dynamics are assumed.
+
+        tol : float, default=1e-12
+            Tolerance for the eigendecomposition solver. Lower values
+            result in higher precision but may increase computation time.
+
+        Notes
+        -----
+        - The visualization coordinates are stored in `self.nodes_df`, which
+          includes the scaled eigenvectors, function values, and stationary
+          frequencies for each state.
+        - Relaxation times and decay rates are stored in `self.decay_rates_df`.
         """
         self.set_Ns(
             Ns=Ns,
@@ -256,41 +273,41 @@ class TimeReversibleRandomWalk(RandomWalk):
         edges_format="npz",
     ):
         """
-        Write the output of the visualization in tables with a common prefix.
-        The output can consist in 2 to 3 different tables, as one of them
-        may not be always necessarily stored multiple times
+        Write the output of the visualization to files with a common prefix.
+        The output can include up to three different tables, depending on the
+        options provided:
 
-            - nodes coordinates : contains the coordinates for each state and
-            the associated function values and stationary frequencies.
-            It is stored in CSV format with suffix "nodes.csv" or parquet
-            with suffix "nodes.pq"
-            - decay rates : contains the decay rates and relaxation times
-            associated to each component or diffusion axis. It is stored
-            in CSV format with suffix "decay_rates.csv"
-            - edges : contains the adjacency relationship between states.
-            It is not stored by default unless `write_edges=True`, as it will
-            remain unchanged for any visualization on the same SequenceSpace.
-            Therefore, so it only needs to be stored once. It can be stored in
-            CSV format, or in the more efficent npz format for sparse matrices
+        - Nodes coordinates: Contains the coordinates for each state, along
+          with the associated function values and stationary frequencies.
+          Stored in either CSV format with the suffix "nodes.csv" or Parquet
+          format with the suffix "nodes.pq".
+        - Decay rates: Contains the decay rates and relaxation times
+          associated with each component or diffusion axis. Stored in CSV
+          format with the suffix "decay_rates.csv".
+        - Edges: Contains the adjacency relationships between states. This
+          is not stored by default unless `write_edges=True`. Since the edges
+          remain unchanged for any visualization on the same SequenceSpace,
+          they only need to be stored once. Stored in either CSV format or
+          the more efficient NPZ format for sparse matrices.
 
         Parameters
         ----------
+        prefix : str
+            Prefix for the filenames used to store the tables.
 
-        prefix: str
-            Prefix of the files to store the different tables
+        write_edges : bool, optional, default=False
+            Whether to write the adjacency relationships between states
+            (edges) to a file.
 
-        write_edges: bool (False)
-            Option to write also the information about the adjacency
-            relationships between pairs for states for plotting the edges
+        nodes_format : {'parquet', 'csv'}, optional, default='parquet'
+            Format for storing the nodes information. Parquet is more
+            efficient, but CSV can be used for smaller datasets or when
+            plain text storage is preferred.
 
-        nodes_format: str {'parquet', 'csv'}
-            Format to store the nodes information. parquet is more efficient
-            but CSV can be used in smaller cases for plain text storage.
-
-        edges_format: str {'npz', 'csv'}
-            Format to store the edges information. npz is more efficient but
-            CSV can be used in smaller cases for plain text storage.
-
+        edges_format : {'npz', 'csv'}, optional, default='npz'
+            Format for storing the edges information. NPZ is more efficient,
+            but CSV can be used for smaller datasets or when plain text
+            storage is preferred.
         """
         self.decay_rates_df.to_csv(
             "{}.decay_rates.csv".format(prefix), index=False
@@ -364,40 +381,26 @@ class PopulationSizeModel(object):
 
 
 class WMWalk(TimeReversibleRandomWalk):
-    """
-    Class for Weak Mutation Weak Selection Random Walk on a SequenceSpace.
-    It is a time-reversible continuous time Markov Chain where the transition
-    rates depend on the differences in fitnesses between two states
-    scaled by the effective population size `Ns` .
+    r"""
+    Class for Weak Mutation Random Walk on a SequenceSpace.
+    This is a time-reversible continuous-time Markov Chain where the transition
+    rates are determined by the differences in fitness between two states,
+    scaled by the effective population size `Ns`.
 
+    The transition rate matrix `Q(i, j)` is defined as:
 
-    Attributes
-    ----------
-    space : DiscreteSpace class
-        Space on which the random walk takes place
-    Ns : float
-        Scaled effective population size for the evolutionary model
-    rate_matrix : csr_matrix
-        Rate matrix defining the continuous time process
+    .. math::
+        Q(i, j) = 
+        \begin{cases}
+        M(i, j)\frac{S(i, j)}{1 - e^{S(i, j)}} & \text{if $i$ and $j$ are neighbors}\\
+        -\sum_{k\neq i} Q(i, k) & \text{if } i=j \\
+        0 & \text{Otherwise},
+        \end{cases}
 
-    Methods
-    -------
-    set_Ns():
-        Method to specify the scaled effective population size Ns, either
-        directly or by specifying the mean function at stationarity or the
-        percentile it represents from the distribution of functions across
-        sequence space
-
-    calc_stationary_frequencies():
-        Calculates the stationary frequencies of the states under the random
-        walk specified on the discrete space
-
-    calc_rate_matrix():
-        Calculates the rate matrix for the continuous time process given
-        the scaled effective population size (Ns) or average phenotype at
-        stationarity.
-
-
+    where:
+    - `M(i, j)` is the neutral mutation rate between states `i` and `j`.
+    - `S(i, j)` is the scaled fitness difference between states `i` and `j`,
+      typically defined as `S(i, j) = Ns(f_j - f_i)`
     """
 
     def __init__(self, space, log=None, Ns=None):
@@ -428,23 +431,23 @@ class WMWalk(TimeReversibleRandomWalk):
 
     def calc_neutral_stat_freqs(self, sites_stat_freqs=None):
         """
-        Calculates the neutral stationary frequencies assuming site
-        independence
+        Computes the neutral stationary frequencies under the assumption of site
+        independence.
 
         Parameters
         ----------
         sites_stat_freqs: list of array-like of shape (n_alleles,)
-            Matrix containing the site stationary frequencies that are used to
-            parameterize the neutral dynamics with mutational biases for each
-            independent site. If `None`, uniform frequencies across alleles
-            will be set
+            A list where each element is an array representing the stationary 
+            frequencies of alleles at a specific site. These frequencies are 
+            used to parameterize the neutral dynamics with mutational biases 
+            for each independent site. If `None`, uniform frequencies across 
+            alleles will be assumed.
 
         Returns
         -------
         neutral_stat_freqs : array-like of shape (n_states,)
-            Genotype stationary frequencies resulting from the product of the
-            site-level stationary frequencies at neutrality
-
+            The genotype stationary frequencies derived from the product of 
+            the site-level stationary frequencies under neutrality.
         """
         if sites_stat_freqs is None:
             sites_stat_freqs = [np.ones(a) / a for a in self.space.n_alleles]
@@ -476,63 +479,60 @@ class WMWalk(TimeReversibleRandomWalk):
         self, site_exchange_rates, neutral_site_freqs
     ):
         """
-        Calculates the neutral mixing rates for a SequenceSpace
-        In case no GTR mutation model is specified, then the neutral
-        mixing rates is limited by the site with the least number of alleles.
-        Otherwise, as we assume that mutations are site-independent,
-        the slowest neutral mixing rate is going to by limited by the slowest
-        site, provided by the smallest of second eigenvalues in the site
-        rate matrices
+        Computes the neutral mixing rates for a SequenceSpace.
+        If no GTR mutation model is specified, the neutral mixing rate is 
+        determined by the site with the fewest alleles. Otherwise, assuming 
+        site-independent mutations, the slowest neutral mixing rate is 
+        governed by the site with the smallest second eigenvalue in its 
+        site-specific rate matrix.
 
         Parameters
         ----------
         neutral_site_Qs : list of array-like of shape (n_alleles, n_alleles)
-            List containing site-specific rate matrices to use for calculating
-            the limiting mixing in the neutral case. If not provided, uniform
+            A list of site-specific rate matrices used to calculate the 
+            limiting mixing rate under neutrality. If not provided, uniform 
             mutation rates are assumed.
 
         neutral_site_freqs : list of array-like of shape (n_alleles,)
-            List containing vectors with the stationary frequencies under
-            neutrality for each site. They are used to calculate the
-            eigenvalues of the time reversible site specific neutral chain.
-            By default, they are assumed to be uniform across sites
-            and alleles.
+            A list of vectors representing the stationary frequencies under 
+            neutrality for each site. These are used to compute the eigenvalues 
+            of the time-reversible site-specific neutral chain. By default, 
+            uniform frequencies are assumed across sites and alleles.
 
         site_weights : array-like of shape (seq_length,)
-            Vector containing the relative weight associated to each site. This
-            value is used to scale the individually normalized rates matrices
-            to ensure this specific leaving rate. By default, all weights
-            are equal
+            A vector of relative weights for each site. These weights scale 
+            the individually normalized rate matrices to ensure the specified 
+            leaving rate. By default, all weights are equal.
 
         Returns
         -------
         neutral_mixing_rate: float
-            Neutral mixing rate as the smallest second largest eigenvalue
-            across sites.
+            The neutral mixing rate, defined as the smallest second-largest 
+            eigenvalue across all sites.
 
-        TODO: Re-implement functionality
+        TODO: Re-implement functionality.
         """
         return ()
 
     def calc_log_stationary_frequencies(self, Ns, neutral_stat_freqs=None):
-        """Calculates the state stationary frequencies using Ns stored in
-        the object and stores the corresponding diagonal matrices with the
-        sqrt transformation and its inverse
+        """
+        Computes the stationary frequencies of states using provided `Ns` value.
+        Additionally, it updates the corresponding  diagonal matrices with the
+        square root transformation and its inverse.
 
         Parameters
         ----------
-        Ns : real
-            Scaled effective population size for the evolutionary model
+        Ns : float
+            Scaled effective population size for the evolutionary model.
 
-        neutral_stat_freqs : array-like of shape (n_states,)
-            Genotype stationary frequencies resulting from the product of the
-            site-level stationary frequencies at neutrality
+        neutral_stat_freqs : array-like of shape (n_states,), optional
+            Genotype stationary frequencies derived from the product of 
+            site-level stationary frequencies under neutrality.
 
         Returns
         -------
         stationary_freqs : array-like of shape (n_states,)
-            Genotype stationary frequencies in the selective regime
-
+            Genotype stationary frequencies under the selective regime.
         """
         if neutral_stat_freqs is None and hasattr(self, "neutral_stat_freqs"):
             neutral_stat_freqs = self.neutral_stat_freqs
@@ -665,19 +665,19 @@ class WMWalk(TimeReversibleRandomWalk):
     ):
         """
         Calculates the sandwich rate matrix for the random walk in the
-        discrete space D^{1/2} Q D^{-1/2}
+        discrete space \( D^{1/2} Q D^{-1/2} \).
 
         Parameters
         ----------
-        Ns : real
-            Scaled effective population size for the evolutionary model
+        Ns : float
+            Scaled effective population size for the evolutionary model.
 
-        neutral_stat_freqs : array-like of shape (n_states,)
+        neutral_stat_freqs : array-like of shape (n_states,), optional
             Genotype stationary frequencies at neutrality to define the
-            time reversible neutral dynamics
+            time-reversible neutral dynamics.
 
-        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape
-                                (n_states, n_states)
+        neutral_exchange_rates : scipy.sparse.csr.csr_matrix of shape
+            (n_states, n_states), optional
             Sparse matrix containing the neutral exchange rates for the
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
@@ -712,24 +712,27 @@ class WMWalk(TimeReversibleRandomWalk):
         self, Ns=None, neutral_stat_freqs=None, neutral_exchange_rates=None
     ):
         """
-        Calculates the rate matrix for the random walk in the discrete space
-        and stores it in the attribute `rate_matrix`
+        Computes and stores the rate matrix for the random walk in the discrete space.
 
         Parameters
         ----------
-        Ns : real
-            Scaled effective population size for the evolutionary model
+        Ns : float, optional
+            Scaled effective population size for the evolutionary model. If not provided,
+            the value of `self.Ns` will be used.
 
-        neutral_stat_freqs : array-like of shape (n_states,)
-            Genotype stationary frequencies at neutrality to define the
-            time reversible neutral dynamics
+        neutral_stat_freqs : array-like of shape (n_states,), optional
+            Genotype stationary frequencies at neutrality to define the time-reversible
+            neutral dynamics. If not provided, the existing `neutral_stat_freqs` attribute
+            will be used if available.
 
-        neutral_exchange_rates: scipy.sparse.csr.csr_matrix of shape
-                                (n_states, n_states)
-            Sparse matrix containing the neutral exchange rates for the
-            whole sequence space. If not provided, uniform mutational dynamics
-            are assumed.
+        neutral_exchange_rates : scipy.sparse.csr.csr_matrix of shape (n_states, n_states), optional
+            Sparse matrix containing the neutral exchange rates for the entire sequence space.
+            If not provided, uniform mutational dynamics are assumed.
 
+        Notes
+        -----
+        - The resulting rate matrix is stored in the `rate_matrix` attribute.
+        - The method also calculates the symmetrized rate matrix as an intermediate step.
         """
 
         if Ns is None:
@@ -747,32 +750,39 @@ class WMWalk(TimeReversibleRandomWalk):
 
     def calc_neutral_model(self, model, stat_freqs={}, exchange_rates={}):
         """
-        Calculate the neutral rate matrix for classic nucleotide substitution
-        rates parameterized as in
+        Compute the neutral rate matrix for nucleotide substitution models.
+
+        This method calculates the neutral rate matrix for standard nucleotide 
+        substitution models, parameterized as described in:
 
         https://en.wikipedia.org/wiki/Substitution_model
 
+        The computed neutral stationary frequencies and exchangeability rates 
+        are stored in the attributes `neutral_stat_freqs` and 
+        `neutral_exchange_rates`.
+
         Parameters
         ----------
-        model : str {'F81', 'K80', 'HKY85', 'K81', 'TN93', 'SYM', 'GTR'}
-            Specific nucleotide substitution model to use for every site in
-            the nucleotide sequence
+        model : str, {'F81', 'K80', 'HKY85', 'K81', 'TN93', 'SYM', 'GTR'}
+            The nucleotide substitution model to use for each site in the 
+            nucleotide sequence.
 
-        stat_freqs : dict with keys {'A', 'C', 'G', 'T'}
-            Dictionary containing the allele stationary frequencies to use
-            in the models that allow them to be different
+        stat_freqs : dict, optional
+            A dictionary with keys {'A', 'C', 'G', 'T'} specifying the allele 
+            stationary frequencies for models that allow them to vary. If not 
+            provided, default frequencies will be used.
 
-        exchange_rates : dict with keys {'a', 'b', 'c', 'd', 'e', 'f'}
-            Parameter values to use for each of the models. Only some of them
-            need to be specified for each of the models
+        exchange_rates : dict, optional
+            A dictionary with keys {'a', 'b', 'c', 'd', 'e', 'f'} specifying 
+            the parameter values for the chosen model. Only the relevant 
+            parameters need to be specified. Default values will be used for 
+            unspecified parameters.
 
-        Returns
-        -------
-        neutral_rate_matrix: scipy.sparse.csr.csr_matrix of shape
-                             (n_states, n_states)
-            Sparse matrix containing the neutral transition rates for the
-            whole sequence space
-
+        Notes
+        -----
+        - Ensure the sequence space is a "dna" space when using nucleotide 
+          substitution models for neutral dynamics.
+        - The provided stationary frequencies must sum to 1.
         """
 
         msg = 'Ensure the space is a "dna" space for using nucleotide '
