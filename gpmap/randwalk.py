@@ -397,10 +397,9 @@ class WMWalk(TimeReversibleRandomWalk):
         0 & \text{Otherwise},
         \end{cases}
 
-    where:
-    - `M(i, j)` is the neutral mutation rate between states `i` and `j`.
-    - `S(i, j)` is the scaled fitness difference between states `i` and `j`,
-      typically defined as `S(i, j) = Ns(f_j - f_i)`
+    where :math:`M(i, j)` is the time-reversible neutral mutation rate between :math:`i` and :math:`j`
+    and :math:`S(i, j)` is the scaled fitness difference between :math:`i` and :math:`j`, typically
+    defined as :math:`S(i, j) = Ns(f_j - f_i)`, where :math:`f_i` is the phenotype for state :math:`i`
     """
 
     def __init__(self, space, log=None, Ns=None):
@@ -510,8 +509,8 @@ class WMWalk(TimeReversibleRandomWalk):
             The neutral mixing rate, defined as the smallest second-largest 
             eigenvalue across all sites.
 
-        TODO: Re-implement functionality.
         """
+        # TODO: Re-implement functionality.
         return ()
 
     def calc_log_stationary_frequencies(self, Ns, neutral_stat_freqs=None):
@@ -551,7 +550,30 @@ class WMWalk(TimeReversibleRandomWalk):
         log_stationary_freqs = log_phi - logsumexp(log_phi)
         return log_stationary_freqs
 
-    def calc_stationary_frequencies(self, Ns, neutral_stat_freqs=None):
+    def calc_stationary_frequencies(self, Ns=None, neutral_stat_freqs=None):
+        """
+        Calculates the stationary frequencies of states under the given
+        evolutionary model.
+
+        Parameters
+        ----------
+        Ns : float, optional
+            Scaled effective population size for the evolutionary model. If
+            not provided, the value of `self.Ns` will be used.
+
+        neutral_stat_freqs : array-like of shape (n_states,), optional
+            Genotype stationary frequencies at neutrality to define the
+            time-reversible neutral dynamics. If not provided, the existing
+            `neutral_stat_freqs` attribute will be used if available.
+
+        Returns
+        -------
+        stationary_freqs : array-like of shape (n_states,)
+            The stationary frequencies of states under the given evolutionary
+            model.
+        """
+        if Ns is None:
+            Ns = self.Ns
         return np.exp(
             self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs)
         )
@@ -578,6 +600,47 @@ class WMWalk(TimeReversibleRandomWalk):
         neutral_stat_freqs=None,
         tol=1e-4,
     ):
+        """
+        Sets the scaled effective population size (Ns) or calculates it based
+        on the desired mean function or percentile of the function values.
+
+        Parameters
+        ----------
+        Ns : float, optional
+            Scaled effective population size for the evolutionary model. If
+            provided, it will be directly set. Must be non-negative.
+
+        mean_function : float, optional
+            Desired mean function value at stationarity. If provided, Ns will
+            be optimized to achieve this value.
+
+        mean_function_perc : float, optional
+            Percentile of the function values to use as the desired mean
+            function at stationarity. For example, if set to 98, the mean
+            function will be set to the 98th percentile of the function values.
+
+        neutral_stat_freqs : array-like of shape (n_states,), optional
+            Genotype stationary frequencies at neutrality to define the
+            time-reversible neutral dynamics. If not provided, the existing
+            `neutral_stat_freqs` attribute will be used if available.
+
+        tol : float, optional, default=1e-4
+            Tolerance for determining whether the mean function is close to
+            the neutral mean function.
+
+        Raises
+        ------
+        ValueError
+            If none of `Ns`, `mean_function`, or `mean_function_perc` is
+            provided.
+
+        ValueError
+            If `mean_function_perc` is not between 0 and 100.
+
+        ValueError
+            If `mean_function` is not between the neutral mean function and
+            the maximum function value.
+        """
         if Ns is None and mean_function is None and mean_function_perc is None:
             msg = "One of [Ns,  mean_function, mean_function_perc]"
             msg += "is required to calculate the rate matrix"

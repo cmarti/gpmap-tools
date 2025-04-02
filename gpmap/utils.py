@@ -107,6 +107,25 @@ def write_dataframe(df, fpath):
 
 
 def read_dataframe(fpath):
+    """
+    Read a DataFrame from a file path in different formats.
+
+    Parameters
+    ----------
+    fpath : str
+        Path to the file containing the DataFrame. The file extension
+        determines the format: 'csv' or 'parquet'.
+
+    Returns
+    -------
+    pd.DataFrame
+        The DataFrame read from the file.
+
+    Raises
+    ------
+    ValueError
+        If the file format is not recognized.
+    """
     suffix = fpath.split(".")[-1]
     if suffix == "csv":
         df = pd.read_csv(fpath, index_col=0)

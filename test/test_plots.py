@@ -420,7 +420,7 @@ class InferencePlotsTests(unittest.TestCase):
             fpath = fhand.name
             pmpl.savefig(fig, fpath)
     
-    def test_plot_SeqDEFT_summary(self):
+    def test_figure_SeqDEFT_summary(self):
         log_a = np.linspace(-2, 2, 11)
         logL = np.exp(-log_a ** 2) - 5
         log_a = np.array([-np.inf] + list(log_a) + [np.inf])
@@ -432,12 +432,12 @@ class InferencePlotsTests(unittest.TestCase):
 
         with NamedTemporaryFile() as fhand:
             fpath = fhand.name
-            fig = pmpl.plot_SeqDEFT_summary(df)
+            fig = pmpl.figure_SeqDEFT_summary(df)
             pmpl.savefig(fig, fpath)
 
         with NamedTemporaryFile() as fhand:
             fpath = fhand.name
-            fig = pmpl.plot_SeqDEFT_summary(df, normalize_logL=False)
+            fig = pmpl.figure_SeqDEFT_summary(df, normalize_logL=False)
             pmpl.savefig(fig, fpath)
 
         
