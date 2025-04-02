@@ -15,10 +15,7 @@ from gpmap.seq import generate_possible_sequences
 from gpmap.matrix import quad
 from gpmap.linop import ProjectionOperator, DeltaKernelRegularizerOperator
 from gpmap.inference import SeqDEFT
-from gpmap.plot.mpl import (
-    plot_SeqDEFT_summary,
-    savefig,
-)
+from gpmap.plot.mpl import figure_SeqDEFT_summary, savefig
 
 
 class SeqDEFTTests(unittest.TestCase):
@@ -589,7 +586,7 @@ class SeqDEFTTests(unittest.TestCase):
         log_Ls = model.logL_df
 
         with NamedTemporaryFile(mode="w") as fhand:
-            fig = plot_SeqDEFT_summary(log_Ls, pred, legend_loc=2)
+            fig = figure_SeqDEFT_summary(log_Ls, pred, legend_loc=2)
             fpath = fhand.name
             savefig(fig, fpath)
 

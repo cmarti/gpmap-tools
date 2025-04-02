@@ -155,11 +155,42 @@ class DataSet(object):
 
     def calc_visualization(
         self,
-        n_components=20,
         Ns=None,
         mean_function=None,
         mean_function_perc=None,
+        n_components=20,
     ):
+        """
+        Calculates the state coordinates to use for visualization
+        of the provided discrete space under a given time-reversible
+        random walk. The coordinates consist of the right eigenvectors
+        of the associated rate matrix `Q`, re-scaled by the corresponding
+        quantity so that the embedding is in units of square root of
+        time.
+
+        Parameters
+        ----------
+        Ns : float, optional
+            Scaled effective population size to use in the underlying
+            evolutionary model. If not provided, it will be derived
+            from `mean_function` or `mean_function_perc`.
+
+        mean_function : float, optional
+            Mean function at stationarity to derive the associated Ns.
+            Either this or `mean_function_perc` must be provided if
+            `Ns` is not specified.
+
+        mean_function_perc : float, optional
+            Percentile that the mean function at stationarity takes within
+            the distribution of function values along sequence space. For
+            example, if `mean_function_perc=98`, then the mean function at
+            stationarity is set to be at the 98th percentile across all
+            the function values. Either this or `mean_function` must be
+            provided if `Ns` is not specified.
+
+        n_components : int, default=10
+            Number of eigenvectors or Diffusion axes to calculate.
+        """
         space = self.to_sequence_space()
         rw = WMWalk(space)
         rw.calc_visualization(
@@ -208,6 +239,28 @@ class DataSet(object):
         self._landscape = pd.DataFrame({"y": y}, index=X)
 
     def build(self):
+        """
+        Build the dataset by inferring the landscape, calculating visualization, 
+        and saving the results.
+
+        This method performs the following steps:
+        1. Checks if the `landscape` attribute exists. If not, it infers the landscape.
+        2. Computes a mean function based on the mean and maximum values of the 
+           `y` attribute in the landscape.
+        3. Calculates visualization data using the specified number of samples (`Ns`) 
+           and the computed mean function.
+        4. Saves the processed data.
+
+        Notes
+        -----
+        The method assumes that the `landscape` attribute is a dictionary-like object 
+        with a key `"y"` containing numerical data.
+
+        Raises
+        ------
+        AttributeError
+            If the `landscape` attribute is not properly initialized.
+        """
         if not hasattr(self, "_landscape"):
             self.infer_landscape()
         meanv, maxv = self.landscape["y"].mean(), self.landscape["y"].max()
@@ -216,6 +269,26 @@ class DataSet(object):
         self.save()
 
     def save(self, fdir=None):
+        """
+        Saves the dataset to disk for direct access within the library.
+
+        This method stores raw data, inferred genotype-phenotype map, and
+        the computed visualization coordinates and relaxation times when
+        available. 
+
+        Parameters
+        ----------
+        fdir : str, optional
+            Directory where the dataset should be saved. If not provided, 
+            the default directories defined in the settings will be used.
+
+        Notes
+        -----
+        - The dataset is stored by default in the installation folder and will
+          be deleted upon re-installation.
+        - If a custom directory is provided, the dataset will be saved with 
+          specific suffixes for each component.
+        """
         fdirs = [
             RAW_DATA_DIR,
             PROCESSED_DIR,
@@ -253,6 +326,11 @@ class DataSet(object):
                 self._write(df, fdir, suffix, fmt=fmt)
 
     def plot(self):
+        '''
+        Makes a two panel figure with the relaxation times associated to
+        the computed Diffusion axes and a low dimensional representation
+        of the complete genotype-phenotype map from this ``DataSet``.
+        '''
         fig, subplots = plt.subplots(1, 2, figsize=(8, 3.5))
         axes = subplots[0]
         plot.plot_relaxation_times(self.relaxation_times, axes)

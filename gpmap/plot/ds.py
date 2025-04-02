@@ -38,6 +38,47 @@ def plot_nodes(
     resolution=800,
     square=False,
 ):
+    """
+    Plot nodes with various customization options.
+
+    Parameters
+    ----------
+    nodes_df : pandas.DataFrame
+        DataFrame containing node data.
+    x : str, optional
+        Column name for the x-axis, by default "1".
+    y : str, optional
+        Column name for the y-axis, by default "2".
+    color : str, optional
+        Column name for the color values, by default "function".
+    cmap : str, optional
+        Colormap to use for coloring nodes, by default "viridis".
+    vmin : float, optional
+        Minimum value for color scaling, by default None.
+    vmax : float, optional
+        Maximum value for color scaling, by default None.
+    size : int, optional
+        Size of the nodes, by default 5.
+    linewidth : int, optional
+        Line width of the node edges, by default 0.
+    edgecolor : str, optional
+        Color of the node edges, by default "black".
+    sort_by : str, optional
+        Column name to sort nodes by, by default None.
+    sort_ascending : bool, optional
+        Whether to sort nodes in ascending order, by default True.
+    shade : bool, optional
+        Whether to use datashader for rendering, by default True.
+    resolution : int, optional
+        Resolution of the plot, by default 800.
+    square : bool, optional
+        Whether to enforce a square aspect ratio, by default False.
+
+    Returns
+    -------
+    holoviews.Element
+        A Holoviews element representing the plotted nodes.
+    """
     ndf = sort_nodes(nodes_df, sort_by, sort_ascending, color)
     vmin, vmax = get_vmin_max(ndf, color, vmin=vmin, vmax=vmax)
 
@@ -86,6 +127,39 @@ def plot_edges(
     resolution=800,
     square=True,
 ):
+    """
+    Plot edges.
+
+    Parameters
+    ----------
+    nodes_df : pandas.DataFrame
+        DataFrame containing node data.
+    edges_df : pandas.DataFrame
+        DataFrame containing edge data.
+    x : str, optional
+        Column name for the x-axis, by default "1".
+    y : str, optional
+        Column name for the y-axis, by default "2".
+    cmap : str, optional
+        Colormap to use for coloring edges, by default "grey".
+    width : float, optional
+        Line width of the edges, by default 0.5.
+    alpha : float, optional
+        Transparency level of the edges, by default 0.2.
+    color : str, optional
+        Color of the edges, by default "grey".
+    shade : bool, optional
+        Whether to use datashader for rendering, by default True.
+    resolution : int, optional
+        Resolution of the plot, by default 800.
+    square : bool, optional
+        Whether to enforce a square aspect ratio, by default True.
+
+    Returns
+    -------
+    holoviews.Element
+        A Holoviews element representing the plotted edges.
+    """
     line_coords = get_lines_from_edges_df(nodes_df, edges_df, x=x, y=y, z=None)
     dsg = hv.Curve(line_coords)
     if shade:
@@ -123,6 +197,65 @@ def plot_visualization(
     shade_edges=True,
     square=True,
 ):
+    """
+    Plots the nodes representing the states of the discrete space on the
+    provided coordinates and the edges representing the connections between
+    states if provided.
+
+    Parameters
+    ----------
+    nodes_df : pandas.DataFrame
+        DataFrame containing node data.
+    x : str, optional
+        Column name for the x-axis, by default "1".
+    y : str, optional
+        Column name for the y-axis, by default "2".
+    edges_df : pandas.DataFrame, optional
+        DataFrame containing edge data, by default None.
+    nodes_color : str, optional
+        Column name for the color values, by default "function".
+    nodes_cmap : str, optional
+        Colormap to use for coloring nodes, by default "viridis".
+    nodes_size : int, optional
+        Size of the nodes, by default 5.
+    nodes_vmin : float, optional
+        Minimum value for color scaling, by default None.
+    nodes_vmax : float, optional
+        Maximum value for color scaling, by default None.
+    linewidth : int, optional
+        Line width of the node edges, by default 0.
+    edgecolor : str, optional
+        Color of the node edges, by default "black".
+    sort_by : str, optional
+        Column name to sort nodes by, by default None.
+    sort_ascending : bool, optional
+        Whether to sort nodes in ascending order, by default False.
+    edges_width : float, optional
+        Line width of the edges, by default 0.5.
+    edges_alpha : float, optional
+        Transparency level of the edges, by default 1.
+    edges_color : str, optional
+        Color of the edges, by default "grey".
+    edges_cmap : str, optional
+        Colormap to use for coloring edges, by default "grey".
+    background_color : str, optional
+        Background color of the plot, by default "white".
+    nodes_resolution : int, optional
+        Resolution of the nodes plot, by default 800.
+    edges_resolution : int, optional
+        Resolution of the edges plot, by default 1200.
+    shade_nodes : bool, optional
+        Whether to use datashader for rendering nodes, by default True.
+    shade_edges : bool, optional
+        Whether to use datashader for rendering edges, by default True.
+    square : bool, optional
+        Whether to enforce a square aspect ratio, by default True.
+
+    Returns
+    -------
+    holoviews.Element
+        A Holoviews element representing the plotted visualization.
+    """
     dsg = plot_nodes(
         nodes_df,
         x,
@@ -168,6 +301,19 @@ def plot_visualization(
 
 
 def dsg_to_fig(dsg):
+    """
+    Convert a Holoviews element to a Matplotlib figure.
+
+    Parameters
+    ----------
+    dsg : holoviews.Element
+        A Holoviews element to be converted.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        A Matplotlib figure object representing the Holoviews element.
+    """
     return hv.render(dsg)
 
 
@@ -264,6 +410,44 @@ def figure_allele_grid(
     square=True,
     **kwargs,
 ):
+    """
+    Generate a grid of allele visualizations and save the resulting figure.
+
+    Parameters
+    ----------
+    nodes_df : pandas.DataFrame
+        DataFrame containing node data.
+    fpath : str
+        File path to save the resulting figure.
+    x : str, optional
+        Column name for the x-axis, by default "1".
+    y : str, optional
+        Column name for the y-axis, by default "2".
+    edges_df : pandas.DataFrame, optional
+        DataFrame containing edge data, by default None.
+    positions : list or numpy.ndarray, optional
+        List or array of positions to visualize, by default None.
+    position_labels : list or numpy.ndarray, optional
+        Labels for the positions, by default None.
+    edges_cmap : str, optional
+        Colormap to use for coloring edges, by default "grey".
+    background_color : str, optional
+        Background color of the plot, by default "white".
+    nodes_resolution : int, optional
+        Resolution of the nodes plot, by default 800.
+    edges_resolution : int, optional
+        Resolution of the edges plot, by default 1200.
+    sort_by : str, optional
+        Column name to sort nodes by, by default None.
+    sort_ascending : bool, optional
+        Whether to sort nodes in ascending order, by default False.
+    fmt : str, optional
+        Format to save the figure, by default "png".
+    figsize : tuple, optional
+        Size of the figure in inches, by default None.
+    square : bool, optional
+        Whether to enforce a square aspect ratio, by default True.
+    """
     edges_dsg = _get_edges_dsg(
         nodes_df, edges_df, x, y, edges_cmap, edges_resolution, square
     )

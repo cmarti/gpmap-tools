@@ -62,6 +62,8 @@ class _DeltaPpriorGP(object):
 
 class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
     """
+    Mininum epistasis interpolation model for sequence-function relationships.
+
     A class for performing Minimum Epistasis Interpolation (MEI) to infer
     complete genotype-phenotype maps from incomplete and noisy data. This
     model applies a prior that penalizes local epistatic coefficients of
@@ -72,28 +74,30 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
     ----------
     n_alleles : int, optional
         The number of alleles per site. If not provided, it will be inferred
-        from the data.
+        from the provided data.
 
     seq_length : int, optional
         The length of the genotype sequences. If not provided, it will be
-        inferred from the data.
+        inferred from the provided data.
 
     genotypes : array-like, optional
-        A list or array of genotypes to be used in the interpolation.
+        A list or array of genotypes to be used in the interpolation. If not
+        provided, the model will infer the genotype space.
 
     alphabet_type : str, optional
         The type of alphabet used for genotypes. Default is "custom".
 
     P : int, optional
-        The order of epistasis to consider. Default is 2.
+        The order of epistasis to consider. Default is 2. This determines the
+        level of interaction between genetic sites that is penalized.
 
     a : float, optional
         The regularization parameter. If not provided, it will be inferred
-        during fitting.
+        during the fitting process to best match the observed data.
 
     cg_rtol : float, optional
         The relative tolerance for the conjugate gradient solver. Default is
-        1e-16.
+        1e-16. This controls the precision of the solver used in computations.
     """
 
     def __init__(
@@ -340,7 +344,28 @@ class VCregression(GaussianProcessRegressor):
         variance_components = variance_components / variance_components.sum()
         return variance_components
 
-    def get_variance_component_df(self, lambdas):
+    def get_variance_components(self, lambdas=None):
+        """
+        Return the variance components as a DataFrame from :math:`\lambda`s.
+
+        Parameters
+        ----------
+        lambdas : array-like, optional
+            An array of eigenvalues representing the variance components. If not provided,
+            the model's current `lambdas` attribute will be used.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame containing the following columns:
+
+            - ``k``: Index of the variance component (ranging from 0 to seq_length).
+            - ``lambdas``: The input eigenvalues.
+            - ``var_perc``: The percentage of variance explained by each component.
+            - ``var_perc_cum``: The cumulative percentage of variance explained.
+        """
+        if lambdas is None:
+            lambdas = self.lambdas
         s = self.seq_length + 1
         k = np.arange(s)
         vc_perc = np.zeros(s)
@@ -455,7 +480,7 @@ class VCregression(GaussianProcessRegressor):
 
         self.fit_time = time() - t0
         self.set_lambdas(lambdas)
-        self.vc_df = self.get_variance_component_df(lambdas)
+        self.vc_df = self.get_variance_components(lambdas)
 
 
 class SeqDEFT(GeneralizedGaussianProcessRegressor, _DeltaPpriorGP):
@@ -916,32 +941,27 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor, _DeltaPpriorGP):
             A DataFrame containing the predicted phenotypes for each input
             genotype in the column ``f``. If ``calc_variance=True``, additional
             columns are included:
+
             - ``f_var``: Posterior variance for each genotype.
             - ``f_std``: Posterior standard deviation for each genotype.
             - ``ci_95_lower``: Lower bound of the 95% credible interval.
             - ``ci_95_upper``: Upper bound of the 95% credible interval.
             The genotype labels are used as the row index.
 
-            If neither `X_pred` nor `calc_variance` are provided, the output
+            If neither ``X_pred`` nor ``calc_variance`` are provided, the output
             DataFrame includes additional columns:
+
             - ``freq``: Empirical frequencies of the genotypes.
             - ``Q_star``: Estimated genotype probabilities.
-
-        Notes
-        -----
-        - The MAP estimate is computed using the posterior mean.
-        - If `calc_variance` is enabled, the credible intervals are calculated
-          as mean ± 2 * standard deviation.
-        - When neither `X_pred` nor `calc_variance` are provided, the additional
-          columns for empirical frequencies and estimated probabilities are
-          included to provide further insights into the genotype distribution.
 
         Examples
         --------
         Predict phenotypes for the entire genotype space:
+
         >>> pred = model.predict()
 
         Predict phenotypes for specific genotypes with variance:
+
         >>> pred = model.predict(X_pred=["AAA", "AAC"], calc_variance=True)
         """
 
@@ -1055,12 +1075,11 @@ class SeqDEFT(GeneralizedGaussianProcessRegressor, _DeltaPpriorGP):
             Vector containing the sampled sequences from the probability
             distribution.
 
-        Example
-        -------
+        Examples
+        --------
+
         >>> model = SeqDEFT(n_alleles=4, seq_length=5, P=2, a=1.0)
         >>> phi, X = model.simulate(N=100, seed=42)
-        >>> print("Simulated phi:", phi[:5])
-        >>> print("Simulated sequences:", X[:5])
         """
         phi, X = self._simulate(seed=seed, N=N)
         return phi, X
