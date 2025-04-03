@@ -1,7 +1,7 @@
 .. _installation:
 
-Installation Instructions
-=========================
+Installation
+============
 
 We recommend using an new independent environment with python3.8, as used during 
 development and testing of gpmap-tools to minimize problems with dependencies. For instance,
