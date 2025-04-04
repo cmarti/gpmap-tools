@@ -16,21 +16,45 @@ paths required to evolve sequences differing at only a few amino acid positions.
 .. image:: figures/visualization.png
    :width: 80%
 
+Inference
+=========
 
-``gpmap-tools`` implements a suite of Gaussian process models for the inference and analysis 
-of complete genotype-phenotype maps within a unified framework inspired by the classical 
-machine learning library `scikit-learn <https://scikit-learn.org/>`_. Models are defined
-as classes and use the common methods ``fit`` and ``predict`` to infer hyperparameters and
-make phenotypic predictions, respectively. 
+``gpmap-tools`` implements a suite of previously proposed Gaussian process models for the
+inference and analysis of complete genotype-phenotype maps.
 
 - `Zhou J and McCandlish DM. Minimum epistasis interpolation for sequence-function relationships (2020) <https://www.nature.com/articles/s41467-020-15512-5>`_
 - `Zhou J, Wong MS, Chen WC, Krainer AR, Kinney JB, McCandlish DM. Higher order epistasis and phenotypic prediction (2022) <https://www.pnas.org/doi/full/10.1073/pnas.2204233119>`_
 - `Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM. Field theoretic density estimation for biological sequence space with applications to 5' splice site diversity and aneuploidy in cancer (2021) <https://www.pnas.org/doi/10.1073/pnas.2025782118>`_
 
-``gpmap-tools`` also provides a new and accessible implementation of a powerful method to 
-visualize complex genotype-phenotype maps.
+These models are implemented within a unified framework inspired by the classical 
+machine learning library `scikit-learn <https://scikit-learn.org/>`_, defined
+as classes with the common methods ``fit`` and ``predict`` to infer hyperparameters and
+make phenotypic predictions, respectively. Among other things, ``gpmap-tools`` allows
+to:
+
+- Estimate the magnitude of genetic interactions of different orders from experimental measurements. 
+- Infer a complete combinatorial genotype-phenotype maps containing millions of sequences from experimental measurements and observations of natural sequences. 
+- Predict the phenotypes of unobserved genotypes with associated uncertainty.
+- Estimate the effects of mutations in specific and possibly unobserved genetic backgrounds with associated uncertainty.
+- Compute the variance explained by interactions of different orders involving combinations of sites in a complete genotype-phenotype map.
+
+Visualization
+=============
+
+``gpmap-tools`` also provides a new and accessible implementation of a 
+previously described powerful method to visualize complex genotype-phenotype maps.
 
 - `McCandlish DM. Visualizing fitness landscapes (2011) <https://onlinelibrary.wiley.com/doi/10.1111/j.1558-5646.2011.01236.x>`_
+
+More specifically, ``gpmap-tools`` allows to:
+
+- Compute the coordinates of the low-dimensional representation of a genotype-phenotype map.
+- Write and read intermediate files in efficient and fast ``parquet`` and ``npz`` formats.
+- Plot the low-dimensional representation efficiently using different backends with varying degrees of computational speed and flexibility. For example, using `datashader <https://datashader.org>`_, we can render visualizations of genotype-phenotype maps with millions of genotypes efficiently.
+- Identify the sequence features that characterize different regions of the genotype-phenotype map with additional plotting functionalities.
+
+History and applications
+========================
 
 Initially designed as an internal library to allow new lab members and students to 
 analyze high-throughput combinatorial datasets without requiring advanced expertise
