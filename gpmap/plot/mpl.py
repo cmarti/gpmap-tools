@@ -267,9 +267,10 @@ def plot_edges(
     max_width=1,
     min_width=0.1,
     fontsize=None,
+    rasterized=False,
 ):
     """
-    Plots the edges representing connections between states in the discrete 
+    Plots the edges representing connections between states in the discrete
     space under a particular embedding.
 
     Parameters
@@ -278,15 +279,15 @@ def plot_edges(
         The matplotlib Axes object in which to plot the edges.
 
     nodes_df : pandas.DataFrame
-        DataFrame of shape (n_genotypes, n_components + 2) containing the 
-        coordinates in each of the `n_components`, along with additional 
-        columns such as "function" and "stationary_freq". Additional columns 
+        DataFrame of shape (n_genotypes, n_components + 2) containing the
+        coordinates in each of the `n_components`, along with additional
+        columns such as "function" and "stationary_freq". Additional columns
         are also allowed.
 
     edges_df : pandas.DataFrame
-        DataFrame of shape (n_edges, 2) containing the connectivity 
-        information between states of the discrete space to plot. It has 
-        columns "i" and "j" for the indices of the pairs of states that are 
+        DataFrame of shape (n_edges, 2) containing the connectivity
+        information between states of the discrete space to plot. It has
+        columns "i" and "j" for the indices of the pairs of states that are
         connected.
 
     x : str, default='1'
@@ -296,28 +297,28 @@ def plot_edges(
         Column in `nodes_df` to use for plotting the genotypes on the y-axis.
 
     z : str, optional
-        Column in `nodes_df` to use for plotting the genotypes on the z-axis. 
-        If provided, a 3D plot will be produced, provided the `axes` object 
+        Column in `nodes_df` to use for plotting the genotypes on the z-axis.
+        If provided, a 3D plot will be produced, provided the `axes` object
         supports it.
 
     alpha : float, default=0.1
         Transparency of the lines representing the edges.
 
     zorder : int, default=1
-        Order in which the edges will be rendered relative to other elements. 
-        Typically, this should be smaller than the `zorder` used for plotting 
+        Order in which the edges will be rendered relative to other elements.
+        Typically, this should be smaller than the `zorder` used for plotting
         nodes.
 
     color : str, default='grey'
-        Column name in `edges_df` for the values used to color the edges, or a 
+        Column name in `edges_df` for the values used to color the edges, or a
         specific color to use for all edges.
 
     cmap : str or matplotlib.colors.Colormap, default='binary'
         Colormap to use for coloring the edges based on the `color` column.
 
     width : float or str
-        Width of the lines representing the edges. If a float is provided, it 
-        will be used for all edges. If a string is provided, edge widths will 
+        Width of the lines representing the edges. If a float is provided, it
+        will be used for all edges. If a string is provided, edge widths will
         be scaled based on the corresponding column in `edges_df`.
 
     max_width : float, default=1
@@ -326,9 +327,12 @@ def plot_edges(
     min_width : float, default=0.1
         Minimum width for the edges when scaled.
 
+    rasterized : bool, optional, default=False
+        Whether to rasterize the plot for better performance with large datasets.
+
     Returns
     -------
-    line_collection : matplotlib.collections.LineCollection or 
+    line_collection : matplotlib.collections.LineCollection or
     mpl_toolkits.mplot3d.art3d.Line3DCollection
         The collection of lines representing the edges.
     """
@@ -348,6 +352,7 @@ def plot_edges(
         alpha=alpha,
         zorder=zorder,
         cmap=mpl.colormaps[cmap],
+        rasterized=rasterized,
     )
     axes.add_collection(lines)
     add_color_info(
@@ -495,6 +500,7 @@ def plot_nodes(
         "zorder": zorder,
         "alpha": alpha,
         "edgecolor": edgecolor,
+        "rasterized": rasterized,
     }
     if continuous:
         kwargs["cmap"] = mpl.colormaps[cmap]
@@ -1062,6 +1068,7 @@ def plot_visualization(
             width=edges_width,
             max_width=edges_max_width,
             min_width=edges_min_width,
+            rasterized=rasterized,
         )
 
     orientation = "vertical"
@@ -1105,6 +1112,7 @@ def plot_visualization(
         vmax=nodes_vmax,
         vmin=nodes_vmin,
         vcenter=nodes_vcenter,
+        rasterized=rasterized,
     )
 
     add_axis_labels(axes, x, y, z=z, center_spines=center_spines)
