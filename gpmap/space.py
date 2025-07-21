@@ -189,7 +189,18 @@ class DiscreteSpace(object):
 
     def get_state_idxs(self, states):
         """
-        Returns the indexes for the provided state labels
+        Get the indexes for the provided state labels.
+
+        Parameters
+        ----------
+        states : array-like
+            A list or array of state labels for which the indexes are to be retrieved.
+
+        Returns
+        -------
+        pandas.Series
+            A pandas Series containing the indexes corresponding to the provided
+            state labels.
         """
 
         return self.state_idxs.loc[states]
@@ -663,6 +674,20 @@ class GridSpace(ProductSpace):
         return m
 
     def set_peaks(self, positions, sigma=1):
+        """
+        Set peaks in the grid space by assigning function values based on
+        distances from specified positions.
+
+        Parameters
+        ----------
+        positions : array-like of shape (n_peaks, ndim)
+            Coordinates of the peaks in the grid space. Each row represents
+            the position of a peak in the n-dimensional space.
+
+        sigma : float, optional, default=1
+            Controls the spread of the peaks. Smaller values result in sharper
+            peaks, while larger values create broader peaks.
+        """
         distances = np.array(
             [np.abs(self.states - pos).sum(1) for pos in positions]
         ).T
@@ -975,25 +1000,57 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         return np.array([x for x in get_seqs_from_alleles(self.alphabet)])
 
 
-def CodonSpace(
-    allowed_aminoacids, codon_table="Standard", add_variation=False, seed=None
-):
-    if isinstance(allowed_aminoacids, str):
-        allowed_aminoacids = np.array([allowed_aminoacids])
+class CodonSpace(SequenceSpace):
+    """
+    Generate a 3-nucleotide sequence space based on allowed amino acids.
 
-    if not isinstance(allowed_aminoacids, np.ndarray):
-        allowed_aminoacids = np.array(allowed_aminoacids)
+    This class creates a nucleotide sequence space corresponding to the
+    provided amino acid constraints using a codon table. Optionally, random
+    variation can be added to the nucleotide space.
 
-    y = pd.Series(np.ones(20), index=PROTEIN_ALPHABET)
-    y.loc[allowed_aminoacids] = 2
+    Parameters
+    ----------
+    allowed_aminoacids : str or array-like
+        A single amino acid (as a string) or a list/array of allowed amino acids.
+    codon_table : str, optional
+        The codon table to use for mapping amino acids to nucleotides.
+        Default is "Standard".
+    add_variation : bool, optional
+        If True, adds random variation to the nucleotide space. Default is False.
+    seed : int, optional
+        Seed for the random number generator, used when `add_variation` is True.
+        Default is None.
 
-    prot_space = SequenceSpace(
-        seq_length=1, alphabet_type="protein", y=y, stop_y=0
-    )
-    nuc_space = prot_space.to_nucleotide_space(codon_table=codon_table)
+    """
 
-    if add_variation:
-        if seed is not None:
-            np.random.seed(seed)
-        nuc_space.y += 1 / 10 * np.random.normal(size=nuc_space.n_genotypes)
-    return nuc_space
+    def __init__(
+        self,
+        allowed_aminoacids,
+        codon_table="Standard",
+        add_variation=False,
+        seed=None,
+    ):
+        super().__init__(alphabet_type="dna", seq_length=3)
+        if isinstance(allowed_aminoacids, str):
+            allowed_aminoacids = np.array([allowed_aminoacids])
+
+        if not isinstance(allowed_aminoacids, np.ndarray):
+            allowed_aminoacids = np.array(allowed_aminoacids)
+
+        prot = pd.Series(
+            translate_seqs(self.genotypes, codon_table), index=self.genotypes
+        )
+        protein_y = np.append(np.ones(20), [0])
+        protein_y = pd.Series(protein_y, index=PROTEIN_ALPHABET + ["*"])
+        protein_y.loc[allowed_aminoacids] = 2
+        y = protein_y.reindex(prot).values
+
+        if add_variation:
+            if seed is not None:
+                np.random.seed(seed)
+            y += 1 / 10 * np.random.normal(size=self.n_genotypes)
+
+        if np.any(np.isnan(y)):
+            msg = "Make sure to include all protein sequences including stops"
+            raise ValueError(msg)
+        self.set_y(self.genotypes, y)

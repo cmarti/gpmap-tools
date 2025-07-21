@@ -4,7 +4,7 @@ import numpy as np
 
 from gpmap.utils import LogTrack, write_dataframe
 from gpmap.inference import SeqDEFT
-from gpmap.plot.mpl import plot_SeqDEFT_summary, savefig
+from gpmap.plot.mpl import figure_SeqDEFT_summary, savefig
 
 
 def main():
@@ -115,7 +115,7 @@ def main():
         log.write(
             "Creating summary plot and saving to {}.png".format(out_fpath)
         )
-        fig = plot_SeqDEFT_summary(seqdeft.logL_df, result)
+        fig = figure_SeqDEFT_summary(seqdeft.logL_df, result)
         savefig(fig, out_fpath)
 
     log.finish()

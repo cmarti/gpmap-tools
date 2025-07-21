@@ -10,19 +10,19 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath('.'))
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'Visualization of fitness landscapes'
-copyright = '2022, Carlos Martí, David McCandlish'
+copyright = '2025, Carlos Martí, David McCandlish'
 author = 'Carlos Martí, David McCandlish'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1.0'
+release = '0.3.2'
 
 
 # -- General configuration ---------------------------------------------------
@@ -30,7 +30,12 @@ release = '0.1.0'
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['nbsphinx', 'sphinx.ext.autodoc', 'numpydoc']
+extensions = [
+    "nbsphinx",
+    "sphinx.ext.autodoc",
+    "numpydoc",
+    "sphinxcontrib.youtube",
+]
 
 # Do NOT automatically execute notebooks when building.
 nbsphinx_execute = 'never'
@@ -62,4 +67,4 @@ html_theme = 'sphinx_rtd_theme'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-#html_static_path = ['_static']
+html_static_path = ["figures"]

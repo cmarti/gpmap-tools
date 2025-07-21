@@ -76,6 +76,7 @@ def set_centered_spines(
     alpha=0.5,
     fontsize=None,
 ):
+    
     axes.spines["left"].set(position=("data", 0), zorder=zorder, alpha=alpha)
     axes.spines["bottom"].set(position=("data", 0), zorder=zorder, alpha=alpha)
     axes.tick_params(axis="both", color=(0, 0, 0, alpha))
@@ -172,34 +173,33 @@ def plot_relaxation_times(
     kwargs={},
 ):
     """
-    Plots the relaxation times associated to each of the calculated components
-    from using ```WMWalk.calc_visualization`
+    Plot relaxation times for calculated components.
 
     Parameters
     ----------
-    decay_df : pd.DataFrame of shape (n_components, 3)
-        ``pd.DataFrame`` containing the decay rates and the associated mean
-        relaxation times for each of the calculated components
+    decay_df : pd.DataFrame
+        DataFrame with shape (n_components, 3) containing decay rates and
+        associated mean relaxation times for each calculated component.
 
-    axes : matplotlib Axes object (None)
-        ``Axes`` where to plot. If not provided, a new figure will be created
-        automatically for this plot and save in the path provided by ``fpath``
+    axes : matplotlib.axes.Axes, optional
+        Axes object to plot on. If not provided, a new figure will be created
+        and saved to the path specified by `fpath`.
 
-    fpath : str (None)
-        File path to store the plot. If ``fpath=None``, ``axes`` argument must
-        be provided for plotting.
+    fpath : str, optional
+        File path to save the plot. If `None`, the `axes` argument must be
+        provided for plotting.
 
-    log_scale : bool (False)
-        Plot the relaxation times in log scale
+    log_scale : bool, default=False
+        Whether to plot relaxation times on a logarithmic scale.
 
-    neutral_time : float (None)
-        If provided, an additional horizontal line will be plotted representing
-        the relaxation time associated to the neutral process. This is useful
-        when selecting the number of relevant dimensions to plot
+    neutral_time : float, optional
+        If provided, a horizontal line representing the neutral process
+        relaxation time will be added to the plot. Useful for selecting
+        relevant dimensions.
 
-    kwargs :  dict
-        Additional key-word arguments dictionary provided for ``axes.plot`` and
-        ``axes.scatter`` e.g. color.
+    kwargs : dict, optional
+        Additional keyword arguments for `axes.plot` and `axes.scatter`,
+        such as color or marker style.
 
     """
 
@@ -267,68 +267,74 @@ def plot_edges(
     max_width=1,
     min_width=0.1,
     fontsize=None,
+    rasterized=False,
 ):
     """
-    Plots the edges representing the connections between states that are conneted
-    in the discrete space under a particular embedding
+    Plots the edges representing connections between states in the discrete
+    space under a particular embedding.
 
     Parameters
     ----------
-    axes : matplotlib ``Axes`` in which to plot the edges.
+    axes : matplotlib.axes.Axes
+        The matplotlib Axes object in which to plot the edges.
 
-    nodes_df : pd.DataFrame of shape (n_genotypes, n_components + 2)
-        ``pd.DataFrame`` containing the coordinates in every of the ``n_components``
-        in addition to the "function" and "stationary_freq" columns. Additional
-        columns are also allowed
+    nodes_df : pandas.DataFrame
+        DataFrame of shape (n_genotypes, n_components + 2) containing the
+        coordinates in each of the `n_components`, along with additional
+        columns such as "function" and "stationary_freq". Additional columns
+        are also allowed.
 
-    edges_df : pd.DataFrame of shape (n_edges, 2)
-        ``pd.DataFrame`` the connectivity information between states of the
-        discrete space to plot. It has columns "i" and "j" for the indexes
-        of the pairs of states that are connected.
+    edges_df : pandas.DataFrame
+        DataFrame of shape (n_edges, 2) containing the connectivity
+        information between states of the discrete space to plot. It has
+        columns "i" and "j" for the indices of the pairs of states that are
+        connected.
 
-    x : str ('1')
-        Column in ``nodes_df`` to use for plotting the genotypes on the x-axis
+    x : str, default='1'
+        Column in `nodes_df` to use for plotting the genotypes on the x-axis.
 
-    y : str ('2')
-        Column in ``nodes_df`` to use for plotting the genotypes on the y-axis
+    y : str, default='2'
+        Column in `nodes_df` to use for plotting the genotypes on the y-axis.
 
-    z : str (None)
-        Column in ``nodes_df`` to use for plotting the genotypes on the z-axis.
-        If provided, then a 3D plot will be produced as long as the provided
-        ``axes`` object allows it.
+    z : str, optional
+        Column in `nodes_df` to use for plotting the genotypes on the z-axis.
+        If provided, a 3D plot will be produced, provided the `axes` object
+        supports it.
 
-    alpha : float (0.1)
-        Transparency of lines representing the edges
+    alpha : float, default=0.1
+        Transparency of the lines representing the edges.
 
-    zorder : int (1)
+    zorder : int, default=1
         Order in which the edges will be rendered relative to other elements.
-        Generally, we would want this to be smaller than the ``zorder``
-        used for plotting the nodes
+        Typically, this should be smaller than the `zorder` used for plotting
+        nodes.
 
-    color : str  ('grey')
-        Column name for the values according to which edges will be colored or
-        the specific color to use for plotting the edges
+    color : str, default='grey'
+        Column name in `edges_df` for the values used to color the edges, or a
+        specific color to use for all edges.
 
-    cmap :  colormap or str
-        Colormap to use for coloring the edges according to column ``color``
+    cmap : str or matplotlib.colors.Colormap, default='binary'
+        Colormap to use for coloring the edges based on the `color` column.
 
     width : float or str
-        Width of the lines representing the edges. If a ``float`` is provided,
-        that will be the width used to plot every edges. If ``str``, then
-        widths will be scaled according to the corresponding column
-        in ``edges_df``.
+        Width of the lines representing the edges. If a float is provided, it
+        will be used for all edges. If a string is provided, edge widths will
+        be scaled based on the corresponding column in `edges_df`.
 
-    max_width : float (1)
-        Maximum linewidth for the edges when scaled by
+    max_width : float, default=1
+        Maximum width for the edges when scaled.
 
-    min_width : float (0.1)
-        Maximum linewidth for the edges when scaled by
+    min_width : float, default=0.1
+        Minimum width for the edges when scaled.
 
+    rasterized : bool, optional, default=False
+        Whether to rasterize the plot for better performance with large datasets.
 
     Returns
     -------
-    line_collection : LineCollection or Line3DCollection
-
+    line_collection : matplotlib.collections.LineCollection or
+    mpl_toolkits.mplot3d.art3d.Line3DCollection
+        The collection of lines representing the edges.
     """
     # TODO: get colors and width as either fixed values or from edges_df
     edges_coords = get_edges_coords(
@@ -346,6 +352,7 @@ def plot_edges(
         alpha=alpha,
         zorder=zorder,
         cmap=mpl.colormaps[cmap],
+        rasterized=rasterized,
     )
     axes.add_collection(lines)
     add_color_info(
@@ -493,6 +500,7 @@ def plot_nodes(
         "zorder": zorder,
         "alpha": alpha,
         "edgecolor": edgecolor,
+        "rasterized": rasterized,
     }
     if continuous:
         kwargs["cmap"] = mpl.colormaps[cmap]
@@ -1060,6 +1068,7 @@ def plot_visualization(
             width=edges_width,
             max_width=edges_max_width,
             min_width=edges_min_width,
+            rasterized=rasterized,
         )
 
     orientation = "vertical"
@@ -1103,6 +1112,7 @@ def plot_visualization(
         vmax=nodes_vmax,
         vmin=nodes_vmin,
         vcenter=nodes_vcenter,
+        rasterized=rasterized,
     )
 
     add_axis_labels(axes, x, y, z=z, center_spines=center_spines)
@@ -1133,6 +1143,44 @@ def figure_Ns_grid(
     fpath=None,
     **kwargs,
 ):
+    """
+    Generate a grid of visualizations for different stationary mean functions.
+
+    Parameters
+    ----------
+    rw : object
+        An object containing the space and nodes information, as well as 
+        methods for calculating visualizations.
+
+    x : str, optional
+        Column in the nodes DataFrame to use for plotting the x-axis. Default 
+        is "1".
+
+    y : str, optional
+        Column in the nodes DataFrame to use for plotting the y-axis. Default 
+        is "2".
+
+    pmin : float, optional
+        Minimum proportion of the range to use for calculating mean functions. 
+        Default is 0.
+
+    pmax : float, optional
+        Maximum proportion of the range to use for calculating mean functions. 
+        Default is 0.8.
+
+    ncol : int, optional
+        Number of columns in the grid. Default is 4.
+
+    nrow : int, optional
+        Number of rows in the grid. Default is 3.
+
+    show_edges : bool, optional
+        Whether to include edges in the visualization. Default is True.
+
+    fpath : str, optional
+        File path to save the figure. If None, the figure will not be saved. 
+        Default is None.
+    """
     fig, subplots = init_fig(
         nrow,
         ncol,
@@ -1257,6 +1305,51 @@ def figure_allele_grid(
     fpath=None,
     **kwargs,
 ):
+    """
+    Generate a grid of visualizations for alleles at specific positions.
+
+    Parameters
+    ----------
+    nodes_df : pd.DataFrame
+        DataFrame containing the nodes' information, including their coordinates
+        and attributes.
+
+    edges_df : pd.DataFrame, optional
+        DataFrame containing the edges' information, including connectivity
+        between nodes. If None, edges will not be plotted. Default is None.
+
+    allele_color : str, optional
+        Color used to highlight nodes corresponding to specific alleles. Default is "orange".
+
+    background_color : str, optional
+        Color used for the background nodes. Default is "lightgrey".
+
+    positions : array-like, optional
+        List of positions to visualize. If None, all positions will be used. Default is None.
+
+    position_labels : array-like, optional
+        Labels for the positions. If None, positions will be labeled sequentially. Default is None.
+
+    colsize : int, optional
+        Width of each column in the grid. Default is 3.
+
+    rowsize : float, optional
+        Height of each row in the grid. Default is 2.7.
+
+    xpos_label : float, optional
+        Horizontal position of the allele label within each subplot, as a fraction
+        of the axes width. Default is 0.05.
+
+    ypos_label : float, optional
+        Vertical position of the allele label within each subplot, as a fraction
+        of the axes height. Default is 0.92.
+
+    fmt : str, optional
+        Format to save the figure, e.g., "png" or "pdf". Default is "png".
+
+    fpath : str, optional
+        File path to save the figure. If None, the figure will not be saved. Default is None.
+    """
     config = guess_space_configuration(nodes_df.index.values)
     length, n_alleles = config["length"], np.max(config["n_alleles"])
 
@@ -1730,7 +1823,7 @@ def plot_density_vs_frequency(seq_density, axes):
     axes.legend(loc=2, fontsize=9)
 
 
-def plot_SeqDEFT_summary(
+def figure_SeqDEFT_summary(
     log_Ls,
     seq_density=None,
     err_bars="stderr",
@@ -1742,20 +1835,23 @@ def plot_SeqDEFT_summary(
     Generates a 2-panel figure summarizing the SeqDEFT model results.
 
     The first panel shows how the cross-validated likelihood changes with the
-    ``a`` hyperparameter and highlights the best-selected value for model fitting.
-    If sequence density data is provided, the second panel visualizes the relationship
-    between observed sequence frequencies and estimated densities.
+    ``a`` hyperparameter and highlights the best-selected value for model
+    fitting. If sequence density data is provided, the second panel visualizes
+    the relationship between observed sequence frequencies and estimated
+    densities.
 
     Parameters
     ----------
     log_Ls : pd.DataFrame
         A DataFrame of shape (num_a, 3) containing the columns:
+
         - ``a``: The hyperparameter values.
         - ``logL``: The log-likelihood values.
         - ``fold``: The cross-validation fold identifiers.
 
     seq_density : pd.DataFrame, optional
         A DataFrame of shape (n_genotypes, >= 2) with the following columns:
+
         - ``frequency``: Observed frequencies for each sequence.
         - ``Q``: Estimated densities for each sequence.
         If not provided, only a single-panel figure with the cross-validated
@@ -1763,6 +1859,7 @@ def plot_SeqDEFT_summary(
 
     err_bars : str, default='stderr'
         Specifies the type of error bars to display:
+
         - ``'sd'``: Standard deviation across the different folds.
         - ``'stderr'``: Standard error of the mean.
 
@@ -1771,10 +1868,12 @@ def plot_SeqDEFT_summary(
         folds in the cross-validation procedure.
 
     legend_loc : int, default=1
-        The location of the legend in the plot. Follows matplotlib's legend location codes.
+        The location of the legend in the plot. Follows matplotlib's legend
+        location codes.
 
     normalize_logL : bool, default=True
-        If True, normalizes the log-likelihood values relative to the value at ``a = ∞``.
+        If True, normalizes the log-likelihood values relative to the value at
+        ``a = ∞``.
 
     Returns
     -------

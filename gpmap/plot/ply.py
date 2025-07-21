@@ -27,67 +27,61 @@ def plot_visualization(
     fpath=None,
 ):
     """
-    Makes an interactive plot of fitness landscape with genotypes as nodes
-    and single point mutations as edges using plotly
+    Creates an interactive plot of a fitness landscape with genotypes as nodes
+    and single point mutations as edges using Plotly.
 
     Parameters
     ----------
-    nodes_df : pd.DataFrame of shape (n_genotypes, n_components + 2)
-        ``pd.DataFrame`` containing the coordinates in every of the ``n_components``
-        in addition to the "function" and "stationary_freq" columns. Additional
-        columns are also allowed
+    nodes_df : pd.DataFrame
+        DataFrame containing genotype information. Must include columns for
+        coordinates (e.g., "1", "2", "3"), "function", and optionally other
+        metadata.
 
-    edges_df : pd.DataFrame of shape (n_edges, 2)
-        ``pd.DataFrame`` the connectivity information between states of the
-        discrete space to plot. It has columns "i" and "j" for the indexes
-        of the pairs of states that are connected.
+    edges_df : pd.DataFrame, optional
+        DataFrame containing edge connectivity information. Must include
+        columns "i" and "j" for connected node indices.
 
-    x : str ('1')
-        Column in ``nodes_df`` to use for plotting the genotypes on the x-axis
+    x : str, default '1'
+        Column name in `nodes_df` for the x-axis coordinates.
 
-    y : str ('2')
-        Column in ``nodes_df`` to use for plotting the genotypes on the y-axis
+    y : str, default '2'
+        Column name in `nodes_df` for the y-axis coordinates.
 
-    z : str (None)
-        Column in ``nodes_df`` to use for plotting the genotypes on the z-axis.
-        If provided, then a 3D plot will be produced as long as the provided
-        ``axes`` object allows it.
+    z : str, optional
+        Column name in `nodes_df` for the z-axis coordinates. If provided,
+        a 3D plot will be generated.
 
-    nodes_color : str  ('function')
-        Column name for the values according to which states will be colored or
-        the specific color to use for plotting the states
+    nodes_color : str, default 'function'
+        Column name in `nodes_df` for node coloring or a specific color value.
 
-    nodes_size : float (2.5)
-        Size of the markers provided for plotting to ``axes.scatter``. If a
-        ``float`` is provided, that will be the size used to plot every nodes.
-        If ``str``, then node sizes will be scaled according to the
-        corresponding column in ``nodes_df``.
+    nodes_size : float, default 4
+        Size of the nodes. Can be a constant or a column name in `nodes_df`.
 
-    nodes_cmap : colormap or str
-        Colormap to use for coloring the nodes according to column ``color``
+    nodes_cmap : str, default 'viridis'
+        Colormap for node coloring.
 
-    nodes_cmap_label : str
-        Label for colorbar
+    nodes_cmap_label : str, default 'Function'
+        Label for the colorbar associated with node coloring.
 
-    edges_width : float or str
-        Width of the lines representing the edges. If a ``float`` is provided,
-        that will be the width used to plot every edges. If ``str``, then
-        widths will be scaled according to the corresponding column
-        in ``edges_df``.
+    edges_width : float, default 0.5
+        Width of the edges. Can be a constant or a column name in `edges_df`.
 
-    edges_color : str
-        Column name for the values according to which edges will be colored or
-        the specific color to use for plotting the edges
+    edges_color : str, default '#888'
+        Color of the edges.
 
-    edges_alpha : float (0.2)
-        Transparency of lines representing the edges
+    edges_alpha : float, default 0.2
+        Transparency of the edges.
 
-    text : array-like of shape (nodes_df.shape[0]) (None)
-        Labels to show for each state when hovering over the markers representing
-        them. If not provided, rownames of the nodes_df DataFrame will be used
+    text : array-like, optional
+        Labels for nodes to display on hover. Defaults to `nodes_df.index`.
 
-    fpath : str
-        File path in which to store the interactive plot as an html file
+    fpath : str, optional
+        File path to save the interactive plot as an HTML file.
+
+    Returns
+    -------
+    fig : plotly.graph_objects.Figure
+        The generated Plotly figure.
     """
 
     # Create figure

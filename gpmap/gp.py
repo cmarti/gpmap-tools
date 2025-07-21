@@ -203,6 +203,7 @@ class SeqGaussianProcessRegressor(object):
         y_var : array-like
             The standard deviation of the experimental noise for each input
             sequence.
+
         Raises
         ------
         ValueError
@@ -211,9 +212,13 @@ class SeqGaussianProcessRegressor(object):
         Examples
         --------
         Simulate data with default parameters:
+         
         >>> f, X, y, y_var = gp.simulate()
+
         Simulate data with custom noise and missing probability:
+
         >>> f, X, y, y_var = gp.simulate(y_var=0.1, p_missing=0.2, seed=42)
+
         """
 
         if X is None:
@@ -297,12 +302,15 @@ class SeqGaussianProcessRegressor(object):
         Examples
         --------
         Compute the posterior distribution for the entire sequence space:
+
         >>> mu, Sigma = gp.calc_posterior()
 
         Compute the posterior distribution for specific prediction points:
+
         >>> mu, Sigma = gp.calc_posterior(X_pred=["AAA", "AAC"])
 
         Apply a linear transformation to the posterior distribution:
+
         >>> B = np.array([[1, 0, 0], [0, 1, 0]])
         >>> mu, Sigma = gp.calc_posterior(B=B)
         """
@@ -335,12 +343,18 @@ class SeqGaussianProcessRegressor(object):
         contrasts : pd.DataFrame of shape (n_contrasts, 5)
             A DataFrame summarizing the posterior distribution for each 
             contrast. The columns include:
+
             - ``estimate``: Posterior mean for each contrast.
+
             - ``std``: Posterior standard deviation for each contrast.
+
             - ``ci_95_lower``: Lower bound of the 95% credible interval.
+
             - ``ci_95_upper``: Upper bound of the 95% credible interval.
+
             - ``p(|x|>0)``: Posterior probability that the absolute value 
               of the contrast is greater than 0.
+
         """
         X_pred = contrast_matrix.index.values
         contrast_names = contrast_matrix.columns.values
@@ -392,10 +406,15 @@ class SeqGaussianProcessRegressor(object):
             A DataFrame containing the predicted phenotypes for each input 
             genotype in the column ``f``. If ``calc_variance=True``, additional 
             columns are included:
+
             - ``f_var``: Posterior variance for each genotype.
+
             - ``f_std``: Posterior standard deviation for each genotype.
+
             - ``ci_95_lower``: Lower bound of the 95% credible interval.
+
             - ``ci_95_upper``: Upper bound of the 95% credible interval.
+
             The genotype labels are used as the row index.
 
         Notes
@@ -407,9 +426,11 @@ class SeqGaussianProcessRegressor(object):
         Examples
         --------
         Predict phenotypes for the entire genotype space:
+
         >>> pred = model.predict()
 
         Predict phenotypes for specific genotypes with variance:
+        
         >>> pred = model.predict(X_pred=["AAA", "AAC"], calc_variance=True)
         """
 
