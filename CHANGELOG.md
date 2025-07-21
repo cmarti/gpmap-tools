@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## New release [0.3.2] - 2025-07-18
+
+### Changed
+
+- **Documentation updated** following Arlin Stoltzfus feedback and comments. Motivation and history of the package
+added to the introductory page together with links to other studies using gpmap-tools and online talks. Getting started
+section shows the basic tasks one can do with gpmap-tools. Installation instructions simplified to use pip alone for users and download github repository and test for developers. Docstrings updated for completeness for API in rtd. 
 
 ## New release [0.3.1] - 2025-03-31
 
