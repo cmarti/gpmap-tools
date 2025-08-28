@@ -88,7 +88,20 @@ class InverseOperator(ExtendedLinearOperator):
         )
 
 
-class DiagonalOperator(ExtendedLinearOperator):
+class SymmetricOperator(ExtendedLinearOperator):
+    symmetric = True
+
+    def _rmatvec(self, v):
+        return self._matvec(v)
+
+    def _rmatmat(self, B):
+        return self._matmat(B)
+
+    def transpose(self):
+        return self
+
+
+class DiagonalOperator(SymmetricOperator):
     def __init__(self, diag):
         self.diag = diag
         self.shape = (diag.shape[0], diag.shape[0])
@@ -99,9 +112,6 @@ class DiagonalOperator(ExtendedLinearOperator):
 
     def _matmat(self, B):
         return np.expand_dims(self.diag, 1) * B
-
-    def transpose(self):
-        return self
 
     def logdet(self):
         msg = "All diagonal entries must be larger than 0 to compute logdet"
@@ -115,21 +125,50 @@ class DiagonalOperator(ExtendedLinearOperator):
 class IdentityOperator(DiagonalOperator):
     def __init__(self, n):
         self.shape = (n, n)
+        self._init_dtype()
 
     def _matvec(self, v):
         return v
 
-    def _rmatvec(self, B):
-        return B
-
     def _matmat(self, B):
         return B
 
-    def _rmatmat(self, B):
-        return B
 
-    def transpose(self):
-        return self
+class PconOperator(SymmetricOperator):
+    def __init__(self, n):
+        self.shape = (n, n)
+        self._init_dtype()
+
+    def _matvec(self, v):
+        return np.full_like(v, np.mean(v))
+
+    def _matmat(self, B):
+        return np.tile(np.mean(B, axis=0), (B.shape[0], 1))
+
+
+class PaddOperator(SymmetricOperator):
+    def __init__(self, n):
+        self.shape = (n, n)
+        self._init_dtype()
+
+    def _matvec(self, v):
+        return v - np.full_like(v, np.mean(v))
+
+    def _matmat(self, B):
+        return B - np.tile(np.mean(B, axis=0), (B.shape[0], 1))
+
+
+class SiteLaplacianOperator(SymmetricOperator):
+    def __init__(self, n):
+        self.n = n
+        self.shape = (n, n)
+        self._init_dtype()
+
+    def _matvec(self, v):
+        return self.n * v - np.full_like(v, np.sum(v))
+
+    def _matmat(self, B):
+        return self.n * B - np.tile(np.sum(B, axis=0), (B.shape[0], 1))
 
 
 class MatMulOperator(ExtendedLinearOperator):
@@ -537,6 +576,52 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         return self.m_k[self.P :] * np.log(self.lambdas[self.P :])
 
 
+class DeltaUOperator(SeqOperator, KronOperator):
+    symmetric = True
+
+    def __init__(self, n_alleles, seq_length, U):
+        self.U = U
+        SeqOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length)
+        KronOperator.__init__(self, self.get_matrices())
+        self.L = SiteLaplacianOperator(self.alpha)
+
+    def get_matrices(self):
+        C0 = IdentityOperator(self.alpha)
+        C1 = SiteLaplacianOperator(self.alpha)
+        return [C1 if i in self.U else C0 for i in range(self.seq_length)]
+
+
+class DeltaUWeighedSumOperator(SeqOperator, SymmetricOperator):
+    def __init__(self, n_alleles, seq_length, P, a):
+        self.ncombs = comb(seq_length, P)
+        self.P = P
+        check_error(a.shape[0] == self.ncombs, msg="Incorrect size of a")
+        self.a = a
+        SeqOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length)
+        self.Deltap = [
+            DeltaUOperator(n_alleles, seq_length, [i])
+            for i in range(seq_length)
+        ]
+
+    def take_product(self, U, v, temp_products):
+        if not U:
+            return(v)
+        elif U in temp_products:
+            return(temp_products[U])
+        else:
+            prev_u = self.take_product(U[:-1], v, temp_products)
+            temp_products[U[:-1]] = prev_u
+            u = self.Deltap[U[-1]] @ prev_u
+            return(u)
+
+    def _matvec(self, v):
+        u = np.zeros_like(v)
+        temp_products = {}
+        for a_U, U in zip(self.a, combinations(self.positions, self.P)):
+            u += a_U * self.take_product(U, v, temp_products)
+        return(u)
+
+
 class KrawtchoukOperator(SeqOperator, PolynomialOperator):
     symmetric = True
 
@@ -786,8 +871,8 @@ class VjProjectionOperator(VjOperator):
     symmetric = True
 
     def get_matrices(self, j):
-        self.W0 = np.full((self.alpha, self.alpha), fill_value=1.0 / self.alpha)
-        self.W1 = np.eye(self.alpha) - self.W0
+        self.W0 = PconOperator(self.alpha)
+        self.W1 = PaddOperator(self.alpha)
         W = [self.W0, self.W1]
         return [W[int(i in j)] for i in range(self.seq_length)]
 
@@ -817,8 +902,8 @@ class RhoProjectionOperator(ConstantDiagSeqOperator, KronOperator):
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
-        W0 = np.full((self.alpha, self.alpha), fill_value=1.0 / self.alpha)
-        W1 = np.eye(self.alpha) - W0
+        W0 = PconOperator(self.alpha)
+        W1 = PaddOperator(self.alpha)
         return [W0 + r * W1 for r in self.rho]
 
     def check_rho(self, rho, ignore_bound=False):

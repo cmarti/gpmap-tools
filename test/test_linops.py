@@ -16,7 +16,12 @@ from gpmap.linop import (
     VjProjectionOperator,
     DiagonalOperator,
     IdentityOperator,
+    PconOperator,
+    PaddOperator,
+    SiteLaplacianOperator,
     DeltaPOperator,
+    DeltaUOperator,
+    DeltaUWeighedSumOperator,
     RhoProjectionOperator,
     ExtendedDeltaPOperator,
     MatMulOperator,
@@ -60,6 +65,51 @@ class LinOpsTests(unittest.TestCase):
         v = np.random.normal(size=n)
         assert np.allclose(v, Identity @ v)
         assert np.allclose(v, Identity.transpose() @ v)
+
+    def test_Pcon_operator(self):
+        n = 3
+        P = PconOperator(n)
+        
+        # With a vector
+        v = np.random.normal(size=n)
+        u = P @ v
+        assert(np.allclose(u, v.mean()))
+
+        # With a matrix
+        B = np.random.normal(size=(n, 2))
+        U = P @ B
+        assert np.allclose(U, B.mean(axis=0, keepdims=True))
+    
+    def test_Padd_operator(self):
+        n = 3
+        P = PaddOperator(n)
+
+        # With a vector
+        v = np.random.normal(size=n)
+        u = P @ v
+        assert np.allclose(u.mean(), 0.)
+
+        # With a matrix
+        B = np.random.normal(size=(n, 2))
+        U = P @ B
+        assert np.allclose(U.mean(axis=0), 0.)
+
+    def test_site_laplacian_operator(self):
+        n = 3
+        L = SiteLaplacianOperator(n)
+        P = PaddOperator(n)
+
+        # With a vector
+        v = np.random.normal(size=n)
+        u = L @ v
+        assert np.allclose(u.mean(), 0.0)
+        assert np.allclose(u, n * P @ v)
+
+        # With a matrix
+        B = np.random.normal(size=(n, 2))
+        U = L @ B
+        assert np.allclose(U.mean(axis=0), 0.0)
+        assert np.allclose(U, n * P @ B)
 
     def test_tri_inv_operator(self):
         A = np.tril(np.random.normal(size=(5, 5)))
@@ -252,6 +302,66 @@ class LinOpsTests(unittest.TestCase):
             n_alleles=2, seq_length=3, P=2, lambdas0=np.array([1, 1.0])
         )
         assert np.allclose(op.lambdas, [1, 1, 4, 12])
+    
+    def test_deltaU_operator(self):
+        a, sl = 2, 3
+        n = a ** sl
+        v = np.random.normal(size=n)
+        DU = DeltaUOperator(a, sl, U=[0, 1])
+        u1 = DU @ v
+        
+        # Ensure equivalence with the dense matrix
+        C0 = np.eye(a)
+        C1 = a * np.eye(a) - np.ones((a, a))
+        A = np.kron(C1, np.kron(C1, C0))
+        u2 = A @ v
+        assert np.allclose(u1, u2)
+
+    def test_deltaU_operator_equivalences(self):
+        a, sl = 2, 3
+        n = a**sl
+        P = 2
+        v = np.random.normal(size=n)
+
+        # Ensure equivalence with the PU operators
+        DU = DeltaUOperator(a, sl, U=[0, 1])
+        u1 = DU @ v
+        PU1 = VjProjectionOperator(a, sl, j=[0, 1])
+        PU2 = VjProjectionOperator(a, sl, j=[0, 1, 2])
+        u2 = a ** 2 * (PU1 + PU2) @ v
+        assert np.allclose(u1, u2)
+
+        # Ensure summing over all DeltaU with |U|=P gives DeltaP
+        u1 = np.zeros(n)
+        for U in combinations(np.arange(sl), P):
+            DU = DeltaUOperator(a, sl, U=U)
+            u1 += DU @ v
+        
+        DP = DeltaPOperator(a, sl, P=P)
+        u2 = DP @ v
+        assert np.allclose(u1, u2)
+
+    def test_deltaU_weighed_sum_operator(self):
+        a, sl = 2, 3
+        n = a**sl
+        v = np.random.normal(size=n)
+
+        # Ensure equivalence with the DeltaU
+        a_values = np.ones(int(comb(sl, 2)))
+        a_values[1:] = 0
+        A1 = DeltaUWeighedSumOperator(a, sl, P=2, a=a_values)
+        A2 = DeltaUOperator(a, sl, U=[0, 1])
+        u1 = A1 @ v
+        u2 = A2 @ v
+        assert np.allclose(u1, u2)
+
+        # Ensure equivalence with the DeltaP
+        a_values = np.ones(int(comb(sl, 2)))
+        A1 = DeltaUWeighedSumOperator(a, sl, P=2, a=a_values)
+        A2 = DeltaPOperator(a, sl, P=2)
+        u1 = A1 @ v
+        u2 = A2 @ v
+        assert np.allclose(u1, u2)
 
     def test_kron_operator(self):
         np.random.seed(0)
