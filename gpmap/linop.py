@@ -37,7 +37,9 @@ class ExtendedLinearOperator(_CustomLinearOperator):
         return SubMatrixOperator(self, row_idx, col_idx)
 
     def todense(self):
-        return self.dot(np.eye(self.shape[1]))
+        M = self @ np.eye(self.shape[1])
+        print(M)
+        return M
 
     def rowsum(self):
         v = np.ones(self.shape[0])
@@ -144,6 +146,18 @@ class PconOperator(SymmetricOperator):
 
     def _matmat(self, B):
         return np.tile(np.mean(B, axis=0), (B.shape[0], 1))
+
+
+class PonesOperator(SymmetricOperator):
+    def __init__(self, n):
+        self.shape = (n, n)
+        self._init_dtype()
+
+    def _matvec(self, v):
+        return np.full_like(v, np.sum(v))
+
+    def _matmat(self, B):
+        return np.tile(np.sum(B, axis=0), (B.shape[0], 1))
 
 
 class PaddOperator(SymmetricOperator):
@@ -363,10 +377,18 @@ class KronOperator(ExtendedLinearOperator):
         u = u_tensor.transpose().flatten()
         return u
 
+    def _get_dense_matrix(self, m):
+        if isinstance(m, _CustomLinearOperator):
+            return m @ np.eye(m.shape[1])
+        else:
+            return m
+
     def _todense(self, matrices):
         if len(matrices) == 1:
-            return matrices[0]
-        matrices = matrices[:-2] + [np.kron(matrices[-2], matrices[-1])]
+            return self._get_dense_matrix(matrices[0])
+        m1 = self._get_dense_matrix(matrices[-2])
+        m2 = self._get_dense_matrix(matrices[-1])
+        matrices = matrices[:-2] + [np.kron(m1, m2)]
         return self._todense(matrices)
 
     def todense(self):
@@ -828,20 +850,17 @@ class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
         return self.L_powers_d_inv[:, distance]
 
 
-class CovarianceVjOperator(ConstantDiagSeqOperator, KronOperator):
+class CovarianceVjOperator(SeqOperator, KronOperator):
     symmetric = True
 
     def __init__(self, n_alleles, seq_length, j):
         self.j = j
-
-        ConstantDiagSeqOperator.__init__(
-            self, n_alleles=n_alleles, seq_length=seq_length
-        )
+        SeqOperator.__init__(self, n_alleles, seq_length)
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
-        C0 = np.eye(self.alpha)
-        C1 = np.ones((self.alpha, self.alpha)) - C0
+        C0 = IdentityOperator(self.alpha)
+        C1 = np.ones((self.alpha, self.alpha)) - np.eye(self.alpha)
         return [C1 if i in self.j else C0 for i in range(self.seq_length)]
 
 
