@@ -387,16 +387,8 @@ class KronOperator(ExtendedLinearOperator):
         else:
             return m
 
-    def _todense(self, matrices):
-        if len(matrices) == 1:
-            return self._get_dense_matrix(matrices[0])
-        m1 = self._get_dense_matrix(matrices[-2])
-        m2 = self._get_dense_matrix(matrices[-1])
-        matrices = matrices[:-2] + [np.kron(m1, m2)]
-        return self._todense(matrices)
-
     def todense(self):
-        return self._todense(self.matrices)
+        return kron([self._get_dense_matrix(m) for m in self.matrices]) 
 
     def transpose(self):
         return KronOperator([m.T for m in self.matrices])
@@ -535,26 +527,36 @@ class LaplacianOperator(ConstantDiagSeqOperator):
         return self.expand_v(u)
 
 
-class DeltaPOperator(ConstantDiagSeqOperator):
+class DeltaOperator(ConstantDiagSeqOperator):
     symmetric = True
 
     def __init__(self, n_alleles, seq_length, P):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
-        self.L = LaplacianOperator(n_alleles=n_alleles, seq_length=seq_length)
-        self.dtype = self.L.dtype
-        self.m_k = self.L.lambdas_multiplicity
         self.set_P(P)
         self.calc_kernel_dimension()
         self.calc_n_p_faces()
         self.calc_n_p_faces_genotype()
-        self.calc_lambdas()
+    
+    def set_P(self, P):
+        self.P = P
+        if self.P == (self.lp1):
+            msg = '"P" = l+1, the optimal density is equal '
+            msg += "to the empirical frequency."
+            raise ValueError(msg)
+        elif not 1 <= self.P <= self.seq_length:
+            msg = '"P" not in the right range.'
+            raise ValueError(msg)
+        self.Pfactorial = factorial(self.P)
+        self.d = comb(self.seq_length, self.P) * (self.alpha - 1) ** self.P
 
     def calc_kernel_dimension(self):
-        self.kernel_dimension = np.sum(self.m_k[: self.P])
+        self.kernel_dimension = np.sum(
+            [
+                comb(self.seq_length, k) * (self.alpha - 1) ** k
+                for k in range(self.P)
+            ]
+        )
         self.rank = self.n - self.kernel_dimension
-
-    def calc_kernel_basis(self):
-        return DeltaKernelBasisOperator(self.alpha, self.seq_length, self.P)
 
     def calc_n_p_faces_genotype(self):
         n_mut = self.seq_length * (self.alpha - 1)
@@ -568,17 +570,26 @@ class DeltaPOperator(ConstantDiagSeqOperator):
             n_p_sites * n_p_faces_per_sites * allelic_comb_remaining_sites
         )
 
-    def set_P(self, P):
-        self.P = P
-        if self.P == (self.lp1):
-            msg = '"P" = l+1, the optimal density is equal '
-            msg += "to the empirical frequency."
-            raise ValueError(msg)
-        elif not 1 <= self.P <= self.seq_length:
-            msg = '"P" not in the right range.'
-            raise ValueError(msg)
-        self.Pfactorial = factorial(self.P)
-        self.d = comb(self.seq_length, self.P) * (self.alpha - 1) ** self.P
+    def calc_kernel_basis(self):
+        return DeltaKernelBasisOperator(self.alpha, self.seq_length, self.P)
+
+
+class DeltaPOperator(DeltaOperator):
+    def __init__(self, n_alleles, seq_length, P):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length, P=P)
+        self.L = LaplacianOperator(n_alleles=n_alleles, seq_length=seq_length)
+        self.dtype = self.L.dtype
+        self.m_k = self.L.lambdas_multiplicity
+        self.calc_lambdas()
+    
+    def calc_lambdas(self):
+        lambdas = []
+        for L_lambda_k in self.L.lambdas:
+            lambda_k = 1
+            for p in range(self.P):
+                lambda_k *= L_lambda_k - p * self.alpha
+            lambdas.append(lambda_k / self.Pfactorial)
+        self.lambdas = np.array(lambdas)
 
     def _L_minus_p_a_dot(self, v, p=0):
         return self.L.dot(v) - p * self.alpha * v
@@ -588,15 +599,6 @@ class DeltaPOperator(ConstantDiagSeqOperator):
         for p in range(self.P):
             dotv = self._L_minus_p_a_dot(dotv, p)
         return dotv / self.Pfactorial
-
-    def calc_lambdas(self):
-        lambdas = []
-        for L_lambda_k in self.L.lambdas:
-            lambda_k = 1
-            for p in range(self.P):
-                lambda_k *= L_lambda_k - p * self.alpha
-            lambdas.append(lambda_k / self.Pfactorial)
-        self.lambdas = np.array(lambdas)
 
     def calc_log_det(self):
         return self.m_k[self.P :] * np.log(self.lambdas[self.P :])
@@ -617,13 +619,12 @@ class DeltaUOperator(SeqOperator, KronOperator):
         return [C1 if i in self.U else C0 for i in range(self.seq_length)]
 
 
-class DeltaUWeighedSumOperator(SeqOperator, SymmetricOperator):
+class DeltaUWeighedSumOperator(DeltaOperator, SymmetricOperator):
     def __init__(self, n_alleles, seq_length, P, a):
         self.ncombs = comb(seq_length, P)
-        self.P = P
         check_error(a.shape[0] == self.ncombs, msg="Incorrect size of a")
         self.a = a
-        SeqOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length)
+        DeltaOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length, P=P)
         self.Deltap = [
             DeltaUOperator(n_alleles, seq_length, [i])
             for i in range(seq_length)
@@ -1251,6 +1252,28 @@ def calc_covariance_vjs(y, n_alleles, seq_length, idx=None):
     sites_matrix = np.array(sites_matrix)
     cov, ns = np.array(cov), np.array(ns)
     return (cov, ns, sites_matrix)
+
+
+def calc_covariance_U_sites(y, n_alleles, seq_length, idx=None):
+    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(
+        y, n_alleles, seq_length, idx=idx
+    )
+
+    cov, ns = [], []
+    sites = np.arange(seq_length)
+    values = [False, True]
+
+    for U in product(values, repeat=seq_length):
+        j = tuple(p for p, s in zip(sites, U) if s)
+        P = CovarianceVjOperator(n_alleles, seq_length, j=j)
+        Pquad = quad(P, seq_values)
+        nj = quad(P, obs_seqs)
+
+        cov.append(reciprocal(Pquad, nj))
+        ns.append(nj)
+
+    cov, ns = np.array(cov), np.array(ns)
+    return (cov, ns)
 
 
 def calc_variance_components(y, n_alleles, seq_length):
