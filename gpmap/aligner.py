@@ -1,8 +1,10 @@
 import numpy as np
 
+from itertools import combinations, product
 from scipy.special import comb
 from scipy.optimize import minimize, lsq_linear
 
+from gpmap.matrix import kron
 from gpmap.utils import check_error, safe_exp
 
 
@@ -50,7 +52,7 @@ class VCKernelAligner(object):
         """Construct second order difference matrix for regularization"""
         Diff2 = np.zeros((self.seq_length - 2, self.seq_length))
         for i in range(Diff2.shape[0]):
-            Diff2[i, i: i + 3] = [-1, 2, -1]
+            Diff2[i, i : i + 3] = [-1, 2, -1]
         self.second_order_diff_matrix = Diff2.T.dot(Diff2)
 
     def calc_loss(self, log_lambdas, beta=None, return_grad=False):
@@ -138,7 +140,7 @@ class VCKernelAligner(object):
         return self.W_kd.T.dot(lambdas)
 
 
-class VjKernelAligner(object):
+class VUKernelAligner(object):
     """
     Class to perform kernel alignment by matching the empirical
     covariances for pairs of sequences that differ at specific
@@ -152,33 +154,42 @@ class VjKernelAligner(object):
     seq_length : int
         The number of sites in the sequence.
     """
+
     def __init__(self, n_alleles, seq_length):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
         self.eta = self.n_alleles - 1
+        self.n_covs = 2 ** seq_length
+        self.n_Us = 2 ** seq_length
+        self.n_seqs = n_alleles ** seq_length
+        self.Padd = np.array([self.n_alleles - 1, -1.0]) / self.n_alleles
+        self.Pcon = np.array([1, 1.0]) / self.n_alleles
+        self.U_sites = list(product([False, True], repeat=self.seq_length))
+        self.calc_W_sU_matrix()
+    
+    def calc_W_sU_matrix(self):
+        W_Us = []
+        for x in self.U_sites:
+            W_Us.append(kron([self.Padd if x_i else self.Pcon for x_i in x]))
+        self.W_sU = np.vstack(W_Us).T
 
-    def set_data(self, covs, ns, sites_matrix):
-        msg = "´sites_matrix´ should have a number of columns equal"
-        msg += " to the sequence length"
-        check_error(sites_matrix.shape[1] == self.seq_length, msg=msg)
-
-        msg = "´sites_matrix´ should have a number of rows equal to"
-        msg += " the the size of `covs`"
-        check_error(sites_matrix.shape[0] == covs.shape[0], msg=msg)
-
+    def set_data(self, covs, ns):
+        if covs.shape[0] != ns.shape[0]:
+            msg = 'covs and ns must be the same shape'
+            raise ValueError(msg)
+        
         self.covs = covs
         self.ns = ns
-        self.sites_matrix = sites_matrix
 
     def frobenius_norm(self, params):
         exp_cov = self.calc_cov(params)
         Frob = np.sum(self.ns * (self.covs - exp_cov) ** 2) / self.ns.sum()
         return Frob
 
-    def frobenius_norm_grad(self, logit_rho):
+    def frobenius_norm_grad(self, params):
         raise ValueError("Gradient calculation not implemented")
 
-    def fit(self, covs, ns, sites_matrix):
+    def fit(self, covs, ns):
         """
         Fits kernel parameters by minimizing the Frobenius Norm
         with the empirical covariance at sequences matching subsets
@@ -191,17 +202,14 @@ class VjKernelAligner(object):
             combination of sites.
         ns : array-like of shape (2 ** seq_length)
             Number of pairs of sequences at every possible combination of sites.
-        sites_matrix : array-like of shape (2 ** seq_length, seq_length)
-            Matrix encoding the sites that are in common for every
-            provided empirical second moment class.
-
         Returns
         -------
         params : array-like or tuple of array-like
             Parameter values that best fit the empirical second moments.
         """
 
-        self.set_data(covs, ns, sites_matrix)
+        self.set_data(covs, ns)
+
         res = minimize(
             fun=self.frobenius_norm,
             x0=self.get_x0(),
@@ -211,16 +219,92 @@ class VjKernelAligner(object):
         self.res = res
         return self.x_to_params(res.x)
 
-    def predict(self, logit_rho, log_mu=0):
-        x = self.params_to_x(log_mu, logit_rho)
-        cov = self.calc_cov(x)
+    def x_to_params(self, x):
+        lambda_U = np.exp(x)
+        return lambda_U
+
+    def params_to_x(self, lambda_U):
+        return np.log(lambda_U)
+
+    def get_x0(self):
+        return np.zeros(self.n_Us)
+
+    def predict(self, lambda_U):
+        cov = self.W_sU @ lambda_U
         return cov
 
+    def calc_cov(self, x):
+        lambda_U = self.x_to_params(x)
+        return self.predict(lambda_U)
+    
 
-class RhoKernelAligner(VjKernelAligner):
+
+class DeltaUKernelAligner(VUKernelAligner):
     """
-    Class to determine the parameters of the Connectedness model 
-    that best align with the empirical covariances for sequences 
+    Class to determine the parameters of the DeltaU sum model
+    that best align with the empirical covariances for sequences
+    matching at all possible combinations of sites.
+
+    Parameters
+    ----------
+    n_alleles : int
+        The number of alleles per site.
+
+    seq_length : int
+        The number of sites in the sequence.
+
+    P : int, optional
+        Interaction order of local epistatic coefficients to
+        be considered e.g. P=2 refers to the classical epistatic
+        coefficients
+
+    """
+
+    def __init__(self, n_alleles, seq_length, P):
+        super().__init__(n_alleles, seq_length)
+        self.P = P
+        self.alphaP = self.n_alleles ** self.P
+        self.n_a_values = int(comb(seq_length, P))
+        self.Us = list(combinations(range(self.seq_length), self.P))
+        self.calc_Us_matrix()
+
+    def calc_Us_matrix(self):
+        Us_matrix = []
+        for x in self.U_sites:
+            Us_matrix.append([np.all([x[s] for s in U]) for U in self.Us])
+        self.Us_matrix = np.vstack(Us_matrix).astype(float)
+
+    def x_to_params(self, x):
+        a_values = np.exp(x)
+        return a_values
+
+    def params_to_x(self, a_values):
+        return np.log(a_values)
+
+    def get_x0(self):
+        return np.zeros(self.n_a_values)
+
+    def a_to_lambda_U(self, a_values):
+        lambda_U_inv = self.alphaP * (self.Us_matrix @ a_values)
+        lambda_U = np.zeros_like(lambda_U_inv)
+        idx = lambda_U_inv > 0.0
+        lambda_U[idx] = 1.0 / lambda_U_inv[idx]
+        return lambda_U
+
+    def predict(self, a_values):
+        lambda_U = self.a_to_lambda_U(a_values)
+        cov = self.W_sU @ lambda_U
+        return cov
+    
+    def calc_cov(self, x):
+        a_values = self.x_to_params(x)
+        return(self.predict(a_values))
+
+
+class ConnectednessKernelAligner(VUKernelAligner):
+    """
+    Class to determine the parameters of the Connectedness model
+    that best align with the empirical covariances for sequences
     matching at all possible combinations of sites.
 
     Parameters
@@ -250,11 +334,17 @@ class RhoKernelAligner(VjKernelAligner):
         log_factors = log_one_p_eta_rho - log1mrho
         baseline = log1mrho.sum()
         cov = (
-            np.exp(baseline + self.sites_matrix @ log_factors)
+            np.exp(baseline + self.U_sites @ log_factors)
             - 1
             + np.exp(log_mu)
         )
         return cov
+
+    def predict(self, logit_rho, log_mu=0):
+        x = self.params_to_x(log_mu, logit_rho)
+        cov = self.calc_cov(x)
+        return cov
+
 
 
 ################################
