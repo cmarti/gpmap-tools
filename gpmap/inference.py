@@ -7,7 +7,7 @@ import pandas as pd
 from tqdm import tqdm
 from scipy.optimize import minimize
 from scipy.special import logsumexp
-from scipy.sparse.linalg import minres
+from scipy.sparse.linalg import lsqr
 from scipy.stats import norm, pearsonr
 
 from gpmap.aligner import VCKernelAligner, DeltaUKernelAligner
@@ -197,7 +197,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
         self.set_a(a_star)
 
 
-class LocalEpistasisInterpolator(MinimizerRegressor):
+class LocalEpistasisRegression(MinimizerRegressor):
     """
     Local epistasis regression model for sequence-function relationships.
 
@@ -259,7 +259,7 @@ class LocalEpistasisInterpolator(MinimizerRegressor):
         self.kernel_basis = DeltaKernelBasisOperator(n_alleles, seq_length, P)
         self.set_a_values(a_values)
 
-    def set_a(self, a_values=None):
+    def set_a_values(self, a_values=None):
         if a_values is not None:
             self.a_values = a_values
             self.C = DeltaUWeighedSumOperator(self.n_alleles, self.seq_length,
@@ -277,7 +277,7 @@ class LocalEpistasisInterpolator(MinimizerRegressor):
     def calc_posterior(self, X_pred=None, B=None):
         self.check_unique_solution()
         mean_post = self.calc_posterior_mean()
-        if self.a is None:
+        if self.a_values is None:
             Sigma_post = None
         else:
             Sigma_post = self.calc_posterior_covariance()
@@ -310,11 +310,14 @@ class LocalEpistasisInterpolator(MinimizerRegressor):
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
         """
-        # TODO: figure out how we can use y_var here
+        # TODO: figure out how we can use y_var here and whether it makes sense to use
+        # iterative solvers
 
         # Fit P-1 order model and compute residuals
-        A = self.likelihood.Xop @ self.kernel_basis
-        self.beta = minres(A, y)
+        self.set_data(X, y, y_var=y_var)
+        A = self.likelihood.Xop @ self.kernel_basis 
+        A = A @ np.eye(self.kernel_basis.shape[1])
+        self.beta = np.linalg.lstsq(A, y, rcond=None)[0]
         self.resid = y - A @ self.beta
 
         # Run kernel alignment
@@ -323,7 +326,7 @@ class LocalEpistasisInterpolator(MinimizerRegressor):
         self.cov, self.ns = cov, ns
         self.aligner = DeltaUKernelAligner(self.n_alleles, self.seq_length, self.P)
         self.Us = self.aligner.Us
-        self.set_a(self.aligner.fit(cov, ns))
+        self.set_a_values(self.aligner.fit(cov, ns))
 
 
 class VCregression(GaussianProcessRegressor):
