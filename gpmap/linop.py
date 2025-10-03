@@ -337,6 +337,9 @@ class ExpandIdxOperator(ExtendedLinearOperator):
         u[self.idx] = v
         return u
 
+    def _rmatvec(self, v):
+        return v[self.idx]
+
     def transpose(self):
         return SelIdxOperator(self.n, self.idx)
 
@@ -350,6 +353,11 @@ class SelIdxOperator(ExtendedLinearOperator):
 
     def _matvec(self, v):
         return v[self.idx]
+    
+    def _rmatvec(self, v):
+        u = np.zeros(self.n)
+        u[self.idx] = v
+        return(u)
 
     def transpose(self):
         return ExpandIdxOperator(self.n, self.idx)
