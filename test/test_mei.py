@@ -3,7 +3,6 @@ import sys
 import unittest
 import numpy as np
 
-
 from scipy.stats import pearsonr
 from scipy.sparse.linalg import aslinearoperator
 
@@ -160,6 +159,38 @@ class MEITests(unittest.TestCase):
                               (test['y_true'] < pred['ci_95_upper']))
         assert(r > 0.9)
         assert(calibration > 0.9)
+    
+    def test_mei_predict(self):
+        model = MinimumEpistasisInterpolator(seq_length=5, alphabet_type='dna', a=100)
+        f, X, y, y_var = model.simulate(y_var=0.01, p_missing=0.1)
+        X_test = np.delete(model.genotypes, model.genotype_idxs.loc[X])
+        
+        # Interpolation solution
+        model.set_data(X, y)
+        pred = model.predict(X_test)
+        assert(y_pred[-1] == 2.)
+        assert(model.calc_cost(y_pred) == 0.)
+        
+        y_pred = model.smooth(y_pred)
+        assert(np.allclose(y_pred, [0, 1, 1, 2]))
+        assert(model.calc_cost(y_pred) == 0.)
+        
+        model = MinimumEpistasisInterpolator(P=2)
+        X = np.array(['AAA', 'ABB', 'BAA', 'BBB'])
+        y = np.array([1, 0, 0, 1])
+        model.set_data(X, y)
+        y_pred = model.calc_posterior_mean()
+        cost1 = model.calc_cost(y_pred)
+        assert(np.allclose(y, y_pred[model.obs_idx]))
+        assert(cost1 > 0.)
+        
+        y_pred_smoothed = model.smooth(y_pred)
+        cost2 = model.calc_cost(y_pred_smoothed)
+        assert(np.allclose(y_pred_smoothed[model.pred_idx],
+                        y_pred[model.pred_idx]))
+        assert(not np.allclose(y, y_pred_smoothed[model.obs_idx]))
+        assert(cost1 > 0)
+        assert(cost2 < cost1)
         
         
 if __name__ == '__main__':

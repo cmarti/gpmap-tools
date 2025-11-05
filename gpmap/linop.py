@@ -98,10 +98,17 @@ class DiagonalOperator(ExtendedLinearOperator):
         self.shape = (diag.shape[0], diag.shape[0])
 
     def _matvec(self, v):
-        return self.diag * v
+        u = self.diag * v
+        return u
 
     def _matmat(self, B):
         return np.expand_dims(self.diag, 1) * B
+
+    def matrix_sqrt(self):
+        return(DiagonalOperator(np.sqrt(self.diag)))
+
+    def inv(self):
+        return(DiagonalOperator(1./self.diag))
 
     def transpose(self):
         return self
@@ -647,8 +654,17 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
         return self.W_kd.T.dot(self.lambdas)
 
     def inv(self):
+        if np.any(self.lambdas == 0.0):
+            raise ValueError("Cannot invert operator with zero eigenvalues")
         return ProjectionOperator(
             self.alpha, self.l, lambdas=1.0 / self.lambdas
+        )
+    
+    def pseudo_inv(self):
+        lambdas_inv = np.array([1.0 / lda if lda != 0 else 0
+                                for lda in self.lambdas])
+        return ProjectionOperator(
+            self.alpha, self.l, lambdas=lambdas_inv
         )
 
     def calc_log_det(self):
