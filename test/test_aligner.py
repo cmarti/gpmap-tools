@@ -3,10 +3,12 @@ import unittest
 
 import numpy as np
 
-from gpmap.aligner import VCKernelAligner, RhoKernelAligner
-from gpmap.linop import (RhoProjectionOperator, ProjectionOperator,
-                             calc_covariance_vjs,
-                             calc_covariance_distance, calc_variance_components)
+from gpmap.aligner import RhoKernelAligner, VCKernelAligner
+from gpmap.inference import (
+    calc_covariance_distance,
+    calc_covariance_vjs,
+)
+from gpmap.linop import ProjectionOperator, RhoProjectionOperator
 
 
 class KernelAlignerTest(unittest.TestCase):
@@ -17,30 +19,16 @@ class KernelAlignerTest(unittest.TestCase):
         log_lambdas = np.array([-16, 0, -16])
         aligner = VCKernelAligner(a, l)
         aligner.set_data(cov, ns)
-        loss = aligner.calc_loss(log_lambdas)
+        loss = aligner.calc_loss(log_lambdas, return_grad=False)
         assert(loss < 1e-12)
         
         # With simulated data from a pure pairwise model
-        np.random.seed(1)
         a, l, k = 4, 5, 2
-        P = ProjectionOperator(a, l, k=k)
-        log_lambdas = np.full(l + 1, -16.)
-        log_lambdas[k] = 0
-        y = P @ np.random.normal(size=P.shape[1])
-        cov, ns = calc_covariance_distance(y, a, l)
-        exp_lambdas = calc_variance_components(y, a, l)
-        exp_log_lambdas = np.log(np.abs(exp_lambdas))
-        
         aligner = VCKernelAligner(a, l)
-        aligner.set_data(cov, ns)
-        loss = aligner.calc_loss(exp_log_lambdas)
-        assert(loss < 1e-12)
-        
-        # With the true covariances
-        a, l, k = 4, 5, 2
         log_lambdas_true = np.full(l + 1, -16)
         log_lambdas_true[k] = 1
         cov_true = aligner.predict(np.exp(log_lambdas_true))
+        ns = np.ones_like(cov_true)
         aligner.set_data(cov_true, ns)
         loss, grad = aligner.calc_loss(log_lambdas_true, return_grad=True)
         assert(loss < 1e-12)
@@ -53,9 +41,8 @@ class KernelAlignerTest(unittest.TestCase):
         sigma2 = 0.1
         a, l, rho = 4, 5, 0.5
         P = 5 * RhoProjectionOperator(a, l, rho=rho).matrix_sqrt()
-        y_true = P @ np.random.normal(size=P.shape[1])
+        y_true = P @ np.random.normal(size=a ** l)
         cov_true, ns = calc_covariance_distance(y_true, a, l)
-        lambdas_true = calc_variance_components(y_true, a, l)
         y = np.random.normal(y_true, np.sqrt(sigma2))
         cov_obs, ns = calc_covariance_distance(y, a, l)
 
@@ -67,14 +54,12 @@ class KernelAlignerTest(unittest.TestCase):
         assert(loss < 1e-12)
         assert(np.allclose(grad, 0, rtol=1e-10))
         assert(np.allclose(cov_true, cov_pred, rtol=0.01))
-        assert(np.allclose(lambdas_true, lambdas_star_1, rtol=0.5))
         
         # Align with beta > 0
         aligner = VCKernelAligner(a, l, beta=beta)
         lambdas_star_2 = aligner.fit(cov_true, ns)
         cov_pred = aligner.predict(lambdas_star_2)
         assert(np.allclose(cov_true, cov_pred, rtol=0.01))
-        assert(np.allclose(lambdas_true, lambdas_star_2, rtol=0.5))
 
         # Ensure loss is lower than unregularized fit
         loss1 = aligner.calc_loss(np.log(lambdas_star_1))
@@ -88,13 +73,11 @@ class KernelAlignerTest(unittest.TestCase):
         cov_obs_pred = aligner.predict(lambdas_star_2 + sigma2)
         assert(not np.allclose(lambdas_star_1, lambdas_star_2, rtol=0.05))
         assert(np.allclose(cov_obs, cov_obs_pred, rtol=0.05))
-        assert(np.allclose(lambdas_true, lambdas_star_2, rtol=0.5))
 
         # Align with beta > 0
         aligner = VCKernelAligner(a, l, beta=beta)
         lambdas_star_3 = aligner.fit(cov_obs, ns, sigma2=sigma2)
         cov_pred = aligner.predict(lambdas_star_3)
-        assert(np.allclose(lambdas_true, lambdas_star_3, rtol=0.5))
 
         # Ensure loss is lower than unregularized fit
         loss2 = aligner.calc_loss(np.log(lambdas_star_2))

@@ -8,9 +8,11 @@ from tqdm import tqdm
 from scipy.optimize import minimize
 from scipy.special import logsumexp
 from scipy.stats import norm, pearsonr
+from itertools import product, combinations
 
 from gpmap.aligner import VCKernelAligner
-from gpmap.matrix import quad
+from gpmap.seq import get_product_states
+from gpmap.matrix import quad, kron, reciprocal
 from gpmap.gp import (
     GaussianProcessRegressor,
     GeneralizedGaussianProcessRegressor,
@@ -24,13 +26,95 @@ from gpmap.linop import (
     DiagonalOperator,
     ProjectionOperator,
     VarianceComponentKernel,
-    calc_covariance_distance,
+    CovarianceDistanceOperator,
+    CovarianceVjOperator,
 )
 from gpmap.utils import (
     check_error,
     get_cv_iter,
     get_CV_splits,
 )
+
+
+def calc_avg_local_epistatic_coeff(X, y, alphabet, seq_length, P):
+    sites = np.arange(seq_length)
+    v = dict(zip(X, y))
+
+    background_seqs = list(product(alphabet, repeat=seq_length - P))
+    allele_pairs = list(combinations(alphabet, 2))
+    allele_pairs_combs = list(product(allele_pairs, repeat=P))
+    z = kron([[-1, 1]] * P)
+
+    s, n = 0, 0
+    sites_sets = list(combinations(sites, P))
+    for target_sites in tqdm(sites_sets):
+        background_sites = [s for s in sites if s not in target_sites]
+        for background_seq in background_seqs:
+            bc = dict(zip(background_sites, background_seq))
+            for pairs in allele_pairs_combs:
+                seqs = []
+                allele_combs = list(get_product_states(pairs))
+
+                for allele_comb in allele_combs:
+                    seq = bc.copy()
+                    seq.update(dict(zip(target_sites, allele_comb)))
+                    seqs.append("".join([seq[i] for i in sites]))
+                try:
+                    u = np.array([v[s] for s in seqs])
+                except KeyError:
+                    continue
+                s += np.dot(u, z) ** 2
+                n += 1
+    return (s, n)
+
+
+def _get_seq_values_and_obs_seqs(y, n_alleles, seq_length, idx=None):
+    n = n_alleles**seq_length
+    if idx is not None:
+        seq_values, observed_seqs = np.zeros(n), np.zeros(n)
+        seq_values[idx], observed_seqs[idx] = y, 1.0
+    else:
+        seq_values, observed_seqs = y, np.ones(n, dtype=float)
+    return (seq_values, observed_seqs)
+
+
+def calc_covariance_distance(y, n_alleles, seq_length, idx=None):
+    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(
+        y, n_alleles, seq_length, idx=idx
+    )
+
+    cov, ns = np.zeros(seq_length + 1), np.zeros(seq_length + 1)
+    for d in range(seq_length + 1):
+        P = CovarianceDistanceOperator(n_alleles, seq_length, distance=d)
+        Pquad = quad(P, seq_values)
+        ns[d] = quad(P, obs_seqs)
+        cov[d] = reciprocal(Pquad, ns[d])
+    return (cov, ns)
+
+
+def calc_covariance_vjs(y, n_alleles, seq_length, idx=None):
+    lp1 = seq_length + 1
+    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(
+        y, n_alleles, seq_length, idx=idx
+    )
+
+    cov, ns = [], []
+    sites = np.arange(seq_length)
+    sites_matrix = []
+    for k in range(lp1):
+        for j in combinations(sites, k):
+            P = CovarianceVjOperator(n_alleles, seq_length, j=j)
+            Pquad = quad(P, seq_values)
+            nj = quad(P, obs_seqs)
+            z = np.array([i not in j for i in range(seq_length)], dtype=float)
+
+            cov.append(reciprocal(Pquad, nj))
+            ns.append(nj)
+            sites_matrix.append(z)
+
+    sites_matrix = np.array(sites_matrix)
+    cov, ns = np.array(cov), np.array(ns)
+    return (cov, ns, sites_matrix)
 
 
 class _DeltaPpriorGP(object):
@@ -234,7 +318,7 @@ class VCregression(GaussianProcessRegressor):
         The number of folds for cross-validation. Default is 5.
 
     cv_loss_function : str, optional
-        The loss function to use during cross-validation. Options are 
+        The loss function to use during cross-validation. Options are
         "frobenius_norm", "logL", or "r2". Default is "frobenius_norm".
 
     num_beta : int, optional

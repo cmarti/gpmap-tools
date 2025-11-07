@@ -1,24 +1,26 @@
 #!/usr/bin/env python
 import sys
 import unittest
-import numpy as np
-import pandas as pd
-
 from os.path import join
 from subprocess import check_call
 from tempfile import NamedTemporaryFile
 
-from scipy.stats import pearsonr
+import numpy as np
+import pandas as pd
 from scipy.special import comb
+from scipy.stats import pearsonr
 
-from gpmap.inference import VCregression
-from gpmap.settings import BIN_DIR
-from gpmap.matrix import rayleigh_quotient
+from gpmap.inference import (
+    VCregression,
+    calc_covariance_distance,
+    calc_covariance_vjs,
+)
 from gpmap.linop import (
     LaplacianOperator,
     ProjectionOperator,
-    calc_covariance_distance,
 )
+from gpmap.matrix import rayleigh_quotient
+from gpmap.settings import BIN_DIR
 
 
 class VCTests(unittest.TestCase):
@@ -91,6 +93,50 @@ class VCTests(unittest.TestCase):
         # Ensure anticorrelated distances
         assert rho[3] < 0
         assert rho[4] < 0
+    
+    def test_calc_covariance_vjs(self):
+        # Test simple cases
+        a, sl = 2, 2
+        y = np.array([1, 1, 1, 1])
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
+        assert np.allclose(cov, 1)
+        assert np.allclose(ns, 4)
+
+        y = np.array([1, -1, 1, -1])
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
+        assert np.allclose(cov, [1, 1, -1, -1])
+        assert np.allclose(ns, 4)
+
+        y = np.array([1, 1, -1, -1])
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
+        assert np.allclose(cov, [1, -1, 1, -1])
+        assert np.allclose(ns, 4)
+
+        y = np.array([1, 0, 0, -1])
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
+        assert np.allclose(cov, [0.5, 0, 0, -0.5])
+        assert np.allclose(ns, 4)
+
+        # Test in a bigger landscape
+        a, sl = 4, 5
+        n = a**sl
+        y = np.random.normal(size=n)
+
+        # Verify output shapes
+        cov, ns, sites = calc_covariance_vjs(y, a, sl)
+        assert cov.shape == (2**sl,)
+        assert ns.shape == (2**sl,)
+        assert sites.shape == (2**sl, sl)
+
+        # Ensure changes when seeing only part of the data
+        idx = np.arange(n)[np.random.uniform(size=n) < 0.9]
+        cov2, ns2, sites2 = calc_covariance_vjs(y[idx], a, sl, idx=idx)
+        assert cov.shape == (2**sl,)
+        assert ns.shape == (2**sl,)
+        assert sites.shape == (2**sl, sl)
+
+        assert np.all(ns2 <= ns)
+        assert np.all(cov2 != cov)
 
     def test_vc_fit(self):
         # Simulate data

@@ -8,7 +8,6 @@ from scipy.sparse.linalg import aslinearoperator
 from scipy.linalg import solve_triangular
 from scipy.stats import multivariate_normal
 
-from gpmap.datasets import DataSet
 from gpmap.seq import generate_possible_sequences
 from gpmap.matrix import inv_dot, quad
 from gpmap.linop import (
@@ -37,10 +36,6 @@ from gpmap.linop import (
     TriangularInverseOperator,
     KronTriangularInverseOperator,
     MultivariateGaussian,
-    calc_covariance_vjs,
-    calc_avg_local_epistatic_coeff,
-    calc_space_variance_components,
-    calc_space_vjs_variance_components,
 )
 
 
@@ -626,56 +621,6 @@ class LinOpsTests(unittest.TestCase):
         logp2 = gaussian2.logp(x)
         assert np.allclose(logp1, logp2)
 
-    def test_calc_avg_epistatic_coef(self):
-        alphabet = "AB"
-        n_alleles = len(alphabet)
-        seq_length = 3
-        X = list(generate_possible_sequences(seq_length, alphabet=alphabet))
-        y = np.random.normal(size=len(X))
-
-        # Ensure expected results in complete landscapes
-        P = 2
-        s, n = calc_avg_local_epistatic_coeff(
-            X, y, alphabet=alphabet, seq_length=seq_length, P=P
-        )
-        DP = DeltaPOperator(n_alleles, seq_length, P)
-        assert n == DP.n_p_faces
-        assert np.allclose(s, quad(DP, y))
-
-        # With incomplete data
-        s1, n1 = calc_avg_local_epistatic_coeff(
-            X[1:], y[1:], alphabet=alphabet, seq_length=seq_length, P=P
-        )
-        assert n1 == 3
-
-        s2, n2 = calc_avg_local_epistatic_coeff(
-            X[:-1], y[:-1], alphabet=alphabet, seq_length=seq_length, P=P
-        )
-        assert n2 == 3
-        assert np.allclose(s1 + s2, s)
-
-        # With P=3
-        P = 3
-        s, n = calc_avg_local_epistatic_coeff(
-            X, y, alphabet=alphabet, seq_length=seq_length, P=P
-        )
-        DP = DeltaPOperator(n_alleles, seq_length, P)
-        assert n == DP.n_p_faces
-        assert np.allclose(s, quad(DP, y))
-
-        # With more than 2 alleles
-        alphabet = "ABC"
-        n_alleles = len(alphabet)
-        X = list(generate_possible_sequences(seq_length, alphabet=alphabet))
-        y = np.random.normal(size=len(X))
-        P = 2
-        s, n = calc_avg_local_epistatic_coeff(
-            X, y, alphabet=alphabet, seq_length=seq_length, P=P
-        )
-        DP = DeltaPOperator(n_alleles, seq_length, P)
-        assert n == DP.n_p_faces
-        assert np.allclose(s, quad(DP, y))
-
     def test_covariance_distance_operator(self):
         a, sl = 2, 2
         v = np.random.normal(size=(a**sl, 1))
@@ -745,67 +690,6 @@ class LinOpsTests(unittest.TestCase):
                 C = CovarianceVjOperator(a, sl, j=j)
                 ss2 += quad(C, v)
         assert np.allclose(ss1, ss2)
-
-    def test_calc_covariance_vjs(self):
-        # Test simple cases
-        a, sl = 2, 2
-        y = np.array([1, 1, 1, 1])
-        cov, ns, sites = calc_covariance_vjs(y, a, sl)
-        assert np.allclose(cov, 1)
-        assert np.allclose(ns, 4)
-
-        y = np.array([1, -1, 1, -1])
-        cov, ns, sites = calc_covariance_vjs(y, a, sl)
-        assert np.allclose(cov, [1, 1, -1, -1])
-        assert np.allclose(ns, 4)
-
-        y = np.array([1, 1, -1, -1])
-        cov, ns, sites = calc_covariance_vjs(y, a, sl)
-        assert np.allclose(cov, [1, -1, 1, -1])
-        assert np.allclose(ns, 4)
-
-        y = np.array([1, 0, 0, -1])
-        cov, ns, sites = calc_covariance_vjs(y, a, sl)
-        assert np.allclose(cov, [0.5, 0, 0, -0.5])
-        assert np.allclose(ns, 4)
-
-        # Test in a bigger landscape
-        a, sl = 4, 5
-        n = a**sl
-        y = np.random.normal(size=n)
-
-        # Verify output shapes
-        cov, ns, sites = calc_covariance_vjs(y, a, sl)
-        assert cov.shape == (2**sl,)
-        assert ns.shape == (2**sl,)
-        assert sites.shape == (2**sl, sl)
-
-        # Ensure changes when seeing only part of the data
-        idx = np.arange(n)[np.random.uniform(size=n) < 0.9]
-        cov2, ns2, sites2 = calc_covariance_vjs(y[idx], a, sl, idx=idx)
-        assert cov.shape == (2**sl,)
-        assert ns.shape == (2**sl,)
-        assert sites.shape == (2**sl, sl)
-
-        assert np.all(ns2 <= ns)
-        assert np.all(cov2 != cov)
-
-    def test_calculate_variance_components(self):
-        space = DataSet("gb1").to_sequence_space()
-        lambdas = calc_space_variance_components(space)
-        assert np.all(lambdas > 0)
-
-    def test_calc_vjs_variance_components(self):
-        space = DataSet("gb1").to_sequence_space()
-
-        vj1 = calc_space_vjs_variance_components(space, k=1)
-        assert vj1[(2,)] > vj1[(0,)]
-        assert vj1[(3,)] > vj1[(1,)]
-
-        vj2 = calc_space_vjs_variance_components(space, k=2)
-        for v in vj2.values():
-            assert vj2[(2, 3)] >= v
-
 
 # class SkewedLinOpsTests(unittest.TestCase):
 #     def xtest_skewed_kernel_operator(self):

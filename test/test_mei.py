@@ -7,11 +7,14 @@ import numpy as np
 from scipy.stats import pearsonr
 from scipy.sparse.linalg import aslinearoperator
 
-from gpmap.linop import ConnectednessKernel
+from gpmap.matrix import quad
+from gpmap.seq import generate_possible_sequences
+from gpmap.linop import ConnectednessKernel, DeltaPOperator
 from gpmap.inference import (
     MinimumEpistasisInterpolator,
     MinimizerRegressor,
     GaussianProcessRegressor,
+    calc_avg_local_epistatic_coeff,
 )
 
 
@@ -304,6 +307,56 @@ class MEITests(unittest.TestCase):
         )
         assert r > 0.5
         assert p > 0.9
+        
+    def test_calc_avg_epistatic_coef(self):
+        alphabet = "AB"
+        n_alleles = len(alphabet)
+        seq_length = 3
+        X = list(generate_possible_sequences(seq_length, alphabet=alphabet))
+        y = np.random.normal(size=len(X))
+
+        # Ensure expected results in complete landscapes
+        P = 2
+        s, n = calc_avg_local_epistatic_coeff(
+            X, y, alphabet=alphabet, seq_length=seq_length, P=P
+        )
+        DP = DeltaPOperator(n_alleles, seq_length, P)
+        assert n == DP.n_p_faces
+        assert np.allclose(s, quad(DP, y))
+
+        # With incomplete data
+        s1, n1 = calc_avg_local_epistatic_coeff(
+            X[1:], y[1:], alphabet=alphabet, seq_length=seq_length, P=P
+        )
+        assert n1 == 3
+
+        s2, n2 = calc_avg_local_epistatic_coeff(
+            X[:-1], y[:-1], alphabet=alphabet, seq_length=seq_length, P=P
+        )
+        assert n2 == 3
+        assert np.allclose(s1 + s2, s)
+
+        # With P=3
+        P = 3
+        s, n = calc_avg_local_epistatic_coeff(
+            X, y, alphabet=alphabet, seq_length=seq_length, P=P
+        )
+        DP = DeltaPOperator(n_alleles, seq_length, P)
+        assert n == DP.n_p_faces
+        assert np.allclose(s, quad(DP, y))
+
+        # With more than 2 alleles
+        alphabet = "ABC"
+        n_alleles = len(alphabet)
+        X = list(generate_possible_sequences(seq_length, alphabet=alphabet))
+        y = np.random.normal(size=len(X))
+        P = 2
+        s, n = calc_avg_local_epistatic_coeff(
+            X, y, alphabet=alphabet, seq_length=seq_length, P=P
+        )
+        DP = DeltaPOperator(n_alleles, seq_length, P)
+        assert n == DP.n_p_faces
+        assert np.allclose(s, quad(DP, y))
 
 
 if __name__ == "__main__":

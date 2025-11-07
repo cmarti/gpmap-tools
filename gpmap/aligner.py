@@ -27,14 +27,14 @@ class VCKernelAligner(object):
         not perform regularization (beta=0).
     """
 
-    def __init__(self, n_alleles, seq_length, beta=0):
+    def __init__(self, n_alleles, seq_length, beta=0.):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
         self.set_beta(beta)
         self.calc_W_kd_matrix()
         self.calc_second_order_diff_matrix()
 
-    def set_data(self, covs, distances_n, sigma2=0):
+    def set_data(self, covs, distances_n, sigma2=0.):
         D_n = np.diag(distances_n)
         WD = self.W_kd @ D_n
         self.A = WD @ self.W_kd.T
@@ -95,7 +95,7 @@ class VCKernelAligner(object):
             for d in range(self.seq_length + 1):
                 self.W_kd[k, d] = self.calc_w(k, d)
 
-    def fit(self, covs, ns, sigma2=0):
+    def fit(self, covs, ns, sigma2=0.):
         """
         Fit the Variance Component kernel by minimizing the Frobenius Norm
         with the covariance at each possible distance.
