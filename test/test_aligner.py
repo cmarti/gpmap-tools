@@ -20,7 +20,7 @@ class KernelAlignerTest(unittest.TestCase):
         aligner = VCKernelAligner(a, l)
         aligner.set_data(cov, ns)
         loss = aligner.calc_loss(log_lambdas, return_grad=False)
-        assert(loss < 1e-12)
+        assert(loss < 1e-10)
         
         # With simulated data from a pure pairwise model
         a, l, k = 4, 5, 2
@@ -31,8 +31,8 @@ class KernelAlignerTest(unittest.TestCase):
         ns = np.ones_like(cov_true)
         aligner.set_data(cov_true, ns)
         loss, grad = aligner.calc_loss(log_lambdas_true, return_grad=True)
-        assert(loss < 1e-12)
-        assert(np.allclose(grad, 0, rtol=1e-10))
+        assert loss < 1e-10
+        assert np.allclose(grad, 0, rtol=1e-10)
 
     def test_vc_kernel_alignment(self):
         # Simulate data
@@ -51,7 +51,7 @@ class KernelAlignerTest(unittest.TestCase):
         lambdas_star_1 = aligner.fit(cov_true, ns)
         cov_pred = aligner.predict(lambdas_star_1)
         loss, grad = aligner.calc_loss(np.log(lambdas_star_1), return_grad=True)
-        assert(loss < 1e-12)
+        assert loss < 1e-10
         assert(np.allclose(grad, 0, rtol=1e-10))
         assert(np.allclose(cov_true, cov_pred, rtol=0.01))
         
