@@ -16,7 +16,6 @@ Gaussian Process regression techniques.
 
     usage/VCregression.ipynb
     usage/SeqDEFT.ipynb
-    usage/SeqDEFT_SD.ipynb
 
 
 **References**
