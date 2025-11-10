@@ -8,4 +8,4 @@ In this section, we illustrate the built-in datasets that are used for demonstra
 .. toctree::
     :maxdepth: 1
     
-    usage/7_datasets.ipynb
+    usage/datasets.ipynb

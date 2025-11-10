@@ -14,8 +14,8 @@ Gaussian Process regression techniques.
 .. toctree::
     :maxdepth: 1
 
-    usage/3_VCregression.ipynb
-    usage/4_SeqDEFT.ipynb
+    usage/VCregression.ipynb
+    usage/SeqDEFT.ipynb
 
 
 **References**
