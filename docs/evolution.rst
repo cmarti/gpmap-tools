@@ -8,4 +8,4 @@ In this section the user can find tools to study evolution on complex fitness la
 .. toctree::
     :maxdepth: 1
     
-    usage/5_Codon.ipynb
+    usage/Codon.ipynb

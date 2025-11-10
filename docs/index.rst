@@ -100,7 +100,8 @@ on its YouTube channel `here <https://www.youtube.com/watch?v=glQ0jllgdfY>`_.
     installation
     usage/getting_started.ipynb
     inference
+    usage/summary_statistics.ipynb
     visualization
     evolution
-    usage/7_datasets.ipynb
+    usage/datasets.ipynb
     api 
