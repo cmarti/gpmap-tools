@@ -453,7 +453,7 @@ class VCregression(GaussianProcessRegressor):
         s = self.seq_length + 1
         k = np.arange(s)
         vc_perc = np.zeros(s)
-        vc_perc[1:] = self.lambdas_to_variance(lambdas)
+        vc_perc[1:] = self.lambdas_to_variance(lambdas) * 100
         df = pd.DataFrame(
             {
                 "k": k,
