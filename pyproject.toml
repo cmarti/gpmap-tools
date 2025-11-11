@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpmap_tools"
+version = "0.3.3"
+description = "Tools for inference and visualization of complex genotype-phenotype maps"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Carlos Martí-Gómez", email = "martigo@cshl.edu" }
+]
+dependencies = [
+    "biopython",
+    "matplotlib",
+    "tqdm",
+    "numpy",
+    "scipy",
+    "pandas",
+    "pyarrow",
+    "networkx",
+    "datashader>=0.13.0",
+    "holoviews>=1.15.0",
+    "plotly==5.18.0"
+]
+requires-python = ">=3.8"
+keywords = [
+    "genotype-phenotype maps",
+    "fitness landscape",
+    "exact gaussian process regression"
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+
+[project.scripts]
+SeqDEFT = "gpmap.bin.fit_seqdeft:main"
+VCregression = "gpmap.bin.vc_regression:main"
+split_data = "gpmap.bin.split_data:main"
+evaluate_split_fits = "gpmap.bin.evaluate_split_fits:main"
+calc_visualization = "gpmap.bin.calc_visualization:main"
+plot_visualization = "gpmap.bin.plot_visualization:main"
+plot_relaxation_times = "gpmap.bin.plot_decay_rates:main"
+filter_genotypes = "gpmap.bin.filter_genotypes:main"
+
+[tool.setuptools]
+packages = ["gpmap", "gpmap.bin", "gpmap.plot"]
+package-data = {"gpmap" = ["datasets/data/*",
+                           "datasets/landscapes/*",
+                           "datasets/raw/*",
+                           "datasets/visualizations/*"]}
+
+[project.urls]
+Documentation = "https://gpmap-tools.readthedocs.io"
+Repository = "https://github.com/cmarti/gpmap-tools.git"

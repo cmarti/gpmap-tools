@@ -1,46 +1,107 @@
-=======================================================================================
-GPMAP-tools: tools for visualization and inference of large complete fitness landscapes
-=======================================================================================
+=====================================================================================
+gpmap-tools: tools for inference and visualization of complex genotype-phenotype maps
+=====================================================================================
 
-GPMAP-tools [#Marti-Gomez2022]_ is a python library to create low dimensional visualizations for large fitness landscapes or the structure of any sequence-function relationship for large genotypic spaces, up to several millions. It provides an open-source and easy to use interface of a slightly modified version of the original method [#McCandlish2011]_. Briefly, genotypes are embedded into a low dimensional representation such that the square distances are proportional to the required time to evolve from one genotype to another under a Weak Mutation Weak Selection evolutionary model.
+``gpmap-tools`` was created to integrate and standardize methods developed in the 
+`McCandlish Lab <https://www.cshl.edu/research/faculty-staff/david-mccandlish/#research>`_ 
+for the inference, analysis, and visualization of complex genotype-phenotype maps 
+comprising up to millions of genotypes.
 
+For example, this is a low-dimensional representation of a 12-nucleotide genotype-phenotype map
+comprising 16 million genotypes, where fitness depends on the 4-amino acid sequence they encode
+under the standard genetic code. This visualization illustrates how the vast set of functional sequences
+is accessible to one another under a given evolutionary model and highlights the long, winding mutational
+paths required to evolve sequences differing at only a few amino acid positions.
 
-The main limitation for the applicability of these method for visualizing a landscape is that we need to have a full characterization of the funcion associated to each possible genotype in the sequence space. As the total number of genotypes scales exponentially with sequence length, this method is inherently limited to the study of relatively short sequences. Another limitation that derives from the difficulty to experimentally assess every possible sequence in a high throughput experiment reliably. To tackle this issue, we provide also a simple interface to previously published methods for inference of quantitative sequence-function relationships in presence of complex epistatic interactions, either from high throughput experiments [#Zhou2022]_ or from the number of times a sequences has been observed in nature [#Chen2021]_.
+.. image:: figures/visualization.png
+   :width: 80%
 
+Inference
+=========
 
+``gpmap-tools`` implements a suite of previously proposed Gaussian process models for the
+inference and analysis of complete genotype-phenotype maps.
 
-GPMAP-tools is written for Python 3 and is provided under an MIT open source license. The documentation provided here is meant guide users through the basic principles underlying the method as well as explain how to use it for calculating the embedding coordinates and use the functionalities provided for advanced plotting of their own fitness landscapes. Please do not hesitate to contact us with any questions or suggestions for improvements. For technical assistance or to report bugs, please contact Carlos Marti (`Email: martigo@cshl.edu <martigo@cshl.edu>`_, `Twitter: @cmarti_ga <https://twitter.com/cmarti_ga>`_) . For more general correspondence, please contact David McCandlish (`Email: mccandlish@cshl.edu <mccandlish@cshl.edu>`_, `Twitter: @TheDMMcC <https://twitter.com/TheDMMcC>`_).
+- `Zhou J and McCandlish DM. Minimum epistasis interpolation for sequence-function relationships (2020) <https://www.nature.com/articles/s41467-020-15512-5>`_
+- `Zhou J, Wong MS, Chen WC, Krainer AR, Kinney JB, McCandlish DM. Higher order epistasis and phenotypic prediction (2022) <https://www.pnas.org/doi/full/10.1073/pnas.2204233119>`_
+- `Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM. Field theoretic density estimation for biological sequence space with applications to 5' splice site diversity and aneuploidy in cancer (2021) <https://www.pnas.org/doi/10.1073/pnas.2025782118>`_
+
+These models are implemented within a unified framework inspired by the classical 
+machine learning library `scikit-learn <https://scikit-learn.org/>`_, defined
+as classes with the common methods ``fit`` and ``predict`` to infer hyperparameters and
+make phenotypic predictions, respectively. Among other things, ``gpmap-tools`` allows
+to:
+
+- Estimate the magnitude of genetic interactions of different orders from experimental measurements. 
+- Infer a complete combinatorial genotype-phenotype maps containing millions of sequences from experimental measurements and observations of natural sequences. 
+- Predict the phenotypes of unobserved genotypes with associated uncertainty.
+- Estimate the effects of mutations in specific and possibly unobserved genetic backgrounds with associated uncertainty.
+- Compute the variance explained by interactions of different orders involving combinations of sites in a complete genotype-phenotype map.
+
+Visualization
+=============
+
+``gpmap-tools`` also provides a new and accessible implementation of a 
+previously described powerful method to visualize complex genotype-phenotype maps.
+
+- `McCandlish DM. Visualizing fitness landscapes (2011) <https://onlinelibrary.wiley.com/doi/10.1111/j.1558-5646.2011.01236.x>`_
+
+More specifically, ``gpmap-tools`` allows to:
+
+- Compute the coordinates of the low-dimensional representation of a genotype-phenotype map.
+- Write and read intermediate files in efficient and fast ``parquet`` and ``npz`` formats.
+- Plot the low-dimensional representation efficiently using different backends with varying degrees of computational speed and flexibility. For example, using `datashader <https://datashader.org>`_, we can render visualizations of genotype-phenotype maps with millions of genotypes efficiently.
+- Identify the sequence features that characterize different regions of the genotype-phenotype map with additional plotting functionalities.
+
+History and applications
+========================
+
+Initially designed as an internal library to allow new lab members and students to 
+analyze high-throughput combinatorial datasets without requiring advanced expertise
+in the original code, we have used ``gpmap-tools`` in a number of collaborative studies
+to address a broad range of interesting biological questions by understanding the structure
+of high-dimensional genotype-phenotype maps: 
+
+- How do mutations in the hydrophobic core of the GFP protein interact with each other and how can they be leveraged to design proteins with new functionality?  
+    
+    `Jonathan Yaacov Weinstein, Carlos Martí-Gómez, Rosalie Lipsh-Sokolik, Shlomo Yakir Hoch, Demian Liebermann, Reinat Nevo, Haim Weissman, Ekaterina Petrovich-Kopitman, David Margulies, Dmitry Ivankov, David M. McCandlish & Sarel J. Fleishman. Designed active-site library reveals thousands of functional GFP variants (2023) <https://www.nature.com/articles/s41467-023-38099-z>`_
+    
+- How can functional orthogonality arise in pairs of interacting proteins?  
+    
+    `Ziv Avizemer, Carlos Martí‐Gómez, Shlomo Yakir Hoch, David M. McCandlish, Sarel J. Fleishman. Evolutionary paths that link orthogonal pairs of binding proteins (2023) <https://www.researchsquare.com/article/rs-2836905/v2>`_
+
+- How does the structure of the genetic code influence the navigability of complex protein genotype-phenotype maps?  
+
+    `Hana Rozhoňová, Carlos Martí-Gómez, David M McCandlish, Joshua L Payne. Robust genetic codes enhance protein evolvability (2024) <https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.3002594>`_
+
+``gpmap-tools`` is now available to the broader scientific community and provides
+access to advanced computational techniques through just a few lines of Python code, 
+while also extending its core functionalities. Find more details through the
+documentation and in our preprint linked below.
+
+Citation
+========
+
+- `Carlos Martí-Gómez, Juannan Zhou, Wei-Chia Chen, Justin B. Kinney, David M. McCandlish. Inference and visualization of complex genotype-phenotype maps with gpmap-tools (2025) <https://www.biorxiv.org/content/10.1101/2025.03.09.642267>`_
+
+YouTube Talk
+============
+
+We presented some of this work at the `Variant Effects Seminar Series <https://www.varianteffect.org/seminar-series>`_, and the 25-minute talk is publicly available
+on its YouTube channel `here <https://www.youtube.com/watch?v=glQ0jllgdfY>`_. 
+
+.. youtube:: glQ0jllgdfY
+
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
     :caption: Table of Contents
 
     installation
-    usage
+    usage/getting_started.ipynb
+    inference
+    usage/summary_statistics.ipynb
+    visualization
+    evolution
+    usage/datasets.ipynb
     api 
-
-References
-==========
-
-.. [#Marti-Gomez2022] Marti-Gomez C, McCandlish DM.
-    GPMAP-tools: a python library for visualizing large fitness landscapes (2022)
-    In process
-
-.. [#Zhou2022] Zhou J, Wong MS, Chen WC, Krainer AR, Kinney JB, McCandlsih DM.
-    Higher order epistasis and phenotypic prediction.
-    Biorxiv (2022) <https://www.biorxiv.org/content/10.1101/2020.10.14.339804v3>_
-
-.. [#Chen2021] Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM. 
-    Field theoretic density estimation for biological sequence space with
-    applications to 5' splice site diversity and aneuploidy in cancer. 
-    PNAS (2021) <https://www.pnas.org/doi/10.1073/pnas.2025782118>_
-
-.. [#McCandlish2011] McCandlish DM.
-    Visualizing fitness landscapes. 
-    Evolution (2011). `<https://onlinelibrary.wiley.com/doi/10.1111/j.1558-5646.2011.01236.x>`_
-
-
-Links
-==============
-
-- `McCandlish Lab <https://www.cshl.edu/research/faculty-staff/david-mccandlish/#research>`_

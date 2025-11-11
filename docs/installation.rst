@@ -1,29 +1,29 @@
 .. _installation:
 
-Installation Instructions
-=========================
+Installation
+============
 
-Soon but not yet, using the ``pip`` package manager by executing the following at the
-command line: ::
+We recommend using an new independent environment with python3.8, as used during 
+development and testing of gpmap-tools to minimize problems with dependencies. For instance,
+one can create and activate a new conda environment as follows: ::
+
+    $ conda create -n gpmap python=3.8
+    $ conda activate gpmap
+
+gpmap-tools is available in PyPI and installable through ``pip`` package manager: ::
 
     $ pip install gpmap-tools
 
-Alternatively, you can clone GPMAP-tools from
-`BitBucket <https://bitbucket.org/cmartiga/gpmap_tools/src/master/>`_ by doing
-this at the command line: ::
-
-    $ git clone git@bitbucket.org:cmartiga/gpmap_tools.git
-
-or from `GitHub <https://github.com/cmarti/gpmap-tools.git>`_ :
+You can also install the latest or specific versions from `GitHub <https://github.com/cmarti/gpmap-tools>`_ as follows: ::
 
     $ git clone https://github.com/cmarti/gpmap-tools.git
 
 and install it in the current python environment: ::
     
-    $ python setup.py install
+    $ cd gpmap-tools
+    $ pip install .
 
-There are sometimes problems with the installation of `datashader <https://datashader.org/>` 
-and their own dependencies. We are still trying to figure out incompatibilities
-in the dependencies but generally we find that installing it first seems to work: ::
-    
-    $ pip install datashader==0.13
+For developers, tests can be run with using ``pytest``: ::
+
+    $ pytest test
+
