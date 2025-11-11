@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## New release [0.3.3] - 2025-11-11
+
+### Added
+
+- **New module for computing summary statistics** of a complete combinatiorial genotype-phenotype map added to the library. It consists of a new class `GPmapSummarizer` that provides a high level interface to computation of the root mean squared epistatic coefficients and variance explained by epistatic interactions of any order and involving any subset of sites. 
+
+### Changed
+
+- **Documentation updated** with new tutorials for inference, statistical analysis, visualization of comparison of genotype-phenotype maps using different types of data for the Shine-Dalgarno fitness landscape, showing some of the analysis presented in the associated manuscript. 
+
 ## New release [0.3.2] - 2025-07-21
 
 ### Changed
