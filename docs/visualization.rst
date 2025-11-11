@@ -13,6 +13,7 @@ landscapes of different size and complexity.
     usage/discrete_spaces.ipynb
     usage/serine.ipynb    
     usage/GB1.ipynb
+    usage/SD.ipynb
 
 **References**
 
