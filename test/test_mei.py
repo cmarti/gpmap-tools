@@ -1,21 +1,17 @@
 #!/usr/bin/env python
 import sys
 import unittest
+
 import numpy as np
-
-
-from scipy.stats import pearsonr
 from scipy.sparse.linalg import aslinearoperator
+from scipy.stats import pearsonr
 
-from gpmap.matrix import quad
-from gpmap.seq import generate_possible_sequences
-from gpmap.linop import ConnectednessKernel, DeltaPOperator
 from gpmap.inference import (
-    MinimumEpistasisInterpolator,
-    MinimizerRegressor,
     GaussianProcessRegressor,
-    calc_avg_local_epistatic_coeff,
+    MinimizerRegressor,
+    MinimumEpistasisInterpolator,
 )
+from gpmap.linop import ConnectednessKernel
 
 
 class MEITests(unittest.TestCase):
@@ -60,7 +56,7 @@ class MEITests(unittest.TestCase):
 
         # Ensure epistasis is larger than 0
         model.set_data(X, y)
-        X = np.array(["AAA", "AAB", "ABA", "BAA", 'BBB'])
+        X = np.array(["AAA", "AAB", "ABA", "BAA", "BBB"])
         y = np.array([1, 0, 0, 0, 1])
         model.set_data(X, y)
         f_pred = model.calc_posterior()[0]
@@ -85,7 +81,7 @@ class MEITests(unittest.TestCase):
             model.calc_posterior_covariance()
         except ValueError:
             pass
-        model.fit(X, y)
+        model.fit(X, y, method="minimum_epistasis")
         Sigma = model.calc_posterior_covariance()
         Sigma = Sigma @ np.eye(Sigma.shape[1])
         m = Sigma.copy()
@@ -249,7 +245,7 @@ class MEITests(unittest.TestCase):
         model = MinimumEpistasisInterpolator(
             P=2, n_alleles=n_alleles, seq_length=seq_length
         )
-        model.fit(X, y, y_var)
+        model.fit(X, y, y_var, method="minimum_epistasis")
         # assert np.allclose(model.a, a, rtol=0.2)
 
         # Make predictions with empirical a
@@ -265,6 +261,23 @@ class MEITests(unittest.TestCase):
             & (y_test_true < pred["ci_95_upper"])
         )
         assert calibration > 0.9
+
+    def test_mei_fit(self):
+        a_true = 0.1
+        np.random.seed(0)
+        model = MinimumEpistasisInterpolator(
+            seq_length=5, alphabet_type="dna", a=a_true
+        )
+        _, X, y, y_var = model.simulate(y_var=0.1, p_missing=0.1)
+
+        # Fit with minimum epistasis
+        model.fit(X, y, y_var, method="minimum_epistasis")
+        err1 = np.abs(np.log2(a_true / model.a))
+
+        # Fit with kernel alignment
+        model.fit(X, y, y_var, method="kernel_alignment")
+        err2 = np.abs(np.log2(a_true / model.a))
+        assert err2 < err1
 
     def test_mei_predict(self):
         np.random.seed(0)
@@ -294,7 +307,7 @@ class MEITests(unittest.TestCase):
         )
         assert r > 0.5
         assert p > 0.9
-        
+
         # GP with precision matrix and experimental variances
         model = MinimumEpistasisInterpolator(
             seq_length=5, alphabet_type="dna", a=100
