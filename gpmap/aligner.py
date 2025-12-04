@@ -1,14 +1,107 @@
 import numpy as np
 
 from itertools import combinations, product
-from scipy.special import comb
+from scipy.special import comb, factorial
 from scipy.optimize import minimize, lsq_linear
 
 from gpmap.matrix import kron
 from gpmap.utils import check_error, safe_exp
 
 
-class VCKernelAligner(object):
+class VkKernelAligner(object):
+    """
+    Class to perform kernel alignment by matching the empirical
+    covariances for pairs of sequences that differ at specific
+    numbers of sites.
+
+    Parameters
+    ----------
+    n_alleles : int
+        The number of alleles per site.
+
+    seq_length : int
+        The number of sites in the sequence.
+    """
+
+    def __init__(self, n_alleles, seq_length):
+        self.seq_length = seq_length
+        self.n_alleles = n_alleles
+        self.calc_W_kd_matrix()
+
+    def set_data(self, covs, distances_n, sigma2=0):
+        D_n = np.diag(distances_n)
+        WD = self.W_kd @ D_n
+        self.A = WD @ self.W_kd.T
+        self.b = WD @ covs - (sigma2 * self.A).sum(1)
+        self.c = np.dot(covs, D_n @ covs)
+        self.sigma2 = sigma2
+
+    def calc_w(self, k, d):
+        """return value of the Krawtchouk polynomial for k, d"""
+        sl, a = self.seq_length, self.n_alleles
+        s = 0
+        for q in range(sl + 1):
+            value = (-1) ** q * (a - 1) ** (k - q)
+            n_value = comb(d, q) * comb(sl - d, k - q)
+            s += value * n_value
+        return s / a**sl
+
+    def calc_W_kd_matrix(self):
+        """return full matrix l+1 by l+1 Krawtchouk matrix"""
+        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
+        for k in range(self.seq_length + 1):
+            for d in range(self.seq_length + 1):
+                self.W_kd[k, d] = self.calc_w(k, d)
+    
+    def predict(self, params):
+        lambdas = self.params_to_lambdas(params)
+        return self.W_kd.T.dot(lambdas)
+    
+    def calc_cov(self, x):
+        params = self.x_to_params(x)
+        return self.predict(params)
+    
+    def frobenius_norm(self, x):
+        lambdas = self.params_to_lambdas(self.x_to_params(x))
+        Av = self.A @ lambdas
+        Frob = self.c + np.dot(lambdas, Av - 2 * self.b)
+        return Frob
+
+    def frobenius_norm_grad(self, params):
+        raise ValueError("Gradient calculation not implemented")
+
+    def fit(self, covs, ns):
+        """
+        Fits kernel parameters by minimizing the Frobenius Norm
+        with the empirical covariance at sequences matching subsets
+        of sites.
+
+        Parameters
+        ----------
+        covs : array-like of shape (2 ** seq_length)
+            Average empirical second moments at every possible
+            combination of sites.
+        ns : array-like of shape (2 ** seq_length)
+            Number of pairs of sequences at every possible combination of sites.
+        Returns
+        -------
+        params : array-like or tuple of array-like
+            Parameter values that best fit the empirical second moments.
+        """
+
+        self.set_data(covs, ns)
+
+        res = minimize(
+            fun=self.frobenius_norm,
+            x0=self.get_x0(),
+            method="Powell",
+            options={"ftol": 1e-16},
+        )
+        self.res = res
+        return self.x_to_params(res.x)
+
+
+class VCKernelAligner(VkKernelAligner):
     """
     Class to perform kernel alignment of empirical
     covariance-distance relationships with the Variance Components
@@ -29,21 +122,24 @@ class VCKernelAligner(object):
         not perform regularization (beta=0).
     """
 
-    def __init__(self, n_alleles, seq_length, beta=0.):
-        self.seq_length = seq_length
-        self.n_alleles = n_alleles
+    def __init__(self, n_alleles, seq_length, beta=0):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.set_beta(beta)
-        self.calc_W_kd_matrix()
         self.calc_second_order_diff_matrix()
+    
+    def get_x0(self):
+        return np.zeros(self.seq_length + 1)
+    
+    def x_to_params(self, x):
+        lambdas = np.exp(x)
+        return lambdas
 
-    def set_data(self, covs, distances_n, sigma2=0.):
-        D_n = np.diag(distances_n)
-        WD = self.W_kd @ D_n
-        self.A = WD @ self.W_kd.T
-        self.b = WD @ covs - (sigma2 * self.A).sum(1)
-        self.c = np.dot(covs, D_n @ covs)
-        self.sigma2 = sigma2
-
+    def params_to_x(self, lambdas):
+        return np.log(lambdas)
+    
+    def params_to_lambdas(self, params):
+        return(params)
+    
     def set_beta(self, beta):
         check_error(beta >= 0, msg="beta must be >= 0")
         self.beta = beta
@@ -80,24 +176,7 @@ class VCKernelAligner(object):
 
         return loss
 
-    def calc_w(self, k, d):
-        """return value of the Krawtchouk polynomial for k, d"""
-        sl, a = self.seq_length, self.n_alleles
-        s = 0
-        for q in range(sl + 1):
-            value = (-1) ** q * (a - 1) ** (k - q)
-            n_value = comb(d, q) * comb(sl - d, k - q)
-            s += value * n_value
-        return s / a**sl
-
-    def calc_W_kd_matrix(self):
-        """return full matrix l+1 by l+1 Krawtchouk matrix"""
-        self.W_kd = np.zeros([self.seq_length + 1, self.seq_length + 1])
-        for k in range(self.seq_length + 1):
-            for d in range(self.seq_length + 1):
-                self.W_kd[k, d] = self.calc_w(k, d)
-
-    def fit(self, covs, ns, sigma2=0.):
+    def fit(self, covs, ns, sigma2=0):
         """
         Fit the Variance Component kernel by minimizing the Frobenius Norm
         with the covariance at each possible distance.
@@ -136,8 +215,50 @@ class VCKernelAligner(object):
             lambdas = np.exp(res.x)
         return lambdas
 
-    def predict(self, lambdas):
-        return self.W_kd.T.dot(lambdas)
+
+class DeltaPKernelAligner(VkKernelAligner):
+    """
+    Class to perform kernel alignment of empirical
+    covariance-distance relationships with the expected values
+    under a prior distribution parametrized by `a` on the local
+    epistatic coefficients by minimizing the Frobenius norm
+    of the resulting matrices.
+
+    Parameters
+    ----------
+    n_alleles: int
+        Number of alleles per site.
+
+    seq_length: int
+        Number of sites in the sequence.
+
+    P: float
+        Order of local epistatic coefficients that are penalized.
+    """
+
+    def __init__(self, n_alleles, seq_length, P):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        self.P = P
+        
+        lambdas = []
+        self.Pfactorial = factorial(self.P)
+        for L_lambda_k in np.arange(self.seq_length + 1) * self.n_alleles:
+            lambda_k = 1
+            for p in range(self.P):
+                lambda_k *= L_lambda_k - p * self.n_alleles
+            lambdas.append(lambda_k / self.Pfactorial)
+        self.lambdas = np.array(lambdas)
+    
+    def get_x0(self):
+        return 0.
+    
+    def x_to_params(self, log_a):
+        return np.exp(log_a)
+    
+    def params_to_lambdas(self, a):
+        lambdas = np.zeros_like(self.lambdas)
+        lambdas[self.lambdas > 0] = 1. / (a * self.lambdas[self.lambdas > 0])
+        return lambdas
 
 
 class VUKernelAligner(object):
