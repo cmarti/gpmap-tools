@@ -4,6 +4,7 @@ import unittest
 import numpy as np
 
 from gpmap.aligner import (
+    DeltaPKernelAligner,
     VCKernelAligner,
     DeltaUKernelAligner,
     VUKernelAligner,
@@ -108,6 +109,19 @@ class KernelAlignerTest(unittest.TestCase):
         loss2 = aligner.calc_loss(np.log(lambdas_star_2))
         loss3 = aligner.calc_loss(np.log(lambdas_star_3))
         assert loss3 < loss2
+    
+    def test_DeltaP_kernel_alignment(self):
+        a, sl = 4, 5
+        aligner = DeltaPKernelAligner(a, sl, P=2)
+        a_true = 0.01
+        cov_true = aligner.predict(a_true)
+        ns = np.ones_like(cov_true)
+        
+        a_star = aligner.fit(cov_true, ns)
+        cov_pred = aligner.predict(a_star)
+        loss = aligner.frobenius_norm(np.log(a_star))
+        assert loss < 1e-12
+        assert np.allclose(cov_true, cov_pred, rtol=0.01)
 
     def test_VU_kernel_alignment(self):
         # Ensure inner matrix works well
