@@ -240,6 +240,13 @@ class DeltaPKernelAligner(VkKernelAligner):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.P = P
         
+        n_p_sites = comb(self.seq_length, self.P)
+        n_p_faces_per_sites = comb(self.n_alleles, 2) ** self.P
+        allelic_comb_remaining_sites = self.n_alleles ** (self.seq_length - self.P)
+        self.n_p_faces = (
+            n_p_sites * n_p_faces_per_sites * allelic_comb_remaining_sites
+        )
+        
         lambdas = []
         self.Pfactorial = factorial(self.P)
         for L_lambda_k in np.arange(self.seq_length + 1) * self.n_alleles:
@@ -247,7 +254,8 @@ class DeltaPKernelAligner(VkKernelAligner):
             for p in range(self.P):
                 lambda_k *= L_lambda_k - p * self.n_alleles
             lambdas.append(lambda_k / self.Pfactorial)
-        self.lambdas = np.array(lambdas)
+        self.lambdas = np.array(lambdas) / self.n_p_faces
+        
     
     def get_x0(self):
         return 0.
