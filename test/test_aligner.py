@@ -123,6 +123,7 @@ class KernelAlignerTest(unittest.TestCase):
         loss = aligner.frobenius_norm(np.log(a_star))
         assert loss < 1e-12
         assert np.allclose(cov_true, cov_pred, rtol=0.01)
+        assert np.allclose(a_star, a_true)
 
     def test_VU_kernel_alignment(self):
         # Ensure inner matrix works well
