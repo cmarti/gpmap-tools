@@ -7,10 +7,13 @@ import pandas as pd
 from tqdm import tqdm
 from scipy.optimize import minimize
 from scipy.special import logsumexp
-from scipy.sparse.linalg import lsqr
 from scipy.stats import norm, pearsonr
 
-from gpmap.aligner import VCKernelAligner, DeltaUKernelAligner
+from gpmap.aligner import (
+    VCKernelAligner,
+    DeltaUKernelAligner,
+    DeltaPKernelAligner,
+)
 from gpmap.matrix import quad
 from gpmap.gp import (
     GaussianProcessRegressor,
@@ -121,6 +124,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             cg_rtol=cg_rtol,
         )
         self.DP = DeltaPOperator(self.n_alleles, self.seq_length, P)
+        self.kernel_basis = self.DP.calc_kernel_basis()
         self.s = self.DP.n_p_faces
         self.p = self.DP.n_p_faces_genotype
         self.initialized = True
@@ -145,7 +149,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             return super().calc_posterior_covariance()
 
     def check_unique_solution(self):
-        basis = self.DP.calc_kernel_basis()
+        basis = self.kernel_basis
         r1 = basis.rank
         r2 = np.linalg.matrix_rank(
             self.likelihood.Xop @ basis @ np.eye(basis.shape[1])
@@ -165,7 +169,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             mean_post, Sigma_post, X_pred=X_pred, B=B
         )
 
-    def fit(self, X, y, y_var=None):
+    def fit(self, X, y, y_var=None, method="kernel_alignment"):
         """
         Fits the Minimum Epistasis Interpolation (MEI) model hyperparameter
         to the provided data.
@@ -189,11 +193,42 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             Array containing the empirical or experimental variance for the
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
+
+        method : str
+            Method to estimate hyperparameter `a`. If `method='kernel_alignment'` it will be estimated via kernel alignment with the empirical distance-covariance function of the residuals of a P-1 order model. If `method='minimum_epistasis'`, it will use the `a` value corresponding to the magnitude of local P order epistatic coefficients in the MAP solution. 
+
         """
-        self.set_data(X, y)
-        mean = self.calc_posterior_mean()
-        a_star = self.DP.rank * self.s / quad(self.DP, mean)
-        self.set_data(X, y, y_var=y_var)
+
+        if method == "kernel_alignment":
+            self.set_data(X, y, y_var=y_var)
+            
+            # Fit P-1 order model and compute residuals
+            A = self.likelihood.Xop @ self.kernel_basis
+            A = A @ np.eye(self.kernel_basis.shape[1])
+            self.beta = np.linalg.lstsq(A, y, rcond=None)[0]
+            self.resid = y - A @ self.beta
+
+            # Run kernel alignment
+            obs_idx = self.get_obs_idx(X)
+            cov, ns = calc_covariance_distance(
+                self.resid, self.n_alleles, self.seq_length, idx=obs_idx
+            )
+            self.aligner = DeltaPKernelAligner(
+                self.n_alleles, self.seq_length, self.DP.P
+            )
+            a_star = self.aligner.fit(cov, ns)[0]
+
+        elif method == "minimum_epistasis":
+            self.set_data(X, y)
+            mean = self.calc_posterior_mean()
+            a_star = self.DP.rank * self.s / quad(self.DP, mean)
+            self.set_data(X, y, y_var=y_var)
+        
+        else:
+            msg = 'Only methods in ["kernel_alignment", "minimum epistasis"]'
+            msg += ' are allowed'
+            raise ValueError(msg)
+            
         self.set_a(a_star)
 
 
@@ -262,13 +297,16 @@ class LocalEpistasisRegression(MinimizerRegressor):
     def set_a_values(self, a_values=None):
         if a_values is not None:
             self.a_values = a_values
-            self.C = DeltaUWeighedSumOperator(self.n_alleles, self.seq_length,
-                                              self.P, a_values)
+            self.C = DeltaUWeighedSumOperator(
+                self.n_alleles, self.seq_length, self.P, a_values
+            )
 
     def check_unique_solution(self):
         r1 = self.kernel_basis.rank
         r2 = np.linalg.matrix_rank(
-            self.likelihood.Xop @ self.kernel_basis @ np.eye(self.kernel_basis.shape[1])
+            self.likelihood.Xop
+            @ self.kernel_basis
+            @ np.eye(self.kernel_basis.shape[1])
         )
         if r2 < r1:
             msg = "The MAP does not have a unique solution"
@@ -290,11 +328,11 @@ class LocalEpistasisRegression(MinimizerRegressor):
         Fits the Local Epistasis Regression (LER) model hyperparameters
         to the provided data.
 
-        This method infers the optimal regularization parameters `a` via 
+        This method infers the optimal regularization parameters `a` via
         kernel alignment of the residuals of a P-1 order interaction model
-        fit via maximum likelihood. Thus, we infer the `a` values that 
+        fit via maximum likelihood. Thus, we infer the `a` values that
         best match the empirical covariance in the residuals
-        
+
         Parameters
         ----------
         X : array-like of shape (n_obs,)
@@ -315,16 +353,20 @@ class LocalEpistasisRegression(MinimizerRegressor):
 
         # Fit P-1 order model and compute residuals
         self.set_data(X, y, y_var=y_var)
-        A = self.likelihood.Xop @ self.kernel_basis 
+        A = self.likelihood.Xop @ self.kernel_basis
         A = A @ np.eye(self.kernel_basis.shape[1])
         self.beta = np.linalg.lstsq(A, y, rcond=None)[0]
         self.resid = y - A @ self.beta
 
         # Run kernel alignment
         obs_idx = self.get_obs_idx(X)
-        cov, ns = calc_covariance_U_sites(self.resid, self.n_alleles, self.seq_length, idx=obs_idx)
+        cov, ns = calc_covariance_U_sites(
+            self.resid, self.n_alleles, self.seq_length, idx=obs_idx
+        )
         self.cov, self.ns = cov, ns
-        self.aligner = DeltaUKernelAligner(self.n_alleles, self.seq_length, self.P)
+        self.aligner = DeltaUKernelAligner(
+            self.n_alleles, self.seq_length, self.P
+        )
         self.Us = self.aligner.Us
         self.set_a_values(self.aligner.fit(cov, ns))
 
@@ -369,7 +411,7 @@ class VCregression(GaussianProcessRegressor):
         The number of folds for cross-validation. Default is 5.
 
     cv_loss_function : str, optional
-        The loss function to use during cross-validation. Options are 
+        The loss function to use during cross-validation. Options are
         "frobenius_norm", "logL", or "r2". Default is "frobenius_norm".
 
     num_beta : int, optional
