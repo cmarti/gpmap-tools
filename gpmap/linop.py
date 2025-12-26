@@ -3,7 +3,13 @@ from itertools import combinations, product
 
 import numpy as np
 from numpy.linalg.linalg import matrix_power
-from scipy.linalg import lu_factor, lu_solve, orth, solve_triangular
+from scipy.linalg import (
+    lu_factor,
+    lu_solve,
+    orth,
+    solve_triangular,
+)
+from scipy.sparse.linalg import eigsh, cg, minres, aslinearoperator
 from scipy.special import comb, factorial
 from tqdm import tqdm
 
@@ -13,7 +19,6 @@ except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
 from gpmap.matrix import (
-    inv_dot,
     kron,
     quad,
     reciprocal,
@@ -41,9 +46,7 @@ class ExtendedLinearOperator(_CustomLinearOperator):
         return SubMatrixOperator(self, row_idx, col_idx)
 
     def todense(self):
-        M = self @ np.eye(self.shape[1])
-        print(M)
-        return M
+        return self @ np.eye(self.shape[1])
 
     def rowsum(self):
         v = np.ones(self.shape[0])
@@ -70,28 +73,111 @@ class TriangularInverseOperator(ExtendedLinearOperator):
         return solve_triangular(self.tri, B, lower=self.lower)
 
 
+class LowRankPerturbationOperator(ExtendedLinearOperator):
+    def __init__(self, A, rank):
+        self.A = A
+        self.shape = A.shape
+        self.dtype = A.dtype
+        self.rank = min(rank, A.shape[0] - 1)
+        lda, Q = eigsh(A, k=rank, v0=np.ones(A.shape[1]))
+
+        self.Lambda = DiagonalOperator(lda)
+        self.Q = aslinearoperator(Q)
+        if hasattr(A, "get_diag"):
+            diag = A.get_diag()
+        else:
+            diag = np.ones(A.shape[1])
+        self.D = DiagonalOperator(diag)
+        
+    def _matvec(self, v):
+        return (self.D + self.Q @ self.Lambda @ self.Q.T) @ v
+
+    def inv(self):
+        D_inv = self.D.inv()
+        lda_inv = np.diag(1.0 / self.Lambda.diag)
+        H = lda_inv + self.Q.transpose() @ D_inv @ self.Q.A
+        H_inv = InverseOperator(H, method="direct")
+        M = D_inv - D_inv @ self.Q @ H_inv @ self.Q.T @ D_inv
+        return M
+
+
 class InverseOperator(ExtendedLinearOperator):
     def __init__(
-        self, linop, method="minres", atol=1e-14, maxiter=1000, **kwargs
+        self,
+        linop,
+        method="cg",
+        atol=1e-14,
+        maxiter=1000,
+        preconditioner_size=0,
+        **kwargs,
     ):
-        # TODO: implement preconditioner option
         self.linop = linop
         self.shape = linop.shape
         self.dtype = linop.dtype
-        self.method = method
         self.atol = atol
         self.maxiter = maxiter
         self.kwargs = kwargs
 
+        if method not in ["minres", "cg", "direct", "exact"]:
+            msg = "Method {} not allowed".format(method)
+            raise ValueError(msg)
+        if method == "exact":
+            if not hasattr(self.linop, "inv"):
+                msg = "Linop must have 'inv' method for exact inversion"
+                raise ValueError(msg)
+            self.linop_inv = self.linop.inv()
+        self.method = method
+
+        if preconditioner_size > 0 and method in ["minres", "cg"]:
+            preconditioner_size = min(linop.shape[0], preconditioner_size)
+            A = LowRankPerturbationOperator(self.linop, preconditioner_size)
+            self.preconditioner = A.inv()
+        else:
+            self.preconditioner = None
+
     def _matvec(self, v):
-        return inv_dot(
-            self.linop,
-            v,
-            method=self.method,
-            maxiter=self.maxiter,
-            atol=self.atol,
-            **self.kwargs,
-        )
+        if self.method == "exact":
+            res = self.linop_inv @ v
+
+        elif self.method == "minres":
+            res = minres(self.linop, v, M=self.preconditioner, **self.kwargs)
+            if res[1] != 0:
+                msg = "Minres did not converge"
+                raise ValueError(msg)
+            res = res[0]
+
+        elif self.method == "cg":
+
+            class cb(object):
+                def __init__(self):
+                    self.niter = 0
+                    
+                def __call__(self, xk):
+                    self.niter += 1
+                    
+            counter = cb()
+            res = cg(
+                self.linop,
+                v,
+                M=self.preconditioner,
+                atol=self.atol,
+                callback=counter,
+                **self.kwargs,
+            )
+            print(counter.niter)
+            if res[1] != 0:
+                msg = "Conjugate gradient did not converge"
+                raise ValueError(msg)
+            res = res[0]
+
+        elif self.method == "direct":
+            res = np.linalg.solve(self.linop, v)
+
+        return res
+
+    def quad(self, v):
+        u = self._matvec(v)
+        return np.sum(v * u)
 
 
 class SymmetricOperator(ExtendedLinearOperator):
@@ -112,12 +198,16 @@ class DiagonalOperator(SymmetricOperator):
         self.diag = diag
         self.shape = (diag.shape[0], diag.shape[0])
         self._init_dtype()
+        self.A = np.expand_dims(self.diag, 1)
 
     def _matvec(self, v):
-        return self.diag * v
+        if len(v.shape) == 1:
+            return self.diag * v
+        else:
+            return self._matmat(v)
 
     def _matmat(self, B):
-        return np.expand_dims(self.diag, 1) * B
+        return self.A * B
 
     def logdet(self):
         msg = "All diagonal entries must be larger than 0 to compute logdet"
@@ -126,6 +216,9 @@ class DiagonalOperator(SymmetricOperator):
 
     def det(self):
         return np.product(self.diag)
+
+    def inv(self):
+        return DiagonalOperator(1.0 / self.diag)
 
 
 class IdentityOperator(DiagonalOperator):
@@ -138,6 +231,9 @@ class IdentityOperator(DiagonalOperator):
 
     def _matmat(self, B):
         return B
+
+    def inv(self):
+        return self
 
 
 class PconOperator(SymmetricOperator):
@@ -357,11 +453,11 @@ class SelIdxOperator(ExtendedLinearOperator):
 
     def _matvec(self, v):
         return v[self.idx]
-    
+
     def _rmatvec(self, v):
         u = np.zeros(self.n)
         u[self.idx] = v
-        return(u)
+        return u
 
     def transpose(self):
         return ExpandIdxOperator(self.n, self.idx)
@@ -396,7 +492,7 @@ class KronOperator(ExtendedLinearOperator):
             return m
 
     def todense(self):
-        return kron([self._get_dense_matrix(m) for m in self.matrices]) 
+        return kron([self._get_dense_matrix(m) for m in self.matrices])
 
     def transpose(self):
         return KronOperator([m.T for m in self.matrices])
@@ -544,7 +640,7 @@ class DeltaOperator(ConstantDiagSeqOperator):
         self.calc_kernel_dimension()
         self.calc_n_p_faces()
         self.calc_n_p_faces_genotype()
-    
+
     def set_P(self, P):
         self.P = P
         if self.P == (self.lp1):
@@ -589,7 +685,7 @@ class DeltaPOperator(DeltaOperator):
         self.dtype = self.L.dtype
         self.m_k = self.L.lambdas_multiplicity
         self.calc_lambdas()
-    
+
     def calc_lambdas(self):
         lambdas = []
         for L_lambda_k in self.L.lambdas:
@@ -632,7 +728,9 @@ class DeltaUWeighedSumOperator(DeltaOperator, SymmetricOperator):
         self.ncombs = comb(seq_length, P)
         check_error(a.shape[0] == self.ncombs, msg="Incorrect size of a")
         self.a = a
-        DeltaOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length, P=P)
+        DeltaOperator.__init__(
+            self, n_alleles=n_alleles, seq_length=seq_length, P=P
+        )
         self.Deltap = [
             DeltaUOperator(n_alleles, seq_length, [i])
             for i in range(seq_length)
@@ -640,21 +738,21 @@ class DeltaUWeighedSumOperator(DeltaOperator, SymmetricOperator):
 
     def take_product(self, U, v, temp_products):
         if not U:
-            return(v)
+            return v
         elif U in temp_products:
-            return(temp_products[U])
+            return temp_products[U]
         else:
             prev_u = self.take_product(U[:-1], v, temp_products)
             temp_products[U[:-1]] = prev_u
             u = self.Deltap[U[-1]] @ prev_u
-            return(u)
+            return u
 
     def _matvec(self, v):
         u = np.zeros_like(v)
         temp_products = {}
         for a_U, U in zip(self.a, combinations(self.positions, self.P)):
             u += a_U * self.take_product(U, v, temp_products)
-        return(u)
+        return u
 
 
 class KrawtchoukOperator(SeqOperator, PolynomialOperator):
@@ -1216,7 +1314,8 @@ def calc_avg_local_epistatic_coeff(X, y, alphabet, seq_length, P):
     z = kron([[-1, 1]] * P)
 
     s, n = 0, 0
-    for target_sites in tqdm(combinations(sites, P), total=comb(seq_length, P)):
+    total = comb(seq_length, P)
+    for target_sites in tqdm(combinations(sites, P), total=total):
         background_sites = [s for s in sites if s not in target_sites]
         for background_seq in background_seqs:
             bc = dict(zip(background_sites, background_seq))

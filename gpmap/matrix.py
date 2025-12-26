@@ -64,30 +64,6 @@ def rayleigh_quotient(linop, v, metric=None):
     return quad(linop, v) / inner_product(v, v, metric=metric)
 
 
-def inv_dot(linop, v, method="minres", **kwargs):
-    if method == "minres":
-        res = minres(linop, v, **kwargs)
-    elif method == "cg":
-        # iters = 0
-        # def nonlocal_iterate(arr):
-        #     nonlocal iters
-        #     iters+=1
-        # res = cg(linop, v, callback=nonlocal_iterate,  **kwargs)
-        # print('n iters', iters)
-        res = cg(linop, v, **kwargs)
-    elif method == "direct":
-        res = np.linalg.solve(linop, v)
-    else:
-        msg = "Method {} not allowed".format(method)
-        raise ValueError(msg)
-    return res[0]
-
-
-def inv_quad(linop, v, method="minres", **kwargs):
-    u = inv_dot(linop, v, method, **kwargs)
-    return np.sum(v * u)
-
-
 def kron(matrices):
     n = len(matrices)
     msg = "Provide at least two matrices to take Kron product"
