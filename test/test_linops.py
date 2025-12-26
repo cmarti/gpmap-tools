@@ -2,6 +2,8 @@
 import unittest
 import numpy as np
 
+from time import time
+
 from itertools import combinations
 from scipy.special import comb
 from scipy.sparse.linalg import aslinearoperator
@@ -9,7 +11,7 @@ from scipy.linalg import solve_triangular
 from scipy.stats import multivariate_normal
 
 from gpmap.seq import generate_possible_sequences
-from gpmap.matrix import inv_dot, quad
+from gpmap.matrix import quad
 from gpmap.linop import (
     LaplacianOperator,
     ProjectionOperator,
@@ -40,6 +42,7 @@ from gpmap.linop import (
     InverseOperator,
     TriangularInverseOperator,
     KronTriangularInverseOperator,
+    LowRankPerturbationOperator,
     MultivariateGaussian,
 )
 
@@ -647,7 +650,8 @@ class LinOpsTests(unittest.TestCase):
 
         # Solve using CG
         v = np.array([1, 2.0, 1])
-        u = inv_dot(K, v, method="cg", atol=1e-14)
+        Kinv = InverseOperator(K, method="cg", atol=1e-14)
+        u = Kinv.dot(v)
         assert np.allclose(K.dot(u), v)
 
         # Test different indexings
@@ -685,22 +689,52 @@ class LinOpsTests(unittest.TestCase):
         v = np.random.normal(size=K.shape[1])
         assert np.allclose(B.dot(v), K.dot(v))
 
-    def test_inverse_operator(self):
-        np.random.seed(0)
+    def test_low_rank_perturbation_operator(self):
+        A = np.array([[2.0, 1.0], [1.0, 2.0]])
+        v = np.random.normal(size=A.shape[1])
+        u1 = A @ v
 
-        # With small matrix we can verify the inverse
+        L = LowRankPerturbationOperator(A, rank=1)
+        u2 = L @ v
+        assert not np.allclose(u1, u2)
+        
+        x = L.inv() @ v
+        assert np.allclose(L @ x, v)
+
+    def test_inverse_operator_full_matrix(self):
         A = np.array([[1, 0.5], [0.5, 1]])
         A_inv = np.linalg.inv(A)
-        A_inv_op = InverseOperator(aslinearoperator(A), method="cg").todense()
+        A_inv_op = InverseOperator(A, method="cg").todense()
         assert np.allclose(A_inv_op, A_inv)
+        
+    def test_inverse_operator_small(self):
+        A = np.array([[1, 0.5], [0.5, 1]])
+        b = np.random.normal(size=A.shape[1])
+        
+        for method in ["direct", "cg", "minres"]:
+            A_inv = InverseOperator(A, method=method)
+            x = A_inv @ b
+            assert np.allclose(b, A @ x)
 
-        # With a large operator
-        A = RhoProjectionOperator(4, 8, rho=0.5)  # + D
-        A_inv = InverseOperator(A, method="cg")
-        v = np.random.normal(size=A.shape[1])
-        u = A @ (A_inv @ v)
-        assert np.allclose(u, v, atol=1e-4)
+    def test_inverse_operator_big(self):
+        A = RhoProjectionOperator(4, 8, rho=0.5)
+        b = np.random.normal(size=A.shape[1])
+        
+        for method in ['exact', 'cg']:
+            A_inv = InverseOperator(A, method=method)
+            x = A_inv @ b
+            assert np.allclose(b, A @ x, atol=1e-4)
 
+    def test_inverse_operator_preconditioned(self):
+        K = RhoProjectionOperator(4, 8, rho=0.5)
+        D = DiagonalOperator(0.1 * np.ones(K.shape[1]))
+        A = K + D
+        b = np.random.normal(size=A.shape[1])
+        
+        A_inv = InverseOperator(A, method='cg', preconditioner_size=25)
+        x = A_inv @ b
+        assert np.allclose(b, A @ x, atol=1e-4)
+            
     def test_mv_gaussian(self):
         A = np.array([[1, 0.5], [0.5, 1]])
         Sigma1 = np.kron(A, A)
