@@ -4,7 +4,7 @@ import numpy as np
 
 from time import time
 
-from itertools import combinations
+from itertools import combinations, product
 from scipy.special import comb
 from scipy.sparse.linalg import aslinearoperator
 from scipy.linalg import solve_triangular
@@ -13,9 +13,11 @@ from scipy.stats import multivariate_normal
 from gpmap.seq import generate_possible_sequences
 from gpmap.matrix import quad
 from gpmap.linop import (
+    SubMatrixOperator,
     LaplacianOperator,
     ProjectionOperator,
     VjProjectionOperator,
+    VUProjectionWeightedSumOperator,
     DiagonalOperator,
     IdentityOperator,
     PconOperator,
@@ -26,7 +28,6 @@ from gpmap.linop import (
     DeltaUWeighedSumOperator,
     RhoProjectionOperator,
     ExtendedDeltaPOperator,
-    MatMulOperator,
     VjBasisOperator,
     KernelOperator,
     EigenBasisOperator,
@@ -125,33 +126,6 @@ class LinOpsTests(unittest.TestCase):
         assert np.allclose(x1, x2)
         assert np.allclose(x1, x3)
 
-    def test_matmul_operator(self):
-        m = np.array([[1, 2], [-1, 1], [2, 0]])
-
-        # Chain 2 operators
-        v = np.random.normal(size=m.shape[0])
-        X = m @ m.T
-        u1 = X.dot(v)
-
-        M = MatMulOperator([m, m.T])
-        u2 = M.dot(v)
-        assert np.allclose(u1, u2)
-
-        # Chain more than 2 operators
-        v = np.random.normal(size=m.shape[0])
-        X = m.T @ m @ m.T
-        u1 = X.dot(v)
-
-        M = MatMulOperator([m.T, m, m.T])
-        u2 = M.dot(v)
-        assert np.allclose(u1, u2)
-
-        # Check dimensions error
-        try:
-            M = MatMulOperator([m, m])
-        except ValueError:
-            pass
-
     def test_stacked_operator(self):
         m = np.array([[1, 2], [-1, 1], [2, 0.0]])
 
@@ -175,16 +149,14 @@ class LinOpsTests(unittest.TestCase):
 
     def test_sel_idxs_operator(self):
         m = np.array([[1, 2, 0], [-1, 1, 1], [2, 0, -1]])
+        M = aslinearoperator(m)
         i, j = np.array([0, 1]), np.array([0, 2])
-        op1 = SelIdxOperator(
-            n=3,
-            idx=i,
-        )
+        op1 = SelIdxOperator(n=3, idx=i)
         op2 = ExpandIdxOperator(n=3, idx=j)
 
-        B = MatMulOperator([op1, m, op2])
+        B = op1 @ M @ op2
         A = m[i, :][:, j]
-        C = MatMulOperator([m]).submatrix(i, j)
+        C = SubMatrixOperator(m, i, j)
         assert B.shape == A.shape
         assert B.shape == C.shape
 
@@ -365,6 +337,28 @@ class LinOpsTests(unittest.TestCase):
         u1 = A1 @ v
         u2 = A2 @ v
         assert np.allclose(u1, u2)
+    
+    def test_P_U_weighed_sum_operator(self):
+        a, sl = 4, 8
+        n = a**sl
+        v = np.random.normal(size=n)
+        
+        t0 = time()
+        lambdas = np.exp(np.random.normal(size=2 ** sl))
+        sites = np.arange(sl)
+        Us = product([False, True], repeat=sl)
+        u1 = np.zeros_like(v)
+        for U, lambda_U in zip(Us, lambdas):
+            j = list(sites[np.array(U)])
+            u1 += lambda_U * VjProjectionOperator(a, sl, j=j) @ v
+        time1 = time() - t0
+        
+        t0 = time()
+        P = VUProjectionWeightedSumOperator(a, sl, lambdas=lambdas)
+        u2 = P @ v
+        time2 = time() - t0
+        assert np.allclose(u1, u2)
+        assert(time2 < time1)
 
     def test_kron_operator(self):
         np.random.seed(0)
