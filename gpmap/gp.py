@@ -457,6 +457,22 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         self.progress = progress
 
     def set_data(self, X, y, y_var=None):
+        """
+        Set the data for the Gaussian process regression model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Array containing the genotypes for which observations are provided.
+
+        y : array-like of shape (n_obs,)
+            Array containing the observed phenotypes corresponding to the genotypes in `X`.
+
+        y_var : array-like of shape (n_obs,), optional
+            Array containing the empirical or experimental variance for the measurements in `y`.
+            If not provided, it is assumed to be uniform or unknown.
+
+        """
         self.define_space(genotypes=X)
         self.likelihood = GaussianLikelihood(self.genotypes)
         self.likelihood.set_data(X, y, y_var)
@@ -487,7 +503,10 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         return Sigma_post
 
     def get_K_sqrt(self):
-        return self.K.matrix_sqrt()
+        if hasattr(self.K, 'cholesky'):
+            return self.K.cholesky()
+        else:
+            return self.K.matrix_sqrt()
 
 
 class MinimizerRegressor(SeqGaussianProcessRegressor):

@@ -164,7 +164,7 @@ class InverseOperator(ExtendedLinearOperator):
                 callback=counter,
                 **self.kwargs,
             )
-            print(counter.niter)
+            self.cg_n_iter = counter.niter
             if res[1] != 0:
                 msg = "Conjugate gradient did not converge"
                 raise ValueError(msg)
@@ -973,16 +973,18 @@ class VjProjectionOperator(VjOperator):
         return sqnorm
 
 class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
-    def __init__(self, n_alleles, seq_length, lambdas):
+    def __init__(self, n_alleles, seq_length, lambdas=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.n_V_U = 2 ** seq_length
-        check_error(lambdas.shape[0] == self.n_V_U, msg="Incorrect size of lambdas")
-        self.lambdas = lambdas
+        self.set_lambdas(lambdas)
         self.W0 = PconOperator(self.alpha)
         self.W1 = PaddOperator(self.alpha)
         self.v_shape = [n_alleles] * seq_length
-        self.cached_matvecs = [None] * self.seq_length
-        self.cached_U = [None] * self.seq_length
+    
+    def set_lambdas(self, lambdas):
+        if lambdas is not None:
+            check_error(lambdas.shape[0] == self.n_V_U, msg="Incorrect size of lambdas")
+            self.lambdas = lambdas
 
     def calc_V_U_product(self, v, sites, sites_included):
         if not sites:
@@ -1006,6 +1008,12 @@ class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
             return u
 
     def _matvec(self, v):
+        if self.lambdas is None:
+            msg = 'lambdas must be defined for computing matrix-vector products'
+            raise ValueError(msg)
+        
+        self.cached_matvecs = [None] * self.seq_length
+        self.cached_U = [None] * self.seq_length
         self.n_products = 0
         check_error(
             v.shape[0] == self.shape[1],
@@ -1021,63 +1029,44 @@ class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
         return u.transpose().flatten()
     
 
-class RhoProjectionOperator(ConstantDiagSeqOperator, KronOperator):
+class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
     symmetric = True
 
-    def __init__(self, n_alleles, seq_length, rho):
+    def __init__(self, n_alleles, seq_length, mu, mu0=1.):
         ConstantDiagSeqOperator.__init__(
             self, n_alleles=n_alleles, seq_length=seq_length
         )
 
-        self.set_rho(rho)
+        self.set_mu(mu)
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
         W0 = PconOperator(self.alpha)
         W1 = PaddOperator(self.alpha)
-        return [W0 + r * W1 for r in self.rho]
+        return [W0 + r * W1 for r in self.mu]
 
-    def check_rho(self, rho, ignore_bound=False):
-        msg = "rho vector size must be equal to sequence length"
-        check_error(rho.shape[0] == self.seq_length, msg=msg)
+    def get_mu(self):
+        return self.mu
 
-        checked = rho > 0
-        msg = "rho larger than 0"
+    def check_mu(self, mu, ignore_bound=False):
+        msg = "mu vector size must be equal to sequence length"
+        check_error(mu.shape[0] == self.seq_length, msg=msg)
+
+        checked = mu > 0
+        msg = "mu larger than 0"
         if not ignore_bound:
-            checked = checked & (rho < 1)
-            msg = "rho must be between 0 and 1"
+            checked = checked & (mu < 1)
+            msg = "mu must be between 0 and 1"
         check_error(np.all(checked), msg=msg)
 
-    def set_rho(self, rho, ignore_bound=True):
-        self.rho = (
-            np.full(self.seq_length, rho)
-            if isinstance(rho, float)
-            else np.array(rho)
+    def set_mu(self, mu, ignore_bound=True):
+        self.mu = (
+            np.full(self.seq_length, mu)
+            if isinstance(mu, float)
+            else np.array(mu)
         )
-        self.check_rho(self.rho, ignore_bound=ignore_bound)
-        self.d = np.prod([1 + (self.alpha - 1) * r for r in self.rho]) / self.n
-
-    def inv(self):
-        return RhoProjectionOperator(
-            self.alpha, self.seq_length, rho=1.0 / self.rho
-        )
-
-    def calc_log_det(self):
-        log_rho = np.log(self.rho)
-        k = np.sum(
-            [comb(self.seq_length, i - 1) for i in range(self.seq_length)]
-        )
-        return k * np.sum(log_rho)
-
-    def matrix_sqrt(self):
-        return RhoProjectionOperator(
-            self.alpha, self.seq_length, rho=np.sqrt(self.rho)
-        )
-
-    def matrix_power(self, b):
-        return RhoProjectionOperator(
-            self.alpha, self.seq_length, rho=self.rho**b
-        )
+        self.check_mu(self.mu, ignore_bound=ignore_bound)
+        self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
 
 
 class EigenBasisOperator(StackedOperator):
@@ -1149,16 +1138,16 @@ class KernelOperator(SubMatrixOperator):
         self._init_dtype()
 
     def _get_diag(self):
-        msg = "rho need to be set to get diagonal"
-        check_error(hasattr(self, "rho"), msg=msg)
+        msg = "mu need to be set to get diagonal"
+        check_error(hasattr(self, "mu"), msg=msg)
         if hasattr(self, "n_obs"):
             return self.P.d + self.y_var
         else:
             return np.full(self.P.d, self.n)
 
     def _calc_trace(self):
-        msg = "rho need to be set to calculate trace"
-        check_error(hasattr(self.P, "rho"), msg=msg)
+        msg = "mu need to be set to calculate trace"
+        check_error(hasattr(self.P, "mu"), msg=msg)
         if hasattr(self, "n_obs"):
             return self.n_obs * self.P.d + np.sum(self.y_var)
         else:
@@ -1181,12 +1170,70 @@ class VarianceComponentKernel(ProjectionOperator, Kernel):
         return np.log(self.get_lambdas())
 
 
-class ConnectednessKernel(RhoProjectionOperator, Kernel):
+class VUKernel(VUProjectionWeightedSumOperator, Kernel):
     def set_params(self, params):
-        self.set_rho(params)
+        self.set_lambdas(lambdas=np.exp(params))
 
     def get_params(self):
-        return self.rho
+        return np.log(self.get_lambdas())
+
+
+class ConnectednessKernel(ConstantDiagSeqOperator, KronOperator, Kernel):
+    symmetric = True
+
+    def __init__(self, n_alleles, seq_length, mu, sigma2):
+        ConstantDiagSeqOperator.__init__(
+            self, n_alleles=n_alleles, seq_length=seq_length
+        )
+        self.set_sigma2(sigma2)
+        self.set_mu(mu)
+        KronOperator.__init__(self, self.get_matrices())
+    
+    def set_sigma2(self, sigma2):
+        if not isinstance(sigma2, float):
+            msg = f'sigma2 should be float, got {type(sigma2)} instead'
+            raise ValueError(msg)
+        self.sigma2 = sigma2
+        self.sigma2_lroot = np.exp(np.log(sigma2) / self.seq_length)
+        self.d = sigma2
+    
+    def get_site_matrix(self, mu_p, sigma2_lroot):
+        v = (1 - mu_p) / (1 + mu_p * (self.alpha - 1))
+        shape = (self.alpha, self.alpha)
+        m = np.full(shape, v)
+        np.fill_diagonal(m, 1)
+        return(sigma2_lroot * m)
+    
+    def get_matrices(self):
+        return [self.get_site_matrix(mu_p, self.sigma2_lroot) for mu_p in self.mu]
+
+    def get_mu(self):
+        return self.mu
+
+    def check_mu(self, mu, ignore_bound=False):
+        msg = "mu vector size must be equal to sequence length"
+        check_error(mu.shape[0] == self.seq_length, msg=msg)
+
+        checked = mu > 0
+        msg = "mu larger than 0"
+        if not ignore_bound:
+            checked = checked & (mu < 1)
+            msg = "mu must be between 0 and 1"
+        check_error(np.all(checked), msg=msg)
+
+    def set_mu(self, mu, ignore_bound=True):
+        self.mu = (
+            np.full(self.seq_length, mu)
+            if isinstance(mu, float)
+            else np.array(mu)
+        )
+        self.check_mu(self.mu, ignore_bound=ignore_bound)
+    
+    def set_params(self, params):
+        self.set_mu(np.exp(params))
+
+    def get_params(self):
+        return np.log(self.get_mu())
 
 
 class MultivariateGaussian(object):

@@ -11,6 +11,7 @@ from scipy.stats import norm, pearsonr
 
 from gpmap.aligner import (
     VCKernelAligner,
+    ConnectednessKernelAligner,
     DeltaUKernelAligner,
     DeltaPKernelAligner,
 )
@@ -28,6 +29,7 @@ from gpmap.linop import (
     DeltaUWeighedSumOperator,
     DiagonalOperator,
     ProjectionOperator,
+    ConnectednessKernel,
     VarianceComponentKernel,
     calc_covariance_U_sites,
     calc_covariance_distance,
@@ -293,6 +295,40 @@ class LocalEpistasisRegression(MinimizerRegressor):
         self.P = P
         self.kernel_basis = DeltaKernelBasisOperator(n_alleles, seq_length, P)
         self.set_a_values(a_values)
+    
+    # def __init__(
+    #     self,
+    #     n_alleles=None,
+    #     seq_length=None,
+    #     genotypes=None,
+    #     alphabet_type="custom",
+    #     P=2,
+    #     a_values=None,
+    #     cg_rtol=1e-16,
+    #     progress=True,
+    # ):
+    #     self.progress = progress
+
+    #     self.define_space(
+    #         n_alleles=n_alleles,
+    #         seq_length=seq_length,
+    #         genotypes=genotypes,
+    #         alphabet_type=alphabet_type,
+    #     )
+    #     self.P = P
+    #     self.kernel_basis = DeltaKernelBasisOperator(n_alleles, seq_length, P)
+    #     self.set_a_values(a_values)
+    #     self.aligner = DeltaUKernelAligner(self.n_alleles, self.seq_length, P)
+    #     self.cg_rtol = cg_rtol
+
+    # def set_a_values(self, a_values=None):
+    #     if a_values is not None:
+    #         self.a_values = a_values
+    #         self.C = DeltaUWeighedSumOperator(
+    #             self.n_alleles, self.seq_length, self.P, a_values
+    #         )
+    #         self.lambdas = self.aligner.a_to_lambda_U(a_values)
+    #         self.K = VUKernel(self.n_alleles, self.seq_length, self.lambdas)
 
     def set_a_values(self, a_values=None):
         if a_values is not None:
@@ -658,6 +694,146 @@ class VCregression(GaussianProcessRegressor):
         self.fit_time = time() - t0
         self.set_lambdas(lambdas)
         self.vc_df = self.get_variance_components(lambdas)
+
+
+class ConnectednessModelRegression(GaussianProcessRegressor):
+    """
+    Connectedness model regression for sequence-function relationships.
+
+    This model enables the inference and prediction of a scalar function in
+    sequence spaces under a Gaussian Process prior. The prior is parameterized
+    by parameters controlling the effect of mutations at specific sites on 
+    the predictability of other mutations.
+
+    Parameters
+    ----------
+    n_alleles : int, optional
+        The number of alleles per site. If not provided, it will be inferred
+        from the data.
+
+    seq_length : int, optional
+        The length of the genotype sequences. If not provided, it will be
+        inferred from the data.
+
+    genotypes : array-like, optional
+        A list or array of genotypes to be used in the interpolation.
+
+    alphabet_type : str, optional
+        The type of alphabet used for genotypes. Default is "custom".
+
+    mu : array-like, optional
+        Factors controlling the site-specific decay factors. If not provided,
+        they will be inferred during fitting.
+
+    cg_rtol : float, optional
+        The relative tolerance for the conjugate gradient solver. Default is 1e-16.
+
+    progress : bool, optional
+        Whether to display progress bars during fitting. Default is True.
+    """
+
+    def __init__(
+        self,
+        n_alleles=None,
+        seq_length=None,
+        genotypes=None,
+        alphabet_type="custom",
+        mu=None,
+        sigma2=None,
+        cg_rtol=1e-16,
+        progress=True,
+    ):
+        self.progress = progress
+        self.define_space(
+            n_alleles=n_alleles,
+            seq_length=seq_length,
+            genotypes=genotypes,
+            alphabet_type=alphabet_type,
+        )
+
+        if mu is not None and sigma2 is not None:
+            self.set_params(mu, sigma2)
+
+        self.cg_rtol = cg_rtol
+
+    def set_params(self, mu, sigma2):
+        self.mu = mu
+        self.sigma2 = sigma2
+        K = ConnectednessKernel(self.n_alleles, self.seq_length, mu=mu, sigma2=sigma2)
+        super().__init__(base_kernel=K, progress=self.progress)
+
+    def calc_covs(self, X, y):
+        return calc_covariance_U_sites(
+            y, self.n_alleles, self.seq_length, self.get_obs_idx(X)
+        )
+
+    def mu_to_decay_factors(self, mu):
+        if mu is None:
+            msg = 'mu is required for computing the corresponding decay factors'
+            raise ValueError(msg)
+        return 100 * self.n_alleles * self.mu / (1 + self.mu * (self.n_alleles - 1))
+
+    def get_decay_factors(self):
+        """
+        Return the decay factors as a DataFrame from :math:`\mu`s.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame containing the following columns:
+
+            - ``p``: 0-indexed position in the sequence.
+            - ``mu``: The :math:`\mu` value associated to each position.
+            - ``decay_factor``: Decay factor associated to each position.
+        """
+        sites = np.arange(self.seq_length)
+        decay_factors = self.mu_to_decay_factors(self.mu)
+        df = pd.DataFrame(
+            {
+                "mu": self.mu,
+                "decay_factor": decay_factors,
+            },
+            index=sites
+        )
+        return df
+
+    def fit(self, X, y, y_var=None):
+        """
+        Infers the site-specific decay factors from the provided data.
+
+        This method infers the site-specific decay factors, which represent
+        control the expected decrease in the predictability of other mutations
+        in the presence of mutations at each site. Decay factors are inferred
+        through kernel alignment with the empirical distance-covariance function.
+
+        After fitting, the optimal decay factors are used to build a Gaussian
+        process prior for inference.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Array containing the genotypes for which observations are provided
+            in `y`.
+
+        y : array-like of shape (n_obs,)
+            Array containing the observed phenotypes corresponding to the
+            genotypes in `X`.
+
+        y_var : array-like of shape (n_obs,), optional
+            Array containing the empirical or experimental variance for the
+            measurements in `y`. If not provided, it is assumed to be uniform
+            or unknown.
+        """
+        self.define_space(genotypes=X)
+        self.kernel_aligner = ConnectednessKernelAligner(
+            n_alleles=self.n_alleles, seq_length=self.seq_length
+        )
+        self.set_data(X, y, y_var=y_var)
+        cov, ns = self.calc_covs(self.likelihood.X, self.likelihood.y)
+        log_sigma2, logit_mu = self.kernel_aligner.fit(cov, ns)
+        sigma2 = np.exp(log_sigma2)
+        mu = np.exp(logit_mu) / (1 + np.exp(logit_mu))
+        self.set_params(mu=mu, sigma2=sigma2)
 
 
 class SeqDEFT(GeneralizedGaussianProcessRegressor, _DeltaPpriorGP):

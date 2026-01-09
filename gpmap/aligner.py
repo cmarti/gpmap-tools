@@ -446,31 +446,26 @@ class ConnectednessKernelAligner(VUKernelAligner):
     """
 
     def x_to_params(self, x):
-        log_mu, logit_rho = x[0], x[1:]
-        return (log_mu, logit_rho)
+        log_sigma2, logit_mu = x[0], x[1:]
+        return (log_sigma2, logit_mu)
 
-    def params_to_x(self, log_mu, logit_rho):
-        return np.hstack([log_mu, logit_rho])
+    def params_to_x(self, log_sigma2, logit_mu):
+        return np.hstack([log_sigma2, logit_mu])
 
     def get_x0(self):
         return np.random.normal(size=self.seq_length + 1)
 
     def calc_cov(self, x):
-        log_mu, logit_rho = self.x_to_params(x)
-        log1mrho = -np.logaddexp(0.0, logit_rho)
-        log_rho = logit_rho + log1mrho
+        log_sigma2, logit_mu = self.x_to_params(x)
+        log1mrho = -np.logaddexp(0.0, logit_mu)
+        log_rho = logit_mu + log1mrho
         log_one_p_eta_rho = np.logaddexp(0.0, log_rho + np.log(self.eta))
-        log_factors = log_one_p_eta_rho - log1mrho
-        baseline = log1mrho.sum()
-        cov = (
-            np.exp(baseline + self.U_sites @ log_factors)
-            - 1
-            + np.exp(log_mu)
-        )
+        log_factors = log1mrho - log_one_p_eta_rho
+        cov = np.exp(log_sigma2 + self.U_sites @ log_factors)
         return cov
 
-    def predict(self, logit_rho, log_mu=0):
-        x = self.params_to_x(log_mu, logit_rho)
+    def predict(self, logit_mu, log_sigma2=0):
+        x = self.params_to_x(log_sigma2, logit_mu)
         cov = self.calc_cov(x)
         return cov
 
