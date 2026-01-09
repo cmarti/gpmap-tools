@@ -26,7 +26,7 @@ from gpmap.linop import (
     DeltaPOperator,
     DeltaUOperator,
     DeltaUWeighedSumOperator,
-    RhoProjectionOperator,
+    ConnectednessProjectionOpererator,
     ExtendedDeltaPOperator,
     VjBasisOperator,
     KernelOperator,
@@ -45,6 +45,7 @@ from gpmap.linop import (
     KronTriangularInverseOperator,
     LowRankPerturbationOperator,
     MultivariateGaussian,
+    ConnectednessKernel,
 )
 
 
@@ -585,51 +586,21 @@ class LinOpsTests(unittest.TestCase):
         c2 = np.dot(phi, D @ phi)
         assert np.allclose(c1, c2)
 
-    def test_rho_projection_operator(self):
-        np.random.seed(0)
-
-        # Small landscape
+    def test_connectedness_kernel(self):
         a, sl = 2, 2
-        P = RhoProjectionOperator(a, sl, rho=0.5)
-        v = np.random.normal(size=P.n)
-        u1 = P.dot(v)
-
-        lambdas = np.array([1, 0.5, 0.25])
-        W = ProjectionOperator(a, sl, lambdas=lambdas)
-        u2 = W.dot(v)
-        assert np.allclose(u1, u2)
-
-        # Different rho per site
-        P = RhoProjectionOperator(a, sl, rho=[0.5, 0.8])
-        v = np.random.normal(size=P.n)
-        u1 = P.dot(v)
-
-        # Test inverse operator
-        P_inv = P.inv()
-        assert(np.allclose(P_inv @ P @ v, v))
-
-        # Do calculations using Vj Projections
-        ws = [1 * 1, 1 * 0.8, 0.5 * 1, 0.8 * 0.5]
-        js = [[], [1], [0], [0, 1]]
-        u2 = np.zeros(v.shape)
-        for w, j in zip(ws, js):
-            Pj = VjProjectionOperator(a, sl, j=j)
-            u2 += w * Pj.dot(v)
-        assert np.allclose(u1, u2)
-
-        # Larger landscape with single rho model
-        a, sl = 4, 6
-        P = RhoProjectionOperator(a, sl, rho=0.5)
-        v = np.random.normal(size=P.shape[1])
-        u1 = P.dot(v)
-
-        lambdas = np.array([2**-(i) for i in range(sl + 1)])
-        W = ProjectionOperator(a, sl, lambdas=lambdas)
-        u2 = W.dot(v)
-        assert np.allclose(u1, u2)
-
-        # Test inverse operator
-
+        mu = 0.5 * np.ones(2)
+        k2 = np.array([[1, 1/3.], [1/3., 1]])
+        K2 = np.kron(k2, k2)
+        
+        K = ConnectednessKernel(a, sl, mu=mu, sigma2=1.)
+        assert np.allclose(K.todense(), K2)
+        
+        K_1 = K.compute(x1=np.array([0]))
+        assert(np.allclose(K_1.todense(), [1, 1/3, 1/3, 1/9]))
+        
+        K = ConnectednessKernel(a, sl, mu=mu, sigma2=2.)
+        assert np.allclose(K.todense(), 2 * K2)
+        
     def test_kernel_operator(self):
         A = np.array([[1.0, 0.5, 0.5], [0.5, 1.0, 0.5], [0.5, 0.5, 1.0]])
 
@@ -711,7 +682,7 @@ class LinOpsTests(unittest.TestCase):
             assert np.allclose(b, A @ x)
 
     def test_inverse_operator_big(self):
-        A = RhoProjectionOperator(4, 8, rho=0.5)
+        A = ConnectednessProjectionOpererator(4, 8, rho=0.5)
         b = np.random.normal(size=A.shape[1])
         
         for method in ['exact', 'cg']:
@@ -720,7 +691,7 @@ class LinOpsTests(unittest.TestCase):
             assert np.allclose(b, A @ x, atol=1e-4)
 
     def test_inverse_operator_preconditioned(self):
-        K = RhoProjectionOperator(4, 8, rho=0.5)
+        K = ConnectednessProjectionOpererator(4, 8, rho=0.5)
         D = DiagonalOperator(0.1 * np.ones(K.shape[1]))
         A = K + D
         b = np.random.normal(size=A.shape[1])

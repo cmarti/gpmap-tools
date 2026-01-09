@@ -11,7 +11,7 @@ from gpmap.aligner import (
     ConnectednessKernelAligner,
 )
 from gpmap.linop import (
-    RhoProjectionOperator,
+    ConnectednessProjectionOpererator,
     ProjectionOperator,
     calc_covariance_distance,
     calc_variance_components,
@@ -62,7 +62,7 @@ class KernelAlignerTest(unittest.TestCase):
         beta = 1e5
         sigma2 = 0.1
         a, sl, rho = 4, 5, 0.5
-        P = 5 * RhoProjectionOperator(a, sl, rho=rho).matrix_sqrt()
+        P = 5 * ConnectednessProjectionOpererator(a, sl, rho=rho).matrix_sqrt()
         y_true = P @ np.random.normal(size=P.shape[1])
         cov_true, ns = calc_covariance_distance(y_true, a, sl)
         lambdas_true = calc_variance_components(y_true, a, sl)
@@ -185,23 +185,23 @@ class KernelAlignerTest(unittest.TestCase):
 
     def test_connectedness_kernel_alignment(self):
         aligner = ConnectednessKernelAligner(n_alleles=3, seq_length=2)
-        logit_rho, log_mu = np.array([0., 0]), np.array([0.])
-        cov = aligner.predict(logit_rho, log_mu)
+        logit_mu, log_mu0 = np.array([0., 0]), np.array([0.])
+        cov = aligner.predict(logit_mu, log_mu0)
         ns = np.ones_like(cov)
         assert(np.allclose(cov[1], cov[2]))
 
-        log_mu_hat, logit_rho_hat = aligner.fit(cov, ns)
-        assert np.allclose(log_mu_hat, log_mu)
-        assert np.allclose(logit_rho_hat, logit_rho)
+        log_mu0_hat, logit_mu_hat = aligner.fit(cov, ns)
+        assert np.allclose(log_mu0_hat, log_mu0)
+        assert np.allclose(logit_mu_hat, logit_mu)
 
         # Try now with a larger case
         aligner = ConnectednessKernelAligner(n_alleles=4, seq_length=4)
-        logit_rho, log_mu = np.array([0.5, -0.5, 0, -1]), np.array([0.0])
-        cov = aligner.predict(logit_rho, log_mu)
+        logit_mu, log_mu0 = np.array([0.5, -0.5, 0, -1]), np.array([0.0])
+        cov = aligner.predict(logit_mu, log_mu0)
         ns = np.ones_like(cov)
-        log_mu_hat, logit_rho_hat = aligner.fit(cov, ns)
-        assert np.allclose(log_mu_hat, log_mu)
-        assert np.allclose(logit_rho_hat, logit_rho)
+        log_mu0_hat, logit_mu_hat = aligner.fit(cov, ns)
+        assert np.allclose(log_mu0_hat, log_mu0)
+        assert np.allclose(logit_mu_hat, logit_mu)
 
 
 if __name__ == "__main__":
