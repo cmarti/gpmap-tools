@@ -8,6 +8,13 @@ from gpmap.inference import LocalEpistasisRegression
 
 
 class LERTests(unittest.TestCase):
+    def test_initializations(self):
+        configs = [{'seq_length': 2, 'n_alleles': 2},
+                   {'seq_length': 2, 'alphabet_type': 'rna'},
+                   {'genotypes': ['AA', 'AB', 'BA', 'BB']}]
+        for config in configs:
+            model = LocalEpistasisRegression(**config)
+        
     def test_predict(self):
         # Partial dataset that can recapitulate MEI
         X = np.array(["AA", "AB", "BA"])
