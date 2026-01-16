@@ -1215,10 +1215,10 @@ class ConnectednessKernel(ConstantDiagSeqOperator, KronOperator, Kernel):
         check_error(mu.shape[0] == self.seq_length, msg=msg)
 
         checked = mu > 0
-        msg = "mu larger than 0"
+        msg = f"mu smaller than 0: {mu}"
         if not ignore_bound:
             checked = checked & (mu < 1)
-            msg = "mu must be between 0 and 1"
+            msg = f"mu must be between 0 and 1: {mu}"
         check_error(np.all(checked), msg=msg)
 
     def set_mu(self, mu, ignore_bound=True):
