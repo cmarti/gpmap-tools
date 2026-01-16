@@ -293,7 +293,7 @@ class LocalEpistasisRegression(MinimizerRegressor):
             cg_rtol=cg_rtol,
         )
         self.P = P
-        self.kernel_basis = DeltaKernelBasisOperator(n_alleles, seq_length, P)
+        self.kernel_basis = DeltaKernelBasisOperator(self.n_alleles, self.seq_length, P)
         self.set_a_values(a_values)
     
     # def __init__(
