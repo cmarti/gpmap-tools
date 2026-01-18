@@ -290,6 +290,7 @@ class VUKernelAligner(object):
         self.eta = self.n_alleles - 1
         self.n_covs = 2 ** seq_length
         self.n_Us = 2 ** seq_length
+        self.n_params = self.n_Us
         self.n_seqs = n_alleles ** seq_length
         self.Padd = np.array([self.n_alleles - 1, -1.0]) / self.n_alleles
         self.Pcon = np.array([1, 1.0]) / self.n_alleles
@@ -338,10 +339,11 @@ class VUKernelAligner(object):
         """
 
         self.set_data(covs, ns)
+        x0 = self.get_x0()
 
         res = minimize(
             fun=self.frobenius_norm,
-            x0=self.get_x0(),
+            x0=x0,
             method="Powell",
             options={"ftol": 1e-16},
         )
@@ -356,7 +358,7 @@ class VUKernelAligner(object):
         return np.log(lambda_U)
 
     def get_x0(self):
-        return np.zeros(self.n_Us)
+        return np.zeros(self.n_params)
 
     def predict(self, lambda_U):
         cov = self.W_sU @ lambda_U
@@ -385,17 +387,28 @@ class DeltaUKernelAligner(VUKernelAligner):
     P : int, optional
         Interaction order of local epistatic coefficients to
         be considered e.g. P=2 refers to the classical epistatic
-        coefficients
+        coefficients.
+    
+    include_lower_P : bool
+        Whether to include regularization terms for DeltaU of size
+        lower than P as well. 
 
     """
 
-    def __init__(self, n_alleles, seq_length, P):
+    def __init__(self, n_alleles, seq_length, P, include_lower_P=False):
         super().__init__(n_alleles, seq_length)
         self.P = P
-        self.alphaP = self.n_alleles ** self.P
-        self.n_a_values = int(comb(seq_length, P))
-        self.Us = list(combinations(range(self.seq_length), self.P))
+        self.set_Us(P)
         self.calc_Us_matrix()
+        self.include_lower_P = include_lower_P
+        self.U_lower_than_P_idx = np.array(self.U_sites).sum(1) < P
+        self.n_U_lower_than_P = self.U_lower_than_P_idx.sum()
+        self.n_params = self.n_a_values + self.n_U_lower_than_P if include_lower_P else self.n_a_values
+    
+    def set_Us(self, P):
+        self.Us = list(combinations(range(self.seq_length), P))
+        self.alphaP = self.n_alleles ** P
+        self.n_a_values = len(self.Us)
 
     def calc_Us_matrix(self):
         Us_matrix = []
@@ -410,9 +423,6 @@ class DeltaUKernelAligner(VUKernelAligner):
     def params_to_x(self, a_values):
         return np.log(a_values)
 
-    def get_x0(self):
-        return np.zeros(self.n_a_values)
-
     def a_to_lambda_U(self, a_values):
         lambda_U_inv = self.alphaP * (self.Us_matrix @ a_values)
         lambda_U = np.zeros_like(lambda_U_inv)
@@ -420,8 +430,20 @@ class DeltaUKernelAligner(VUKernelAligner):
         lambda_U[idx] = 1.0 / lambda_U_inv[idx]
         return lambda_U
 
-    def predict(self, a_values):
+    def predict(self, params):
+        if params.shape[0] != self.n_params:
+            msg = f"Unexpected number of parameters: expected {self.n_params}, got {params.shape[0]}"
+            raise ValueError(msg)
+        
+        if self.include_lower_P:
+            a_values = params[self.n_U_lower_than_P:]
+            lambda_U_lower_than_P = params[:self.n_U_lower_than_P]
+        else:
+            a_values = params
+            lambda_U_lower_than_P = np.zeros(self.n_U_lower_than_P)
+        
         lambda_U = self.a_to_lambda_U(a_values)
+        lambda_U[self.U_lower_than_P_idx] = lambda_U_lower_than_P
         cov = self.W_sU @ lambda_U
         return cov
     
