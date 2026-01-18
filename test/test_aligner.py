@@ -181,6 +181,21 @@ class KernelAlignerTest(unittest.TestCase):
         ns = np.ones_like(cov)
         log_a_hat = np.log(aligner.fit(cov, ns))
         assert np.allclose(log_a_hat, log_a)
+    
+    def test_DeltaU_kernel_alignment_include_lower_order(self):
+        aligner = DeltaUKernelAligner(n_alleles=3, seq_length=2, P=2,
+                                      include_lower_P=True)
+        assert aligner.n_a_values == 1
+        assert aligner.n_U_lower_than_P == 3
+        assert aligner.n_params == 4
+        
+        x = np.array([-16, -16, -16, -5.0])
+        cov = aligner.calc_cov(x)
+        ns = np.ones_like(cov)
+        x_hat = np.log(aligner.fit(cov, ns))
+        cov2 = aligner.calc_cov(x_hat)
+        assert np.allclose(np.exp(x), np.exp(x_hat), atol=1e-4)
+        assert np.allclose(cov, cov2)
 
     def test_connectedness_kernel_alignment(self):
         aligner = ConnectednessKernelAligner(n_alleles=3, seq_length=2)
