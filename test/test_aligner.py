@@ -165,8 +165,8 @@ class KernelAlignerTest(unittest.TestCase):
         c2 = aligner.W_sU @ np.array([0, 0, 0, 1])
         assert np.allclose(c2, [4 / 9, -2 / 9, -2 / 9, 1 / 9])
 
-        # Test a_to_lambda_U
-        lambda_U = aligner.a_to_lambda_U([1])
+        # Test get_lambda_U
+        lambda_U = aligner.get_lambda_U([1])
         assert np.allclose(lambda_U, [0, 0, 0, 1 / 9])
 
         log_a = np.array([-5.]) 
