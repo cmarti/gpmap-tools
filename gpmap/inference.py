@@ -31,6 +31,7 @@ from gpmap.linop import (
     ProjectionOperator,
     ConnectednessKernel,
     VarianceComponentKernel,
+    VUKernel,
     calc_covariance_U_sites,
     calc_covariance_distance,
 )
@@ -234,7 +235,130 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
         self.set_a(a_star)
 
 
-class LocalEpistasisRegression(MinimizerRegressor):
+class LocalEpistasisRegression(GaussianProcessRegressor):
+    """
+    Local epistasis regression model for sequence-function relationships.
+
+    A class for performing Local Epistasis Regression (LER) to infer
+    complete genotype-phenotype maps from incomplete and noisy data. This
+    model applies a prior that penalizes local epistatic coefficients of
+    order P differently depending on the combinations of P sites
+    and infers the posterior distribution based on experimental
+    data for a subset of sequences.
+
+    Parameters
+    ----------
+    n_alleles : int, optional
+        The number of alleles per site. If not provided, it will be inferred
+        from the provided data.
+
+    seq_length : int, optional
+        The length of the genotype sequences. If not provided, it will be
+        inferred from the provided data.
+
+    genotypes : array-like, optional
+        A list or array of genotypes to be used in the interpolation. If not
+        provided, the model will infer the genotype space.
+
+    alphabet_type : str, optional
+        The type of alphabet used for genotypes. Default is "custom".
+
+    P : int, optional
+        The order of epistasis to consider. Default is 2. This determines the
+        level of interaction between genetic sites that is penalized.
+
+    a_values : array-like, optional
+        The regularization parameters. If not provided, it will be inferred
+        during the fitting process to best match the observed data.
+    
+    lambda_U_lower_than_P : array-like, optional
+        The regularization parameters for lower order interactions than P.
+        If not provided, it will be assumed that these interactions are not
+        penalized.
+        
+    cg_rtol : float, optional
+        The relative tolerance for the conjugate gradient solver. Default is
+        1e-16. This controls the precision of the solver used in computations.
+    """
+    def __init__(
+        self,
+        n_alleles=None,
+        seq_length=None,
+        genotypes=None,
+        alphabet_type="custom",
+        P=2,
+        a_values=None,
+        lambda_U_lower_than_P=None,
+        cg_rtol=1e-16,
+        progress=True,
+    ):
+        self.progress = progress
+
+        self.define_space(
+            n_alleles=n_alleles,
+            seq_length=seq_length,
+            genotypes=genotypes,
+            alphabet_type=alphabet_type,
+        )
+        self.P = P
+        self.aligner = DeltaUKernelAligner(self.n_alleles, self.seq_length, P, include_lower_P=True)
+        self.Us = self.aligner.Us
+        self.set_lambda_Us(a_values, lambda_U_lower_than_P)
+        self.cg_rtol = cg_rtol
+
+    def set_lambda_Us(self, a_values=None, lambda_U_lower_than_P=None):
+        if a_values is not None and lambda_U_lower_than_P is not None:
+            self.a_values = a_values
+            self.lambda_U_lower_than_P = lambda_U_lower_than_P
+            self.lambdas = self.aligner.get_lambda_U(a_values, lambda_U_lower_than_P)
+            self.K = VUKernel(self.n_alleles, self.seq_length, self.lambdas)
+
+    def calc_posterior(self, X_pred=None, B=None):
+        mean_post = self.calc_posterior_mean()
+        if self.a_values is None:
+            Sigma_post = None
+        else:
+            Sigma_post = self.calc_posterior_covariance()
+        return self.transform_posterior(
+            mean_post, Sigma_post, X_pred=X_pred, B=B
+        )
+        
+    def fit(self, X, y, y_var=None):
+        """
+        Fits the Local Epistasis Regression (LER) model hyperparameters
+        to the provided data.
+
+        This method infers the optimal regularization parameters `a` via
+        kernel alignment of the residuals of a P-1 order interaction model
+        fit via maximum likelihood. Thus, we infer the `a` values and `lambda_U`
+        that best match the empirical covariance.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Array containing the genotypes for which observations are provided
+            in `y`.
+
+        y : array-like of shape (n_obs,)
+            Array containing the observed phenotypes corresponding to the
+            genotypes in `X`.
+
+        y_var : array-like of shape (n_obs,), optional
+            Array containing the empirical or experimental variance for the
+            measurements in `y`. If not provided, it is assumed to be uniform
+            or unknown.
+        """
+        self.set_data(X, y, y_var=y_var)
+        cov, ns = calc_covariance_U_sites(
+            y, self.n_alleles, self.seq_length, idx=self.get_obs_idx(X)
+        )
+        x = self.aligner.fit(cov, ns)
+        a_values = x[self.aligner.n_U_lower_than_P :]
+        lambda_U_lower_than_P = x[: self.aligner.n_U_lower_than_P]
+        self.set_lambda_Us(a_values, lambda_U_lower_than_P)
+
+
+class LocalEpistasisMinimizer(MinimizerRegressor):
     """
     Local epistasis regression model for sequence-function relationships.
 
@@ -296,40 +420,6 @@ class LocalEpistasisRegression(MinimizerRegressor):
         self.kernel_basis = DeltaKernelBasisOperator(self.n_alleles, self.seq_length, P)
         self.set_a_values(a_values)
     
-    # def __init__(
-    #     self,
-    #     n_alleles=None,
-    #     seq_length=None,
-    #     genotypes=None,
-    #     alphabet_type="custom",
-    #     P=2,
-    #     a_values=None,
-    #     cg_rtol=1e-16,
-    #     progress=True,
-    # ):
-    #     self.progress = progress
-
-    #     self.define_space(
-    #         n_alleles=n_alleles,
-    #         seq_length=seq_length,
-    #         genotypes=genotypes,
-    #         alphabet_type=alphabet_type,
-    #     )
-    #     self.P = P
-    #     self.kernel_basis = DeltaKernelBasisOperator(n_alleles, seq_length, P)
-    #     self.set_a_values(a_values)
-    #     self.aligner = DeltaUKernelAligner(self.n_alleles, self.seq_length, P)
-    #     self.cg_rtol = cg_rtol
-
-    # def set_a_values(self, a_values=None):
-    #     if a_values is not None:
-    #         self.a_values = a_values
-    #         self.C = DeltaUWeighedSumOperator(
-    #             self.n_alleles, self.seq_length, self.P, a_values
-    #         )
-    #         self.lambdas = self.aligner.a_to_lambda_U(a_values)
-    #         self.K = VUKernel(self.n_alleles, self.seq_length, self.lambdas)
-
     def set_a_values(self, a_values=None):
         if a_values is not None:
             self.a_values = a_values

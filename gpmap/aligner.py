@@ -423,11 +423,13 @@ class DeltaUKernelAligner(VUKernelAligner):
     def params_to_x(self, a_values):
         return np.log(a_values)
 
-    def a_to_lambda_U(self, a_values):
+    def get_lambda_U(self, a_values, lambda_U_lower_than_P=None):
         lambda_U_inv = self.alphaP * (self.Us_matrix @ a_values)
         lambda_U = np.zeros_like(lambda_U_inv)
         idx = lambda_U_inv > 0.0
         lambda_U[idx] = 1.0 / lambda_U_inv[idx]
+        if lambda_U_lower_than_P is not None:
+            lambda_U[self.U_lower_than_P_idx] = lambda_U_lower_than_P
         return lambda_U
 
     def predict(self, params):
@@ -435,15 +437,13 @@ class DeltaUKernelAligner(VUKernelAligner):
             msg = f"Unexpected number of parameters: expected {self.n_params}, got {params.shape[0]}"
             raise ValueError(msg)
         
+        a_values = params
+        lambda_U_lower_than_P = None
         if self.include_lower_P:
             a_values = params[self.n_U_lower_than_P:]
             lambda_U_lower_than_P = params[:self.n_U_lower_than_P]
-        else:
-            a_values = params
-            lambda_U_lower_than_P = np.zeros(self.n_U_lower_than_P)
         
-        lambda_U = self.a_to_lambda_U(a_values)
-        lambda_U[self.U_lower_than_P_idx] = lambda_U_lower_than_P
+        lambda_U = self.get_lambda_U(a_values, lambda_U_lower_than_P)
         cov = self.W_sU @ lambda_U
         return cov
     

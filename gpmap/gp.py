@@ -494,6 +494,8 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
 
     def calc_posterior_mean(self):
         mean_post = self.K @ self.X_t @ self.K_xx_inv @ self.likelihood.y
+        if hasattr(self, 'deterministic_mean'):
+            mean_post += self.deterministic_mean
         return mean_post
 
     def calc_posterior_covariance(self):
