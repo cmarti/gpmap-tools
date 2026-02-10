@@ -197,6 +197,24 @@ class LERTests(unittest.TestCase):
         assert np.allclose(model.a_values[-1], 0.5, rtol=1)
         assert np.allclose(model.lambda_U_lower_than_P, [24.5, 4.5, 4.5, 2], atol=1)
     
+    def test_get_parameters(self):
+        X = np.array([''.join(x) for x in product(list('AB'), repeat=3)])
+        model = LocalEpistasisRegression(seq_length=3, n_alleles=2, genotypes=X)
+        f = np.array([0, 1, 1, 3, 1, 2, 2, 4])
+        model.fit(X, f)
+        
+        cor_df = model.get_empirical_pred_correlations_df()
+        assert cor_df.shape == (8, 5)
+        assert np.all(cor_df.columns == ['d', 'n', 'emp_cor', 'pred_cor', 'd_jittered'])
+        
+        a_df = model.get_a_values()
+        assert a_df.shape == (3, 4)
+        assert np.all(a_df.columns == ['site1', 'site2', 'a_U', 'interaction_strength'])
+        
+        lambda_U_df = model.get_lambda_U_values()
+        assert lambda_U_df.shape == (4, 3)
+        assert np.all(lambda_U_df.columns == ['U', 'k', 'lambda_U'])
+    
     def test_fit_noise_incomplete(self):
         np.random.seed(1234)
         X = np.array(["AAA", "AAB", "ABA", "BAA", "BAB", "BBA"])

@@ -355,6 +355,118 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         a_values = x[self.aligner.n_U_lower_than_P :]
         lambda_U_lower_than_P = x[: self.aligner.n_U_lower_than_P]
         self.set_lambda_Us(a_values, lambda_U_lower_than_P)
+        
+    def get_empirical_pred_correlations_df(self):
+        """
+        Compute empirical and predicted correlations for pairs of sequences
+        differing at all possible combinations of sites U.
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame indexed by concatenated site labels with columns
+            - d: number of sites in the set
+            - n: number of observations for that set
+            - emp_cor: empirical centered autocovariance normalized by the zero-lag value
+            - pred_cor: predicted autocovariance (from the current aligner) normalized likewise
+            - d_jittered: jittered d useful for plotting
+
+        """
+        
+        Us = np.array(self.aligner.U_sites).astype(int).astype(str)
+        sites = np.array(["".join(x) for x in Us])
+        d = [x.count("1") for x in sites]
+        
+        obs_covs, ns = self.gpdata.calc_covariance_U_sites(centered=True)
+        obs_corrs = obs_covs / obs_covs[0]
+        
+        params = np.append(self.lambda_U_lower_than_P, self.a_values)
+        params[0] = 0 # Make the constant term 0 to match centered autocovariance
+        pred_covs = self.aligner.predict(params)
+        pred_corrs = pred_covs / pred_covs[0]
+        
+        df = pd.DataFrame(
+            {
+                "d": d,
+                "n": ns,
+                "emp_cor": obs_corrs,
+                "pred_cor": pred_corrs,
+                "d_jittered": np.random.normal(d, scale=0.05),
+            },
+            index=sites
+        )
+        return(df)
+    
+    def get_a_values(self, position_labels=None):
+        """
+        Return a DataFrame of interaction-specific regularization parameters.
+
+        Parameters
+        ----------
+        position_labels : array-like of shape (seq_length,), optional
+            Labels for sequence positions (ints or strings). If None, defaults
+            to np.arange(self.seq_length).
+
+        Returns
+        -------
+        pandas.DataFrame
+            Rows correspond to interactions U. Columns include:
+            - 'site{i}' (for i=0..|U|-1): labels of positions in U
+            - 'a_U': regularization parameter for interaction U
+            - 'interaction_strength': 1.0 / a_U
+
+        """
+        if position_labels is None:
+            position_labels = np.arange(self.seq_length)
+        elif position_labels.shape[0] !=  self.seq_length:
+            msg = f'Site of position_labeles ({position_labels.shape[0]}) '
+            msg += f'should match sequence length ({self.seq_length})'
+            raise ValueError(msg)
+        
+        records = []
+        for U, a_U in zip(self.Us, self.a_values):
+            U = np.array(U)
+            record = {f'site{i+1}': p for i, p in enumerate(position_labels[U])}
+            record['a_U'] = a_U
+            record['interaction_strength'] = 1. / a_U
+            records.append(record)
+        df = pd.DataFrame(records)
+        return(df)
+    
+    def get_lambda_U_values(self, position_labels=None):
+        """
+        Return a DataFrame of interaction-specific lambda values for interactions U
+        with order lower than P.
+
+        Parameters
+        ----------
+        position_labels : array-like of shape (seq_length,), optional
+            Labels for sequence positions (ints or strings). If None, defaults
+            to np.arange(self.seq_length).
+
+        Returns
+        -------
+        pandas.DataFrame
+            Rows correspond to interactions U (only those with order < P). Columns:
+            - 'U': comma-separated position labels in U
+            - 'k': number of sites in U
+            - 'lambda_U': regularization parameter for interaction U
+        """
+        if position_labels is None:
+            position_labels = np.arange(self.seq_length)
+        elif position_labels.shape[0] !=  self.seq_length:
+            msg = f'Site of position_labeles ({position_labels.shape[0]}) '
+            msg += f'should match sequence length ({self.seq_length})'
+            raise ValueError(msg)
+        
+        records = []
+        Us = np.array(self.aligner.U_sites)[self.aligner.U_lower_than_P_idx]
+        for U, lambda_U in zip(Us, self.lambda_U_lower_than_P):
+            U_label = ','.join([str(p) for p in position_labels[U]])
+            record = {'U': U_label, 'k': U.sum(), 'lambda_U': lambda_U}
+            records.append(record)
+        df = pd.DataFrame(records)
+        return(df)
 
 
 class LocalEpistasisMinimizer(MinimizerRegressor):
