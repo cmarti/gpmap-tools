@@ -16,7 +16,7 @@ from gpmap.linop import (
     SubMatrixOperator,
     LaplacianOperator,
     ProjectionOperator,
-    VjProjectionOperator,
+    VUProjectionOperator,
     VUProjectionWeightedSumOperator,
     DiagonalOperator,
     IdentityOperator,
@@ -28,7 +28,7 @@ from gpmap.linop import (
     DeltaUWeighedSumOperator,
     ConnectednessProjectionOpererator,
     ExtendedDeltaPOperator,
-    VjBasisOperator,
+    VUBasisOperator,
     KernelOperator,
     EigenBasisOperator,
     DeltaKernelBasisOperator,
@@ -36,7 +36,7 @@ from gpmap.linop import (
     KronOperator,
     PolynomialOperator,
     CovarianceDistanceOperator,
-    CovarianceVjOperator,
+    CovarianceSitesOperator,
     SelIdxOperator,
     ExpandIdxOperator,
     StackedOperator,
@@ -302,8 +302,8 @@ class LinOpsTests(unittest.TestCase):
         # Ensure equivalence with the PU operators
         DU = DeltaUOperator(a, sl, U=[0, 1])
         u1 = DU @ v
-        PU1 = VjProjectionOperator(a, sl, j=[0, 1])
-        PU2 = VjProjectionOperator(a, sl, j=[0, 1, 2])
+        PU1 = VUProjectionOperator(a, sl, j=[0, 1])
+        PU2 = VUProjectionOperator(a, sl, j=[0, 1, 2])
         u2 = a ** 2 * (PU1 + PU2) @ v
         assert np.allclose(u1, u2)
 
@@ -351,7 +351,7 @@ class LinOpsTests(unittest.TestCase):
         u1 = np.zeros_like(v)
         for U, lambda_U in zip(Us, lambdas):
             j = list(sites[np.array(U)])
-            u1 += lambda_U * VjProjectionOperator(a, sl, j=j) @ v
+            u1 += lambda_U * VUProjectionOperator(a, sl, j=j) @ v
         time1 = time() - t0
         
         t0 = time()
@@ -443,19 +443,19 @@ class LinOpsTests(unittest.TestCase):
         y01 = np.array([-1, -1, 1, 1])
         y10 = np.array([-0.5, 0.5, -0.5, 0.5])
 
-        Pj = VjProjectionOperator(a, sl, j=[0])
+        Pj = VUProjectionOperator(a, sl, j=[0])
         f01 = Pj.dot(y)
         assert np.allclose(f01, y01)
 
-        Pj = VjProjectionOperator(a, sl, j=[1])
+        Pj = VUProjectionOperator(a, sl, j=[1])
         f10 = Pj.dot(y)
         assert np.allclose(f10, y10)
 
-        Pj = VjProjectionOperator(a, sl, j=[])
+        Pj = VUProjectionOperator(a, sl, j=[])
         f00 = Pj.dot(y)
         assert np.allclose(f00, 0)
 
-        Pj = VjProjectionOperator(a, sl, j=[0, 1])
+        Pj = VUProjectionOperator(a, sl, j=[0, 1])
         f11 = Pj.dot(y)
         assert np.allclose(f11, 0)
 
@@ -469,7 +469,7 @@ class LinOpsTests(unittest.TestCase):
 
             u2 = np.zeros(v.shape[0])
             for j in combinations(np.arange(W.seq_length), k):
-                Pj = VjProjectionOperator(a, sl, j=list(j))
+                Pj = VUProjectionOperator(a, sl, j=list(j))
                 u2 += Pj.dot(v)
 
             assert np.allclose(u1, u2)
@@ -479,13 +479,13 @@ class LinOpsTests(unittest.TestCase):
         y = np.array([-1.5, -0.5, 0.5, 1.5])
 
         for j in [[], [0], [1], [0, 1]]:
-            Pj = VjProjectionOperator(a, sl, j=j)
+            Pj = VUProjectionOperator(a, sl, j=j)
             fsqn = Pj.dot_square_norm(y)
             exp = np.sum(Pj.dot(y) ** 2)
             assert np.allclose(fsqn, exp)
 
         # Test with bigger operator
-        Pj = VjProjectionOperator(4, 8, j=[0, 3, 5])
+        Pj = VUProjectionOperator(4, 8, j=[0, 3, 5])
         y = np.random.normal(size=Pj.shape[1])
         exp = np.sum(Pj.dot(y) ** 2)
         fsqn = Pj.dot_square_norm(y)
@@ -493,7 +493,7 @@ class LinOpsTests(unittest.TestCase):
 
     def test_vj_basis_operator(self):
         # Test in small case
-        B = VjBasisOperator(2, 2, j=(0, 1))
+        B = VUBasisOperator(2, 2, j=(0, 1))
         b = B.todense()
         assert b.shape == B.shape
         assert b.shape == (4, 1)
@@ -501,16 +501,16 @@ class LinOpsTests(unittest.TestCase):
         dense_b = np.array([0.5, -0.5, -0.5, 0.5])
         assert np.allclose(b.flatten(), dense_b)
 
-        B = VjBasisOperator(2, 2, j=(0,))
+        B = VUBasisOperator(2, 2, j=(0,))
         dense_b = np.array([-0.5, -0.5, 0.5, 0.5])
         assert np.allclose(B.todense().flatten(), dense_b)
 
-        B = VjBasisOperator(2, 2, j=(1,))
+        B = VUBasisOperator(2, 2, j=(1,))
         dense_b = np.array([-0.5, 0.5, -0.5, 0.5])
         assert np.allclose(B.todense().flatten(), dense_b)
 
         # Test dimensions in larger operators
-        B = VjBasisOperator(4, 5, j=(0, 2))
+        B = VUBasisOperator(4, 5, j=(0, 2))
         assert B.shape == (4**5, 9)
 
         v = np.random.normal(size=(9,))
@@ -682,7 +682,8 @@ class LinOpsTests(unittest.TestCase):
             assert np.allclose(b, A @ x)
 
     def test_inverse_operator_big(self):
-        A = ConnectednessProjectionOpererator(4, 8, rho=0.5)
+        mu = np.full(8, 0.5)
+        A = ConnectednessProjectionOpererator(4, 8, mu=mu)
         b = np.random.normal(size=A.shape[1])
         
         for method in ['exact', 'cg']:
@@ -691,7 +692,8 @@ class LinOpsTests(unittest.TestCase):
             assert np.allclose(b, A @ x, atol=1e-4)
 
     def test_inverse_operator_preconditioned(self):
-        K = ConnectednessProjectionOpererator(4, 8, rho=0.5)
+        mu = np.full(8, 0.5)
+        K = ConnectednessProjectionOpererator(4, 8, mu=mu)
         D = DiagonalOperator(0.1 * np.ones(K.shape[1]))
         A = K + D
         b = np.random.normal(size=A.shape[1])
@@ -758,7 +760,7 @@ class LinOpsTests(unittest.TestCase):
         m2 = np.array([[0, 0, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0], [1, 0, 0, 0]])
         assert np.allclose(np.sum(m2 * S), quad(C2, v))
 
-    def test_covariance_vj_operator(self):
+    def test_covariance_U_sites_operator(self):
         a, sl = 2, 2
         sites = np.arange(sl)
         v = np.random.normal(size=(a**sl, 1))
@@ -766,26 +768,26 @@ class LinOpsTests(unittest.TestCase):
 
         # Check 00
         s00 = np.sum(v**2)
-        C00 = CovarianceVjOperator(a, sl, j=[])
+        C00 = CovarianceSitesOperator(a, sl, sites=[])
         assert np.allclose(np.eye(a**sl), C00.todense())
         assert np.allclose(quad(C00, v), s00)
 
         # Check 01
-        C01 = CovarianceVjOperator(a, sl, j=[0])
+        C01 = CovarianceSitesOperator(a, sl, sites=[0])
         m01 = np.array([[0, 0, 1, 0], [0, 0, 0, 1],
                         [1, 0, 0, 0], [0, 1, 0, 0]])
         assert np.allclose(m01, C01.todense())
         assert np.allclose(np.sum(m01 * S), quad(C01, v))
 
         # Check 10
-        C10 = CovarianceVjOperator(a, sl, j=[1])
+        C10 = CovarianceSitesOperator(a, sl, sites=[1])
         m10 = np.array([[0, 1, 0, 0], [1, 0, 0, 0],
                         [0, 0, 0, 1], [0, 0, 1, 0]])
         assert np.allclose(m10, C10.todense())
         assert np.allclose(np.sum(m10 * S), quad(C10, v))
 
         # Check distance=2
-        C11 = CovarianceVjOperator(a, sl, j=(0, 1))
+        C11 = CovarianceSitesOperator(a, sl, sites=(0, 1))
         m11 = np.array([[0, 0, 0, 1], [0, 0, 1, 0],
                         [0, 1, 0, 0], [1, 0, 0, 0]])
         assert np.allclose(m11, C11.todense())
@@ -795,8 +797,8 @@ class LinOpsTests(unittest.TestCase):
         ss1 = S.sum()
         ss2 = 0
         for k in range(sl + 1):
-            for j in combinations(sites, k):
-                C = CovarianceVjOperator(a, sl, j=j)
+            for U in combinations(sites, k):
+                C = CovarianceSitesOperator(a, sl, sites=U)
                 ss2 += quad(C, v)
         assert np.allclose(ss1, ss2)
 

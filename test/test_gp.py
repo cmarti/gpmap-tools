@@ -13,17 +13,18 @@ from gpmap.linop import ConnectednessKernel, VarianceComponentKernel
 class GPTests(unittest.TestCase):
     def test_prior_sample(self):
         seq_length, a = 5, 4
+        sigma2 = 1.
         
         # Sample from fixed rho kernel
-        kernel = ConnectednessKernel(a, seq_length, rho=0.5)
+        mu = np.full(seq_length, 0.5)
+        kernel = ConnectednessKernel(a, seq_length, mu=mu, sigma2=sigma2)
         model = GaussianProcessRegressor(kernel)
         y = model.sample_prior()
         assert y.shape[0] == a**seq_length
         
         # Sample from variable rho kernel
-        kernel = ConnectednessKernel(
-            a, seq_length, rho=np.array([0.2, 0.1, 0.8, 0.4, 0.5])
-        )
+        mu = np.array([0.2, 0.1, 0.8, 0.4, 0.5])
+        kernel = ConnectednessKernel(a, seq_length, mu=mu, sigma2=sigma2)
         model = GaussianProcessRegressor(kernel)
         y = model.sample_prior()
         assert y.shape[0] == a**seq_length

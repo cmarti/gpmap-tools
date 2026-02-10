@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from itertools import combinations
+from itertools import combinations, product
 
 import numpy as np
 from numpy.linalg.linalg import matrix_power
@@ -18,13 +18,7 @@ try:
 except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
-from gpmap.matrix import (
-    kron,
-    quad,
-    reciprocal,
-    is_lower_triangular,
-    tensordot,
-)
+from gpmap.matrix import kron, is_lower_triangular, tensordot
 from gpmap.utils import check_error
 
 
@@ -477,6 +471,11 @@ class KronOperator(ExtendedLinearOperator):
         return KronSquareTriangularOperator(
             [np.linalg.cholesky(m) for m in self.matrices]
         )
+    
+    def inv(self):
+        if self.shape[0] != self.shape[1]:
+            raise ValueError("Cannot invert a non-square matrix")
+        return(KronOperator([np.linalg.inv(m) for m in self.matrices]))
 
 
 class KronSquareTriangularOperator(KronOperator):
@@ -913,21 +912,21 @@ class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
         return self.L_powers_d_inv[:, distance]
 
 
-class CovarianceVjOperator(SeqOperator, KronOperator):
+class CovarianceSitesOperator(SeqOperator, KronOperator):
     symmetric = True
 
-    def __init__(self, n_alleles, seq_length, j):
-        self.j = j
+    def __init__(self, n_alleles, seq_length, sites):
+        self.sites = sites
         SeqOperator.__init__(self, n_alleles, seq_length)
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
         C0 = IdentityOperator(self.alpha)
         C1 = np.ones((self.alpha, self.alpha)) - np.eye(self.alpha)
-        return [C1 if i in self.j else C0 for i in range(self.seq_length)]
+        return [C1 if i in self.sites else C0 for i in range(self.seq_length)]
 
 
-class VjOperator(ConstantDiagSeqOperator, KronOperator):
+class VUOperator(ConstantDiagSeqOperator, KronOperator):
     def __init__(self, n_alleles, seq_length, j):
         self.j = j
         self.k = len(j)
@@ -940,7 +939,7 @@ class VjOperator(ConstantDiagSeqOperator, KronOperator):
         KronOperator.__init__(self, self.get_matrices(j))
 
 
-class VjBasisOperator(VjOperator):
+class VUBasisOperator(VUOperator):
     def get_matrices(self, j):
         site_L = self.alpha * np.eye(self.alpha) - np.ones(
             (self.alpha, self.alpha)
@@ -949,7 +948,7 @@ class VjBasisOperator(VjOperator):
         return [b[int(i in j)] for i in range(self.seq_length)]
 
 
-class VjProjectionOperator(VjOperator):
+class VUProjectionOperator(VUOperator):
     symmetric = True
 
     def get_matrices(self, j):
@@ -1031,7 +1030,7 @@ class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
 class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
     symmetric = True
 
-    def __init__(self, n_alleles, seq_length, mu, mu0=1.):
+    def __init__(self, n_alleles, seq_length, mu):
         ConstantDiagSeqOperator.__init__(
             self, n_alleles=n_alleles, seq_length=seq_length
         )
@@ -1066,6 +1065,10 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
         )
         self.check_mu(self.mu, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
+    
+    def inv(self):
+        mu = 1. / self.mu
+        return(ConnectednessProjectionOpererator(self.alpha, self.seq_length, mu=mu))
 
 
 class EigenBasisOperator(StackedOperator):
@@ -1075,7 +1078,7 @@ class EigenBasisOperator(StackedOperator):
         self.n_alleles = n_alleles
         self.seq_length = seq_length
         As = [
-            VjBasisOperator(n_alleles, seq_length, j)
+            VUBasisOperator(n_alleles, seq_length, j)
             for j in combinations(positions, k)
         ]
         super().__init__(linops=As, axis=1)
@@ -1282,189 +1285,3 @@ def get_diag(A, progress=False):
         v[i] = 1.0
         d.append(np.dot(v, A @ v))
     return np.array(d)
-
-
-def _get_seq_values_and_obs_seqs(y, n_alleles, seq_length, idx=None):
-    n = n_alleles**seq_length
-    if idx is not None:
-        seq_values, observed_seqs = np.zeros(n), np.zeros(n)
-        seq_values[idx], observed_seqs[idx] = y, 1.0
-    else:
-        seq_values, observed_seqs = y, np.ones(n, dtype=float)
-    return (seq_values, observed_seqs)
-
-
-def calc_covariance_distance(y, n_alleles, seq_length, idx=None):
-    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(
-        y, n_alleles, seq_length, idx=idx
-    )
-
-    cov, ns = np.zeros(seq_length + 1), np.zeros(seq_length + 1)
-    for d in range(seq_length + 1):
-        P = CovarianceDistanceOperator(n_alleles, seq_length, distance=d)
-        Pquad = quad(P, seq_values)
-        ns[d] = quad(P, obs_seqs)
-        cov[d] = reciprocal(Pquad, ns[d])
-    return (cov, ns)
-
-
-def calc_avg_local_epistatic_coeff(X, y, alphabet, seq_length, P):
-    sites = np.arange(seq_length)
-    v = dict(zip(X, y))
-
-    background_seqs = list(product(alphabet, repeat=seq_length - P))
-    allele_pairs = list(combinations(alphabet, 2))
-    allele_pairs_combs = list(product(allele_pairs, repeat=P))
-    z = kron([[-1, 1]] * P)
-
-    s, n = 0, 0
-    total = comb(seq_length, P)
-    for target_sites in tqdm(combinations(sites, P), total=total):
-        background_sites = [s for s in sites if s not in target_sites]
-        for background_seq in background_seqs:
-            bc = dict(zip(background_sites, background_seq))
-            for pairs in allele_pairs_combs:
-                seqs = []
-                allele_combs = list(get_product_states(pairs))
-
-                for allele_comb in allele_combs:
-                    seq = bc.copy()
-                    seq.update(dict(zip(target_sites, allele_comb)))
-                    seqs.append("".join([seq[i] for i in sites]))
-                try:
-                    u = np.array([v[s] for s in seqs])
-                except KeyError:
-                    continue
-                s += np.dot(u, z) ** 2
-                n += 1
-    return (s, n)
-
-
-def calc_covariance_vjs(y, n_alleles, seq_length, idx=None):
-    lp1 = seq_length + 1
-    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(
-        y, n_alleles, seq_length, idx=idx
-    )
-
-    cov, ns = [], []
-    sites = np.arange(seq_length)
-    sites_matrix = []
-    for k in range(lp1):
-        for j in combinations(sites, k):
-            P = CovarianceVjOperator(n_alleles, seq_length, j=j)
-            Pquad = quad(P, seq_values)
-            nj = quad(P, obs_seqs)
-            z = np.array([i not in j for i in range(seq_length)], dtype=float)
-
-            cov.append(reciprocal(Pquad, nj))
-            ns.append(nj)
-            sites_matrix.append(z)
-
-    sites_matrix = np.array(sites_matrix)
-    cov, ns = np.array(cov), np.array(ns)
-    return (cov, ns, sites_matrix)
-
-
-def calc_covariance_U_sites(y, n_alleles, seq_length, idx=None):
-    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(
-        y, n_alleles, seq_length, idx=idx
-    )
-
-    cov, ns = [], []
-    sites = np.arange(seq_length)
-    values = [False, True]
-
-    for U in product(values, repeat=seq_length):
-        j = tuple(p for p, s in zip(sites, U) if s)
-        P = CovarianceVjOperator(n_alleles, seq_length, j=j)
-        Pquad = quad(P, seq_values)
-        nj = quad(P, obs_seqs)
-
-        cov.append(reciprocal(Pquad, nj))
-        ns.append(nj)
-
-    cov, ns = np.array(cov), np.array(ns)
-    return (cov, ns)
-
-
-def calc_variance_components(y, n_alleles, seq_length):
-    lambdas = []
-    for k in np.arange(seq_length + 1):
-        W = ProjectionOperator(n_alleles=n_alleles, seq_length=seq_length, k=k)
-        lambdas.append(quad(W, y) / W.m_k[k])
-    return np.array(lambdas)
-
-
-def calc_space_variance_components(space):
-    """
-    Calculates the variance components associated with the function
-    along the SequenceSpace. It returns the squared magnitude of the
-    projection into each of the l+1 eigenspaces of the graph Laplacian,
-    representing the variance associated with epistatic interactions of order k.
-
-    This method is based on the work by Zhou et al. (2021):
-    https://www.pnas.org/doi/suppl/10.1073/pnas.2204233119
-
-    Parameters
-    ----------
-    space : SequenceSpace
-        A SequenceSpace object for which to calculate the variance components.
-
-    Returns
-    -------
-    vc : array-like of shape (seq_length + 1,)
-        A vector containing the squared magnitude of the projections into the
-        k-th eigenspaces in increasing order of k.
-
-    """
-    n_alleles = np.unique(space.n_alleles)
-    msg = "Variance components can only be calculated for spaces"
-    msg += " with constant number of alleles across sites"
-    check_error(n_alleles.shape[0] == 1, msg)
-    n_alleles = n_alleles[0]
-    seq_length = space.seq_length
-    y = space.y
-    vc = calc_variance_components(y, n_alleles, seq_length)
-    return vc
-
-
-def calc_vjs_variance_components(y, a, sl, k):
-    positions = np.arange(sl)
-    dimension = (a - 1) ** float(k)
-    variances = {}
-    for j in combinations(positions, k):
-        Pj = VjProjectionOperator(a, sl, j=j)
-        variances[j] = np.sum(Pj.dot(y) ** 2) / dimension
-    return variances
-
-
-def calc_space_vjs_variance_components(space, k=None):
-    """
-    Calculates the squared magnitude of the projection into the `Vj` subspaces
-    of order `k`, defined by each individual combination of `k` sites as
-    specified by `j`.
-
-    Parameters
-    ----------
-    space : SequenceSpace
-        SequenceSpace object for which to calculate the Vj's
-        variance components.
-
-    k : int or None
-        If provided, restricts the variance components calculation to subspaces
-        of order k.
-
-    Returns
-    -------
-    vc: dict
-        Dictionary with combinations of sites as keys and the associated
-        squared magnitudes of the projection into the individual subspaces.
-    """
-
-    n_alleles = np.unique(space.n_alleles)
-    msg = "Variance components can only be calculated for spaces"
-    msg += " with constant number of alleles across sites"
-    check_error(n_alleles.shape[0] == 1, msg)
-    n_alleles = n_alleles[0]
-    vc = calc_vjs_variance_components(space.y, n_alleles, space.seq_length, k)
-    return vc

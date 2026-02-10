@@ -3,17 +3,27 @@ import itertools
 import pandas as pd
 import numpy as np
 
+from typing import Optional, List
 from itertools import chain
 from collections import defaultdict
+from itertools import product
 
 from Bio.Seq import Seq
 from Bio.Data.CodonTable import CodonTable
 from scipy.sparse import csr_matrix, hstack, vstack
 
-from gpmap.settings import NUCLEOTIDES, COMPLEMENT, ALPHABETS, ALPHABET
+from gpmap.settings import (
+    NUCLEOTIDES,
+    COMPLEMENT,
+    ALPHABETS,
+    ALPHABET,
+    DNA_ALPHABET,
+    RNA_ALPHABET,
+    PROTEIN_ALPHABET,
+)
 from gpmap.utils import check_error
 from gpmap.matrix import get_sparse_diag_matrix
-from gpmap.settings import DNA_ALPHABET, RNA_ALPHABET, PROTEIN_ALPHABET
+from gpmap.linop import SelIdxOperator
 
 
 def hamming_distance(s1, s2):
@@ -187,6 +197,61 @@ def guess_space_configuration(
     return config
 
 
+class SequenceSpaceRelatedObject(object):
+    def __init__(
+        self,
+        seq_length: Optional[int] = None,
+        alphabet: Optional[List[str]] = None,
+        alphabet_type: str = "custom",
+        genotypes: Optional[np.ndarray] = None,
+    ):
+        """ 
+        """
+        if seq_length is not None and genotypes is not None:
+            msg = 'Only one of seq_length or genotypes must be provided'
+            raise ValueError(msg)
+        elif genotypes is None and seq_length is None:
+            msg = 'seq_length must be provided if genotypes is None'
+            raise ValueError(msg)
+        
+        if genotypes is not None:
+            configuration = guess_space_configuration(
+                genotypes,
+                ensure_full_space=False,
+                force_regular=True,
+                force_regular_alleles=False,
+            )
+            seq_length = configuration["length"]
+            alphabet = np.unique(np.hstack(configuration["alphabet"])).tolist()
+            n_alleles = len(alphabet)
+        else:
+            msg = "Either seq_length or genotypes must be provided"
+            check_error(seq_length is not None, msg=msg)
+            if alphabet is None:
+                alphabet = get_alphabet(alphabet_type=alphabet_type)
+            n_alleles = len(alphabet)
+
+
+        self.alphabet_list = [alphabet] * seq_length
+        self.seq_length = seq_length
+        self.positions = np.arange(seq_length)
+        self.n_alleles = n_alleles
+        self.alphabet = alphabet
+        self.genotypes = np.array([''.join(x) for x in product(*self.alphabet_list)])
+        self.n_genotypes = self.genotypes.shape[0]
+        self.genotype_idxs = dict(zip(self.genotypes, np.arange(self.n_genotypes)))
+
+    def get_seqs_idx(self, seqs: np.ndarray) -> np.ndarray:
+        return np.array([self.genotype_idxs[s] for s in seqs])
+
+    def get_X_operator(self, seqs: np.ndarray) -> SelIdxOperator:
+        return(SelIdxOperator(self.n_genotypes, self.get_seqs_idx(seqs)))
+    
+    def get_Us(self):
+        values = [False, True]
+        return(product(values, repeat=self.seq_length))
+
+
 def generate_freq_reduced_code(
     seqs, n_alleles, counts=None, keep_allele_names=True, last_character="X"
 ):
@@ -350,7 +415,7 @@ def get_one_hot_from_alleles(alphabet):
         return m
 
 
-def get_alphabet(n_alleles=None, alphabet_type=None):
+def get_alphabet(n_alleles: Optional[int] = None, alphabet_type: Optional[str] = None):
     """
     Generate an alphabet based on the specified number of alleles or alphabet type.
 
@@ -372,12 +437,18 @@ def get_alphabet(n_alleles=None, alphabet_type=None):
     """
 
     if alphabet_type is None or alphabet_type == "custom":
-        if n_alleles <= 10:
+        if n_alleles is None:
+            msg = 'n_alleles must be provided when alphabet_type is not specified or "custom"'
+            raise ValueError(msg)
+        elif n_alleles <= 10:
             alphabet = [str(x) for x in np.arange(n_alleles)]
         else:
-            alphabet = [ALPHABET for x in np.arange(n_alleles)]
+            alphabet = [ALPHABET[x] for x in np.arange(n_alleles)]
 
     elif alphabet_type in ALPHABETS:
+        if n_alleles is not None:
+            msg = 'Only one of n_alleles or alphabet_type must be provided'
+            raise ValueError(msg)
         alphabet = ALPHABETS[alphabet_type]
 
     else:
