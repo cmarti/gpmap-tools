@@ -253,7 +253,7 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         inferred from the provided data.
 
     genotypes : array-like, optional
-        A list or array of genotypes to be used in the interpolation. If not
+        A list or array of genotypes to be used in the model. If not
         provided, the model will infer the genotype space.
 
     alphabet_type : str, optional
@@ -264,17 +264,25 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         level of interaction between genetic sites that is penalized.
 
     a_values : array-like, optional
-        The regularization parameters. If not provided, it will be inferred
-        during the fitting process to best match the observed data.
+        The regularization parameters for each interaction order. If not provided,
+        they will be inferred during the fitting process to best match the observed data.
 
     lambda_U_lower_than_P : array-like, optional
-        The regularization parameters for lower order interactions than P.
-        If not provided, it will be assumed that these interactions are not
-        penalized.
+        The regularization parameters for interactions with order lower than P.
+        If not provided, it will be inferred during fitting.
+
+    noise_var : float, optional
+        The noise variance. Default is 0.0.
+
+    learn_noise_var : bool, optional
+        Whether to learn the noise variance during fitting. Default is False.
 
     cg_rtol : float, optional
         The relative tolerance for the conjugate gradient solver. Default is
         1e-16. This controls the precision of the solver used in computations.
+
+    progress : bool, optional
+        Whether to display progress bars during fitting. Default is True.
     """
 
     def __init__(
@@ -286,6 +294,8 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         P=2,
         a_values=None,
         lambda_U_lower_than_P=None,
+        noise_var=0.0,
+        learn_noise_var=False,
         cg_rtol=1e-16,
         progress=True,
     ):
@@ -299,18 +309,21 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         )
         self.P = P
         self.aligner = DeltaUKernelAligner(
-            self.n_alleles, self.seq_length, P, include_lower_P=True
+            self.n_alleles, self.seq_length, P, learn_noise_var=learn_noise_var
         )
         self.Us = self.aligner.Us
         self.set_lambda_Us(a_values, lambda_U_lower_than_P)
+        self.noise_var = noise_var
         self.cg_rtol = cg_rtol
 
     def set_lambda_Us(self, a_values=None, lambda_U_lower_than_P=None):
         if a_values is not None and lambda_U_lower_than_P is not None:
             self.a_values = a_values
             self.lambda_U_lower_than_P = lambda_U_lower_than_P
+
             self.lambdas = self.aligner.get_lambda_U(
-                a_values, lambda_U_lower_than_P
+                np.log(a_values),
+                np.log(lambda_U_lower_than_P),
             )
             self.K = VUKernel(self.n_alleles, self.seq_length, self.lambdas)
 
@@ -352,10 +365,19 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         self.set_data(X, y, y_var=y_var)
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
         x = self.aligner.fit(cov, ns)
-        a_values = x[self.aligner.n_U_lower_than_P :]
-        lambda_U_lower_than_P = x[: self.aligner.n_U_lower_than_P]
+
+        if self.aligner.learn_noise_var:
+            noise_var = x[0]
+            lambda_U_lower_than_P = x[1 : self.aligner.n_U_lower_than_P + 1]
+            a_values = x[self.aligner.n_U_lower_than_P + 1 :]
+        else:
+            noise_var = self.noise_var
+            lambda_U_lower_than_P = x[: self.aligner.n_U_lower_than_P]
+            a_values = x[self.aligner.n_U_lower_than_P :]
+
         self.set_lambda_Us(a_values, lambda_U_lower_than_P)
-        
+        self.noise_var = noise_var
+
     def get_empirical_pred_correlations_df(self):
         """
         Compute empirical and predicted correlations for pairs of sequences
@@ -372,19 +394,23 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             - d_jittered: jittered d useful for plotting
 
         """
-        
+
         Us = np.array(self.aligner.U_sites).astype(int).astype(str)
         sites = np.array(["".join(x) for x in Us])
         d = [x.count("1") for x in sites]
-        
+
         obs_covs, ns = self.gpdata.calc_covariance_U_sites(centered=True)
         obs_corrs = obs_covs / obs_covs[0]
-        
-        params = np.append(self.lambda_U_lower_than_P, self.a_values)
-        params[0] = 0 # Make the constant term 0 to match centered autocovariance
-        pred_covs = self.aligner.predict(params)
+
+        log_a = np.log(self.a_values)
+        log_lambda_U = np.log(self.lambda_U_lower_than_P)
+        log_lambda_U[0] = 0.
+        log_noise_var = np.log(self.noise_var) if self.noise_var > 0 else None
+        pred_covs = self.aligner.predict(
+            log_a=log_a, log_lambda_U=log_lambda_U, log_noise_var=log_noise_var
+        )
         pred_corrs = pred_covs / pred_covs[0]
-        
+
         df = pd.DataFrame(
             {
                 "d": d,
@@ -393,10 +419,10 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
                 "pred_cor": pred_corrs,
                 "d_jittered": np.random.normal(d, scale=0.05),
             },
-            index=sites
+            index=sites,
         )
-        return(df)
-    
+        return df
+
     def get_a_values(self, position_labels=None):
         """
         Return a DataFrame of interaction-specific regularization parameters.
@@ -418,21 +444,23 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         """
         if position_labels is None:
             position_labels = np.arange(self.seq_length)
-        elif position_labels.shape[0] !=  self.seq_length:
-            msg = f'Site of position_labeles ({position_labels.shape[0]}) '
-            msg += f'should match sequence length ({self.seq_length})'
+        elif position_labels.shape[0] != self.seq_length:
+            msg = f"Site of position_labeles ({position_labels.shape[0]}) "
+            msg += f"should match sequence length ({self.seq_length})"
             raise ValueError(msg)
-        
+
         records = []
         for U, a_U in zip(self.Us, self.a_values):
             U = np.array(U)
-            record = {f'site{i+1}': p for i, p in enumerate(position_labels[U])}
-            record['a_U'] = a_U
-            record['interaction_strength'] = 1. / a_U
+            record = {
+                f"site{i + 1}": p for i, p in enumerate(position_labels[U])
+            }
+            record["a_U"] = a_U
+            record["interaction_strength"] = 1.0 / a_U
             records.append(record)
         df = pd.DataFrame(records)
-        return(df)
-    
+        return df
+
     def get_lambda_U_values(self, position_labels=None):
         """
         Return a DataFrame of interaction-specific lambda values for interactions U
@@ -454,158 +482,19 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         """
         if position_labels is None:
             position_labels = np.arange(self.seq_length)
-        elif position_labels.shape[0] !=  self.seq_length:
-            msg = f'Site of position_labeles ({position_labels.shape[0]}) '
-            msg += f'should match sequence length ({self.seq_length})'
+        elif position_labels.shape[0] != self.seq_length:
+            msg = f"Site of position_labeles ({position_labels.shape[0]}) "
+            msg += f"should match sequence length ({self.seq_length})"
             raise ValueError(msg)
-        
+
         records = []
         Us = np.array(self.aligner.U_sites)[self.aligner.U_lower_than_P_idx]
         for U, lambda_U in zip(Us, self.lambda_U_lower_than_P):
-            U_label = ','.join([str(p) for p in position_labels[U]])
-            record = {'U': U_label, 'k': U.sum(), 'lambda_U': lambda_U}
+            U_label = ",".join([str(p) for p in position_labels[U]])
+            record = {"U": U_label, "k": U.sum(), "lambda_U": lambda_U}
             records.append(record)
         df = pd.DataFrame(records)
-        return(df)
-
-
-class LocalEpistasisMinimizer(MinimizerRegressor):
-    """
-    Local epistasis regression model for sequence-function relationships.
-
-    A class for performing Local Epistasis Regression (LER) to infer
-    complete genotype-phenotype maps from incomplete and noisy data. This
-    model applies a prior that penalizes local epistatic coefficients of
-    order P differently depending on the combinations of P sites
-    and infers the posterior distribution based on experimental
-    data for a subset of sequences.
-
-    Parameters
-    ----------
-    n_alleles : int, optional
-        The number of alleles per site. If not provided, it will be inferred
-        from the provided data.
-
-    seq_length : int, optional
-        The length of the genotype sequences. If not provided, it will be
-        inferred from the provided data.
-
-    genotypes : array-like, optional
-        A list or array of genotypes to be used in the interpolation. If not
-        provided, the model will infer the genotype space.
-
-    alphabet_type : str, optional
-        The type of alphabet used for genotypes. Default is "custom".
-
-    P : int, optional
-        The order of epistasis to consider. Default is 2. This determines the
-        level of interaction between genetic sites that is penalized.
-
-    a_values : array-like, optional
-        The regularization parameters. If not provided, it will be inferred
-        during the fitting process to best match the observed data.
-
-    cg_rtol : float, optional
-        The relative tolerance for the conjugate gradient solver. Default is
-        1e-16. This controls the precision of the solver used in computations.
-    """
-
-    def __init__(
-        self,
-        n_alleles=None,
-        seq_length=None,
-        genotypes=None,
-        alphabet_type="custom",
-        P=2,
-        a_values=None,
-        cg_rtol=1e-16,
-    ):
-        super().__init__(
-            seq_length=seq_length,
-            n_alleles=n_alleles,
-            genotypes=genotypes,
-            alphabet_type=alphabet_type,
-            cg_rtol=cg_rtol,
-        )
-        self.P = P
-        self.kernel_basis = DeltaKernelBasisOperator(
-            self.n_alleles, self.seq_length, P
-        )
-        self.set_a_values(a_values)
-
-    def set_a_values(self, a_values=None):
-        if a_values is not None:
-            self.a_values = a_values
-            self.C = DeltaUWeighedSumOperator(
-                self.n_alleles, self.seq_length, self.P, a_values
-            )
-
-    def check_unique_solution(self):
-        r1 = self.kernel_basis.rank
-        r2 = np.linalg.matrix_rank(
-            self.likelihood.Xop
-            @ self.kernel_basis
-            @ np.eye(self.kernel_basis.shape[1])
-        )
-        if r2 < r1:
-            msg = "The MAP does not have a unique solution"
-            raise ValueError(msg)
-
-    def calc_posterior(self, X_pred=None, B=None):
-        self.check_unique_solution()
-        mean_post = self.calc_posterior_mean()
-        if self.a_values is None:
-            Sigma_post = None
-        else:
-            Sigma_post = self.calc_posterior_covariance()
-        return self.transform_posterior(
-            mean_post, Sigma_post, X_pred=X_pred, B=B
-        )
-
-    def fit(self, X, y, y_var=None):
-        """
-        Fits the Local Epistasis Regression (LER) model hyperparameters
-        to the provided data.
-
-        This method infers the optimal regularization parameters `a` via
-        kernel alignment of the residuals of a P-1 order interaction model
-        fit via maximum likelihood. Thus, we infer the `a` values that
-        best match the empirical covariance in the residuals
-
-        Parameters
-        ----------
-        X : array-like of shape (n_obs,)
-            Array containing the genotypes for which observations are provided
-            in `y`.
-
-        y : array-like of shape (n_obs,)
-            Array containing the observed phenotypes corresponding to the
-            genotypes in `X`.
-
-        y_var : array-like of shape (n_obs,), optional
-            Array containing the empirical or experimental variance for the
-            measurements in `y`. If not provided, it is assumed to be uniform
-            or unknown.
-        """
-        # TODO: figure out how we can use y_var here and whether it makes sense to use
-        # iterative solvers
-
-        # Fit P-1 order model and compute residuals
-        self.set_data(X, y, y_var=y_var)
-        A = self.likelihood.Xop @ self.kernel_basis
-        A = A @ np.eye(self.kernel_basis.shape[1])
-        self.beta = np.linalg.lstsq(A, y, rcond=None)[0]
-        self.resid = y - A @ self.beta
-
-        # Run kernel alignment
-        cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
-        self.cov, self.ns = cov, ns
-        self.aligner = DeltaUKernelAligner(
-            self.n_alleles, self.seq_length, self.P
-        )
-        self.Us = self.aligner.Us
-        self.a_values = self.aligner.fit(cov, ns)
-        self.set_a_values(self.a_values)
+        return df
 
 
 class VCregression(GaussianProcessRegressor):
@@ -841,7 +730,9 @@ class VCregression(GaussianProcessRegressor):
         cov, ns = self.cov, self.ns
         if cov is None or ns is None:
             self.gpdata.set_data(
-                self.likelihood.X, self.likelihood.y, y_var=self.likelihood.y_var
+                self.likelihood.X,
+                self.likelihood.y,
+                y_var=self.likelihood.y_var,
             )
             cov, ns = self.gpdata.calc_covariance_distance(centered=False)
 

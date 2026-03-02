@@ -81,7 +81,7 @@ class LowRankPerturbationOperator(ExtendedLinearOperator):
         else:
             diag = np.ones(A.shape[1])
         self.D = DiagonalOperator(diag)
-        
+
     def _matvec(self, v):
         return (self.D + self.Q @ self.Lambda @ self.Q.T) @ v
 
@@ -144,10 +144,10 @@ class InverseOperator(ExtendedLinearOperator):
             class cb(object):
                 def __init__(self):
                     self.niter = 0
-                    
+
                 def __call__(self, xk):
                     self.niter += 1
-                    
+
             counter = cb()
             res = cg(
                 self.linop,
@@ -471,11 +471,11 @@ class KronOperator(ExtendedLinearOperator):
         return KronSquareTriangularOperator(
             [np.linalg.cholesky(m) for m in self.matrices]
         )
-    
+
     def inv(self):
         if self.shape[0] != self.shape[1]:
             raise ValueError("Cannot invert a non-square matrix")
-        return(KronOperator([np.linalg.inv(m) for m in self.matrices]))
+        return KronOperator([np.linalg.inv(m) for m in self.matrices])
 
 
 class KronSquareTriangularOperator(KronOperator):
@@ -970,18 +970,21 @@ class VUProjectionOperator(VUOperator):
             sqnorm = self.repeats * np.sum((A @ u.flatten()) ** 2)
         return sqnorm
 
-class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
+
+class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
     def __init__(self, n_alleles, seq_length, lambdas=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
-        self.n_V_U = 2 ** seq_length
+        self.n_V_U = 2**seq_length
         self.set_lambdas(lambdas)
         self.W0 = PconOperator(self.alpha)
         self.W1 = PaddOperator(self.alpha)
         self.v_shape = [n_alleles] * seq_length
-    
+
     def set_lambdas(self, lambdas):
         if lambdas is not None:
-            check_error(lambdas.shape[0] == self.n_V_U, msg="Incorrect size of lambdas")
+            check_error(
+                lambdas.shape[0] == self.n_V_U, msg="Incorrect size of lambdas"
+            )
             self.lambdas = lambdas
 
     def calc_V_U_product(self, v, sites, sites_included):
@@ -996,20 +999,22 @@ class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
             v_prev = self.calc_V_U_product(v, sites[:-1], sites_included[:-1])
             u = tensordot(P, v_prev, site)
             self.n_products += 1
-            
+
             self.cached_matvecs[site] = u
             self.cached_U[site] = site_included
-            for i in range(site+1, self.seq_length):
+            for i in range(site + 1, self.seq_length):
                 self.cached_U[i] = None
                 self.cached_matvecs[i] = None
-                
+
             return u
 
     def _matvec(self, v):
         if self.lambdas is None:
-            msg = 'lambdas must be defined for computing matrix-vector products'
+            msg = (
+                "lambdas must be defined for computing matrix-vector products"
+            )
             raise ValueError(msg)
-        
+
         self.cached_matvecs = [None] * self.seq_length
         self.cached_U = [None] * self.seq_length
         self.n_products = 0
@@ -1025,7 +1030,7 @@ class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
             v_U = self.calc_V_U_product(v, sites, U)
             u += lambda_U * v_U
         return u.transpose().flatten()
-    
+
 
 class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
     symmetric = True
@@ -1065,10 +1070,12 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
         )
         self.check_mu(self.mu, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
-    
+
     def inv(self):
-        mu = 1. / self.mu
-        return(ConnectednessProjectionOpererator(self.alpha, self.seq_length, mu=mu))
+        mu = 1.0 / self.mu
+        return ConnectednessProjectionOpererator(
+            self.alpha, self.seq_length, mu=mu
+        )
 
 
 class EigenBasisOperator(StackedOperator):
@@ -1179,6 +1186,12 @@ class VUKernel(VUProjectionWeightedSumOperator, Kernel):
     def get_params(self):
         return np.log(self.get_lambdas())
 
+    def matrix_sqrt(self):
+        lambdas = np.sqrt(self.lambdas)
+        return VUProjectionWeightedSumOperator(
+            self.alpha, self.seq_length, lambdas=lambdas
+        )
+
 
 class ConnectednessKernel(ConstantDiagSeqOperator, KronOperator, Kernel):
     symmetric = True
@@ -1190,24 +1203,26 @@ class ConnectednessKernel(ConstantDiagSeqOperator, KronOperator, Kernel):
         self.set_sigma2(sigma2)
         self.set_mu(mu)
         KronOperator.__init__(self, self.get_matrices())
-    
+
     def set_sigma2(self, sigma2):
         if not isinstance(sigma2, float):
-            msg = f'sigma2 should be float, got {type(sigma2)} instead'
+            msg = f"sigma2 should be float, got {type(sigma2)} instead"
             raise ValueError(msg)
         self.sigma2 = sigma2
         self.sigma2_lroot = np.exp(np.log(sigma2) / self.seq_length)
         self.d = sigma2
-    
+
     def get_site_matrix(self, mu_p, sigma2_lroot):
         v = (1 - mu_p) / (1 + mu_p * (self.alpha - 1))
         shape = (self.alpha, self.alpha)
         m = np.full(shape, v)
         np.fill_diagonal(m, 1)
-        return(sigma2_lroot * m)
-    
+        return sigma2_lroot * m
+
     def get_matrices(self):
-        return [self.get_site_matrix(mu_p, self.sigma2_lroot) for mu_p in self.mu]
+        return [
+            self.get_site_matrix(mu_p, self.sigma2_lroot) for mu_p in self.mu
+        ]
 
     def get_mu(self):
         return self.mu
@@ -1230,7 +1245,7 @@ class ConnectednessKernel(ConstantDiagSeqOperator, KronOperator, Kernel):
             else np.array(mu)
         )
         self.check_mu(self.mu, ignore_bound=ignore_bound)
-    
+
     def set_params(self, params):
         self.set_mu(np.exp(params))
 

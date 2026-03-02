@@ -476,7 +476,10 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         """
         self.define_space(genotypes=X)
         self.likelihood = GaussianLikelihood(self.genotypes)
-        self.likelihood.set_data(X, y, y_var)
+        if y_var is None:
+            y_var = np.zeros_like(y)
+        noise_var = getattr(self, 'noise_var', 0.)
+        self.likelihood.set_data(X, y, y_var + noise_var)
         self.X = self.likelihood.Xop
         self.X_t = self.X.transpose()
         self.gpdata = GPDataSummarizer(
