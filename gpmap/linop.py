@@ -454,10 +454,10 @@ class KronOperator(ExtendedLinearOperator):
         return u
 
     def _get_dense_matrix(self, m):
-        if isinstance(m, _CustomLinearOperator):
-            return m @ np.eye(m.shape[1])
-        else:
+        if isinstance(m, np.ndarray):
             return m
+        else:
+            return m @ np.eye(m.shape[1])
 
     def todense(self):
         return kron([self._get_dense_matrix(m) for m in self.matrices])
@@ -469,7 +469,7 @@ class KronOperator(ExtendedLinearOperator):
         if self.shape[0] != self.shape[1]:
             raise ValueError("Cannot compute cholesky of non-square matrix")
         return KronSquareTriangularOperator(
-            [np.linalg.cholesky(m) for m in self.matrices]
+            [np.linalg.cholesky(m @ np.eye(m.shape[1])) for m in self.matrices]
         )
 
     def inv(self):
@@ -986,7 +986,8 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
                 lambdas.shape[0] == self.n_V_U, msg="Incorrect size of lambdas"
             )
             check_error(
-                np.all(lambdas >= 0), msg=f"lambdas must be non-negative: {lambdas}"
+                np.all(lambdas >= 0),
+                msg=f"lambdas must be non-negative: {lambdas}",
             )
             self.lambdas = lambdas
 
@@ -1013,9 +1014,7 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
 
     def _matvec(self, v):
         if self.lambdas is None:
-            msg = (
-                "lambdas must be defined for computing matrix-vector products"
-            )
+            msg = "lambdas must be defined for computing matrix-vector products"
             raise ValueError(msg)
 
         self.cached_matvecs = [None] * self.seq_length
@@ -1034,6 +1033,17 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
             u += lambda_U * v_U
         return u.transpose().flatten()
 
+    def inv(self):
+        return VUProjectionWeightedSumOperator(
+            self.alpha, self.seq_length, lambdas=1.0 / self.lambdas
+        )
+
+    def matrix_sqrt(self):
+        lambdas = np.sqrt(self.lambdas)
+        return VUProjectionWeightedSumOperator(
+            self.alpha, self.seq_length, lambdas=lambdas
+        )
+
 
 class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
     symmetric = True
@@ -1049,17 +1059,24 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
     def get_matrices(self):
         W0 = PconOperator(self.alpha)
         W1 = PaddOperator(self.alpha)
-        return [W0 + r * W1 for r in self.mu]
+        return [self.mu[0] * W0 + mu_i * W1 for mu_i in self.mu[1:]]
 
     def get_mu(self):
         return self.mu
+    
+    def get_decay_factors(self):
+        decay_factors = []
+        for m in self.matrices:
+            m = m @ np.eye(self.alpha)
+            decay_factors.append(1 - m[0, 1] / m[0, 0])
+        return np.array(decay_factors)
 
     def check_mu(self, mu, ignore_bound=False):
-        msg = "mu vector size must be equal to sequence length"
-        check_error(mu.shape[0] == self.seq_length, msg=msg)
+        msg = "mu vector size must be equal to sequence length + 1"
+        check_error(mu.shape[0] == self.seq_length + 1, msg=msg)
 
-        checked = mu > 0
-        msg = "mu larger than 0"
+        checked = mu >= 0
+        msg = "mu must be non-negative"
         if not ignore_bound:
             checked = checked & (mu < 1)
             msg = "mu must be between 0 and 1"
@@ -1076,6 +1093,12 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
 
     def inv(self):
         mu = 1.0 / self.mu
+        return ConnectednessProjectionOpererator(
+            self.alpha, self.seq_length, mu=mu
+        )
+
+    def matrix_sqrt(self):
+        mu = np.sqrt(self.mu)
         return ConnectednessProjectionOpererator(
             self.alpha, self.seq_length, mu=mu
         )
@@ -1189,65 +1212,9 @@ class VUKernel(VUProjectionWeightedSumOperator, Kernel):
     def get_params(self):
         return np.log(self.get_lambdas())
 
-    def matrix_sqrt(self):
-        lambdas = np.sqrt(self.lambdas)
-        return VUProjectionWeightedSumOperator(
-            self.alpha, self.seq_length, lambdas=lambdas
-        )
 
-
-class ConnectednessKernel(ConstantDiagSeqOperator, KronOperator, Kernel):
+class ConnectednessKernel(ConnectednessProjectionOpererator, Kernel):
     symmetric = True
-
-    def __init__(self, n_alleles, seq_length, mu, sigma2):
-        ConstantDiagSeqOperator.__init__(
-            self, n_alleles=n_alleles, seq_length=seq_length
-        )
-        self.set_sigma2(sigma2)
-        self.set_mu(mu)
-        KronOperator.__init__(self, self.get_matrices())
-
-    def set_sigma2(self, sigma2):
-        if not isinstance(sigma2, float):
-            msg = f"sigma2 should be float, got {type(sigma2)} instead"
-            raise ValueError(msg)
-        self.sigma2 = sigma2
-        self.sigma2_lroot = np.exp(np.log(sigma2) / self.seq_length)
-        self.d = sigma2
-
-    def get_site_matrix(self, mu_p, sigma2_lroot):
-        v = (1 - mu_p) / (1 + mu_p * (self.alpha - 1))
-        shape = (self.alpha, self.alpha)
-        m = np.full(shape, v)
-        np.fill_diagonal(m, 1)
-        return sigma2_lroot * m
-
-    def get_matrices(self):
-        return [
-            self.get_site_matrix(mu_p, self.sigma2_lroot) for mu_p in self.mu
-        ]
-
-    def get_mu(self):
-        return self.mu
-
-    def check_mu(self, mu, ignore_bound=False):
-        msg = "mu vector size must be equal to sequence length"
-        check_error(mu.shape[0] == self.seq_length, msg=msg)
-
-        checked = mu > 0
-        msg = f"mu smaller than 0: {mu}"
-        if not ignore_bound:
-            checked = checked & (mu < 1)
-            msg = f"mu must be between 0 and 1: {mu}"
-        check_error(np.all(checked), msg=msg)
-
-    def set_mu(self, mu, ignore_bound=True):
-        self.mu = (
-            np.full(self.seq_length, mu)
-            if isinstance(mu, float)
-            else np.array(mu)
-        )
-        self.check_mu(self.mu, ignore_bound=ignore_bound)
 
     def set_params(self, params):
         self.set_mu(np.exp(params))

@@ -723,7 +723,7 @@ class VCregression(GaussianProcessRegressor):
             )
             cov, ns = self.gpdata.calc_covariance_distance(centered=False)
 
-        self.kernel_aligner.set_beta(beta)
+        self.kernel_aligner.regularizer.set_beta(beta)
         lambdas = self.kernel_aligner.fit(cov, ns)
         return lambdas
 
@@ -816,7 +816,6 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         genotypes=None,
         alphabet_type="custom",
         mu=None,
-        sigma2=None,
         cg_rtol=1e-16,
         progress=True,
     ):
@@ -828,29 +827,15 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             alphabet_type=alphabet_type,
         )
 
-        if mu is not None and sigma2 is not None:
-            self.set_params(mu, sigma2)
+        if mu is not None:
+            self.set_params(mu)
 
         self.cg_rtol = cg_rtol
 
-    def set_params(self, mu, sigma2):
+    def set_params(self, mu):
         self.mu = mu
-        self.sigma2 = sigma2
-        K = ConnectednessKernel(
-            self.n_alleles, self.seq_length, mu=mu, sigma2=sigma2
-        )
+        K = ConnectednessKernel(self.n_alleles, self.seq_length, mu=mu)
         super().__init__(base_kernel=K, progress=self.progress)
-
-    def mu_to_decay_factors(self, mu):
-        if mu is None:
-            msg = "mu is required for computing the corresponding decay factors"
-            raise ValueError(msg)
-        return (
-            100
-            * self.n_alleles
-            * self.mu
-            / (1 + self.mu * (self.n_alleles - 1))
-        )
 
     def get_decay_factors(self):
         """
@@ -866,14 +851,8 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             - ``decay_factor``: Decay factor associated to each position.
         """
         sites = np.arange(self.seq_length)
-        decay_factors = self.mu_to_decay_factors(self.mu)
-        df = pd.DataFrame(
-            {
-                "mu": self.mu,
-                "decay_factor": decay_factors,
-            },
-            index=sites,
-        )
+        decay_factors = self.K.get_decay_factors()
+        df = pd.DataFrame({"decay_factor": decay_factors}, index=sites)
         return df
 
     def fit(self, X, y, y_var=None):
@@ -909,10 +888,8 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         )
         self.set_data(X, y, y_var=y_var)
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
-        log_sigma2, logit_mu = self.kernel_aligner.fit(cov, ns)
-        sigma2 = np.exp(log_sigma2)
-        mu = np.exp(logit_mu) / (1 + np.exp(logit_mu))
-        self.set_params(mu=mu, sigma2=sigma2)
+        mu = self.kernel_aligner.fit(cov, ns)
+        self.set_params(mu=mu)
 
 
 class SeqDEFT(GeneralizedGaussianProcessRegressor, _DeltaPpriorGP):

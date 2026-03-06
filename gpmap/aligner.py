@@ -484,7 +484,8 @@ class LowDimVUKernelAligner(VUKernelAligner):
             loss, loss_grad = self.frobenius_norm(
                 log_lambda_U, return_grad=True
             )
-            grad = t_grad @ loss_grad
+            with np.errstate(invalid='ignore'):
+                grad = t_grad @ loss_grad
             return (loss, grad)
         else:
             log_lambda_U = self.params_to_log_lambda_U(x, return_grad=False)

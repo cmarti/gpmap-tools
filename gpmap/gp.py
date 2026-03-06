@@ -517,7 +517,10 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
 
     def get_K_sqrt(self):
         if hasattr(self.K, "cholesky"):
-            return self.K.cholesky()
+            try:
+                return self.K.cholesky()
+            except np.linalg.LinAlgError:
+                return self.K.matrix_sqrt()    
         else:
             return self.K.matrix_sqrt()
 
