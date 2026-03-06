@@ -1,7 +1,7 @@
 import numpy as np
 
 from itertools import combinations, product
-from scipy.special import comb, factorial, logsumexp, gammaln
+from scipy.special import comb, logsumexp, gammaln
 from scipy.optimize import minimize, lsq_linear
 
 
@@ -194,9 +194,6 @@ class DeltaUtoVUTransform(object):
             return log_lambda_V, grad
         else:
             return log_lambda_V
-
-
-
 
 
 class KernelAligner(object):

@@ -123,34 +123,6 @@ class LERTests(unittest.TestCase):
             model.lambda_U_lower_than_P, [24.5, 4.5, 4.5, 2], atol=1
         )
 
-    def test_fit_complete_learn_noise(self):
-        # Initializing model
-        model = LocalEpistasisRegression(
-            seq_length=8, alphabet_type="dna", learn_noise_var=True
-        )
-        lambda_U = np.array([0] + [1e2] * model.seq_length)
-        a_values = np.full(int(comb(model.seq_length, 2)), 1e-3)
-        model.set_lambda_Us(a_values, lambda_U_lower_than_P=lambda_U)
-
-        # Simulating data
-        X = model.genotypes
-        f = model.sample_prior()
-        print(f.var())
-        y_var = np.full_like(f, 0.1)
-        noise_var = 1.
-        y_std = np.sqrt(y_var + noise_var)
-        y = f + np.random.normal(loc=0, scale=y_std)
-
-        # Fit to infer additional noise variance
-        model.fit(X, y, y_var=y_var)
-        print(model.noise_var)
-        print(model.a_values)
-        print(model.lambda_U_lower_than_P)
-        # assert np.all(model.a_values > 20)
-        # assert np.all(model.lambda_U_lower_than_P > 0)
-        # assert np.all(model.lambda_U_lower_than_P[1:] < 1e-2)
-        # assert np.allclose(model.lambda_U_lower_than_P[0], 8, atol=0.5)
-
     def test_get_parameters(self):
         X = np.array(["".join(x) for x in product(list("AB"), repeat=3)])
         model = LocalEpistasisRegression(

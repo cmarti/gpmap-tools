@@ -5,8 +5,9 @@ import numpy as np
 import pandas as pd
 
 from tqdm import tqdm
+from itertools import product
 from scipy.optimize import minimize
-from scipy.special import logsumexp
+from scipy.special import logsumexp, comb
 from scipy.stats import norm, pearsonr
 
 from gpmap.summary import GPDataSummarizer
@@ -27,7 +28,6 @@ from gpmap.linop import (
     DeltaKernelBasisOperator,
     DeltaKernelRegularizerOperator,
     DeltaPOperator,
-    DeltaUWeighedSumOperator,
     DiagonalOperator,
     ProjectionOperator,
     ConnectednessKernel,
@@ -271,12 +271,6 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         The regularization parameters for interactions with order lower than P.
         If not provided, it will be inferred during fitting.
 
-    noise_var : float, optional
-        The noise variance. Default is 0.0.
-
-    learn_noise_var : bool, optional
-        Whether to learn the noise variance during fitting. Default is False.
-
     cg_rtol : float, optional
         The relative tolerance for the conjugate gradient solver. Default is
         1e-16. This controls the precision of the solver used in computations.
@@ -294,8 +288,6 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         P=2,
         a_values=None,
         lambda_U_lower_than_P=None,
-        noise_var=0.0,
-        learn_noise_var=False,
         cg_rtol=1e-16,
         progress=True,
     ):
@@ -308,23 +300,31 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             alphabet_type=alphabet_type,
         )
         self.P = P
-        self.aligner = DeltaUKernelAligner(
-            self.n_alleles, self.seq_length, P, learn_noise_var=learn_noise_var
+        self.aligner = DeltaUKernelAligner(self.n_alleles, self.seq_length, P)
+        self.all_Us = np.array(
+            list(product([False, True], repeat=self.seq_length))
         )
-        self.Us = self.aligner.Us
+        self.Us = self.aligner.params_to_log_lambda_U.Us
+        self.n_U = len(self.Us)
+        self.n_U_lower_than_P = int(
+            sum([comb(self.seq_length, k) for k in range(P)])
+        )
         self.set_lambda_Us(a_values, lambda_U_lower_than_P)
-        self.noise_var = noise_var
         self.cg_rtol = cg_rtol
+
+    def get_params(self):
+        return np.log(np.append(self.lambda_U_lower_than_P, self.a_values))
 
     def set_lambda_Us(self, a_values=None, lambda_U_lower_than_P=None):
         if a_values is not None and lambda_U_lower_than_P is not None:
             self.a_values = a_values
             self.lambda_U_lower_than_P = lambda_U_lower_than_P
 
-            self.lambdas = self.aligner.get_lambda_U(
-                np.log(a_values),
-                np.log(lambda_U_lower_than_P),
+            x = self.get_params()
+            log_lambda = self.aligner.params_to_log_lambda_U(
+                x, return_grad=False
             )
+            self.lambdas = np.exp(log_lambda)
             self.K = VUKernel(self.n_alleles, self.seq_length, self.lambdas)
 
     def calc_posterior(self, X_pred=None, B=None):
@@ -365,18 +365,10 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         self.set_data(X, y, y_var=y_var)
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
         x = self.aligner.fit(cov, ns)
-
-        if self.aligner.learn_noise_var:
-            noise_var = x[0]
-            lambda_U_lower_than_P = x[1 : self.aligner.n_U_lower_than_P + 1]
-            a_values = x[self.aligner.n_U_lower_than_P + 1 :]
-        else:
-            noise_var = self.noise_var
-            lambda_U_lower_than_P = x[: self.aligner.n_U_lower_than_P]
-            a_values = x[self.aligner.n_U_lower_than_P :]
+        lambda_U_lower_than_P = x[: self.n_U_lower_than_P]
+        a_values = x[self.n_U_lower_than_P :]
 
         self.set_lambda_Us(a_values, lambda_U_lower_than_P)
-        self.noise_var = noise_var
 
     def get_empirical_pred_correlations_df(self):
         """
@@ -394,21 +386,15 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             - d_jittered: jittered d useful for plotting
 
         """
-
-        Us = np.array(self.aligner.U_sites).astype(int).astype(str)
-        sites = np.array(["".join(x) for x in Us])
+        sites = np.array(
+            ["".join(x) for x in product(["0", "1"], repeat=self.seq_length)]
+        )
         d = [x.count("1") for x in sites]
 
         obs_covs, ns = self.gpdata.calc_covariance_U_sites(centered=True)
         obs_corrs = obs_covs / obs_covs[0]
 
-        log_a = np.log(self.a_values)
-        log_lambda_U = np.log(self.lambda_U_lower_than_P)
-        log_lambda_U[0] = 0.
-        log_noise_var = np.log(self.noise_var) if self.noise_var > 0 else None
-        pred_covs = self.aligner.predict(
-            log_a=log_a, log_lambda_U=log_lambda_U, log_noise_var=log_noise_var
-        )
+        pred_covs = self.aligner.predict(self.get_params())
         pred_corrs = pred_covs / pred_covs[0]
 
         df = pd.DataFrame(
@@ -488,7 +474,8 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             raise ValueError(msg)
 
         records = []
-        Us = np.array(self.aligner.U_sites)[self.aligner.U_lower_than_P_idx]
+
+        Us = self.all_Us[self.all_Us.sum(1) < self.P, :]
         for U, lambda_U in zip(Us, self.lambda_U_lower_than_P):
             U_label = ",".join([str(p) for p in position_labels[U]])
             record = {"U": U_label, "k": U.sum(), "lambda_U": lambda_U}
@@ -856,9 +843,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
 
     def mu_to_decay_factors(self, mu):
         if mu is None:
-            msg = (
-                "mu is required for computing the corresponding decay factors"
-            )
+            msg = "mu is required for computing the corresponding decay factors"
             raise ValueError(msg)
         return (
             100

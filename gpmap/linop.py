@@ -985,6 +985,9 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
             check_error(
                 lambdas.shape[0] == self.n_V_U, msg="Incorrect size of lambdas"
             )
+            check_error(
+                np.all(lambdas >= 0), msg=f"lambdas must be non-negative: {lambdas}"
+            )
             self.lambdas = lambdas
 
     def calc_V_U_product(self, v, sites, sites_included):
