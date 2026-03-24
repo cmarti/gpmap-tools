@@ -401,7 +401,8 @@ class DeltaPKernelAligner(VkKernelAligner):
             loss, loss_grad = self.frobenius_norm(
                 log_lambda_k, return_grad=True
             )
-            grad = t_grad @ loss_grad
+            with np.errstate(invalid='ignore'):
+                grad = t_grad @ loss_grad
             return (loss, grad)
         else:
             log_lambda_k = self.params_to_log_lambda_k(x, return_grad=False)

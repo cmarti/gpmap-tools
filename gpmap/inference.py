@@ -105,7 +105,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
 
     cg_rtol : float, optional
         The relative tolerance for the conjugate gradient solver. Default is
-        1e-16. This controls the precision of the solver used in computations.
+        1e-5. This controls the precision of the solver used in computations.
     """
 
     def __init__(
@@ -116,7 +116,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
         alphabet_type="custom",
         P=2,
         a=None,
-        cg_rtol=1e-16,
+        cg_rtol=1e-5,
     ):
         super().__init__(
             seq_length=seq_length,
@@ -288,7 +288,7 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         P=2,
         a_values=None,
         lambda_U_lower_than_P=None,
-        cg_rtol=1e-16,
+        cg_rtol=1e-5,
         progress=True,
     ):
         self.progress = progress
@@ -537,7 +537,7 @@ class VCregression(GaussianProcessRegressor):
         The maximum log10(beta) value for cross-validation. Default is 7.
 
     cg_rtol : float, optional
-        The relative tolerance for the conjugate gradient solver. Default is 1e-16.
+        The relative tolerance for the conjugate gradient solver. Default is 1e-5.
 
     progress : bool, optional
         Whether to display progress bars during fitting. Default is True.
@@ -557,7 +557,7 @@ class VCregression(GaussianProcessRegressor):
         num_beta=20,
         min_log_beta=-2,
         max_log_beta=7,
-        cg_rtol=1e-16,
+        cg_rtol=1e-5,
         progress=True,
     ):
         self.progress = progress
@@ -690,11 +690,9 @@ class VCregression(GaussianProcessRegressor):
         X, y, y_var, cov, ns = data
 
         if self.cv_loss_function == "frobenius_norm":
-            # TODO: unclear how to properly deal with the variance here
             self.kernel_aligner.set_data(cov, ns)
-            loss = self.kernel_aligner.calc_loss(
-                lambdas, beta=0, return_grad=False
-            )
+            self.kernel_aligner.regularizer.set_beta(self.beta)
+            loss = self.kernel_aligner.calc_loss(lambdas, return_grad=False)
 
         else:
             self.set_lambdas(lambdas)
@@ -803,7 +801,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         they will be inferred during fitting.
 
     cg_rtol : float, optional
-        The relative tolerance for the conjugate gradient solver. Default is 1e-16.
+        The relative tolerance for the conjugate gradient solver. Default is 1e-5.
 
     progress : bool, optional
         Whether to display progress bars during fitting. Default is True.
@@ -816,7 +814,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         genotypes=None,
         alphabet_type="custom",
         mu=None,
-        cg_rtol=1e-16,
+        cg_rtol=1e-5,
         progress=True,
     ):
         self.progress = progress

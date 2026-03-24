@@ -99,7 +99,8 @@ class InverseOperator(ExtendedLinearOperator):
         self,
         linop,
         method="cg",
-        atol=1e-14,
+        atol=0,
+        rtol=1e-5,
         maxiter=1000,
         preconditioner_size=0,
         **kwargs,
@@ -108,6 +109,7 @@ class InverseOperator(ExtendedLinearOperator):
         self.shape = linop.shape
         self.dtype = linop.dtype
         self.atol = atol
+        self.rtol = rtol
         self.maxiter = maxiter
         self.kwargs = kwargs
 
@@ -154,6 +156,8 @@ class InverseOperator(ExtendedLinearOperator):
                 v,
                 M=self.preconditioner,
                 atol=self.atol,
+                tol=self.rtol,
+                maxiter=self.maxiter,
                 callback=counter,
                 **self.kwargs,
             )

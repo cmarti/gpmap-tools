@@ -452,10 +452,11 @@ class SeqGaussianProcessRegressor(object):
 
 
 class GaussianProcessRegressor(SeqGaussianProcessRegressor):
-    def __init__(self, base_kernel, progress=True):
+    def __init__(self, base_kernel, progress=True, cg_rtol=1e-5):
         self.K = base_kernel
         self.n_genotypes = self.K.shape[0]
         self.progress = progress
+        self.cg_rtol = cg_rtol
 
     def set_data(self, X, y, y_var=None):
         """
@@ -494,13 +495,14 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
     def K_xx_inv(self):
         if np.any(self.likelihood.y_var == 0.0):
             K_xx = self.X @ self.K @ self.X_t + self.likelihood.D_var
-            K_xx_inv = InverseOperator(K_xx, method="cg")
+            K_xx_inv = InverseOperator(K_xx, method="cg", rtol=self.cg_rtol)
         else:
             # This formulation is better conditioned with heterogenous variances
             D_sqrt = self.likelihood.D_var_inv_sqrt
             Identity = IdentityOperator(self.likelihood.n_obs)
             A = D_sqrt @ self.X @ self.K @ self.X_t @ D_sqrt + Identity
-            K_xx_inv = D_sqrt @ InverseOperator(A, method="cg") @ D_sqrt
+            A_inv = InverseOperator(A, method="cg", rtol=self.cg_rtol)
+            K_xx_inv = D_sqrt @ A_inv @ D_sqrt
         return K_xx_inv
 
     def calc_posterior_mean(self):
@@ -565,11 +567,13 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         if self.likelihood.zero_var:
             Z = self.likelihood.Zop
             Z_t = self.likelihood.Zop.transpose()
-            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg")
+            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol)
             b = Z @ self.C @ X_t @ y
             mean_post = X_t @ y - Z_t @ C_zz_inv @ b
         else:
-            A = InverseOperator(self.C + self.likelihood.D, method="cg")
+            A = InverseOperator(
+                self.C + self.likelihood.D, method="cg", rtol=self.cg_rtol
+            )
             mean_post = A @ X_t @ self.likelihood.D_var_inv @ y
         return mean_post
 
@@ -577,11 +581,15 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         if self.likelihood.zero_var:
             Z = self.likelihood.Zop
             Z_t = self.likelihood.Zop.transpose()
-            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg")
+            C_zz_inv = InverseOperator(
+                Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol
+            )
             Sigma_post = Z_t @ C_zz_inv @ Z
         else:
             D = self.likelihood.D
-            Sigma_post = InverseOperator(self.C + D, method="cg")
+            Sigma_post = InverseOperator(
+                self.C + D, method="cg", rtol=self.cg_rtol
+            )
         return Sigma_post
 
 
@@ -635,7 +643,8 @@ class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
         w = self.likelihood.calc_loss_grad_hess(mean_post)[2]
         D = DiagonalOperator(1 / np.sqrt(w))
         A = D @ self.C @ D + IdentityOperator(self.n_genotypes)
-        Sigma_post = D @ InverseOperator(A, method="cg") @ D
+        A_inv = InverseOperator(A, method="cg", rtol=self.cg_rtol)
+        Sigma_post = D @ A_inv @ D
         return Sigma_post
 
     def calc_posterior(self, X_pred=None, B=None):
