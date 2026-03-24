@@ -7,6 +7,7 @@ from scipy.sparse.linalg import aslinearoperator
 from scipy.stats import norm
 from scipy.optimize import minimize
 
+from gpmap.summary import GPDataSummarizer
 from gpmap.likelihood import GaussianLikelihood
 from gpmap.linop import (
     DiagonalOperator,
@@ -212,7 +213,7 @@ class SeqGaussianProcessRegressor(object):
         Examples
         --------
         Simulate data with default parameters:
-         
+
         >>> f, X, y, y_var = gp.simulate()
 
         Simulate data with custom noise and missing probability:
@@ -266,37 +267,37 @@ class SeqGaussianProcessRegressor(object):
         """
         Calculate the posterior distribution for the given inputs.
 
-        This method computes the posterior mean and covariance for the 
-        specified prediction points or the entire sequence space. Optionally, 
+        This method computes the posterior mean and covariance for the
+        specified prediction points or the entire sequence space. Optionally,
         a linear transformation can be applied to the posterior distribution.
 
         Parameters
         ----------
         X_pred : array-like, optional
-            Prediction points (genotypes) where the posterior distribution 
-            is evaluated. If `None`, the posterior is computed for the entire 
+            Prediction points (genotypes) where the posterior distribution
+            is evaluated. If `None`, the posterior is computed for the entire
             sequence space. Default is `None`.
         B : array-like or scipy.sparse.linalg.LinearOperator, optional
-            Linear transformation to apply to the posterior distribution over 
-            the complete space of possible sequences. If `None`, no 
+            Linear transformation to apply to the posterior distribution over
+            the complete space of possible sequences. If `None`, no
             transformation is applied. Default is `None`.
 
         Returns
         -------
         mu : numpy.ndarray
-            The transformed posterior mean, either for the specified prediction 
+            The transformed posterior mean, either for the specified prediction
             points or the entire sequence space.
         Sigma : numpy.ndarray or scipy.sparse.linalg.LinearOperator
-            The transformed posterior covariance matrix, either for the 
+            The transformed posterior covariance matrix, either for the
             specified prediction points or the entire sequence space.
 
         Notes
         -----
-        - The posterior mean and covariance are computed using the Gaussian 
+        - The posterior mean and covariance are computed using the Gaussian
           Process prior and the observed data.
-        - If `X_pred` is provided, the posterior is evaluated only for the 
+        - If `X_pred` is provided, the posterior is evaluated only for the
           specified prediction points.
-        - If `B` is provided, the posterior distribution is transformed using 
+        - If `B` is provided, the posterior distribution is transformed using
           the specified linear operator or matrix.
 
         Examples
@@ -327,21 +328,21 @@ class SeqGaussianProcessRegressor(object):
         Computes the posterior distribution of linear combinations of genotypes
         under the specified Gaussian Process prior.
 
-        This method calculates the posterior mean, standard deviation, 
-        95% credible intervals, and the posterior probability for each 
+        This method calculates the posterior mean, standard deviation,
+        95% credible intervals, and the posterior probability for each
         linear combination of genotypes defined in the contrast matrix.
 
         Parameters
         ----------
         contrast_matrix : pd.DataFrame of shape (n_genotypes, n_contrasts)
-            A DataFrame where each column represents a linear combination 
-            of genotypes (contrast) for which the posterior distribution 
+            A DataFrame where each column represents a linear combination
+            of genotypes (contrast) for which the posterior distribution
             is to be computed. The index should correspond to the genotypes.
 
         Returns
         -------
         contrasts : pd.DataFrame of shape (n_contrasts, 5)
-            A DataFrame summarizing the posterior distribution for each 
+            A DataFrame summarizing the posterior distribution for each
             contrast. The columns include:
 
             - ``estimate``: Posterior mean for each contrast.
@@ -352,7 +353,7 @@ class SeqGaussianProcessRegressor(object):
 
             - ``ci_95_upper``: Upper bound of the 95% credible interval.
 
-            - ``p(|x|>0)``: Posterior probability that the absolute value 
+            - ``p(|x|>0)``: Posterior probability that the absolute value
               of the contrast is greater than 0.
 
         """
@@ -386,25 +387,25 @@ class SeqGaussianProcessRegressor(object):
 
     def predict(self, X_pred=None, calc_variance=False):
         """
-        Compute the Maximum a Posteriori (MAP) estimate of the phenotype for 
+        Compute the Maximum a Posteriori (MAP) estimate of the phenotype for
         the specified genotypes or the entire genotype space.
 
         Parameters
         ----------
         X_pred : array-like of shape (n_genotypes,), optional
-            Array containing the genotypes for which the phenotype predictions 
-            are desired. If `X_pred` is None, predictions are computed for the 
+            Array containing the genotypes for which the phenotype predictions
+            are desired. If `X_pred` is None, predictions are computed for the
             entire sequence space.
 
         calc_variance : bool, optional, default=False
-            If True, the posterior variances and standard deviations for each 
+            If True, the posterior variances and standard deviations for each
             genotype are also computed and included in the output.
 
         Returns
         -------
         pred : pd.DataFrame of shape (n_genotypes, n_columns)
-            A DataFrame containing the predicted phenotypes for each input 
-            genotype in the column ``f``. If ``calc_variance=True``, additional 
+            A DataFrame containing the predicted phenotypes for each input
+            genotype in the column ``f``. If ``calc_variance=True``, additional
             columns are included:
 
             - ``f_var``: Posterior variance for each genotype.
@@ -420,7 +421,7 @@ class SeqGaussianProcessRegressor(object):
         Notes
         -----
         - The MAP estimate is computed using the posterior mean.
-        - If `calc_variance` is enabled, the credible intervals are calculated 
+        - If `calc_variance` is enabled, the credible intervals are calculated
           as mean ± 2 * standard deviation.
 
         Examples
@@ -430,7 +431,7 @@ class SeqGaussianProcessRegressor(object):
         >>> pred = model.predict()
 
         Predict phenotypes for specific genotypes with variance:
-        
+
         >>> pred = model.predict(X_pred=["AAA", "AAC"], calc_variance=True)
         """
 
@@ -451,10 +452,11 @@ class SeqGaussianProcessRegressor(object):
 
 
 class GaussianProcessRegressor(SeqGaussianProcessRegressor):
-    def __init__(self, base_kernel, progress=True):
+    def __init__(self, base_kernel, progress=True, cg_rtol=1e-5):
         self.K = base_kernel
         self.n_genotypes = self.K.shape[0]
         self.progress = progress
+        self.cg_rtol = cg_rtol
 
     def set_data(self, X, y, y_var=None):
         """
@@ -475,26 +477,41 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         """
         self.define_space(genotypes=X)
         self.likelihood = GaussianLikelihood(self.genotypes)
-        self.likelihood.set_data(X, y, y_var)
+        if y_var is None:
+            y_var = np.zeros_like(y)
+        noise_var = getattr(self, 'noise_var', 0.)
+        self.likelihood.set_data(X, y, y_var + noise_var)
         self.X = self.likelihood.Xop
         self.X_t = self.X.transpose()
+        self.gpdata = GPDataSummarizer(
+            alphabet=self.alphabet[0],
+            seq_length=self.seq_length,
+            X=X,
+            y=y,
+            y_var=y_var,
+        )
 
     @property
     def K_xx_inv(self):
-        if np.any(self.likelihood.y_var == 0.):
+        if np.any(self.likelihood.y_var == 0.0):
             K_xx = self.X @ self.K @ self.X_t + self.likelihood.D_var
-            K_xx_inv = InverseOperator(K_xx, method="cg")
+            K_xx_inv = InverseOperator(K_xx, method="cg", rtol=self.cg_rtol)
         else:
             # This formulation is better conditioned with heterogenous variances
             D_sqrt = self.likelihood.D_var_inv_sqrt
             Identity = IdentityOperator(self.likelihood.n_obs)
             A = D_sqrt @ self.X @ self.K @ self.X_t @ D_sqrt + Identity
-            K_xx_inv = D_sqrt @ InverseOperator(A, method="cg") @ D_sqrt
-        return(K_xx_inv)
+            A_inv = InverseOperator(A, method="cg", rtol=self.cg_rtol)
+            K_xx_inv = D_sqrt @ A_inv @ D_sqrt
+        return K_xx_inv
 
     def calc_posterior_mean(self):
         mean_post = self.K @ self.X_t @ self.K_xx_inv @ self.likelihood.y
+<<<<<<< HEAD
+        if hasattr(self, "deterministic_mean"):
+=======
         if hasattr(self, 'deterministic_mean'):
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
             mean_post += self.deterministic_mean
         return mean_post
 
@@ -505,8 +522,16 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         return Sigma_post
 
     def get_K_sqrt(self):
+<<<<<<< HEAD
+        if hasattr(self.K, "cholesky"):
+            try:
+                return self.K.cholesky()
+            except np.linalg.LinAlgError:
+                return self.K.matrix_sqrt()    
+=======
         if hasattr(self.K, 'cholesky'):
             return self.K.cholesky()
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         else:
             return self.K.matrix_sqrt()
 
@@ -534,6 +559,13 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         self.define_space(genotypes=X)
         self.likelihood = GaussianLikelihood(self.genotypes)
         self.likelihood.set_data(X, y, y_var)
+        self.gpdata = GPDataSummarizer(
+            alphabet=self.alphabet[0],
+            seq_length=self.seq_length,
+            X=X,
+            y=y,
+            y_var=y_var,
+        )
 
     def calc_loss_prior(self, v):
         return quad(self.C, v)
@@ -544,11 +576,13 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         if self.likelihood.zero_var:
             Z = self.likelihood.Zop
             Z_t = self.likelihood.Zop.transpose()
-            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg")
+            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol)
             b = Z @ self.C @ X_t @ y
             mean_post = X_t @ y - Z_t @ C_zz_inv @ b
         else:
-            A = InverseOperator(self.C + self.likelihood.D, method="cg")
+            A = InverseOperator(
+                self.C + self.likelihood.D, method="cg", rtol=self.cg_rtol
+            )
             mean_post = A @ X_t @ self.likelihood.D_var_inv @ y
         return mean_post
 
@@ -556,11 +590,15 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         if self.likelihood.zero_var:
             Z = self.likelihood.Zop
             Z_t = self.likelihood.Zop.transpose()
-            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg")
+            C_zz_inv = InverseOperator(
+                Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol
+            )
             Sigma_post = Z_t @ C_zz_inv @ Z
         else:
             D = self.likelihood.D
-            Sigma_post = InverseOperator(self.C + D, method="cg")
+            Sigma_post = InverseOperator(
+                self.C + D, method="cg", rtol=self.cg_rtol
+            )
         return Sigma_post
 
 
@@ -614,7 +652,8 @@ class GeneralizedGaussianProcessRegressor(MinimizerRegressor):
         w = self.likelihood.calc_loss_grad_hess(mean_post)[2]
         D = DiagonalOperator(1 / np.sqrt(w))
         A = D @ self.C @ D + IdentityOperator(self.n_genotypes)
-        Sigma_post = D @ InverseOperator(A, method="cg") @ D
+        A_inv = InverseOperator(A, method="cg", rtol=self.cg_rtol)
+        Sigma_post = D @ A_inv @ D
         return Sigma_post
 
     def calc_posterior(self, X_pred=None, B=None):

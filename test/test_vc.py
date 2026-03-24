@@ -1,24 +1,22 @@
 #!/usr/bin/env python
 import sys
 import unittest
-import numpy as np
-import pandas as pd
-
 from os.path import join
 from subprocess import check_call
 from tempfile import NamedTemporaryFile
 
-from scipy.stats import pearsonr
+import numpy as np
+import pandas as pd
 from scipy.special import comb
+from scipy.stats import pearsonr
 
 from gpmap.inference import VCregression
-from gpmap.settings import BIN_DIR
-from gpmap.matrix import rayleigh_quotient
 from gpmap.linop import (
     LaplacianOperator,
     ProjectionOperator,
-    calc_covariance_distance,
 )
+from gpmap.matrix import rayleigh_quotient
+from gpmap.settings import BIN_DIR
 
 
 class VCTests(unittest.TestCase):
@@ -60,37 +58,6 @@ class VCTests(unittest.TestCase):
                 W = ProjectionOperator(n_alleles, seq_length, k=k2)
                 f_k_rq = rayleigh_quotient(W, f)
                 assert np.allclose(f_k_rq, k1 == k2)
-
-    def test_calc_distance_covariance(self):
-        np.random.seed(1)
-        lambdas = np.array([0, 200, 20, 2, 0.2])
-        n_alleles, seq_length = 4, 4
-
-        vc = VCregression(
-            n_alleles=n_alleles, seq_length=seq_length, lambdas=lambdas
-        )
-        y_true = vc.simulate(y_var=0.01)[0]
-        rho, n = calc_covariance_distance(y_true, n_alleles, seq_length)
-
-        # Ensure we get the expected number of pairs per distance category
-        for d in range(seq_length + 1):
-            total_genotypes = n_alleles**seq_length
-            d_combs = comb(seq_length, d)
-            d_sites_genotypes = (n_alleles - 1) ** d
-            n[d] = total_genotypes * d_combs * d_sites_genotypes
-
-        # Ensure anticorrelated distances
-        assert rho[3] < 0
-        assert rho[4] < 0
-
-        # With missing data
-        y_true, X, y, _ = vc.simulate(y_var=0.01, p_missing=0.1)
-        idx = vc.get_obs_idx(X)
-        rho, n = calc_covariance_distance(y, n_alleles, seq_length, idx=idx)
-
-        # Ensure anticorrelated distances
-        assert rho[3] < 0
-        assert rho[4] < 0
 
     def test_vc_fit(self):
         # Simulate data

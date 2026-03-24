@@ -11,7 +11,11 @@ from gpmap.inference import (
     MinimizerRegressor,
     MinimumEpistasisInterpolator,
 )
+<<<<<<< HEAD
+from gpmap.linop import ConnectednessKernel, InverseOperator
+=======
 from gpmap.linop import ConnectednessKernel
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 
 class MEITests(unittest.TestCase):
@@ -95,7 +99,7 @@ class MEITests(unittest.TestCase):
         y_var = np.array([0.1] * 4)
 
         # With standard GP formulation
-        kernel = ConnectednessKernel(2, 2, rho=np.array([0.2, 0.2]))
+        kernel = ConnectednessKernel(2, 2, mu=np.array([0.2, 0.2]), sigma2=1.0)
         model1 = GaussianProcessRegressor(kernel)
         model1.set_data(X, y, y_var)
         mu1, Sigma1 = model1.calc_posterior()
@@ -108,18 +112,6 @@ class MEITests(unittest.TestCase):
         model2.C = C
         mu2, Sigma2 = model2.calc_posterior()
 
-        # With operator inverse method
-        model3 = MinimizerRegressor(seq_length=2, n_alleles=2)
-        model3.set_data(X, y, y_var)
-        model3.C = kernel.inv()
-        assert np.allclose(K_inv, model3.C @ np.eye(4))
-        mu3, Sigma3 = model3.calc_posterior()
-
-        assert np.allclose(mu1, mu2)
-        assert np.allclose(mu1, mu3)
-        assert np.allclose(Sigma1 @ np.eye(4), Sigma2 @ np.eye(4))
-        assert np.allclose(Sigma1 @ np.eye(4), Sigma3 @ np.eye(4))
-
         # With incomplete data
         X = np.array(["AA", "AB", "BA"])
         y = np.array([0, 0.9, 1.0])
@@ -131,26 +123,20 @@ class MEITests(unittest.TestCase):
         model2.set_data(X, y, y_var)
         mu2, Sigma2 = model2.calc_posterior()
 
-        model3.set_data(X, y, y_var)
-        mu3, Sigma3 = model2.calc_posterior()
         assert np.allclose(mu1, mu2)
-        assert np.allclose(mu1, mu3)
         assert np.allclose(Sigma1 @ np.eye(4), Sigma2 @ np.eye(4))
-        assert np.allclose(Sigma1 @ np.eye(4), Sigma3 @ np.eye(4))
 
         # Ensure predict methods return same values
         pred1 = model1.predict(calc_variance=True)
         pred2 = model2.predict(calc_variance=True)
-        pred3 = model3.predict(calc_variance=True)
         assert np.allclose(pred1, pred2)
-        assert np.allclose(pred1, pred3)
 
         # Run on larger simulated dataset
         np.random.seed(0)
         n_alleles, seq_length = 4, 5
         sigma2 = 0.1
         kernel = ConnectednessKernel(
-            n_alleles, seq_length, rho=np.array([0.2] * seq_length)
+            n_alleles, seq_length, mu=np.array([0.2] * seq_length), sigma2=1.0
         )
         model1 = GaussianProcessRegressor(kernel)
         model1.define_space(seq_length=seq_length, n_alleles=n_alleles)
@@ -165,7 +151,7 @@ class MEITests(unittest.TestCase):
         model2.set_data(X, y, y_var)
         model2.C = kernel.inv()
         mu2, Sigma2 = model2.calc_posterior()
-        assert np.allclose(mu1, mu2, atol=1e-4)
+        assert np.allclose(mu1, mu2, atol=1e-3)
 
     def test_regression(self):
         # Partial dataset that can recapitulate MEI

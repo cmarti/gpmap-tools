@@ -19,8 +19,16 @@ Density estimation
 .. autoclass:: gpmap.inference.SeqDEFT
     :members: fit, predict, make_contrasts, sample_prior, simulate
 
+Summary statistics
+------------------
+
+.. autoclass:: gpmap.summary.GPmapSummarizer
+    :members: calc_V_k_variance_components, calc_root_mean_squared_epistatic_coeff,
+        calc_V_U_variance_components, calc_sites_variance_perc, 
+        calc_site_pairs_variance_perc
+
 Visualization
----------------
+-------------
 
 Discrete Spaces
 ^^^^^^^^^^^^^^^

@@ -18,6 +18,9 @@ try:
 except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
+<<<<<<< HEAD
+from gpmap.matrix import kron, is_lower_triangular, tensordot
+=======
 from gpmap.matrix import (
     kron,
     quad,
@@ -26,6 +29,7 @@ from gpmap.matrix import (
     tensordot,
 )
 from gpmap.seq import get_product_states
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 from gpmap.utils import check_error
 
 
@@ -88,7 +92,11 @@ class LowRankPerturbationOperator(ExtendedLinearOperator):
         else:
             diag = np.ones(A.shape[1])
         self.D = DiagonalOperator(diag)
+<<<<<<< HEAD
+
+=======
         
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def _matvec(self, v):
         return (self.D + self.Q @ self.Lambda @ self.Q.T) @ v
 
@@ -106,7 +114,12 @@ class InverseOperator(ExtendedLinearOperator):
         self,
         linop,
         method="cg",
+<<<<<<< HEAD
+        atol=0,
+        rtol=1e-5,
+=======
         atol=1e-14,
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         maxiter=1000,
         preconditioner_size=0,
         **kwargs,
@@ -115,6 +128,7 @@ class InverseOperator(ExtendedLinearOperator):
         self.shape = linop.shape
         self.dtype = linop.dtype
         self.atol = atol
+        self.rtol = rtol
         self.maxiter = maxiter
         self.kwargs = kwargs
 
@@ -151,16 +165,28 @@ class InverseOperator(ExtendedLinearOperator):
             class cb(object):
                 def __init__(self):
                     self.niter = 0
+<<<<<<< HEAD
+
+                def __call__(self, xk):
+                    self.niter += 1
+
+=======
                     
                 def __call__(self, xk):
                     self.niter += 1
                     
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
             counter = cb()
             res = cg(
                 self.linop,
                 v,
                 M=self.preconditioner,
                 atol=self.atol,
+<<<<<<< HEAD
+                tol=self.rtol,
+                maxiter=self.maxiter,
+=======
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
                 callback=counter,
                 **self.kwargs,
             )
@@ -169,6 +195,7 @@ class InverseOperator(ExtendedLinearOperator):
                 msg = "Conjugate gradient did not converge"
                 raise ValueError(msg)
             res = res[0]
+<<<<<<< HEAD
 
         elif self.method == "direct":
             res = np.linalg.solve(self.linop, v)
@@ -192,6 +219,31 @@ class SymmetricOperator(ExtendedLinearOperator):
     def transpose(self):
         return self
 
+=======
+
+        elif self.method == "direct":
+            res = np.linalg.solve(self.linop, v)
+
+        return res
+
+    def quad(self, v):
+        u = self._matvec(v)
+        return np.sum(v * u)
+
+
+class SymmetricOperator(ExtendedLinearOperator):
+    symmetric = True
+
+    def _rmatvec(self, v):
+        return self._matvec(v)
+
+    def _rmatmat(self, B):
+        return self._matmat(B)
+
+    def transpose(self):
+        return self
+
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 class DiagonalOperator(SymmetricOperator):
     def __init__(self, diag):
@@ -461,10 +513,17 @@ class KronOperator(ExtendedLinearOperator):
         return u
 
     def _get_dense_matrix(self, m):
+<<<<<<< HEAD
+        if isinstance(m, np.ndarray):
+            return m
+        else:
+            return m @ np.eye(m.shape[1])
+=======
         if isinstance(m, _CustomLinearOperator):
             return m @ np.eye(m.shape[1])
         else:
             return m
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
     def todense(self):
         return kron([self._get_dense_matrix(m) for m in self.matrices])
@@ -476,8 +535,13 @@ class KronOperator(ExtendedLinearOperator):
         if self.shape[0] != self.shape[1]:
             raise ValueError("Cannot compute cholesky of non-square matrix")
         return KronSquareTriangularOperator(
-            [np.linalg.cholesky(m) for m in self.matrices]
+            [np.linalg.cholesky(m @ np.eye(m.shape[1])) for m in self.matrices]
         )
+
+    def inv(self):
+        if self.shape[0] != self.shape[1]:
+            raise ValueError("Cannot invert a non-square matrix")
+        return KronOperator([np.linalg.inv(m) for m in self.matrices])
 
 
 class KronSquareTriangularOperator(KronOperator):
@@ -914,21 +978,33 @@ class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
         return self.L_powers_d_inv[:, distance]
 
 
+<<<<<<< HEAD
+class CovarianceSitesOperator(SeqOperator, KronOperator):
+    symmetric = True
+
+    def __init__(self, n_alleles, seq_length, sites):
+        self.sites = sites
+=======
 class CovarianceVjOperator(SeqOperator, KronOperator):
     symmetric = True
 
     def __init__(self, n_alleles, seq_length, j):
         self.j = j
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         SeqOperator.__init__(self, n_alleles, seq_length)
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
         C0 = IdentityOperator(self.alpha)
         C1 = np.ones((self.alpha, self.alpha)) - np.eye(self.alpha)
+<<<<<<< HEAD
+        return [C1 if i in self.sites else C0 for i in range(self.seq_length)]
+=======
         return [C1 if i in self.j else C0 for i in range(self.seq_length)]
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 
-class VjOperator(ConstantDiagSeqOperator, KronOperator):
+class VUOperator(ConstantDiagSeqOperator, KronOperator):
     def __init__(self, n_alleles, seq_length, j):
         self.j = j
         self.k = len(j)
@@ -941,7 +1017,7 @@ class VjOperator(ConstantDiagSeqOperator, KronOperator):
         KronOperator.__init__(self, self.get_matrices(j))
 
 
-class VjBasisOperator(VjOperator):
+class VUBasisOperator(VUOperator):
     def get_matrices(self, j):
         site_L = self.alpha * np.eye(self.alpha) - np.ones(
             (self.alpha, self.alpha)
@@ -950,7 +1026,7 @@ class VjBasisOperator(VjOperator):
         return [b[int(i in j)] for i in range(self.seq_length)]
 
 
-class VjProjectionOperator(VjOperator):
+class VUProjectionOperator(VUOperator):
     symmetric = True
 
     def get_matrices(self, j):
@@ -1007,11 +1083,60 @@ class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
                 
             return u
 
+<<<<<<< HEAD
+class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
+    def __init__(self, n_alleles, seq_length, lambdas=None):
+        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
+        self.n_V_U = 2**seq_length
+        self.set_lambdas(lambdas)
+        self.W0 = PconOperator(self.alpha)
+        self.W1 = PaddOperator(self.alpha)
+        self.v_shape = [n_alleles] * seq_length
+
+    def set_lambdas(self, lambdas):
+        if lambdas is not None:
+            check_error(
+                lambdas.shape[0] == self.n_V_U, msg="Incorrect size of lambdas"
+            )
+            check_error(
+                np.all(lambdas >= 0),
+                msg=f"lambdas must be non-negative: {lambdas}",
+            )
+            self.lambdas = lambdas
+
+    def calc_V_U_product(self, v, sites, sites_included):
+        if not sites:
+            return v
+        elif np.all([self.cached_U[s] == sites_included[s] for s in sites]):
+            return self.cached_matvecs[sites[-1]]
+        else:
+            site = sites[-1]
+            site_included = sites_included[-1]
+            P = self.W1 if site_included else self.W0
+            v_prev = self.calc_V_U_product(v, sites[:-1], sites_included[:-1])
+            u = tensordot(P, v_prev, site)
+            self.n_products += 1
+
+            self.cached_matvecs[site] = u
+            self.cached_U[site] = site_included
+            for i in range(site + 1, self.seq_length):
+                self.cached_U[i] = None
+                self.cached_matvecs[i] = None
+
+            return u
+
+    def _matvec(self, v):
+        if self.lambdas is None:
+            msg = "lambdas must be defined for computing matrix-vector products"
+            raise ValueError(msg)
+
+=======
     def _matvec(self, v):
         if self.lambdas is None:
             msg = 'lambdas must be defined for computing matrix-vector products'
             raise ValueError(msg)
         
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         self.cached_matvecs = [None] * self.seq_length
         self.cached_U = [None] * self.seq_length
         self.n_products = 0
@@ -1027,12 +1152,31 @@ class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
             v_U = self.calc_V_U_product(v, sites, U)
             u += lambda_U * v_U
         return u.transpose().flatten()
+<<<<<<< HEAD
+
+    def inv(self):
+        return VUProjectionWeightedSumOperator(
+            self.alpha, self.seq_length, lambdas=1.0 / self.lambdas
+        )
+
+    def matrix_sqrt(self):
+        lambdas = np.sqrt(self.lambdas)
+        return VUProjectionWeightedSumOperator(
+            self.alpha, self.seq_length, lambdas=lambdas
+        )
+
+=======
     
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
     symmetric = True
 
+<<<<<<< HEAD
+    def __init__(self, n_alleles, seq_length, mu):
+=======
     def __init__(self, n_alleles, seq_length, mu, mu0=1.):
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         ConstantDiagSeqOperator.__init__(
             self, n_alleles=n_alleles, seq_length=seq_length
         )
@@ -1043,6 +1187,26 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
     def get_matrices(self):
         W0 = PconOperator(self.alpha)
         W1 = PaddOperator(self.alpha)
+<<<<<<< HEAD
+        return [self.mu[0] * W0 + mu_i * W1 for mu_i in self.mu[1:]]
+
+    def get_mu(self):
+        return self.mu
+    
+    def get_decay_factors(self):
+        decay_factors = []
+        for m in self.matrices:
+            m = m @ np.eye(self.alpha)
+            decay_factors.append(1 - m[0, 1] / m[0, 0])
+        return np.array(decay_factors)
+
+    def check_mu(self, mu, ignore_bound=False):
+        msg = "mu vector size must be equal to sequence length + 1"
+        check_error(mu.shape[0] == self.seq_length + 1, msg=msg)
+
+        checked = mu >= 0
+        msg = "mu must be non-negative"
+=======
         return [W0 + r * W1 for r in self.mu]
 
     def get_mu(self):
@@ -1054,6 +1218,7 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
 
         checked = mu > 0
         msg = "mu larger than 0"
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         if not ignore_bound:
             checked = checked & (mu < 1)
             msg = "mu must be between 0 and 1"
@@ -1064,6 +1229,23 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
             np.full(self.seq_length, mu)
             if isinstance(mu, float)
             else np.array(mu)
+<<<<<<< HEAD
+        )
+        self.check_mu(self.mu, ignore_bound=ignore_bound)
+        self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
+
+    def inv(self):
+        mu = 1.0 / self.mu
+        return ConnectednessProjectionOpererator(
+            self.alpha, self.seq_length, mu=mu
+        )
+
+    def matrix_sqrt(self):
+        mu = np.sqrt(self.mu)
+        return ConnectednessProjectionOpererator(
+            self.alpha, self.seq_length, mu=mu
+=======
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         )
         self.check_mu(self.mu, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
@@ -1076,7 +1258,7 @@ class EigenBasisOperator(StackedOperator):
         self.n_alleles = n_alleles
         self.seq_length = seq_length
         As = [
-            VjBasisOperator(n_alleles, seq_length, j)
+            VUBasisOperator(n_alleles, seq_length, j)
             for j in combinations(positions, k)
         ]
         super().__init__(linops=As, axis=1)
@@ -1178,6 +1360,11 @@ class VUKernel(VUProjectionWeightedSumOperator, Kernel):
         return np.log(self.get_lambdas())
 
 
+<<<<<<< HEAD
+class ConnectednessKernel(ConnectednessProjectionOpererator, Kernel):
+    symmetric = True
+
+=======
 class ConnectednessKernel(ConstantDiagSeqOperator, KronOperator, Kernel):
     symmetric = True
 
@@ -1229,6 +1416,7 @@ class ConnectednessKernel(ConstantDiagSeqOperator, KronOperator, Kernel):
         )
         self.check_mu(self.mu, ignore_bound=ignore_bound)
     
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def set_params(self, params):
         self.set_mu(np.exp(params))
 
@@ -1283,6 +1471,8 @@ def get_diag(A, progress=False):
         v[i] = 1.0
         d.append(np.dot(v, A @ v))
     return np.array(d)
+<<<<<<< HEAD
+=======
 
 
 def _get_seq_values_and_obs_seqs(y, n_alleles, seq_length, idx=None):
@@ -1469,3 +1659,4 @@ def calc_space_vjs_variance_components(space, k=None):
     n_alleles = n_alleles[0]
     vc = calc_vjs_variance_components(space.y, n_alleles, space.seq_length, k)
     return vc
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359

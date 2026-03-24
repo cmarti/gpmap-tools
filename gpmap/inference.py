@@ -5,10 +5,15 @@ import numpy as np
 import pandas as pd
 
 from tqdm import tqdm
+from itertools import product
 from scipy.optimize import minimize
-from scipy.special import logsumexp
+from scipy.special import logsumexp, comb
 from scipy.stats import norm, pearsonr
 
+<<<<<<< HEAD
+from gpmap.summary import GPDataSummarizer
+=======
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 from gpmap.aligner import (
     VCKernelAligner,
     ConnectednessKernelAligner,
@@ -32,8 +37,11 @@ from gpmap.linop import (
     ConnectednessKernel,
     VarianceComponentKernel,
     VUKernel,
+<<<<<<< HEAD
+=======
     calc_covariance_U_sites,
     calc_covariance_distance,
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 )
 from gpmap.utils import (
     check_error,
@@ -106,7 +114,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
 
     cg_rtol : float, optional
         The relative tolerance for the conjugate gradient solver. Default is
-        1e-16. This controls the precision of the solver used in computations.
+        1e-5. This controls the precision of the solver used in computations.
     """
 
     def __init__(
@@ -117,7 +125,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
         alphabet_type="custom",
         P=2,
         a=None,
-        cg_rtol=1e-16,
+        cg_rtol=1e-5,
     ):
         super().__init__(
             seq_length=seq_length,
@@ -198,13 +206,21 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             or unknown.
 
         method : str
+<<<<<<< HEAD
+            Method to estimate hyperparameter `a`. If `method='kernel_alignment'` it will be estimated via kernel alignment with the empirical distance-covariance function of the residuals of a P-1 order model. If `method='minimum_epistasis'`, it will use the `a` value corresponding to the magnitude of local P order epistatic coefficients in the MAP solution.
+=======
             Method to estimate hyperparameter `a`. If `method='kernel_alignment'` it will be estimated via kernel alignment with the empirical distance-covariance function of the residuals of a P-1 order model. If `method='minimum_epistasis'`, it will use the `a` value corresponding to the magnitude of local P order epistatic coefficients in the MAP solution. 
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
         """
 
         if method == "kernel_alignment":
             self.set_data(X, y, y_var=y_var)
+<<<<<<< HEAD
+
+=======
             
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
             # Fit P-1 order model and compute residuals
             A = self.likelihood.Xop @ self.kernel_basis
             A = A @ np.eye(self.kernel_basis.shape[1])
@@ -212,10 +228,14 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             self.resid = y - A @ self.beta
 
             # Run kernel alignment
+<<<<<<< HEAD
+            cov, ns = self.gpdata.calc_covariance_distance(centered=False)
+=======
             obs_idx = self.get_obs_idx(X)
             cov, ns = calc_covariance_distance(
                 self.resid, self.n_alleles, self.seq_length, idx=obs_idx
             )
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
             self.aligner = DeltaPKernelAligner(
                 self.n_alleles, self.seq_length, self.DP.P
             )
@@ -226,12 +246,21 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             mean = self.calc_posterior_mean()
             a_star = self.DP.rank * self.s / quad(self.DP, mean)
             self.set_data(X, y, y_var=y_var)
+<<<<<<< HEAD
+
+        else:
+            msg = 'Only methods in ["kernel_alignment", "minimum epistasis"]'
+            msg += " are allowed"
+            raise ValueError(msg)
+
+=======
         
         else:
             msg = 'Only methods in ["kernel_alignment", "minimum epistasis"]'
             msg += ' are allowed'
             raise ValueError(msg)
             
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         self.set_a(a_star)
 
 
@@ -257,7 +286,11 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         inferred from the provided data.
 
     genotypes : array-like, optional
+<<<<<<< HEAD
+        A list or array of genotypes to be used in the model. If not
+=======
         A list or array of genotypes to be used in the interpolation. If not
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         provided, the model will infer the genotype space.
 
     alphabet_type : str, optional
@@ -268,6 +301,23 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         level of interaction between genetic sites that is penalized.
 
     a_values : array-like, optional
+<<<<<<< HEAD
+        The regularization parameters for each interaction order. If not provided,
+        they will be inferred during the fitting process to best match the observed data.
+
+    lambda_U_lower_than_P : array-like, optional
+        The regularization parameters for interactions with order lower than P.
+        If not provided, it will be inferred during fitting.
+
+    cg_rtol : float, optional
+        The relative tolerance for the conjugate gradient solver. Default is
+        1e-16. This controls the precision of the solver used in computations.
+
+    progress : bool, optional
+        Whether to display progress bars during fitting. Default is True.
+    """
+
+=======
         The regularization parameters. If not provided, it will be inferred
         during the fitting process to best match the observed data.
     
@@ -280,6 +330,7 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         The relative tolerance for the conjugate gradient solver. Default is
         1e-16. This controls the precision of the solver used in computations.
     """
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def __init__(
         self,
         n_alleles=None,
@@ -289,7 +340,11 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         P=2,
         a_values=None,
         lambda_U_lower_than_P=None,
+<<<<<<< HEAD
+        cg_rtol=1e-5,
+=======
         cg_rtol=1e-16,
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         progress=True,
     ):
         self.progress = progress
@@ -301,16 +356,43 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             alphabet_type=alphabet_type,
         )
         self.P = P
+<<<<<<< HEAD
+        self.aligner = DeltaUKernelAligner(self.n_alleles, self.seq_length, P)
+        self.all_Us = np.array(
+            list(product([False, True], repeat=self.seq_length))
+        )
+        self.Us = self.aligner.params_to_log_lambda_U.Us
+        self.n_U = len(self.Us)
+        self.n_U_lower_than_P = int(
+            sum([comb(self.seq_length, k) for k in range(P)])
+        )
+        self.set_lambda_Us(a_values, lambda_U_lower_than_P)
+        self.cg_rtol = cg_rtol
+
+    def get_params(self):
+        return np.log(np.append(self.lambda_U_lower_than_P, self.a_values))
+
+=======
         self.aligner = DeltaUKernelAligner(self.n_alleles, self.seq_length, P, include_lower_P=True)
         self.Us = self.aligner.Us
         self.set_lambda_Us(a_values, lambda_U_lower_than_P)
         self.cg_rtol = cg_rtol
 
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def set_lambda_Us(self, a_values=None, lambda_U_lower_than_P=None):
         if a_values is not None and lambda_U_lower_than_P is not None:
             self.a_values = a_values
             self.lambda_U_lower_than_P = lambda_U_lower_than_P
+<<<<<<< HEAD
+
+            x = self.get_params()
+            log_lambda = self.aligner.params_to_log_lambda_U(
+                x, return_grad=False
+            )
+            self.lambdas = np.exp(log_lambda)
+=======
             self.lambdas = self.aligner.get_lambda_U(a_values, lambda_U_lower_than_P)
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
             self.K = VUKernel(self.n_alleles, self.seq_length, self.lambdas)
 
     def calc_posterior(self, X_pred=None, B=None):
@@ -322,7 +404,11 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         return self.transform_posterior(
             mean_post, Sigma_post, X_pred=X_pred, B=B
         )
+<<<<<<< HEAD
+
+=======
         
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def fit(self, X, y, y_var=None):
         """
         Fits the Local Epistasis Regression (LER) model hyperparameters
@@ -349,6 +435,127 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             or unknown.
         """
         self.set_data(X, y, y_var=y_var)
+<<<<<<< HEAD
+        cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
+        x = self.aligner.fit(cov, ns)
+        lambda_U_lower_than_P = x[: self.n_U_lower_than_P]
+        a_values = x[self.n_U_lower_than_P :]
+
+        self.set_lambda_Us(a_values, lambda_U_lower_than_P)
+
+    def get_empirical_pred_correlations_df(self):
+        """
+        Compute empirical and predicted correlations for pairs of sequences
+        differing at all possible combinations of sites U.
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame indexed by concatenated site labels with columns
+            - d: number of sites in the set
+            - n: number of observations for that set
+            - emp_cor: empirical centered autocovariance normalized by the zero-lag value
+            - pred_cor: predicted autocovariance (from the current aligner) normalized likewise
+            - d_jittered: jittered d useful for plotting
+
+        """
+        sites = np.array(
+            ["".join(x) for x in product(["0", "1"], repeat=self.seq_length)]
+        )
+        d = [x.count("1") for x in sites]
+
+        obs_covs, ns = self.gpdata.calc_covariance_U_sites(centered=True)
+        obs_corrs = obs_covs / obs_covs[0]
+
+        pred_covs = self.aligner.predict(self.get_params())
+        pred_corrs = pred_covs / pred_covs[0]
+
+        df = pd.DataFrame(
+            {
+                "d": d,
+                "n": ns,
+                "emp_cor": obs_corrs,
+                "pred_cor": pred_corrs,
+                "d_jittered": np.random.normal(d, scale=0.05),
+            },
+            index=sites,
+        )
+        return df
+
+    def get_a_values(self, position_labels=None):
+        """
+        Return a DataFrame of interaction-specific regularization parameters.
+
+        Parameters
+        ----------
+        position_labels : array-like of shape (seq_length,), optional
+            Labels for sequence positions (ints or strings). If None, defaults
+            to np.arange(self.seq_length).
+
+        Returns
+        -------
+        pandas.DataFrame
+            Rows correspond to interactions U. Columns include:
+            - 'site{i}' (for i=0..|U|-1): labels of positions in U
+            - 'a_U': regularization parameter for interaction U
+            - 'interaction_strength': 1.0 / a_U
+
+        """
+        if position_labels is None:
+            position_labels = np.arange(self.seq_length)
+        elif position_labels.shape[0] != self.seq_length:
+            msg = f"Site of position_labeles ({position_labels.shape[0]}) "
+            msg += f"should match sequence length ({self.seq_length})"
+            raise ValueError(msg)
+
+        records = []
+        for U, a_U in zip(self.Us, self.a_values):
+            U = np.array(U)
+            record = {
+                f"site{i + 1}": p for i, p in enumerate(position_labels[U])
+            }
+            record["a_U"] = a_U
+            record["interaction_strength"] = 1.0 / a_U
+            records.append(record)
+        df = pd.DataFrame(records)
+        return df
+
+    def get_lambda_U_values(self, position_labels=None):
+        """
+        Return a DataFrame of interaction-specific lambda values for interactions U
+        with order lower than P.
+
+        Parameters
+        ----------
+        position_labels : array-like of shape (seq_length,), optional
+            Labels for sequence positions (ints or strings). If None, defaults
+            to np.arange(self.seq_length).
+
+        Returns
+        -------
+        pandas.DataFrame
+            Rows correspond to interactions U (only those with order < P). Columns:
+            - 'U': comma-separated position labels in U
+            - 'k': number of sites in U
+            - 'lambda_U': regularization parameter for interaction U
+        """
+        if position_labels is None:
+            position_labels = np.arange(self.seq_length)
+        elif position_labels.shape[0] != self.seq_length:
+            msg = f"Site of position_labeles ({position_labels.shape[0]}) "
+            msg += f"should match sequence length ({self.seq_length})"
+            raise ValueError(msg)
+
+        records = []
+
+        Us = self.all_Us[self.all_Us.sum(1) < self.P, :]
+        for U, lambda_U in zip(Us, self.lambda_U_lower_than_P):
+            U_label = ",".join([str(p) for p in position_labels[U]])
+            record = {"U": U_label, "k": U.sum(), "lambda_U": lambda_U}
+            records.append(record)
+        df = pd.DataFrame(records)
+        return df
+=======
         cov, ns = calc_covariance_U_sites(
             y, self.n_alleles, self.seq_length, idx=self.get_obs_idx(X)
         )
@@ -495,6 +702,7 @@ class LocalEpistasisMinimizer(MinimizerRegressor):
         )
         self.Us = self.aligner.Us
         self.set_a_values(self.aligner.fit(cov, ns))
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 
 class VCregression(GaussianProcessRegressor):
@@ -550,7 +758,7 @@ class VCregression(GaussianProcessRegressor):
         The maximum log10(beta) value for cross-validation. Default is 7.
 
     cg_rtol : float, optional
-        The relative tolerance for the conjugate gradient solver. Default is 1e-16.
+        The relative tolerance for the conjugate gradient solver. Default is 1e-5.
 
     progress : bool, optional
         Whether to display progress bars during fitting. Default is True.
@@ -570,7 +778,7 @@ class VCregression(GaussianProcessRegressor):
         num_beta=20,
         min_log_beta=-2,
         max_log_beta=7,
-        cg_rtol=1e-16,
+        cg_rtol=1e-5,
         progress=True,
     ):
         self.progress = progress
@@ -635,12 +843,6 @@ class VCregression(GaussianProcessRegressor):
         super().set_data(X, y, y_var=y_var)
         self.cov = cov
         self.ns = ns
-        self.sigma2 = 0.0 if y_var is None else np.nanmin(y_var)
-
-    def calc_covariance_distance(self, X, y):
-        return calc_covariance_distance(
-            y, self.n_alleles, self.seq_length, self.get_obs_idx(X)
-        )
 
     def lambdas_to_variance(self, lambdas):
         variance_components = (lambdas * self.K.m_k)[1:]
@@ -672,7 +874,7 @@ class VCregression(GaussianProcessRegressor):
         s = self.seq_length + 1
         k = np.arange(s)
         vc_perc = np.zeros(s)
-        vc_perc[1:] = self.lambdas_to_variance(lambdas)
+        vc_perc[1:] = self.lambdas_to_variance(lambdas) * 100
         df = pd.DataFrame(
             {
                 "k": k,
@@ -685,7 +887,11 @@ class VCregression(GaussianProcessRegressor):
 
     def process_data(self, data):
         X, y, y_var = data
-        cov, ns = self.calc_covariance_distance(X, y)
+        if not hasattr(self, "gpdata"):
+            self.gpdata = GPDataSummarizer(genotypes=X)
+
+        self.gpdata.set_data(X, y, y_var=y_var)
+        cov, ns = self.gpdata.calc_covariance_distance(centered=False)
         return (X, y, y_var, cov, ns)
 
     def set_cv_loss_function(self, cv_loss_function):
@@ -705,11 +911,9 @@ class VCregression(GaussianProcessRegressor):
         X, y, y_var, cov, ns = data
 
         if self.cv_loss_function == "frobenius_norm":
-            # TODO: unclear how to properly deal with the variance here
-            self.kernel_aligner.set_data(cov, ns, sigma2=y_var.min())
-            loss = self.kernel_aligner.calc_loss(
-                lambdas, beta=0, return_grad=False
-            )
+            self.kernel_aligner.set_data(cov, ns)
+            self.kernel_aligner.regularizer.set_beta(self.beta)
+            loss = self.kernel_aligner.calc_loss(lambdas, return_grad=False)
 
         else:
             self.set_lambdas(lambdas)
@@ -729,15 +933,17 @@ class VCregression(GaussianProcessRegressor):
         if beta is None:
             beta = self.beta
 
-        cov, ns, sigma2 = self.cov, self.ns, self.sigma2
+        cov, ns = self.cov, self.ns
         if cov is None or ns is None:
-            cov, ns = self.calc_covariance_distance(
-                self.likelihood.X, self.likelihood.y
+            self.gpdata.set_data(
+                self.likelihood.X,
+                self.likelihood.y,
+                y_var=self.likelihood.y_var,
             )
-            sigma2 = np.nanmin(self.likelihood.y_var)
+            cov, ns = self.gpdata.calc_covariance_distance(centered=False)
 
-        self.kernel_aligner.set_beta(beta)
-        lambdas = self.kernel_aligner.fit(cov, ns, sigma2=sigma2)
+        self.kernel_aligner.regularizer.set_beta(beta)
+        lambdas = self.kernel_aligner.fit(cov, ns)
         return lambdas
 
     def fit(self, X, y, y_var=None):
@@ -792,7 +998,11 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
 
     This model enables the inference and prediction of a scalar function in
     sequence spaces under a Gaussian Process prior. The prior is parameterized
+<<<<<<< HEAD
+    by parameters controlling the effect of mutations at specific sites on
+=======
     by parameters controlling the effect of mutations at specific sites on 
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     the predictability of other mutations.
 
     Parameters
@@ -816,7 +1026,11 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         they will be inferred during fitting.
 
     cg_rtol : float, optional
+<<<<<<< HEAD
+        The relative tolerance for the conjugate gradient solver. Default is 1e-5.
+=======
         The relative tolerance for the conjugate gradient solver. Default is 1e-16.
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
     progress : bool, optional
         Whether to display progress bars during fitting. Default is True.
@@ -829,8 +1043,12 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         genotypes=None,
         alphabet_type="custom",
         mu=None,
+<<<<<<< HEAD
+        cg_rtol=1e-5,
+=======
         sigma2=None,
         cg_rtol=1e-16,
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         progress=True,
     ):
         self.progress = progress
@@ -841,6 +1059,18 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             alphabet_type=alphabet_type,
         )
 
+<<<<<<< HEAD
+        if mu is not None:
+            self.set_params(mu)
+
+        self.cg_rtol = cg_rtol
+
+    def set_params(self, mu):
+        self.mu = mu
+        K = ConnectednessKernel(self.n_alleles, self.seq_length, mu=mu)
+        super().__init__(base_kernel=K, progress=self.progress)
+
+=======
         if mu is not None and sigma2 is not None:
             self.set_params(mu, sigma2)
 
@@ -863,6 +1093,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             raise ValueError(msg)
         return 100 * self.n_alleles * self.mu / (1 + self.mu * (self.n_alleles - 1))
 
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def get_decay_factors(self):
         """
         Return the decay factors as a DataFrame from :math:`\mu`s.
@@ -877,6 +1108,10 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             - ``decay_factor``: Decay factor associated to each position.
         """
         sites = np.arange(self.seq_length)
+<<<<<<< HEAD
+        decay_factors = self.K.get_decay_factors()
+        df = pd.DataFrame({"decay_factor": decay_factors}, index=sites)
+=======
         decay_factors = self.mu_to_decay_factors(self.mu)
         df = pd.DataFrame(
             {
@@ -885,6 +1120,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             },
             index=sites
         )
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         return df
 
     def fit(self, X, y, y_var=None):
@@ -919,11 +1155,17 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             n_alleles=self.n_alleles, seq_length=self.seq_length
         )
         self.set_data(X, y, y_var=y_var)
+<<<<<<< HEAD
+        cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
+        mu = self.kernel_aligner.fit(cov, ns)
+        self.set_params(mu=mu)
+=======
         cov, ns = self.calc_covs(self.likelihood.X, self.likelihood.y)
         log_sigma2, logit_mu = self.kernel_aligner.fit(cov, ns)
         sigma2 = np.exp(log_sigma2)
         mu = np.exp(logit_mu) / (1 + np.exp(logit_mu))
         self.set_params(mu=mu, sigma2=sigma2)
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 
 class SeqDEFT(GeneralizedGaussianProcessRegressor, _DeltaPpriorGP):

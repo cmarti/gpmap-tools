@@ -10,9 +10,10 @@ landscapes of different size and complexity.
 .. toctree::
     :maxdepth: 1
 
-    usage/0_discrete_spaces.ipynb
-    usage/1_Ser.ipynb    
-    usage/2_GB1.ipynb
+    usage/discrete_spaces.ipynb
+    usage/serine.ipynb    
+    usage/GB1.ipynb
+    usage/SD.ipynb
 
 **References**
 
