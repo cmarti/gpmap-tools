@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 from scipy.sparse.linalg import aslinearoperator
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, norm
 
 from gpmap.inference import (
     GaussianProcessRegressor,
@@ -263,21 +263,59 @@ class MEITests(unittest.TestCase):
         assert calibration > 0.9
 
     def test_mei_fit(self):
-        a_true = 0.1
+        a_true = 100
         np.random.seed(0)
         model = MinimumEpistasisInterpolator(
             seq_length=5, alphabet_type="dna", a=a_true
         )
-        _, X, y, y_var = model.simulate(y_var=0.1, p_missing=0.1)
+        f, X, y, _ = model.simulate(y_var=0.1, p_missing=0.1)
+        idx = model.get_obs_idx(X)
+        f_train = f[idx]
 
         # Fit with minimum epistasis
-        model.fit(X, y, y_var, method="minimum_epistasis")
+        model.fit(X, f_train, method="minimum_epistasis")
+        a1 = model.a.copy()
         err1 = np.abs(np.log2(a_true / model.a))
+        pred1 = model.predict(calc_variance=True)
+        print(pred1)
 
         # Fit with kernel alignment
-        model.fit(X, y, y_var, method="kernel_alignment")
+        model.fit(X, f_train, method="kernel_alignment")
+        a2 = model.a.copy()
         err2 = np.abs(np.log2(a_true / model.a))
+        pred2 = model.predict(calc_variance=True)
+        
         assert err2 < err1
+        assert np.allclose(pred1['f'], pred2['f'])
+        assert np.all(pred1['f_var'] <= pred2['f_var'])
+        
+        
+        a_values = np.geomspace(1e1, 400, 20)
+        logps = []
+        for a in a_values:
+            model.set_a(a)
+            pred = model.predict(calc_variance=True)
+            pred['f_true'] = f
+            pred = pred.loc[pred['f_var']> 0, :]
+            distrib = norm(pred['f'], pred['f_std'])
+            logps.append(distrib.logpdf(pred['f_true']).mean())
+            
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(1, 1, figsize=(4, 3))
+        axes.scatter(a_values, logps, s=10, c='black')
+        axes.plot(a_values, logps, c='black')
+        axes.axvline(a1, lw=0.75, linestyle='--', label='Minimum epistasis', c='green')
+        axes.axvline(a2, lw=0.75, linestyle='--', label='Kernel alignment', c='darkblue')
+        axes.axvline(a_true, lw=0.75, linestyle='--', label='True value', c='grey')
+        a_star = a_values[np.argmax(logps)]
+        axes.axvline(a_star, label='Cross-validation', lw=0.75, linestyle='--', c='darkred')
+        axes.set(xlabel='Hyperparameter $a$', xscale='log',
+                 ylabel='Predictive log-likelihood')
+        axes.legend(loc=3)
+        fig.tight_layout()
+        fig.savefig('/home/cmarti/mei_cross_validation.png', dpi=300)
+            
+        
 
     def test_mei_predict(self):
         np.random.seed(0)
