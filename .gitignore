@@ -13,6 +13,7 @@ docs/usage/.ipynb_checkpoints
 docs/html
 docs/build_docs.sh
 docs/notebooks
+gpmap/datasets/*/test*
 
 # Other programs files
 .pydevproject
