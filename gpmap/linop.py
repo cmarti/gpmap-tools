@@ -9,7 +9,7 @@ from scipy.linalg import (
     orth,
     solve_triangular,
 )
-from scipy.sparse.linalg import eigsh, cg, minres, aslinearoperator
+from scipy.sparse.linalg import aslinearoperator, cg, eigsh, minres
 from scipy.special import comb, factorial
 from tqdm import tqdm
 
@@ -18,18 +18,7 @@ try:
 except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
-<<<<<<< HEAD
-from gpmap.matrix import kron, is_lower_triangular, tensordot
-=======
-from gpmap.matrix import (
-    kron,
-    quad,
-    reciprocal,
-    is_lower_triangular,
-    tensordot,
-)
-from gpmap.seq import get_product_states
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
+from gpmap.matrix import is_lower_triangular, kron, tensordot
 from gpmap.utils import check_error
 
 
@@ -92,11 +81,7 @@ class LowRankPerturbationOperator(ExtendedLinearOperator):
         else:
             diag = np.ones(A.shape[1])
         self.D = DiagonalOperator(diag)
-<<<<<<< HEAD
-
-=======
         
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def _matvec(self, v):
         return (self.D + self.Q @ self.Lambda @ self.Q.T) @ v
 
@@ -114,12 +99,8 @@ class InverseOperator(ExtendedLinearOperator):
         self,
         linop,
         method="cg",
-<<<<<<< HEAD
         atol=0,
         rtol=1e-5,
-=======
-        atol=1e-14,
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         maxiter=1000,
         preconditioner_size=0,
         **kwargs,
@@ -165,28 +146,18 @@ class InverseOperator(ExtendedLinearOperator):
             class cb(object):
                 def __init__(self):
                     self.niter = 0
-<<<<<<< HEAD
 
                 def __call__(self, xk):
                     self.niter += 1
 
-=======
-                    
-                def __call__(self, xk):
-                    self.niter += 1
-                    
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
             counter = cb()
             res = cg(
                 self.linop,
                 v,
                 M=self.preconditioner,
                 atol=self.atol,
-<<<<<<< HEAD
                 tol=self.rtol,
                 maxiter=self.maxiter,
-=======
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
                 callback=counter,
                 **self.kwargs,
             )
@@ -195,7 +166,6 @@ class InverseOperator(ExtendedLinearOperator):
                 msg = "Conjugate gradient did not converge"
                 raise ValueError(msg)
             res = res[0]
-<<<<<<< HEAD
 
         elif self.method == "direct":
             res = np.linalg.solve(self.linop, v)
@@ -219,31 +189,6 @@ class SymmetricOperator(ExtendedLinearOperator):
     def transpose(self):
         return self
 
-=======
-
-        elif self.method == "direct":
-            res = np.linalg.solve(self.linop, v)
-
-        return res
-
-    def quad(self, v):
-        u = self._matvec(v)
-        return np.sum(v * u)
-
-
-class SymmetricOperator(ExtendedLinearOperator):
-    symmetric = True
-
-    def _rmatvec(self, v):
-        return self._matvec(v)
-
-    def _rmatmat(self, B):
-        return self._matmat(B)
-
-    def transpose(self):
-        return self
-
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 class DiagonalOperator(SymmetricOperator):
     def __init__(self, diag):
@@ -513,17 +458,10 @@ class KronOperator(ExtendedLinearOperator):
         return u
 
     def _get_dense_matrix(self, m):
-<<<<<<< HEAD
         if isinstance(m, np.ndarray):
             return m
         else:
             return m @ np.eye(m.shape[1])
-=======
-        if isinstance(m, _CustomLinearOperator):
-            return m @ np.eye(m.shape[1])
-        else:
-            return m
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
     def todense(self):
         return kron([self._get_dense_matrix(m) for m in self.matrices])
@@ -978,30 +916,18 @@ class CovarianceDistanceOperator(SeqOperator, PolynomialOperator):
         return self.L_powers_d_inv[:, distance]
 
 
-<<<<<<< HEAD
 class CovarianceSitesOperator(SeqOperator, KronOperator):
     symmetric = True
 
     def __init__(self, n_alleles, seq_length, sites):
         self.sites = sites
-=======
-class CovarianceVjOperator(SeqOperator, KronOperator):
-    symmetric = True
-
-    def __init__(self, n_alleles, seq_length, j):
-        self.j = j
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         SeqOperator.__init__(self, n_alleles, seq_length)
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
         C0 = IdentityOperator(self.alpha)
         C1 = np.ones((self.alpha, self.alpha)) - np.eye(self.alpha)
-<<<<<<< HEAD
         return [C1 if i in self.sites else C0 for i in range(self.seq_length)]
-=======
-        return [C1 if i in self.j else C0 for i in range(self.seq_length)]
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 
 class VUOperator(ConstantDiagSeqOperator, KronOperator):
@@ -1048,42 +974,6 @@ class VUProjectionOperator(VUOperator):
             sqnorm = self.repeats * np.sum((A @ u.flatten()) ** 2)
         return sqnorm
 
-class VUProjectionWeightedSumOperator(SeqOperator,SymmetricOperator):
-    def __init__(self, n_alleles, seq_length, lambdas=None):
-        super().__init__(n_alleles=n_alleles, seq_length=seq_length)
-        self.n_V_U = 2 ** seq_length
-        self.set_lambdas(lambdas)
-        self.W0 = PconOperator(self.alpha)
-        self.W1 = PaddOperator(self.alpha)
-        self.v_shape = [n_alleles] * seq_length
-    
-    def set_lambdas(self, lambdas):
-        if lambdas is not None:
-            check_error(lambdas.shape[0] == self.n_V_U, msg="Incorrect size of lambdas")
-            self.lambdas = lambdas
-
-    def calc_V_U_product(self, v, sites, sites_included):
-        if not sites:
-            return v
-        elif np.all([self.cached_U[s] == sites_included[s] for s in sites]):
-            return self.cached_matvecs[sites[-1]]
-        else:
-            site = sites[-1]
-            site_included = sites_included[-1]
-            P = self.W1 if site_included else self.W0
-            v_prev = self.calc_V_U_product(v, sites[:-1], sites_included[:-1])
-            u = tensordot(P, v_prev, site)
-            self.n_products += 1
-            
-            self.cached_matvecs[site] = u
-            self.cached_U[site] = site_included
-            for i in range(site+1, self.seq_length):
-                self.cached_U[i] = None
-                self.cached_matvecs[i] = None
-                
-            return u
-
-<<<<<<< HEAD
 class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
     def __init__(self, n_alleles, seq_length, lambdas=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
@@ -1130,13 +1020,6 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
             msg = "lambdas must be defined for computing matrix-vector products"
             raise ValueError(msg)
 
-=======
-    def _matvec(self, v):
-        if self.lambdas is None:
-            msg = 'lambdas must be defined for computing matrix-vector products'
-            raise ValueError(msg)
-        
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         self.cached_matvecs = [None] * self.seq_length
         self.cached_U = [None] * self.seq_length
         self.n_products = 0
@@ -1152,7 +1035,6 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
             v_U = self.calc_V_U_product(v, sites, U)
             u += lambda_U * v_U
         return u.transpose().flatten()
-<<<<<<< HEAD
 
     def inv(self):
         return VUProjectionWeightedSumOperator(
@@ -1165,18 +1047,11 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
             self.alpha, self.seq_length, lambdas=lambdas
         )
 
-=======
-    
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
     symmetric = True
 
-<<<<<<< HEAD
     def __init__(self, n_alleles, seq_length, mu):
-=======
-    def __init__(self, n_alleles, seq_length, mu, mu0=1.):
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         ConstantDiagSeqOperator.__init__(
             self, n_alleles=n_alleles, seq_length=seq_length
         )
@@ -1187,7 +1062,6 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
     def get_matrices(self):
         W0 = PconOperator(self.alpha)
         W1 = PaddOperator(self.alpha)
-<<<<<<< HEAD
         return [self.mu[0] * W0 + mu_i * W1 for mu_i in self.mu[1:]]
 
     def get_mu(self):
@@ -1206,19 +1080,6 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
 
         checked = mu >= 0
         msg = "mu must be non-negative"
-=======
-        return [W0 + r * W1 for r in self.mu]
-
-    def get_mu(self):
-        return self.mu
-
-    def check_mu(self, mu, ignore_bound=False):
-        msg = "mu vector size must be equal to sequence length"
-        check_error(mu.shape[0] == self.seq_length, msg=msg)
-
-        checked = mu > 0
-        msg = "mu larger than 0"
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         if not ignore_bound:
             checked = checked & (mu < 1)
             msg = "mu must be between 0 and 1"
@@ -1229,7 +1090,6 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
             np.full(self.seq_length, mu)
             if isinstance(mu, float)
             else np.array(mu)
-<<<<<<< HEAD
         )
         self.check_mu(self.mu, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
@@ -1244,8 +1104,6 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
         mu = np.sqrt(self.mu)
         return ConnectednessProjectionOpererator(
             self.alpha, self.seq_length, mu=mu
-=======
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         )
         self.check_mu(self.mu, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
@@ -1360,63 +1218,9 @@ class VUKernel(VUProjectionWeightedSumOperator, Kernel):
         return np.log(self.get_lambdas())
 
 
-<<<<<<< HEAD
 class ConnectednessKernel(ConnectednessProjectionOpererator, Kernel):
     symmetric = True
 
-=======
-class ConnectednessKernel(ConstantDiagSeqOperator, KronOperator, Kernel):
-    symmetric = True
-
-    def __init__(self, n_alleles, seq_length, mu, sigma2):
-        ConstantDiagSeqOperator.__init__(
-            self, n_alleles=n_alleles, seq_length=seq_length
-        )
-        self.set_sigma2(sigma2)
-        self.set_mu(mu)
-        KronOperator.__init__(self, self.get_matrices())
-    
-    def set_sigma2(self, sigma2):
-        if not isinstance(sigma2, float):
-            msg = f'sigma2 should be float, got {type(sigma2)} instead'
-            raise ValueError(msg)
-        self.sigma2 = sigma2
-        self.sigma2_lroot = np.exp(np.log(sigma2) / self.seq_length)
-        self.d = sigma2
-    
-    def get_site_matrix(self, mu_p, sigma2_lroot):
-        v = (1 - mu_p) / (1 + mu_p * (self.alpha - 1))
-        shape = (self.alpha, self.alpha)
-        m = np.full(shape, v)
-        np.fill_diagonal(m, 1)
-        return(sigma2_lroot * m)
-    
-    def get_matrices(self):
-        return [self.get_site_matrix(mu_p, self.sigma2_lroot) for mu_p in self.mu]
-
-    def get_mu(self):
-        return self.mu
-
-    def check_mu(self, mu, ignore_bound=False):
-        msg = "mu vector size must be equal to sequence length"
-        check_error(mu.shape[0] == self.seq_length, msg=msg)
-
-        checked = mu > 0
-        msg = f"mu smaller than 0: {mu}"
-        if not ignore_bound:
-            checked = checked & (mu < 1)
-            msg = f"mu must be between 0 and 1: {mu}"
-        check_error(np.all(checked), msg=msg)
-
-    def set_mu(self, mu, ignore_bound=True):
-        self.mu = (
-            np.full(self.seq_length, mu)
-            if isinstance(mu, float)
-            else np.array(mu)
-        )
-        self.check_mu(self.mu, ignore_bound=ignore_bound)
-    
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def set_params(self, params):
         self.set_mu(np.exp(params))
 
@@ -1471,192 +1275,3 @@ def get_diag(A, progress=False):
         v[i] = 1.0
         d.append(np.dot(v, A @ v))
     return np.array(d)
-<<<<<<< HEAD
-=======
-
-
-def _get_seq_values_and_obs_seqs(y, n_alleles, seq_length, idx=None):
-    n = n_alleles**seq_length
-    if idx is not None:
-        seq_values, observed_seqs = np.zeros(n), np.zeros(n)
-        seq_values[idx], observed_seqs[idx] = y, 1.0
-    else:
-        seq_values, observed_seqs = y, np.ones(n, dtype=float)
-    return (seq_values, observed_seqs)
-
-
-def calc_covariance_distance(y, n_alleles, seq_length, idx=None):
-    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(
-        y, n_alleles, seq_length, idx=idx
-    )
-
-    cov, ns = np.zeros(seq_length + 1), np.zeros(seq_length + 1)
-    for d in range(seq_length + 1):
-        P = CovarianceDistanceOperator(n_alleles, seq_length, distance=d)
-        Pquad = quad(P, seq_values)
-        ns[d] = quad(P, obs_seqs)
-        cov[d] = reciprocal(Pquad, ns[d])
-    return (cov, ns)
-
-
-def calc_avg_local_epistatic_coeff(X, y, alphabet, seq_length, P):
-    sites = np.arange(seq_length)
-    v = dict(zip(X, y))
-
-    background_seqs = list(product(alphabet, repeat=seq_length - P))
-    allele_pairs = list(combinations(alphabet, 2))
-    allele_pairs_combs = list(product(allele_pairs, repeat=P))
-    z = kron([[-1, 1]] * P)
-
-    s, n = 0, 0
-    total = comb(seq_length, P)
-    for target_sites in tqdm(combinations(sites, P), total=total):
-        background_sites = [s for s in sites if s not in target_sites]
-        for background_seq in background_seqs:
-            bc = dict(zip(background_sites, background_seq))
-            for pairs in allele_pairs_combs:
-                seqs = []
-                allele_combs = list(get_product_states(pairs))
-
-                for allele_comb in allele_combs:
-                    seq = bc.copy()
-                    seq.update(dict(zip(target_sites, allele_comb)))
-                    seqs.append("".join([seq[i] for i in sites]))
-                try:
-                    u = np.array([v[s] for s in seqs])
-                except KeyError:
-                    continue
-                s += np.dot(u, z) ** 2
-                n += 1
-    return (s, n)
-
-
-def calc_covariance_vjs(y, n_alleles, seq_length, idx=None):
-    lp1 = seq_length + 1
-    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(
-        y, n_alleles, seq_length, idx=idx
-    )
-
-    cov, ns = [], []
-    sites = np.arange(seq_length)
-    sites_matrix = []
-    for k in range(lp1):
-        for j in combinations(sites, k):
-            P = CovarianceVjOperator(n_alleles, seq_length, j=j)
-            Pquad = quad(P, seq_values)
-            nj = quad(P, obs_seqs)
-            z = np.array([i not in j for i in range(seq_length)], dtype=float)
-
-            cov.append(reciprocal(Pquad, nj))
-            ns.append(nj)
-            sites_matrix.append(z)
-
-    sites_matrix = np.array(sites_matrix)
-    cov, ns = np.array(cov), np.array(ns)
-    return (cov, ns, sites_matrix)
-
-
-def calc_covariance_U_sites(y, n_alleles, seq_length, idx=None):
-    seq_values, obs_seqs = _get_seq_values_and_obs_seqs(
-        y, n_alleles, seq_length, idx=idx
-    )
-
-    cov, ns = [], []
-    sites = np.arange(seq_length)
-    values = [False, True]
-
-    for U in product(values, repeat=seq_length):
-        j = tuple(p for p, s in zip(sites, U) if s)
-        P = CovarianceVjOperator(n_alleles, seq_length, j=j)
-        Pquad = quad(P, seq_values)
-        nj = quad(P, obs_seqs)
-
-        cov.append(reciprocal(Pquad, nj))
-        ns.append(nj)
-
-    cov, ns = np.array(cov), np.array(ns)
-    return (cov, ns)
-
-
-def calc_variance_components(y, n_alleles, seq_length):
-    lambdas = []
-    for k in np.arange(seq_length + 1):
-        W = ProjectionOperator(n_alleles=n_alleles, seq_length=seq_length, k=k)
-        lambdas.append(quad(W, y) / W.m_k[k])
-    return np.array(lambdas)
-
-
-def calc_space_variance_components(space):
-    """
-    Calculates the variance components associated with the function
-    along the SequenceSpace. It returns the squared magnitude of the
-    projection into each of the l+1 eigenspaces of the graph Laplacian,
-    representing the variance associated with epistatic interactions of order k.
-
-    This method is based on the work by Zhou et al. (2021):
-    https://www.pnas.org/doi/suppl/10.1073/pnas.2204233119
-
-    Parameters
-    ----------
-    space : SequenceSpace
-        A SequenceSpace object for which to calculate the variance components.
-
-    Returns
-    -------
-    vc : array-like of shape (seq_length + 1,)
-        A vector containing the squared magnitude of the projections into the
-        k-th eigenspaces in increasing order of k.
-
-    """
-    n_alleles = np.unique(space.n_alleles)
-    msg = "Variance components can only be calculated for spaces"
-    msg += " with constant number of alleles across sites"
-    check_error(n_alleles.shape[0] == 1, msg)
-    n_alleles = n_alleles[0]
-    seq_length = space.seq_length
-    y = space.y
-    vc = calc_variance_components(y, n_alleles, seq_length)
-    return vc
-
-
-def calc_vjs_variance_components(y, a, sl, k):
-    positions = np.arange(sl)
-    dimension = (a - 1) ** float(k)
-    variances = {}
-    for j in combinations(positions, k):
-        Pj = VjProjectionOperator(a, sl, j=j)
-        variances[j] = np.sum(Pj.dot(y) ** 2) / dimension
-    return variances
-
-
-def calc_space_vjs_variance_components(space, k=None):
-    """
-    Calculates the squared magnitude of the projection into the `Vj` subspaces
-    of order `k`, defined by each individual combination of `k` sites as
-    specified by `j`.
-
-    Parameters
-    ----------
-    space : SequenceSpace
-        SequenceSpace object for which to calculate the Vj's
-        variance components.
-
-    k : int or None
-        If provided, restricts the variance components calculation to subspaces
-        of order k.
-
-    Returns
-    -------
-    vc: dict
-        Dictionary with combinations of sites as keys and the associated
-        squared magnitudes of the projection into the individual subspaces.
-    """
-
-    n_alleles = np.unique(space.n_alleles)
-    msg = "Variance components can only be calculated for spaces"
-    msg += " with constant number of alleles across sites"
-    check_error(n_alleles.shape[0] == 1, msg)
-    n_alleles = n_alleles[0]
-    vc = calc_vjs_variance_components(space.y, n_alleles, space.seq_length, k)
-    return vc
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359

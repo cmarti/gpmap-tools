@@ -1,27 +1,27 @@
 #!/usr/bin/env python
+import sys
+from itertools import combinations
+
+import networkx as nx
 import numpy as np
 import pandas as pd
-import networkx as nx
-import sys
-
-from itertools import combinations
+from scipy.optimize import minimize
 from scipy.sparse import csr_matrix, identity
 from scipy.sparse.linalg import bicgstab, cg, eigsh
-from scipy.optimize import minimize
-from scipy.special import logsumexp, comb
+from scipy.special import comb, logsumexp
 
-from gpmap.settings import DNA_ALPHABET
-from gpmap.utils import check_error, write_log
+from gpmap.graph import calc_bottleneck, calc_pathway, has_path
 from gpmap.matrix import (
-    get_sparse_diag_matrix,
     calc_cartesian_product,
+    get_sparse_diag_matrix,
     kron,
     rate_to_jump_matrix,
 )
-from gpmap.graph import calc_bottleneck, calc_pathway, has_path
+from gpmap.settings import DNA_ALPHABET
+from gpmap.utils import check_error, write_log
 
 
-class RandomWalk(object):
+class RandomWalk:
     def __init__(self, space, log=None):
         self.space = space
         self.log = log
@@ -79,7 +79,7 @@ class RandomWalk(object):
 
         if res != 0:
             rmse = np.sqrt(np.mean((U.dot(q_red) - v) ** 2))
-            msg = "Warning: BICGSTAB exitCode: {}. RMSE={}\n".format(res, rmse)
+            msg = f"Warning: BICGSTAB exitCode: {res}. RMSE={rmse}\n"
             sys.stderr.write(msg)
 
         q = np.ones(Q.shape[0])
@@ -131,9 +131,7 @@ class TimeReversibleRandomWalk(RandomWalk):
         )
 
         self.report(
-            "Calculating {} eigenvalue-eigenvector pairs".format(
-                self.n_components
-            )
+            f"Calculating {self.n_components} eigenvalue-eigenvector pairs"
         )
         v0 = self.diag_freq.dot(self.stationary_freqs)
         lambdas, q = eigsh(
@@ -310,23 +308,23 @@ class TimeReversibleRandomWalk(RandomWalk):
             storage is preferred.
         """
         self.decay_rates_df.to_csv(
-            "{}.decay_rates.csv".format(prefix), index=False
+            f"{prefix}.decay_rates.csv", index=False
         )
 
         if nodes_format in ["parquet", "pq"]:
-            self.nodes_df.to_parquet("{}.nodes.pq".format(prefix))
+            self.nodes_df.to_parquet(f"{prefix}.nodes.pq")
         elif nodes_format == "csv":
-            self.nodes_df.to_csv("{}.nodes.csv".format(prefix))
+            self.nodes_df.to_csv(f"{prefix}.nodes.csv")
         else:
             msg = 'nodes_format can only take values ["parquet", "csv"]'
             raise ValueError(msg)
 
         if write_edges:
-            fpath = "{}.edges.{}".format(prefix, edges_format)
+            fpath = f"{prefix}.edges.{edges_format}"
             self.space.write_edges(fpath)
 
 
-class PopulationSizeModel(object):
+class PopulationSizeModel:
     def __init__(self, y, p_neutral=None):
         self.y = y
         if p_neutral is None:
@@ -726,7 +724,7 @@ class WMWalk(TimeReversibleRandomWalk):
     def calc_sandwich_rate_matrix(
         self, Ns, neutral_stat_freqs=None, neutral_exchange_rates=None
     ):
-        """
+        r"""
         Calculates the sandwich rate matrix for the random walk in the
         discrete space \( D^{1/2} Q D^{-1/2} \).
 
@@ -746,7 +744,7 @@ class WMWalk(TimeReversibleRandomWalk):
             are assumed.
         """
         self.report(
-            "Calculating D^(1/2) Q D^(-1/2) matrix with Ns={}".format(Ns)
+            f"Calculating D^(1/2) Q D^(-1/2) matrix with Ns={Ns}"
         )
 
         if neutral_stat_freqs is None and hasattr(self, "neutral_stat_freqs"):
@@ -801,7 +799,7 @@ class WMWalk(TimeReversibleRandomWalk):
         if Ns is None:
             Ns = self.Ns
 
-        self.report("Calculating rate matrix with Ns={}".format(Ns))
+        self.report(f"Calculating rate matrix with Ns={Ns}")
         self.calc_sandwich_rate_matrix(
             Ns=Ns,
             neutral_stat_freqs=neutral_stat_freqs,
@@ -913,7 +911,7 @@ class WMWalk(TimeReversibleRandomWalk):
             ]
             stat_freqs = [stat_freqs[a] for a in DNA_ALPHABET]
         else:
-            msg = "Model not supported: {}. Try one of the ".format(model)
+            msg = f"Model not supported: {model}. Try one of the "
             msg += "following: [F81, K80, HKY85, K81, TN93, GTR]"
             raise ValueError(msg)
 
@@ -931,7 +929,7 @@ class WMWalk(TimeReversibleRandomWalk):
         )
 
 
-class ReactivePaths(object):
+class ReactivePaths:
     """
     Class for calculation of transition path theory objects and quantities
 
@@ -998,7 +996,7 @@ class ReactivePaths(object):
 
         if res != 0:
             sys.stderr.write(
-                "Warning: BICGSTAB exitCode: {}. RMSE={}".format(res, rmse)
+                f"Warning: BICGSTAB exitCode: {res}. RMSE={rmse}"
             )
 
         return (q_partial, rmse)
@@ -1171,9 +1169,7 @@ class TimeReversibleReactivePaths(ReactivePaths):
         rmse = np.sqrt(np.mean((U.dot(q_partial) - v) ** 2))
 
         if res != 0:
-            cmd = "Warning: ConjugateGradient exitCode: {}. RMSE={}".format(
-                res, rmse
-            )
+            cmd = f"Warning: ConjugateGradient exitCode: {res}. RMSE={rmse}"
             sys.stderr.write(cmd)
 
         return (q_partial, rmse)

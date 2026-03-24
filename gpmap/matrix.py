@@ -1,7 +1,5 @@
 import numpy as np
-
-from scipy.sparse import csr_matrix, dia_matrix, hstack, vstack, identity
-from scipy.sparse.linalg import minres, cg
+from scipy.sparse import csr_matrix, dia_matrix, hstack, identity, vstack
 
 from gpmap.utils import check_error, get_length
 

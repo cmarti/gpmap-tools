@@ -1,25 +1,24 @@
 #!/usr/bin/env python
-from itertools import combinations
-from typing import Optional, List
+from itertools import chain, combinations, product
+from typing import List, Optional
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+from scipy.special import comb
 from tqdm import tqdm
 
-from itertools import chain, product
-from scipy.special import comb
 from gpmap.linop import (
-    ProjectionOperator,
-    VUProjectionOperator,
-    DeltaPOperator,
     CovarianceDistanceOperator,
     CovarianceSitesOperator,
+    DeltaPOperator,
+    ProjectionOperator,
+    VUProjectionOperator,
 )
-from gpmap.matrix import quad, kron, reciprocal
+from gpmap.matrix import kron, quad, reciprocal
 from gpmap.seq import SequenceSpaceRelatedObject, get_product_states
 
 
-class GPmapSummarizer(object):
+class GPmapSummarizer:
     """
     Class for computing low-level descriptors of a complete genotype-phenotype
     map.

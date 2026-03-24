@@ -1,29 +1,27 @@
 #!/usr/bin/env python
 import itertools
-import pandas as pd
-import numpy as np
-
-from typing import Optional, List
-from itertools import chain
 from collections import defaultdict
-from itertools import product
+from itertools import chain, product
+from typing import List, Optional
 
-from Bio.Seq import Seq
+import numpy as np
+import pandas as pd
 from Bio.Data.CodonTable import CodonTable
+from Bio.Seq import Seq
 from scipy.sparse import csr_matrix, hstack, vstack
 
+from gpmap.linop import SelIdxOperator
+from gpmap.matrix import get_sparse_diag_matrix
 from gpmap.settings import (
-    NUCLEOTIDES,
-    COMPLEMENT,
-    ALPHABETS,
     ALPHABET,
+    ALPHABETS,
+    COMPLEMENT,
     DNA_ALPHABET,
-    RNA_ALPHABET,
+    NUCLEOTIDES,
     PROTEIN_ALPHABET,
+    RNA_ALPHABET,
 )
 from gpmap.utils import check_error
-from gpmap.matrix import get_sparse_diag_matrix
-from gpmap.linop import SelIdxOperator
 
 
 def hamming_distance(s1, s2):
@@ -156,9 +154,9 @@ def guess_space_configuration(
     if ensure_full_space:
         n_exp = np.prod(n_alleles)
         n_obs = seqs.shape[0]
-        msg = "Number of genotypes ({}) does not match ".format(n_obs)
+        msg = f"Number of genotypes ({n_obs}) does not match "
         msg += "the expected from the observed alleles in the "
-        msg += "provided sequences ({}).".format(n_exp)
+        msg += f"provided sequences ({n_exp})."
         msg += "Provide phenotypes for every possible "
         msg += "sequence in the space or "
         msg += "set `ensure_full_space=False` to avoid this error"
@@ -197,7 +195,7 @@ def guess_space_configuration(
     return config
 
 
-class SequenceSpaceRelatedObject(object):
+class SequenceSpaceRelatedObject:
     def __init__(
         self,
         seq_length: Optional[int] = None,
@@ -453,7 +451,7 @@ def get_alphabet(n_alleles: Optional[int] = None, alphabet_type: Optional[str] =
 
     else:
         raise ValueError(
-            "Unknwon alphabet type. Try any of: {}".format(ALPHABETS.keys())
+            f"Unknwon alphabet type. Try any of: {ALPHABETS.keys()}"
         )
     return alphabet
 

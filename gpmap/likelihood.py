@@ -1,10 +1,9 @@
 #!/usr/bin/env python
-
 import numpy as np
 import pandas as pd
 from scipy.special import loggamma, logsumexp
 
-from gpmap.linop import SelIdxOperator, DiagonalOperator, IdentityOperator
+from gpmap.linop import DiagonalOperator, SelIdxOperator
 from gpmap.seq import (
     calc_allele_frequencies,
     calc_expected_logp,
@@ -18,7 +17,7 @@ from gpmap.utils import (
 )
 
 
-class PhiRegularizer(object):
+class PhiRegularizer:
     def __init__(self, n_genotypes, phi_lower=0, phi_upper=100):
         self.phi_upper = phi_upper
         self.phi_lower = phi_lower
@@ -60,7 +59,7 @@ class PhiRegularizer(object):
         return (loss, grad, hess)
 
 
-class SeqDEFTLikelihood(object):
+class SeqDEFTLikelihood:
     def __init__(self, genotypes):
         self.genotypes = genotypes
         self.n_genotypes = genotypes.shape[0]
@@ -184,7 +183,7 @@ class SeqDEFTLikelihood(object):
         return X
 
 
-class GaussianLikelihood(object):
+class GaussianLikelihood:
     """
     GaussianLikelihood class for modeling Gaussian likelihoods.
 

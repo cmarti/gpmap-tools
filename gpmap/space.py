@@ -1,39 +1,38 @@
 #!/usr/bin/env python
 import warnings
+from collections import defaultdict
+from itertools import combinations, product
+
+import networkx as nx
 import numpy as np
 import pandas as pd
-import networkx as nx
-
-from itertools import product, combinations
-from collections import defaultdict
-
 from scipy.sparse import csr_matrix
 from scipy.special import logsumexp
 
-from gpmap.seq import (
-    translate_seqs,
-    guess_space_configuration,
-    guess_alphabet_type,
-    get_seqs_from_alleles,
-    get_product_states,
-    hamming_distance,
-)
-from gpmap.utils import check_error, write_edges
+from gpmap.graph import calc_max_min_path
 from gpmap.matrix import calc_cartesian_product
+from gpmap.seq import (
+    get_product_states,
+    get_seqs_from_alleles,
+    guess_alphabet_type,
+    guess_space_configuration,
+    hamming_distance,
+    translate_seqs,
+)
 from gpmap.settings import (
-    DNA_ALPHABET,
-    RNA_ALPHABET,
-    PROTEIN_ALPHABET,
     ALPHABET,
+    DNA_ALPHABET,
+    DNA_AMBIGUOUS_VALUES,
     MAX_STATES,
     PROT_AMBIGUOUS_VALUES,
-    DNA_AMBIGUOUS_VALUES,
+    PROTEIN_ALPHABET,
+    RNA_ALPHABET,
     RNA_AMBIGUOUS_VALUES,
 )
-from gpmap.graph import calc_max_min_path
+from gpmap.utils import check_error, write_edges
 
 
-class DiscreteSpace(object):
+class DiscreteSpace:
     """
     Class to define an arbitrary discrete space characterized by the
     connectivity between different states and optionally by a scalar value
@@ -75,9 +74,9 @@ class DiscreteSpace(object):
 
     def format_values(self, values):
         if values.dtype == float:
-            v = ["{:.2f}".format(x) for x in values]
+            v = [f"{x:.2f}" for x in values]
         else:
-            v = ["{}".format(x) for x in values]
+            v = [f"{x}" for x in values]
         return v
 
     def format_list_ends(self, values, k=3):
@@ -93,17 +92,13 @@ class DiscreteSpace(object):
         return label
 
     def __str__(self):
-        s = "Discrete Space:\n\tNumber of states: {}\n".format(self.n_states)
-        s += "\tState labels: {}\n".format(
-            self.format_list_ends(self.state_labels)
-        )
+        s = f"Discrete Space:\n\tNumber of states: {self.n_states}\n"
+        s += f"\tState labels: {self.format_list_ends(self.state_labels)}\n"
         if hasattr(self, "y"):
-            s += "\tStates function values: {}\n".format(
-                self.format_list_ends(self.y)
-            )
+            s += f"\tStates function values: {self.format_list_ends(self.y)}\n"
         else:
             s += "\tStates function values: undefined\n"
-        s += "\tNumber of edges: {}".format(self.n_edges)
+        s += f"\tNumber of edges: {self.n_edges}"
         return s
 
     @property
@@ -321,7 +316,7 @@ class GeneralSequenceSpace(DiscreteSpace):
             if alphabet_type != "custom":
                 atype = guess_alphabet_type(alphabet)
                 msg = "The provided alphabet is not compatible with the"
-                msg += " alphabet_type {}".format(alphabet_type)
+                msg += f" alphabet_type {alphabet_type}"
                 check_error(alphabet_type == atype, msg=msg)
 
         elif alphabet_type == "custom":
@@ -377,7 +372,7 @@ class GeneralSequenceSpace(DiscreteSpace):
         else:
             alphabet_types = ["dna", "rna", "protein", "custom"]
             raise ValueError(
-                "alphabet_type can only be: {}".format(alphabet_types)
+                f"alphabet_type can only be: {alphabet_types}"
             )
 
         if add_stop and alphabet_type == "protein":
@@ -423,9 +418,7 @@ class GeneralSequenceSpace(DiscreteSpace):
             d12 = hamming_distance(node1, end)
             d22 = hamming_distance(node2, end)
 
-            if allow_bypasses and d21 >= d11 and d22 <= d12:
-                yield (node1, node2)
-            elif d21 > d11 and d22 < d12:
+            if allow_bypasses and d21 >= d11 and d22 <= d12 or d21 > d11 and d22 < d12:
                 yield (node1, node2)
 
     def calc_graph(self, start, end, allow_bypasses, monotonic=False):
@@ -790,12 +783,12 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
 
     def __str__(self):
         s = "Sequence Space:\n"
-        s += "\tType: {}\n".format(self.alphabet_type)
-        s += "\tSequence length: {}\n".format(self.seq_length)
-        s += "\tNumber of alleles per site: {}\n".format(self.n_alleles)
-        s += "\tGenotypes: {}\n".format(self.format_list_ends(self.genotypes))
+        s += f"\tType: {self.alphabet_type}\n"
+        s += f"\tSequence length: {self.seq_length}\n"
+        s += f"\tNumber of alleles per site: {self.n_alleles}\n"
+        s += f"\tGenotypes: {self.format_list_ends(self.genotypes)}\n"
         if hasattr(self, "y"):
-            s += "\tFunction y: {}".format(self.format_list_ends(self.y))
+            s += f"\tFunction y: {self.format_list_ends(self.y)}"
         else:
             s += "\tFunction y: undefined"
         return s
@@ -826,7 +819,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         )
         self.n_states = np.prod(self.n_alleles)
 
-        msg = "Sequence space is too big to handle ({})".format(self.n_states)
+        msg = f"Sequence space is too big to handle ({self.n_states})"
         check_error(self.n_states <= MAX_STATES, msg=msg)
 
         adjacency_matrix = self.calc_adjacency_matrix()
@@ -902,9 +895,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         """
 
         msg = "Only protein spaces can be transformed to nucleotide space"
-        msg += " through a codon model: {} not allowed".format(
-            self.alphabet_type
-        )
+        msg += f" through a codon model: {self.alphabet_type} not allowed"
         check_error(self.alphabet_type == "protein", msg)
 
         msg = '`alphabet_type` must be one of ["dna", "rna"]'

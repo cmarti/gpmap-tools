@@ -32,7 +32,7 @@ def get_length(x):
     return length
 
 
-class LogTrack(object):
+class LogTrack:
     """Logger class"""
 
     def __init__(self, fhand=None):
@@ -43,7 +43,7 @@ class LogTrack(object):
 
     def write(self, msg, add_time=True):
         if add_time:
-            msg = "[ {} ] {}\n".format(ctime(), msg)
+            msg = f"[ {ctime()} ] {msg}\n"
         else:
             msg += "\n"
         self.fhand.write(msg)
@@ -51,7 +51,7 @@ class LogTrack(object):
 
     def finish(self):
         t = time.time() - self.start
-        self.write("Finished succesfully. Time elapsed: {:.1f} s".format(t))
+        self.write(f"Finished succesfully. Time elapsed: {t:.1f} s")
 
 
 def write_log(log, msg):
@@ -91,8 +91,7 @@ def shuffle(x, n=1):
 
 def write_seqs(seqs, fpath):
     with open(fpath, "w") as fhand:
-        for seq in seqs:
-            fhand.write("{}\n".format(seq))
+        fhand.writelines(f"{seq}\n" for seq in seqs)
 
 
 def write_dataframe(df, fpath):
@@ -102,7 +101,7 @@ def write_dataframe(df, fpath):
     elif suffix == "pq" or suffix == "parquet":
         df.to_parquet(fpath)
     else:
-        msg = "output format {} not recognized".format(suffix)
+        msg = f"output format {suffix} not recognized"
         raise ValueError(msg)
 
 
@@ -132,7 +131,7 @@ def read_dataframe(fpath):
     elif suffix == "pq" or suffix == "parquet":
         df = pd.read_parquet(fpath)
     else:
-        msg = "input format {} not recognized".format(suffix)
+        msg = f"input format {suffix} not recognized"
         raise ValueError(msg)
     return df
 
@@ -165,7 +164,7 @@ def read_edges(fpath, log=None, return_df=True):
         csr_matrix representation of the edges.
     """
     if fpath is not None:
-        write_log(log, "Reading edges data from {}".format(fpath))
+        write_log(log, f"Reading edges data from {fpath}")
         edges_format = fpath.split(".")[-1]
         if edges_format == "npz":
             A = load_npz(fpath).tocoo()
@@ -410,30 +409,30 @@ def get_training_p_splits(
 
 def write_split_data(out_prefix, splits, out_format="csv"):
     for i, train, test in splits:
-        fpath = "{}.{}.train.{}".format(out_prefix, i, out_format)
+        fpath = f"{out_prefix}.{i}.train.{out_format}"
         train_df = data_to_df(train)
         write_dataframe(train_df, fpath)
 
         test_x = test[0]
-        write_seqs(test_x, fpath="{}.{}.test.txt".format(out_prefix, i))
+        write_seqs(test_x, fpath=f"{out_prefix}.{i}.test.txt")
 
 
 def read_split_data(prefix, suffix=None, in_format="csv", log=None):
     fdir = abspath(dirname(prefix))
     prefix = prefix.split("/")[-1]
 
-    suffix2 = "test_pred.{}".format(in_format)
+    suffix2 = f"test_pred.{in_format}"
     if suffix is None:
         suffix = suffix2
     else:
-        suffix = "{}.{}".format(suffix, suffix2)
+        suffix = f"{suffix}.{suffix2}"
 
     for fname in listdir(fdir):
         fpath = join(fdir, fname)
         if fname.startswith(prefix) and fname.endswith(suffix):
             label = ".".join(fname.split(".")[1:-2])
             if log is not None:
-                msg = "\tReading {} file: {}".format(label, fpath)
+                msg = f"\tReading {label} file: {fpath}"
                 log.write(msg)
             test_pred = pd.read_csv(fpath, index_col=0)
             yield (label, test_pred)
