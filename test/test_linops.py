@@ -10,12 +10,21 @@ from scipy.sparse.linalg import aslinearoperator
 from scipy.linalg import solve_triangular
 from scipy.stats import multivariate_normal
 
+<<<<<<< HEAD
+=======
+from gpmap.datasets import DataSet
+from gpmap.seq import generate_possible_sequences
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 from gpmap.matrix import quad
 from gpmap.linop import (
     SubMatrixOperator,
     LaplacianOperator,
     ProjectionOperator,
+<<<<<<< HEAD
     VUProjectionOperator,
+=======
+    VjProjectionOperator,
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     VUProjectionWeightedSumOperator,
     DiagonalOperator,
     IdentityOperator,
@@ -27,7 +36,11 @@ from gpmap.linop import (
     DeltaUWeighedSumOperator,
     ConnectednessProjectionOpererator,
     ExtendedDeltaPOperator,
+<<<<<<< HEAD
     VUBasisOperator,
+=======
+    VjBasisOperator,
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     KernelOperator,
     EigenBasisOperator,
     DeltaKernelBasisOperator,
@@ -45,6 +58,13 @@ from gpmap.linop import (
     LowRankPerturbationOperator,
     MultivariateGaussian,
     ConnectednessKernel,
+<<<<<<< HEAD
+=======
+    calc_covariance_vjs,
+    calc_avg_local_epistatic_coeff,
+    calc_space_variance_components,
+    calc_space_vjs_variance_components,
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 )
 
 
@@ -73,17 +93,29 @@ class LinOpsTests(unittest.TestCase):
     def test_Pcon_operator(self):
         n = 3
         P = PconOperator(n)
+<<<<<<< HEAD
 
         # With a vector
         v = np.random.normal(size=n)
         u = P @ v
         assert np.allclose(u, v.mean())
+=======
+        
+        # With a vector
+        v = np.random.normal(size=n)
+        u = P @ v
+        assert(np.allclose(u, v.mean()))
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
         # With a matrix
         B = np.random.normal(size=(n, 2))
         U = P @ B
         assert np.allclose(U, B.mean(axis=0, keepdims=True))
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def test_Padd_operator(self):
         n = 3
         P = PaddOperator(n)
@@ -91,12 +123,20 @@ class LinOpsTests(unittest.TestCase):
         # With a vector
         v = np.random.normal(size=n)
         u = P @ v
+<<<<<<< HEAD
         assert np.allclose(u.mean(), 0.0)
+=======
+        assert np.allclose(u.mean(), 0.)
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
         # With a matrix
         B = np.random.normal(size=(n, 2))
         U = P @ B
+<<<<<<< HEAD
         assert np.allclose(U.mean(axis=0), 0.0)
+=======
+        assert np.allclose(U.mean(axis=0), 0.)
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
     def test_site_laplacian_operator(self):
         n = 3
@@ -277,6 +317,88 @@ class LinOpsTests(unittest.TestCase):
             n_alleles=2, seq_length=3, P=2, lambdas0=np.array([1, 1.0])
         )
         assert np.allclose(op.lambdas, [1, 1, 4, 12])
+    
+    def test_deltaU_operator(self):
+        a, sl = 2, 3
+        n = a ** sl
+        v = np.random.normal(size=n)
+        DU = DeltaUOperator(a, sl, U=[0, 1])
+        u1 = DU @ v
+        
+        # Ensure equivalence with the dense matrix
+        C0 = np.eye(a)
+        C1 = a * np.eye(a) - np.ones((a, a))
+        A = np.kron(C1, np.kron(C1, C0))
+        u2 = A @ v
+        assert np.allclose(u1, u2)
+
+    def test_deltaU_operator_equivalences(self):
+        a, sl = 2, 3
+        n = a**sl
+        P = 2
+        v = np.random.normal(size=n)
+
+        # Ensure equivalence with the PU operators
+        DU = DeltaUOperator(a, sl, U=[0, 1])
+        u1 = DU @ v
+        PU1 = VjProjectionOperator(a, sl, j=[0, 1])
+        PU2 = VjProjectionOperator(a, sl, j=[0, 1, 2])
+        u2 = a ** 2 * (PU1 + PU2) @ v
+        assert np.allclose(u1, u2)
+
+        # Ensure summing over all DeltaU with |U|=P gives DeltaP
+        u1 = np.zeros(n)
+        for U in combinations(np.arange(sl), P):
+            DU = DeltaUOperator(a, sl, U=U)
+            u1 += DU @ v
+        
+        DP = DeltaPOperator(a, sl, P=P)
+        u2 = DP @ v
+        assert np.allclose(u1, u2)
+
+    def test_deltaU_weighed_sum_operator(self):
+        a, sl = 2, 3
+        n = a**sl
+        v = np.random.normal(size=n)
+
+        # Ensure equivalence with the DeltaU
+        a_values = np.ones(int(comb(sl, 2)))
+        a_values[1:] = 0
+        A1 = DeltaUWeighedSumOperator(a, sl, P=2, a=a_values)
+        A2 = DeltaUOperator(a, sl, U=[0, 1])
+        u1 = A1 @ v
+        u2 = A2 @ v
+        assert np.allclose(u1, u2)
+
+        # Ensure equivalence with the DeltaP
+        a_values = np.ones(int(comb(sl, 2)))
+        A1 = DeltaUWeighedSumOperator(a, sl, P=2, a=a_values)
+        A2 = DeltaPOperator(a, sl, P=2)
+        u1 = A1 @ v
+        u2 = A2 @ v
+        assert np.allclose(u1, u2)
+    
+    def test_P_U_weighed_sum_operator(self):
+        a, sl = 4, 8
+        n = a**sl
+        v = np.random.normal(size=n)
+        
+        t0 = time()
+        lambdas = np.exp(np.random.normal(size=2 ** sl))
+        sites = np.arange(sl)
+        Us = product([False, True], repeat=sl)
+        u1 = np.zeros_like(v)
+        for U, lambda_U in zip(Us, lambdas):
+            j = list(sites[np.array(U)])
+            u1 += lambda_U * VjProjectionOperator(a, sl, j=j) @ v
+        time1 = time() - t0
+        
+        t0 = time()
+        P = VUProjectionWeightedSumOperator(a, sl, lambdas=lambdas)
+        u2 = P @ v
+        time2 = time() - t0
+        assert np.allclose(u1, u2)
+        assert(time2 < time1)
 
     def test_deltaU_operator(self):
         a, sl = 2, 3
@@ -587,6 +709,7 @@ class LinOpsTests(unittest.TestCase):
 
     def test_connectedness_kernel(self):
         a, sl = 2, 2
+<<<<<<< HEAD
 
         mu = np.array([1.5, 0.5, 0.5])
         k2 = np.array([[1, 1 / 2.0], [1 / 2.0, 1]])
@@ -600,6 +723,21 @@ class LinOpsTests(unittest.TestCase):
         K = ConnectednessKernel(a, sl, mu=mu)
         assert np.allclose(K.todense(), K2)
 
+=======
+        mu = 0.5 * np.ones(2)
+        k2 = np.array([[1, 1/3.], [1/3., 1]])
+        K2 = np.kron(k2, k2)
+        
+        K = ConnectednessKernel(a, sl, mu=mu, sigma2=1.)
+        assert np.allclose(K.todense(), K2)
+        
+        K_1 = K.compute(x1=np.array([0]))
+        assert(np.allclose(K_1.todense(), [1, 1/3, 1/3, 1/9]))
+        
+        K = ConnectednessKernel(a, sl, mu=mu, sigma2=2.)
+        assert np.allclose(K.todense(), 2 * K2)
+        
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def test_kernel_operator(self):
         A = np.array([[1.0, 0.5, 0.5], [0.5, 1.0, 0.5], [0.5, 0.5, 1.0]])
 
@@ -661,36 +799,59 @@ class LinOpsTests(unittest.TestCase):
         L = LowRankPerturbationOperator(A, rank=1)
         u2 = L @ v
         assert not np.allclose(u1, u2)
+<<<<<<< HEAD
 
         x = L.inv() @ v
         assert np.allclose(L @ x, v)
 
+=======
+        
+        x = L.inv() @ v
+        assert np.allclose(L @ x, v)
+
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def test_inverse_operator_full_matrix(self):
         A = np.array([[1, 0.5], [0.5, 1]])
         A_inv = np.linalg.inv(A)
         A_inv_op = InverseOperator(A, method="cg").todense()
         assert np.allclose(A_inv_op, A_inv)
+<<<<<<< HEAD
 
     def test_inverse_operator_small(self):
         A = np.array([[1, 0.5], [0.5, 1]])
         b = np.random.normal(size=A.shape[1])
 
+=======
+        
+    def test_inverse_operator_small(self):
+        A = np.array([[1, 0.5], [0.5, 1]])
+        b = np.random.normal(size=A.shape[1])
+        
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         for method in ["direct", "cg", "minres"]:
             A_inv = InverseOperator(A, method=method)
             x = A_inv @ b
             assert np.allclose(b, A @ x)
 
     def test_inverse_operator_big(self):
+<<<<<<< HEAD
         mu = np.full(9, 0.5)
         A = ConnectednessProjectionOpererator(4, 8, mu=mu)
         b = np.random.normal(size=A.shape[1])
 
         for method in ["exact", "cg"]:
+=======
+        A = ConnectednessProjectionOpererator(4, 8, rho=0.5)
+        b = np.random.normal(size=A.shape[1])
+        
+        for method in ['exact', 'cg']:
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
             A_inv = InverseOperator(A, method=method)
             x = A_inv @ b
             assert np.allclose(b, A @ x, atol=1e-4)
 
     def test_inverse_operator_preconditioned(self):
+<<<<<<< HEAD
         mu = np.full(9, 0.5)
         K = ConnectednessProjectionOpererator(4, 8, mu=mu)
         D = DiagonalOperator(0.1 * np.ones(K.shape[1]))
@@ -701,6 +862,17 @@ class LinOpsTests(unittest.TestCase):
         x = A_inv @ b
         assert np.allclose(b, A @ x, atol=1e-4)
 
+=======
+        K = ConnectednessProjectionOpererator(4, 8, rho=0.5)
+        D = DiagonalOperator(0.1 * np.ones(K.shape[1]))
+        A = K + D
+        b = np.random.normal(size=A.shape[1])
+        
+        A_inv = InverseOperator(A, method='cg', preconditioner_size=25)
+        x = A_inv @ b
+        assert np.allclose(b, A @ x, atol=1e-4)
+            
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
     def test_mv_gaussian(self):
         A = np.array([[1, 0.5], [0.5, 1]])
         Sigma1 = np.kron(A, A)

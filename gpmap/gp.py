@@ -507,7 +507,11 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
 
     def calc_posterior_mean(self):
         mean_post = self.K @ self.X_t @ self.K_xx_inv @ self.likelihood.y
+<<<<<<< HEAD
         if hasattr(self, "deterministic_mean"):
+=======
+        if hasattr(self, 'deterministic_mean'):
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
             mean_post += self.deterministic_mean
         return mean_post
 
@@ -518,11 +522,16 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         return Sigma_post
 
     def get_K_sqrt(self):
+<<<<<<< HEAD
         if hasattr(self.K, "cholesky"):
             try:
                 return self.K.cholesky()
             except np.linalg.LinAlgError:
                 return self.K.matrix_sqrt()    
+=======
+        if hasattr(self.K, 'cholesky'):
+            return self.K.cholesky()
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
         else:
             return self.K.matrix_sqrt()
 

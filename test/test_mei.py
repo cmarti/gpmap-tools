@@ -11,7 +11,11 @@ from gpmap.inference import (
     MinimizerRegressor,
     MinimumEpistasisInterpolator,
 )
+<<<<<<< HEAD
 from gpmap.linop import ConnectednessKernel, InverseOperator
+=======
+from gpmap.linop import ConnectednessKernel
+>>>>>>> 816356b6603079af23e962f22495c532ee2fa359
 
 
 class MEITests(unittest.TestCase):
