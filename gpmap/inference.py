@@ -366,7 +366,9 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         obs_covs, ns = self.gpdata.calc_covariance_U_sites(centered=True)
         obs_corrs = obs_covs / obs_covs[0]
 
-        pred_covs = self.aligner.predict(self.get_params())
+        params = self.get_params()
+        params[0] = -16
+        pred_covs = self.aligner.predict(params)
         pred_corrs = pred_covs / pred_covs[0]
 
         df = pd.DataFrame(

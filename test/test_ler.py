@@ -136,6 +136,7 @@ class LERTests(unittest.TestCase):
         assert np.all(
             cor_df.columns == ["d", "n", "emp_cor", "pred_cor", "d_jittered"]
         )
+        assert np.allclose(cor_df['emp_cor'], cor_df['pred_cor'])
 
         a_df = model.get_a_values()
         assert a_df.shape == (3, 4)
