@@ -170,7 +170,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             mean_post, Sigma_post, X_pred=X_pred, B=B
         )
 
-    def fit(self, X, y, y_var=None, method="kernel_alignment"):
+    def fit(self, X, y, y_var=None):
         """
         Fits the Minimum Epistasis Interpolation (MEI) model hyperparameter
         to the provided data.
@@ -194,38 +194,12 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             Array containing the empirical or experimental variance for the
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
-
-        method : str
-            Method to estimate hyperparameter `a`. If `method='kernel_alignment'` it will be estimated via kernel alignment with the empirical distance-covariance function of the residuals of a P-1 order model. If `method='minimum_epistasis'`, it will use the `a` value corresponding to the magnitude of local P order epistatic coefficients in the MAP solution.
-
         """
 
-        if method == "kernel_alignment":
-            self.set_data(X, y, y_var=y_var)
-            # Fit P-1 order model and compute residuals
-            A = self.likelihood.Xop @ self.kernel_basis
-            A = A @ np.eye(self.kernel_basis.shape[1])
-            self.beta = np.linalg.lstsq(A, y, rcond=None)[0]
-            self.resid = y - A @ self.beta
-
-            # Run kernel alignment
-            cov, ns = self.gpdata.calc_covariance_distance(centered=False)
-            self.aligner = DeltaPKernelAligner(
-                self.n_alleles, self.seq_length, self.DP.P
-            )
-            a_star = self.aligner.fit(cov, ns)[0]
-
-        elif method == "minimum_epistasis":
-            self.set_data(X, y)
-            mean = self.calc_posterior_mean()
-            a_star = self.DP.rank * self.s / quad(self.DP, mean)
-            self.set_data(X, y, y_var=y_var)
-
-        else:
-            msg = 'Only methods in ["kernel_alignment", "minimum epistasis"]'
-            msg += " are allowed"
-            raise ValueError(msg)
-
+        self.set_data(X, y)
+        mean = self.calc_posterior_mean()
+        a_star = self.DP.rank * self.s / quad(self.DP, mean)
+        self.set_data(X, y, y_var=y_var)
         self.set_a(a_star)
 
 

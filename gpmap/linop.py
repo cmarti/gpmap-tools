@@ -1105,8 +1105,6 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
         return ConnectednessProjectionOpererator(
             self.alpha, self.seq_length, mu=mu
         )
-        self.check_mu(self.mu, ignore_bound=ignore_bound)
-        self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
 
 
 class EigenBasisOperator(StackedOperator):

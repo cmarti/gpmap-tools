@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 import unittest
+from functools import partial
 
 import numpy as np
 
-from functools import partial
 from gpmap.aligner import (
-    DeltaUtoVUTransform,
-    DeltaPtoVkTransform,
-    DeltaPKernelAligner,
-    VCKernelAligner,
-    DeltaUKernelAligner,
-    VCUKernelAligner,
     ConnectednessKernelAligner,
+    DeltaPKernelAligner,
+    DeltaPtoVkTransform,
+    DeltaUKernelAligner,
+    DeltaUtoVUTransform,
+    VCKernelAligner,
+    VCUKernelAligner,
 )
 
 

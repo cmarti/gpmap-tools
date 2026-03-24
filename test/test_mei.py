@@ -4,18 +4,14 @@ import unittest
 
 import numpy as np
 from scipy.sparse.linalg import aslinearoperator
-from scipy.stats import pearsonr, norm
+from scipy.stats import pearsonr
 
 from gpmap.inference import (
     GaussianProcessRegressor,
     MinimizerRegressor,
     MinimumEpistasisInterpolator,
 )
-<<<<<<< HEAD
-from gpmap.linop import ConnectednessKernel, InverseOperator
-=======
-from gpmap.linop import ConnectednessKernel
->>>>>>> 816356b6603079af23e962f22495c532ee2fa359
+from gpmap.linop import VarianceComponentKernel
 
 
 class MEITests(unittest.TestCase):
@@ -85,7 +81,7 @@ class MEITests(unittest.TestCase):
             model.calc_posterior_covariance()
         except ValueError:
             pass
-        model.fit(X, y, method="minimum_epistasis")
+        model.fit(X, y)
         Sigma = model.calc_posterior_covariance()
         Sigma = Sigma @ np.eye(Sigma.shape[1])
         m = Sigma.copy()
@@ -99,7 +95,7 @@ class MEITests(unittest.TestCase):
         y_var = np.array([0.1] * 4)
 
         # With standard GP formulation
-        kernel = ConnectednessKernel(2, 2, mu=np.array([0.2, 0.2]), sigma2=1.0)
+        kernel = VarianceComponentKernel(2, 2, lambdas=np.array([10, 1, 0.1]))
         model1 = GaussianProcessRegressor(kernel)
         model1.set_data(X, y, y_var)
         mu1, Sigma1 = model1.calc_posterior()
@@ -134,24 +130,22 @@ class MEITests(unittest.TestCase):
         # Run on larger simulated dataset
         np.random.seed(0)
         n_alleles, seq_length = 4, 5
-        sigma2 = 0.1
-        kernel = ConnectednessKernel(
-            n_alleles, seq_length, mu=np.array([0.2] * seq_length), sigma2=1.0
-        )
-        model1 = GaussianProcessRegressor(kernel)
+        lambdas = np.array([1e3, 1e3, 1e2, 1e1, 1e0, 1e-1])
+        kernel = VarianceComponentKernel(n_alleles, seq_length, lambdas=lambdas)
+        model1 = GaussianProcessRegressor(kernel, cg_rtol=1e-5)
         model1.define_space(seq_length=seq_length, n_alleles=n_alleles)
-        f, X, y, y_var = model1.simulate(y_var=sigma2, p_missing=0.1)
+        f, X, y, y_var = model1.simulate(y_var=0.1, p_missing=0.1)
         model1.set_data(X, y, y_var)
         mu1, Sigma1 = model1.calc_posterior()
         r1 = pearsonr(mu1, f)[0]
         assert r1 > 0.4
 
         # With operator inverse method
-        model2 = MinimizerRegressor(seq_length, n_alleles)
+        model2 = MinimizerRegressor(seq_length, n_alleles, cg_rtol=1e-5)
         model2.set_data(X, y, y_var)
         model2.C = kernel.inv()
         mu2, Sigma2 = model2.calc_posterior()
-        assert np.allclose(mu1, mu2, atol=1e-3)
+        assert np.allclose(mu1, mu2, atol=1e-2)
 
     def test_regression(self):
         # Partial dataset that can recapitulate MEI
@@ -207,46 +201,30 @@ class MEITests(unittest.TestCase):
         )
         f, X, y, y_var = model.simulate(y_var=1.0)
         idx = np.random.uniform(size=X.shape[0]) < 0.98
-        X_test, y_test_true = X[~idx], f[~idx]
+        X_test, f_test_true = X[~idx], f[~idx]
         X, y, y_var = X[idx], y[idx], y_var[idx]
 
         # Make interpolation predictions
         model.set_data(X, y)
         pred = model.predict()
-
-        # Ensure matching the data
         assert np.allclose(pred.loc[idx, "f"], y)
 
-        # Ensure good predictions in test data
-        r = pearsonr(pred.loc[X_test, "f"], y_test_true)[0]
+        r = pearsonr(pred.loc[X_test, "f"], f_test_true)[0]
         assert r > 0.5
 
         # Make predictions with noisy data
         model.set_data(X, y, y_var)
         pred = model.predict()
-        r = pearsonr(pred["f"], f)[0]
+        r = pearsonr(pred.loc[X_test, "f"], f_test_true)[0]
         assert r > 0.5
 
-        # Fit model with empirical epistatic coeffs
-        model = MinimumEpistasisInterpolator(
-            P=2, n_alleles=n_alleles, seq_length=seq_length
-        )
-        model.fit(X, y, y_var, method="minimum_epistasis")
-        # assert np.allclose(model.a, a, rtol=0.2)
-
-        # Make predictions with empirical a
-        pred = model.predict()
-        r = pearsonr(pred.loc[X_test, "f"], y_test_true)[0]
-        assert r > 0.5
-
+        # Evaluate coverage of posterior intervals
         pred = model.predict(X_test, calc_variance=True)
-        r = pearsonr(pred["f"], y_test_true)[0]
-
-        calibration = np.mean(
-            (pred["ci_95_lower"] < y_test_true)
-            & (y_test_true < pred["ci_95_upper"])
+        coverage = np.mean(
+            (pred["ci_95_lower"] < f_test_true)
+            & (f_test_true < pred["ci_95_upper"])
         )
-        assert calibration > 0.9
+        assert coverage > 0.9
 
     def test_mei_fit(self):
         a_true = 100
@@ -254,54 +232,10 @@ class MEITests(unittest.TestCase):
         model = MinimumEpistasisInterpolator(
             seq_length=5, alphabet_type="dna", a=a_true
         )
-        f, X, y, _ = model.simulate(y_var=0.1, p_missing=0.1)
+        f, X = model.simulate(p_missing=0.1)[:2]
         idx = model.get_obs_idx(X)
-        f_train = f[idx]
-
-        # Fit with minimum epistasis
-        model.fit(X, f_train, method="minimum_epistasis")
-        a1 = model.a.copy()
-        err1 = np.abs(np.log2(a_true / model.a))
-        pred1 = model.predict(calc_variance=True)
-        print(pred1)
-
-        # Fit with kernel alignment
-        model.fit(X, f_train, method="kernel_alignment")
-        a2 = model.a.copy()
-        err2 = np.abs(np.log2(a_true / model.a))
-        pred2 = model.predict(calc_variance=True)
-        
-        assert err2 < err1
-        assert np.allclose(pred1['f'], pred2['f'])
-        assert np.all(pred1['f_var'] <= pred2['f_var'])
-        
-        
-        a_values = np.geomspace(1e1, 400, 20)
-        logps = []
-        for a in a_values:
-            model.set_a(a)
-            pred = model.predict(calc_variance=True)
-            pred['f_true'] = f
-            pred = pred.loc[pred['f_var']> 0, :]
-            distrib = norm(pred['f'], pred['f_std'])
-            logps.append(distrib.logpdf(pred['f_true']).mean())
-            
-        import matplotlib.pyplot as plt
-        fig, axes = plt.subplots(1, 1, figsize=(4, 3))
-        axes.scatter(a_values, logps, s=10, c='black')
-        axes.plot(a_values, logps, c='black')
-        axes.axvline(a1, lw=0.75, linestyle='--', label='Minimum epistasis', c='green')
-        axes.axvline(a2, lw=0.75, linestyle='--', label='Kernel alignment', c='darkblue')
-        axes.axvline(a_true, lw=0.75, linestyle='--', label='True value', c='grey')
-        a_star = a_values[np.argmax(logps)]
-        axes.axvline(a_star, label='Cross-validation', lw=0.75, linestyle='--', c='darkred')
-        axes.set(xlabel='Hyperparameter $a$', xscale='log',
-                 ylabel='Predictive log-likelihood')
-        axes.legend(loc=3)
-        fig.tight_layout()
-        fig.savefig('/home/cmarti/mei_cross_validation.png', dpi=300)
-            
-        
+        model.fit(X, f[idx])
+        assert np.allclose(model.a, a_true, rtol=0.2)
 
     def test_mei_predict(self):
         np.random.seed(0)

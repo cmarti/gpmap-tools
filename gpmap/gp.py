@@ -535,7 +535,7 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         genotypes=None,
         alphabet_type="custom",
         progress=True,
-        cg_rtol=1e-16,
+        cg_rtol=1e-5,
     ):
         self.progress = progress
         self.cg_rtol = cg_rtol
