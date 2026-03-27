@@ -11,7 +11,6 @@ from tqdm import tqdm
 
 from gpmap.aligner import (
     ConnectednessKernelAligner,
-    DeltaPKernelAligner,
     DeltaUKernelAligner,
     VCKernelAligner,
 )
@@ -40,7 +39,7 @@ from gpmap.utils import (
 )
 
 
-class _DeltaPpriorGP(object):
+class _DeltaPpriorGP:
     def get_C_lambdas(self):
         a = self.a
         msg = "a needs to be defined"
@@ -309,7 +308,7 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             mean_post, Sigma_post, X_pred=X_pred, B=B
         )
         
-    def fit(self, X, y, y_var=None):
+    def fit(self, X, y, y_var=None, method='L-BFGS-B'):
         """
         Fits the Local Epistasis Regression (LER) model hyperparameters
         to the provided data.
@@ -333,10 +332,13 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             Array containing the empirical or experimental variance for the
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
+            
+        method : str, optional
+            Optimization method to use during kernel alignment. Default is 'L-BFGS-B'.
         """
         self.set_data(X, y, y_var=y_var)
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
-        x = self.aligner.fit(cov, ns)
+        x = self.aligner.fit(cov, ns, method=method)
         lambda_U_lower_than_P = x[: self.n_U_lower_than_P]
         a_values = x[self.n_U_lower_than_P :]
 
@@ -603,7 +605,7 @@ class VCregression(GaussianProcessRegressor):
         return variance_components
 
     def get_variance_components(self, lambdas=None):
-        """
+        r"""
         Return the variance components as a DataFrame from :math:`\lambda`s.
 
         Parameters
@@ -810,7 +812,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         super().__init__(base_kernel=K, progress=self.progress)
 
     def get_decay_factors(self):
-        """
+        r"""
         Return the decay factors as a DataFrame from :math:`\mu`s.
 
         Returns
@@ -1474,7 +1476,7 @@ def D_geo(phi1, phi2):
     return 2 * np.arccos(x)
 
 
-class HMC(object):
+class HMC:
     def __init__(self, logp, logp_grad, step_size, path_length):
         self.logp = logp
         self.logp_grad = logp_grad
