@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+
+## New release [0.4.0] - 2026-03-27
+
+### Added
+
+- **New method for inference of genotype-phenotype maps**. `LocalEpistasisRegression` learns which sites tend to interact with each other from the empirical correlations in the data and uses this information to build a prior for Gaussian process inference of complete combinatorial landscapes. 
+
+- **Implementation of the Connectedness model regression**. `ConnectednessModelRegression` learns how much mutations at each site decrease the predictabiligy of other mutations from the empirical correlations in the data and uses this information to build a prior for Gaussian process inference of complete combinatorial landscapes. 
+
+- **New module for computing summary statistics in empirical data**. It consists of a new class `GPDataSummarizer` that provides a high level interface to computation of the empirical covariance for pairs of sequences located at different Hamming distance from each other or differing at every possible combination of sites. These statistics are very useful for understanding the structure and complexity of epistatic interactions and are used for estimating the parameters of the prior via kernel alignment. 
+
+- **New functions for plotting summary statistics**. We implemented new functions to easily plot the diverse summary statistics that can be computed either from the data or from the inferred combinatorial genotype-phenotype maps to characterize the structure of genetic interactions in the posterior distribution.
+
+### Changed
+
+- **Documentation updated** with the new functionality and updated references for published papers describing the software or its applications. 
+- 
+- **Covariance-distance** statistics can be now computed before or after centering explicitly and take into account the provided experimental error variances. 
+
 ## New release [0.3.3] - 2025-11-11
 
 ### Added
