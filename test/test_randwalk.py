@@ -198,7 +198,7 @@ class RandomWalkTests(unittest.TestCase):
         mc.calc_rate_matrix(Ns=1)
         mc.calc_jump_matrix()
         times, path = mc.run_forward(time=1)
-        assert(np.sum(times) == 1)
+        assert(np.allclose(np.sum(times), 1))
         assert(len(path) == len(times))
         
     def test_run_forward_tree(self):
@@ -207,7 +207,7 @@ class RandomWalkTests(unittest.TestCase):
         mc.calc_rate_matrix(Ns=1)
         mc.calc_jump_matrix()
         times, path = mc.run_forward(time=1)
-        assert(np.sum(times) == 1)
+        assert(np.allclose(np.sum(times), 1))
         assert(len(path) == len(times))
         
     def calc_neutral_stat_freqs(self):
