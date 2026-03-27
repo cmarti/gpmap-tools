@@ -19,12 +19,13 @@ paths required to evolve sequences differing at only a few amino acid positions.
 Inference
 =========
 
-``gpmap-tools`` implements a suite of previously proposed Gaussian process models for the
+``gpmap-tools`` implements a suite of Gaussian process models for the
 inference and analysis of complete genotype-phenotype maps.
 
-- `Zhou J and McCandlish DM. Minimum epistasis interpolation for sequence-function relationships (2020) <https://www.nature.com/articles/s41467-020-15512-5>`_
-- `Zhou J, Wong MS, Chen WC, Krainer AR, Kinney JB, McCandlish DM. Higher order epistasis and phenotypic prediction (2022) <https://www.pnas.org/doi/full/10.1073/pnas.2204233119>`_
-- `Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM. Field theoretic density estimation for biological sequence space with applications to 5' splice site diversity and aneuploidy in cancer (2021) <https://www.pnas.org/doi/10.1073/pnas.2025782118>`_
+- `Juannan Zhou and David M. McCandlish. Minimum epistasis interpolation for sequence-function relationships (2020) <https://www.nature.com/articles/s41467-020-15512-5>`_
+- `Juannan Zhou, Mandy S. Wong, Wei-Chia Chen, Adrian R. Krainer, Justin B. Kinney, David M. McCandlish. Higher order epistasis and phenotypic prediction (2022) <https://www.pnas.org/doi/full/10.1073/pnas.2204233119>`_
+- `Wei-Chia Chen, Juannan Zhou, Jason M. Sheltzer, Justin B. Kinney, David M. McCandlish. Field theoretic density estimation for biological sequence space with applications to 5' splice site diversity and aneuploidy in cancer (2021) <https://www.pnas.org/doi/10.1073/pnas.2025782118>`_
+- `Carlos Martí-Gómez and David M. McCandlish. Inference of fitness landscapes with heterogenous patterns of epistasis across sites (2026). In preparation.
 
 These models are implemented within a unified framework inspired by the classical 
 machine learning library `scikit-learn <https://scikit-learn.org/>`_, defined
@@ -44,7 +45,7 @@ Visualization
 ``gpmap-tools`` also provides a new and accessible implementation of a 
 previously described powerful method to visualize complex genotype-phenotype maps.
 
-- `McCandlish DM. Visualizing fitness landscapes (2011) <https://onlinelibrary.wiley.com/doi/10.1111/j.1558-5646.2011.01236.x>`_
+- `David M. McCandlish. Visualizing fitness landscapes (2011) <https://onlinelibrary.wiley.com/doi/10.1111/j.1558-5646.2011.01236.x>`_
 
 More specifically, ``gpmap-tools`` allows to:
 
@@ -68,7 +69,7 @@ of high-dimensional genotype-phenotype maps:
     
 - How can functional orthogonality arise in pairs of interacting proteins?  
     
-    `Ziv Avizemer, Carlos Martí‐Gómez, Shlomo Yakir Hoch, David M. McCandlish, Sarel J. Fleishman. Evolutionary paths that link orthogonal pairs of binding proteins (2023) <https://www.researchsquare.com/article/rs-2836905/v2>`_
+    `Ziv Avizemer, Carlos Martí‐Gómez, Shlomo Yakir Hoch, David M. McCandlish, Sarel J. Fleishman. Evolutionary paths that link orthogonal pairs of binding proteins (2025) <https://www.cell.com/cell-systems/abstract/S2405-4712(25)00095-X>`_
 
 - How does the structure of the genetic code influence the navigability of complex protein genotype-phenotype maps?  
 
@@ -82,7 +83,7 @@ documentation and in our preprint linked below.
 Citation
 ========
 
-- `Carlos Martí-Gómez, Juannan Zhou, Wei-Chia Chen, Justin B. Kinney, David M. McCandlish. Inference and visualization of complex genotype-phenotype maps with gpmap-tools (2025) <https://www.biorxiv.org/content/10.1101/2025.03.09.642267>`_
+- `Carlos Martí-Gómez, Juannan Zhou, Wei-Chia Chen, Arlin Stoltzfus, Justin B. Kinney, David M. McCandlish. Inference and visualization of complex genotype-phenotype maps (2026) <https://academic.oup.com/mbe/article/43/2/msag023/8456298>`_
 
 YouTube Talk
 ============

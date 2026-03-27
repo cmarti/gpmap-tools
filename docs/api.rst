@@ -55,6 +55,15 @@ Random walks
 Plotting
 --------
 
+Summary statistics
+^^^^^^^^^^^^^^^^^^
+.. autofunction:: gpmap.plot.mpl.plot_correlation_distance
+.. autofunction:: gpmap.plot.mpl.plot_correlation_U_sites
+.. autofunction:: gpmap.plot.mpl.plot_interaction_matrix
+.. autofunction:: gpmap.plot.mpl.plot_kth_variance_components
+.. autofunction:: gpmap.plot.mpl.plot_sites_variance_components
+.. autofunction:: gpmap.plot.mpl.plot_site_pairs_variance_components
+
 Matplotlib Backend
 ^^^^^^^^^^^^^^^^^^
 

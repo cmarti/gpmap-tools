@@ -16,13 +16,3 @@ Gaussian Process regression techniques.
 
     usage/VCregression.ipynb
     usage/SeqDEFT.ipynb
-
-
-**References**
-
-.. [#Zhou2022] `Zhou J, Wong MS, Chen WC, Krainer AR, Kinney JB, McCandlsih DM.
-    Higher order epistasis and phenotypic prediction (2022) <https://www.pnas.org/doi/full/10.1073/pnas.2204233119>`_
-
-.. [#Chen2021] `Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM. 
-    Field theoretic density estimation for biological sequence space with
-    applications to 5' splice site diversity and aneuploidy in cancer (2021) <https://www.pnas.org/doi/10.1073/pnas.2025782118>`_
