@@ -151,16 +151,29 @@ class InverseOperator(ExtendedLinearOperator):
                     self.niter += 1
 
             counter = cb()
-            res = cg(
-                self.linop,
-                v,
-                M=self.preconditioner,
-                atol=self.atol,
-                tol=self.rtol,
-                maxiter=self.maxiter,
-                callback=counter,
-                **self.kwargs,
-            )
+            try:
+                res = cg(
+                    self.linop,
+                    v,
+                    M=self.preconditioner,
+                    atol=self.atol,
+                    tol=self.rtol,
+                    maxiter=self.maxiter,
+                    callback=counter,
+                    **self.kwargs,
+                )
+            except TypeError: # Captures error from newer scipy versions
+                res = cg(
+                    self.linop,
+                    v,
+                    M=self.preconditioner,
+                    atol=self.atol,
+                    rtol=self.rtol,
+                    maxiter=self.maxiter,
+                    callback=counter,
+                    **self.kwargs,
+                )
+                
             self.cg_n_iter = counter.niter
             if res[1] != 0:
                 msg = "Conjugate gradient did not converge"
