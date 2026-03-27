@@ -1,17 +1,10 @@
 ### DeltaU project
-- Implement y_var dependency in kernel alignment problem
-- Think whether we want to take into account y_var when computing residuals for kernel alignment
-- Implement VUProjectionOperator and its sum (needed for simulation from this model and may speed up convergence with large y_var values) - Fast fourier transform on sequence-function relationships
-- Implement DeltaUsum inverse method to give a VUProjectionSumOperator
-- Implement DeltaP kernel alignment for fitting a
-- Implement connectedness model regression for baseline comparisons
 - Add position labels to dataset objects
 
 ### Protein alignment problems
 - Implement baseline calculation methods. 
 
 ### High priority
-- Implement posterior covariance under MEI (requires 'a').
 - API section: need to have plotting functions and docstrings for DataSet methods
 - Write __str__ method for DataSet to highlight the main properties of the dataset
 - Make clean and complete datasets
@@ -19,7 +12,6 @@
 - Fix mixing time notation to relaxation and write the neutral relaxation time method for cases with mutational biases
 - Add some more plotting details to the tutorials e.g. edge coloring and positioning of legends and colorbars in different places
 - Make sure every function in the docs is in the API with docstrings as well
-- Review Kernel alignment loss function in the paper, code and docs to match
 
 ### Mid priority
 - Re-implement HMC
