@@ -77,7 +77,7 @@ def set_centered_spines(
     alpha=0.5,
     fontsize=None,
 ):
-    
+
     axes.spines["left"].set(position=("data", 0), zorder=zorder, alpha=alpha)
     axes.spines["bottom"].set(position=("data", 0), zorder=zorder, alpha=alpha)
     axes.tick_params(axis="both", color=(0, 0, 0, alpha))
@@ -1150,23 +1150,23 @@ def figure_Ns_grid(
     Parameters
     ----------
     rw : object
-        An object containing the space and nodes information, as well as 
+        An object containing the space and nodes information, as well as
         methods for calculating visualizations.
 
     x : str, optional
-        Column in the nodes DataFrame to use for plotting the x-axis. Default 
+        Column in the nodes DataFrame to use for plotting the x-axis. Default
         is "1".
 
     y : str, optional
-        Column in the nodes DataFrame to use for plotting the y-axis. Default 
+        Column in the nodes DataFrame to use for plotting the y-axis. Default
         is "2".
 
     pmin : float, optional
-        Minimum proportion of the range to use for calculating mean functions. 
+        Minimum proportion of the range to use for calculating mean functions.
         Default is 0.
 
     pmax : float, optional
-        Maximum proportion of the range to use for calculating mean functions. 
+        Maximum proportion of the range to use for calculating mean functions.
         Default is 0.8.
 
     ncol : int, optional
@@ -1179,7 +1179,7 @@ def figure_Ns_grid(
         Whether to include edges in the visualization. Default is True.
 
     fpath : str, optional
-        File path to save the figure. If None, the figure will not be saved. 
+        File path to save the figure. If None, the figure will not be saved.
         Default is None.
     """
     fig, subplots = init_fig(
@@ -1223,12 +1223,8 @@ def figure_Ns_grid(
         title = r"$\bar{y}$" + f" = {mean_function:.2f}; Ns={rw.Ns:.2f}"
         axes.set(xlabel="", ylabel="", title=title)
 
-    fig.supxlabel(
-        f"Diffusion axis {x}", y=0.05, ha="center", va="center"
-    )
-    fig.supylabel(
-        f"Diffusion axis {y}", x=0.05, ha="center", va="center"
-    )
+    fig.supxlabel(f"Diffusion axis {x}", y=0.05, ha="center", va="center")
+    fig.supylabel(f"Diffusion axis {y}", x=0.05, ha="center", va="center")
     savefig(fig, fpath, tight=False)
 
 
@@ -1402,12 +1398,8 @@ def figure_allele_grid(
     if "y" in kwargs:
         y = kwargs["y"]
 
-    fig.supxlabel(
-        f"Diffusion axis {x}", y=0.05, ha="center", va="center"
-    )
-    fig.supylabel(
-        f"Diffusion axis {y}", x=0.05, ha="center", va="center"
-    )
+    fig.supxlabel(f"Diffusion axis {x}", y=0.05, ha="center", va="center")
+    fig.supylabel(f"Diffusion axis {y}", x=0.05, ha="center", va="center")
     savefig(fig, fpath, fmt=fmt, tight=False)
 
 
@@ -1902,13 +1894,46 @@ def figure_SeqDEFT_summary(
     return fig
 
 
+def plot_correlation_distance(corr, axes, x="d", y='emp_cor'):
+    """
+    Plot the correlation as a function of Hamming distance.
+
+    This function visualizes the relationship between the Hamming distance 
+    and the empirical correlation by plotting the data points and connecting 
+    them with a line. It also customizes the axes labels, limits, and ticks 
+    for better interpretability.
+
+    Parameters:
+    -----------
+    corr : pandas.DataFrame
+        A DataFrame containing the correlation data. It should have columns 
+        corresponding to the x and y variables specified.
+    axes : matplotlib.axes.Axes
+        The matplotlib Axes object where the plot will be drawn.
+    x : str, optional, default="d"
+        The column name in `corr` to be used for the x-axis (Hamming distance).
+    y : str, optional, default="emp_cor"
+        The column name in `corr` to be used for the y-axis (empirical correlation).
+    """
+    axes.scatter(corr[x], corr[y], color="black", s=5)
+    axes.plot(corr[x], corr[y], color="black", lw=1)
+    axes.set(
+        ylabel="Empirical correlation",
+        ylim=(None, 1.05),
+        xlabel="Hamming distance",
+        xticks=np.arange(corr.shape[0]),
+        yticks=np.linspace(0, 1, 6),
+    )
+    axes.axhline(0, linestyle="--", color="grey", lw=0.75)
+
+
 def plot_correlation_U_sites(corr, axes, x="d_jittered", y="emp_cor"):
     """
-    Plot the correlation values for each distance class corresponding to all 
+    Plot the correlation values for each distance class corresponding to all
     possible combinations of sites at which two sequences differ.
 
-    Each point represents a distance class. Each distance class corresponds to 
-    each of the possible subsets of sites (of any size) and are plotted 
+    Each point represents a distance class. Each distance class corresponds to
+    each of the possible subsets of sites (of any size) and are plotted
     according to a jittered Hamming distance class on the x-axis.
 
     Parameters
@@ -1953,8 +1978,8 @@ def plot_interaction_matrix(
     """
     Plots a heatmap of the estimated interaction strengths using local
     epistasis regression.
-    
-    This plots the inverse of the regularization parameters for 
+
+    This plots the inverse of the regularization parameters for
     local epistatic interactions involving every pair of sites
 
     Parameters
@@ -1995,7 +2020,11 @@ def plot_interaction_matrix(
     else:
         im = axes.imshow(scaled_matrix, cmap=cmap)
 
-    labels = matrix.columns if hasattr(matrix, "columns") else np.arange(matrix.shape[1])
+    labels = (
+        matrix.columns
+        if hasattr(matrix, "columns")
+        else np.arange(matrix.shape[1])
+    )
     if position_labels is not None:
         labels = position_labels
 
@@ -2009,6 +2038,55 @@ def plot_interaction_matrix(
         yticklabels=labels,
     )
     plt.colorbar(im, ax=axes, fraction=0.046, pad=0.04, label=cbar_label)
+
+
+def plot_kth_variance_components(
+    vc,
+    axes,
+    color="black",
+    cum_color="grey",
+    bar_ylim=(0, 50),
+    cum_ylim=(0, 100),
+):
+    """
+    Plot variance components for interaction orders.
+
+    Parameters
+    ----------
+    vc : pd.DataFrame
+        DataFrame containing variance components for a landscape.
+
+    axes : matplotlib.axes.Axes
+        The matplotlib Axes object in which to plot the variance components.
+
+    color : str, optional, default="black"
+        Color for the bars representing variance percentages.
+
+    cum_color : str, optional, default="grey"
+        Color for the cumulative variance line and points.
+
+    bar_ylim : tuple, optional, default=(0, 50)
+        Y-axis limits for the variance percentage bars.
+
+    cum_ylim : tuple, optional, default=(0, 100)
+        Y-axis limits for the cumulative variance line.
+
+    """
+    axes.bar(x=vc["k"], height=100 * vc["var_perc"], color=color)
+    axes.set(
+        xlabel="Interaction order $k$",
+        ylabel="% variance explained",
+        xticks=vc["k"],
+        ylim=bar_ylim,
+    )
+
+    twin_axes = axes.twinx()
+    twin_axes.scatter(vc["k"], 100 * vc["var_perc_cum"], color=cum_color, s=5)
+    twin_axes.plot(vc["k"], 100 * vc["var_perc_cum"], color=cum_color, lw=1)
+    twin_axes.tick_params(axis="y", colors=cum_color)
+    twin_axes.spines["right"].set_color(cum_color)
+    twin_axes.set(ylim=cum_ylim)
+    twin_axes.set_ylabel("% cumulative variance", color=cum_color)
 
 
 def plot_sites_variance_components(
