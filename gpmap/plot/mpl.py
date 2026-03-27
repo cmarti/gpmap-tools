@@ -1,12 +1,12 @@
 #!/usr/bin/env python
+from itertools import chain, cycle, product
+
+import matplotlib as mpl
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.patches as mpatches
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-
-from itertools import product, chain, cycle
+from matplotlib import colors
 from matplotlib.collections import LineCollection
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
@@ -15,15 +15,16 @@ try:
 except ImportError:
     pass
 
-from gpmap.settings import PLOTS_FORMAT
-from gpmap.utils import check_error
-from gpmap.seq import guess_space_configuration
 from gpmap.genotypes import (
     get_edges_coords,
     get_nodes_df_highlight,
     minimize_nodes_distance,
 )
 from gpmap.plot.utils import sort_nodes
+from gpmap.seq import guess_space_configuration
+from gpmap.settings import PLOTS_FORMAT
+from gpmap.space import SequenceSpace
+from gpmap.utils import check_error
 
 
 def init_fig(
@@ -140,7 +141,7 @@ def savefig(
         fig.set_size_inches(*figsize)
 
     if fpath is not None:
-        fpath = "{}.{}".format(fpath, fmt)
+        fpath = f"{fpath}.{fmt}"
         fig.savefig(fpath, format=fmt, dpi=dpi)
         plt.close()
     else:
@@ -567,8 +568,8 @@ def plot_color_hist(axes, values, cmap="viridis", bins=50, fontsize=None):
 
 def add_axis_labels(axes, x, y, z=None, fontsize=None, center_spines=False):
     xlabel, ylabel = (
-        "Diffusion axis {}".format(x),
-        "Diffusion axis {}".format(y),
+        f"Diffusion axis {x}",
+        f"Diffusion axis {y}",
     )
 
     if center_spines:
@@ -582,7 +583,7 @@ def add_axis_labels(axes, x, y, z=None, fontsize=None, center_spines=False):
         axes.set_ylabel(ylabel, fontsize=fontsize)
 
         if hasattr(axes, "set_zlabel"):
-            axes.set_zlabel("Diffusion axis {}".format(z), fontsize=fontsize)
+            axes.set_zlabel(f"Diffusion axis {z}", fontsize=fontsize)
 
 
 def add_color_info(
@@ -685,7 +686,7 @@ def get_element_color(df, color, palette, cbar, legend, vmin=None, vmax=None):
             continuous = True
 
         else:
-            msg = "color dtype is not compatible: {}".format(df[color].dtype)
+            msg = f"color dtype is not compatible: {df[color].dtype}"
             raise ValueError(msg)
     else:
         cbar, legend = False, False
@@ -722,7 +723,7 @@ def add_cbar(
     if vmin is not None and vmax is not None:
         ticks = np.linspace(vmin, vmax, nticks)
         cbar.set_ticks(ticks)
-        ticklabels = ["{:.1f}".format(x) for x in ticks]
+        ticklabels = [f"{x:.1f}" for x in ticks]
         cbar.set_ticklabels(ticklabels, fontsize=fontsize)
 
 
@@ -741,7 +742,7 @@ def draw_cbar(
     values = np.vstack([values] * width)
 
     ticks = np.linspace(0, 256, nticks)
-    ticklabels = ["{:.1f}".format(x) for x in np.linspace(vmin, vmax, nticks)]
+    ticklabels = [f"{x:.1f}" for x in np.linspace(vmin, vmax, nticks)]
 
     if orientation == "vertical":
         values = values.T
@@ -755,7 +756,7 @@ def draw_cbar(
         set_ticklabels = axes.set_xticklabels
         xlims, ylims = (0, 256), (None, None)
     else:
-        raise ValueError("orientation not allowed: {}".format(orientation))
+        raise ValueError(f"orientation not allowed: {orientation}")
 
     axes.imshow(values, cmap=cmap)
 
@@ -1219,16 +1220,14 @@ def figure_Ns_grid(
             **kwargs,
         )
         prev_nodes_df = rw.nodes_df
-        title = r"$\bar{y}$" + " = {:.2f}; Ns={:.2f}".format(
-            mean_function, rw.Ns
-        )
+        title = r"$\bar{y}$" + f" = {mean_function:.2f}; Ns={rw.Ns:.2f}"
         axes.set(xlabel="", ylabel="", title=title)
 
     fig.supxlabel(
-        "Diffusion axis {}".format(x), y=0.05, ha="center", va="center"
+        f"Diffusion axis {x}", y=0.05, ha="center", va="center"
     )
     fig.supylabel(
-        "Diffusion axis {}".format(y), x=0.05, ha="center", va="center"
+        f"Diffusion axis {y}", x=0.05, ha="center", va="center"
     )
     savefig(fig, fpath, tight=False)
 
@@ -1391,7 +1390,7 @@ def figure_allele_grid(
             axes.text(
                 xpos_label,
                 ypos_label,
-                "{}{}".format(allele, position_labels[j]),
+                f"{allele}{position_labels[j]}",
                 ha="left",
                 transform=axes.transAxes,
             )
@@ -1404,10 +1403,10 @@ def figure_allele_grid(
         y = kwargs["y"]
 
     fig.supxlabel(
-        "Diffusion axis {}".format(x), y=0.05, ha="center", va="center"
+        f"Diffusion axis {x}", y=0.05, ha="center", va="center"
     )
     fig.supylabel(
-        "Diffusion axis {}".format(y), x=0.05, ha="center", va="center"
+        f"Diffusion axis {y}", x=0.05, ha="center", va="center"
     )
     savefig(fig, fpath, fmt=fmt, tight=False)
 
@@ -1494,7 +1493,7 @@ def figure_shifts_grid(
         panel_label = (
             genotype_groups[0]
             if labels_full_seq
-            else "{}{}".format(seq, position_labels[j])
+            else f"{seq}{position_labels[j]}"
         )
         axes.text(xpos, ypos, panel_label, ha="left")
 
@@ -1729,7 +1728,7 @@ def plot_hyperparam_cv(
     if refx is not None and np.isin(refx, df[x].values):
         refdf = df.loc[df[x] == refx, :].set_index("fold")[[y]]
         df = df.join(refdf, on="fold", rsuffix="_ref")
-        df[y] = df[y] - df["{}_ref".format(y)]
+        df[y] = df[y] - df[f"{y}_ref"]
 
     sdf = df.groupby(x, as_index=False).agg({y: ("mean", "std", "count")})
     sdf.columns = ["x", "mean", "sd", "count"]
@@ -1753,7 +1752,7 @@ def plot_hyperparam_cv(
         color = "red" if a == x_star else "black"
 
         if a == x_star:
-            label = "{}* = {:.1f}".format(xlabel, x_star)
+            label = f"{xlabel}* = {x_star:.1f}"
         else:
             label = None
 
@@ -1765,7 +1764,7 @@ def plot_hyperparam_cv(
     for r in sdf.loc[np.isinf(sdf["x"]), :].to_dict(orient="index").values():
         x, y = r["x"], r["mean"]
         sign = "" if x > 0 else "-"
-        label = "{}".format(xlabel) + " = {}".format(sign) + r"$\infty$"
+        label = f"{xlabel}" + f" = {sign}" + r"$\infty$"
 
         if not np.isnan(y):
             axes.plot(
@@ -1775,7 +1774,7 @@ def plot_hyperparam_cv(
     axes.legend(loc=legend_loc, fontsize=9)
     axes.set(
         xlabel=xlabel,
-        ylabel="Out of sample {}".format(ylabel),
+        ylabel=f"Out of sample {ylabel}",
         ylim=ylims,
         xlim=xlims,
     )
@@ -1901,3 +1900,225 @@ def figure_SeqDEFT_summary(
     if seq_density is not None:
         fig.tight_layout()
     return fig
+
+
+def plot_correlation_U_sites(corr, axes, x="d_jittered", y="emp_cor"):
+    """
+    Plot the correlation values for each distance class corresponding to all 
+    possible combinations of sites at which two sequences differ.
+
+    Each point represents a distance class. Each distance class corresponds to 
+    each of the possible subsets of sites (of any size) and are plotted 
+    according to a jittered Hamming distance class on the x-axis.
+
+    Parameters
+    ----------
+    corr : pd.DataFrame
+        DataFrame containing correlation data with at least columns for x and y
+        coordinates, and index values representing sequences.
+
+    axes : matplotlib.axes.Axes
+        The matplotlib Axes object in which to plot the landscape.
+
+    x : str, default="d_jittered"
+        Column name in `corr` for the x-axis coordinates (jittered Hamming distance).
+
+    y : str, default="emp_cor"
+        Column name in `corr` for the y-axis coordinates and correlation values to plot.
+    """
+    space = SequenceSpace(X=corr.index.values, y=corr[y].values)
+    edges_df = space.get_edges_df()
+
+    axes.scatter(corr[x], corr[y], color="black", s=7.5, alpha=0.5, lw=0)
+    plot_edges(axes, corr, edges_df, x=x, y=y, alpha=0.1, color="black")
+    axes.axhline(0, color="grey", linestyle="--", lw=0.75, alpha=0.5)
+    axes.set(
+        xlabel=x,
+        ylabel=y,
+        xticks=np.arange(space.seq_length + 1),
+    )
+
+
+def plot_interaction_matrix(
+    matrix,
+    axes,
+    cmap="binary",
+    vmax=None,
+    scale_factor=1e-6,
+    position_labels=None,
+    xlabel="Site 1",
+    ylabel="Site 2",
+    cbar_label="Value",
+):
+    """
+    Plots a heatmap of the estimated interaction strengths using local
+    epistasis regression.
+    
+    This plots the inverse of the regularization parameters for 
+    local epistatic interactions involving every pair of sites
+
+    Parameters
+    ----------
+    matrix : pd.DataFrame or np.ndarray
+        2D array or DataFrame containing the matrix values to visualize.
+
+    axes : matplotlib.axes.Axes
+        The matplotlib Axes object in which to plot the matrix.
+
+    cmap : str, default="binary"
+        Colormap name to use for the heatmap.
+
+    vmax : float, optional
+        Maximum value for the colormap scale. If None, uses the maximum value
+        in the matrix.
+
+    scale_factor : float, default=1e-6
+        Scaling factor to apply to matrix values before plotting. Useful for
+        displaying very large or very small numbers.
+
+    position_labels : array-like, optional
+        Labels for the rows and columns. If None, uses the matrix index/columns.
+
+    xlabel : str, default="Site 1"
+        Label for the x-axis.
+
+    ylabel : str, default="Site 2"
+        Label for the y-axis.
+
+    cbar_label : str, default="Value"
+        Label for the colorbar.
+    """
+    scaled_matrix = matrix * scale_factor if vmax is not None else matrix
+
+    if vmax is not None:
+        im = axes.imshow(scaled_matrix, cmap=cmap, vmax=vmax * scale_factor)
+    else:
+        im = axes.imshow(scaled_matrix, cmap=cmap)
+
+    labels = matrix.columns if hasattr(matrix, "columns") else np.arange(matrix.shape[1])
+    if position_labels is not None:
+        labels = position_labels
+
+    n = matrix.shape[0]
+    axes.set(
+        xlabel=xlabel,
+        ylabel=ylabel,
+        xticks=np.arange(n),
+        yticks=np.arange(n),
+        xticklabels=labels,
+        yticklabels=labels,
+    )
+    plt.colorbar(im, ax=axes, fraction=0.046, pad=0.04, label=cbar_label)
+
+
+def plot_sites_variance_components(
+    axes,
+    sites,
+    cmap="Greys",
+    vmin=0,
+    vmax=None,
+    xlabel="Site",
+    ylabel="Interaction order $k$",
+    cbar_label="% variance explained",
+):
+    """
+    Plot site-level variance components as a heatmap.
+
+    Parameters
+    ----------
+    axes : matplotlib.axes.Axes
+        The matplotlib Axes object in which to plot the heatmap.
+
+    sites : pd.DataFrame
+        DataFrame of shape (n_orders, n_sites) containing variance component
+        values for each interaction order and site.
+
+    cmap : str, default="Greys"
+        Colormap name to use for the heatmap.
+
+    vmin : float, default=0
+        Minimum value for the colormap scale.
+
+    vmax : float, default=None
+        Maximum value for the colormap scale.
+
+    xlabel : str, default="Site"
+        Label for the x-axis (sites).
+
+    ylabel : str, default="Interaction order $k$"
+        Label for the y-axis (interaction orders).
+
+    cbar_label : str, default="% variance explained"
+        Label for the colorbar.
+    """
+    positions = sites.columns
+    ticks = np.arange(positions.shape[0])
+    orders = np.arange(1, 1 + positions.shape[0])
+
+    im = axes.imshow(sites, cmap=cmap, vmin=vmin, vmax=vmax)
+    axes.set(
+        xticks=ticks,
+        xticklabels=positions,
+        xlabel=xlabel,
+        yticks=ticks,
+        yticklabels=orders[::-1],
+        ylabel=ylabel,
+        aspect="equal",
+    )
+    plt.colorbar(im, ax=axes, fraction=0.046, pad=0.04, label=cbar_label)
+
+
+def plot_site_pairs_variance_components(
+    axes,
+    matrix,
+    cmap="Greys",
+    vmin=0,
+    vmax=60,
+    xlabel="Site 1",
+    ylabel="Site 2",
+    cbar_label="% pairwise and higher-order\nvariance explained",
+):
+    """
+    Plot pairwise site variance components as a heatmap.
+
+    Parameters
+    ----------
+    axes : matplotlib.axes.Axes
+        The matplotlib Axes object in which to plot the heatmap.
+
+    matrix : pd.DataFrame
+        DataFrame of shape (n_sites, n_sites) containing pairwise and
+        higher-order variance component values.
+
+    cmap : str, default="Greys"
+        Colormap name to use for the heatmap.
+
+    vmin : float, default=0
+        Minimum value for the colormap scale.
+
+    vmax : float, default=60
+        Maximum value for the colormap scale.
+
+    xlabel : str, default="Site 1"
+        Label for the x-axis.
+
+    ylabel : str, default="Site 2"
+        Label for the y-axis.
+
+    cbar_label : str, default="% pairwise and higher-order\\nvariance explained"
+        Label for the colorbar.
+    """
+    positions = matrix.columns
+    ticks = np.arange(positions.shape[0])
+
+    im = axes.imshow(matrix, cmap=cmap, vmin=vmin, vmax=vmax)
+    axes.set(
+        xticks=ticks,
+        xlabel=xlabel,
+        yticks=ticks,
+        xticklabels=positions,
+        yticklabels=positions,
+        ylabel=ylabel,
+        aspect="equal",
+    )
+    plt.colorbar(im, ax=axes, fraction=0.046, pad=0.04, label=cbar_label)
