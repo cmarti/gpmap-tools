@@ -2,12 +2,6 @@
 
 gpmap-tools is a python library containing a suite of tools for inference and visualization of large and complex genotype-phenotype maps for genotypic spaces containing up to several million genotypes. 
 
-gpmap-tools uses Gaussian process models to infer complete genotype-phenotype maps in the presence of genetic interactions of every possible order from high throughput experimental data and observations of natural sequences. gpmap-tools enables the statistical analysis of features of these complex objects by handling the high dimensional posterior distribution over the set of genotype-phenotype maps. 
-
-gpmap-tools provides an open-source and easy to use interface of a slightly
-modified version of the original method. Briefly, genotypes are embedded into a 
-low dimensional coordinate system where the square distances are proportional to the required time to evolve from one genotype to another under a Weak Mutation evolutionary model. This technique highlights regions of sequence space that are highly inaccessible to each other and display the main qualitative features of genotype-phenotype maps. 
-
 gpmap-tools is written for Python 3 and is provided under an MIT open source license.
 The documentation provided [here](https://gpmap-tools.readthedocs.io) is meant guide users through the basic principles underlying the method as well as explain how to use it for calculating the embedding coordinates and use the functionalities provided for advanced plotting of their own fitness landscapes. 
 
@@ -51,7 +45,8 @@ pytest test
 ```
 
 # References
-- Martí-Gómez, C.; Zhou, J.; Chen W.; Kinney J. B.; Mccandlish, D. M. Inference and visualization of complex genotype-phenotype maps using gpmap-tools. bioRxiv (2025). [doi](https://www.biorxiv.org/content/10.1101/2025.03.09.642267v2)
+- Martí-Gómez, C.; Zhou, J.; Chen W.; Kinney J. B.; Mccandlish, D. M. Inference and visualization of complex genotype-phenotype maps. Molecular Biology and Evolution (2026). [doi](https://academic.oup.com/mbe/article/43/2/msag023/8456298)
+- Martí-Gómez, C and McCandlish, DM. Inference of fitness landscapes with heterogenous patterns of epistasis across sites (2026). In preparation.
 - Zhou, J.; McCandlish D. M.; Minimum epistasis interpolation for sequence-function relationships. Nat. Comm. (2020) [doi](https://www.nature.com/articles/s41467-020-15512-5)
 - Zhou, J.; Wong, M. S.; Chen, W.; Krainer, A. R.; Kinney J. B.; Mccandlish, D. M. Higher-Order Epistasis and Phenotypic Prediction. PNAS (2022). [doi](https://doi.org/10.1073/pnas.2204233119).
 - Chen WC, Zhou J, Sheltzer JM, Kinney JB, McCandlish DM. Field theoretic density estimation for biological sequence space with applications to 5' splice site diversity and aneuploidy in cancer. PNAS (2021). [doi](https://www.pnas.org/doi/10.1073/pnas.2025782118)
