@@ -2,7 +2,7 @@
 from itertools import combinations, product
 
 import numpy as np
-from numpy.linalg.linalg import matrix_power
+from numpy.linalg import matrix_power
 from scipy.linalg import (
     lu_factor,
     lu_solve,
