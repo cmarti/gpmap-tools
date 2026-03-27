@@ -1,26 +1,26 @@
 #!/usr/bin/env python
+from os import listdir
+from os.path import exists, join
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+
 import gpmap.plot.mpl as plot
-
-from os import listdir
-from os.path import join, exists
-
+from gpmap.inference import SeqDEFT, VCregression
+from gpmap.randwalk import WMWalk
+from gpmap.settings import LANDSCAPES_DIR, PROCESSED_DIR, RAW_DATA_DIR, VIZ_DIR
+from gpmap.space import SequenceSpace
 from gpmap.utils import (
     check_error,
     read_dataframe,
     read_edges,
-    write_edges,
     write_dataframe,
+    write_edges,
 )
-from gpmap.settings import RAW_DATA_DIR, LANDSCAPES_DIR, PROCESSED_DIR, VIZ_DIR
-from gpmap.space import SequenceSpace
-from gpmap.randwalk import WMWalk
-from gpmap.inference import VCregression, SeqDEFT
 
 
-class DataSet(object):
+class DataSet:
     """
     DataSet object for managing and manipulating various components 
     related to a specific dataset. This includes the original data, 
@@ -49,7 +49,7 @@ class DataSet(object):
             datasets = list_available_datasets()
             check_error(
                 dataset_name in datasets,
-                msg="Dataset not available: check {}".format(datasets),
+                msg=f"Dataset not available: check {datasets}",
             )
         else:
             check_error(
@@ -67,15 +67,13 @@ class DataSet(object):
         self.name = dataset_name
 
     def _load(self, fdir, label, suffix=""):
-        fpath = join(fdir, "{}.pq".format(self.name + suffix))
+        fpath = join(fdir, f"{self.name + suffix}.pq")
 
         if not exists(fpath):
-            fpath = join(fdir, "{}.npz".format(self.name + suffix))
+            fpath = join(fdir, f"{self.name + suffix}.npz")
 
             if not exists(fpath):
-                msg = "{} for dataset {} not found".format(
-                    label, self.name + suffix
-                )
+                msg = f"{label} for dataset {self.name + suffix} not found"
                 raise ValueError(msg)
             else:
                 df = read_edges(fpath, return_df=True)
@@ -84,7 +82,7 @@ class DataSet(object):
         return df
 
     def _write(self, df, fdir, suffix="", fmt="pq"):
-        fpath = join(fdir, "{}.{}".format(self.name + suffix, fmt))
+        fpath = join(fdir, f"{self.name + suffix}.{fmt}")
         if fmt == "npz":
             write_edges(df, fpath)
         else:

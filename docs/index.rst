@@ -25,7 +25,7 @@ inference and analysis of complete genotype-phenotype maps.
 - `Juannan Zhou and David M. McCandlish. Minimum epistasis interpolation for sequence-function relationships (2020) <https://www.nature.com/articles/s41467-020-15512-5>`_
 - `Juannan Zhou, Mandy S. Wong, Wei-Chia Chen, Adrian R. Krainer, Justin B. Kinney, David M. McCandlish. Higher order epistasis and phenotypic prediction (2022) <https://www.pnas.org/doi/full/10.1073/pnas.2204233119>`_
 - `Wei-Chia Chen, Juannan Zhou, Jason M. Sheltzer, Justin B. Kinney, David M. McCandlish. Field theoretic density estimation for biological sequence space with applications to 5' splice site diversity and aneuploidy in cancer (2021) <https://www.pnas.org/doi/10.1073/pnas.2025782118>`_
-- `Carlos Martí-Gómez and David M. McCandlish. Inference of fitness landscapes with heterogenous patterns of epistasis across sites (2026). In preparation.
+- Carlos Martí-Gómez and David M. McCandlish. Inference of fitness landscapes with heterogenous patterns of epistasis across sites (2026). In preparation.
 
 These models are implemented within a unified framework inspired by the classical 
 machine learning library `scikit-learn <https://scikit-learn.org/>`_, defined

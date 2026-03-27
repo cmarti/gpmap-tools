@@ -14,6 +14,12 @@ Regression
 .. autoclass:: gpmap.inference.VCregression
     :members: fit, predict, make_contrasts, sample_prior, simulate, get_variance_components
 
+.. autoclass:: gpmap.inference.ConnectednessModelRegression
+    :members: fit, predict, make_contrasts, sample_prior, simulate, get_decay_factors
+
+.. autoclass:: gpmap.inference.LocalEpistasisRegression
+    :members: fit, predict, make_contrasts, sample_prior, simulate, get_empirical_pred_correlations_df, get_a_values, get_lambda_U_values
+
 Density estimation
 ^^^^^^^^^^^^^^^^^^
 .. autoclass:: gpmap.inference.SeqDEFT
@@ -22,6 +28,13 @@ Density estimation
 Summary statistics
 ------------------
 
+Experimental data
+^^^^^^^^^^^^^^^^^
+.. autoclass:: gpmap.summary.GPDataSummarizer
+    :members: calc_covariance_distance, calc_covariance_U_sites
+
+Complete landscapes
+^^^^^^^^^^^^^^^^^^^
 .. autoclass:: gpmap.summary.GPmapSummarizer
     :members: calc_V_k_variance_components, calc_root_mean_squared_epistatic_coeff,
         calc_V_U_variance_components, calc_sites_variance_perc, 
