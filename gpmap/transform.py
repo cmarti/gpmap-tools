@@ -102,6 +102,11 @@ class DeltaUtoVUTransform:
         self.input_size = self.m + self.n_Us
         self.output_size = 2**seq_length
 
+        # Precompute indices and masks used in __call__.
+        self._m_idx = np.arange(self.m)
+        self.mask_bool = self.V_to_U[self.U_idx]
+        self.mask = self.mask_bool.astype(float, copy=False)
+
     def get_log_lambda_U(self, x):
         return x[: self.m]
 
@@ -115,24 +120,24 @@ class DeltaUtoVUTransform:
 
         log_lambda_U = self.get_log_lambda_U(x)
         log_a = self.get_log_a_U(x)
+        U_idx = self.U_idx
+        m = self.m
+        log_alphaP = self.log_alphaP
 
-        log_lambda_V = np.zeros(self.output_size)
+        log_lambda_V = np.empty(self.output_size)
         log_lambda_V[self.no_U_idx] = log_lambda_U
 
-        if return_grad:
-            grad = np.zeros((self.input_size, self.output_size))
-            grad[np.arange(self.m), self.no_U_idx] = 1
+        x_vec = logsumexp(log_a[None, :], b=self.mask, axis=1)
+        log_lambda_V[U_idx] = -(log_alphaP + x_vec)
 
-        for i in self.U_idx:
-            idx = np.where(self.V_to_U[i])[0]
-            log_a_i = log_a[idx]
-
-            x_i = logsumexp(log_a_i)
-            log_lambda_V[i] = -(self.log_alphaP + x_i)
-            if return_grad:
-                grad[self.m + idx, i] = -np.exp(log_a_i - x_i)
-
-        if return_grad:
-            return log_lambda_V, grad
-        else:
+        if not return_grad:
             return log_lambda_V
+
+        grad = np.zeros((self.input_size, self.output_size))
+        grad[self._m_idx, self.no_U_idx] = 1
+
+        # Compute exp only where entries contribute.
+        probs = np.zeros_like(self.mask)
+        np.exp(log_a[None, :] - x_vec[:, None], out=probs, where=self.mask_bool)
+        grad[m:, U_idx] = -probs.T
+        return log_lambda_V, grad
