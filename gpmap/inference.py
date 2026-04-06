@@ -656,10 +656,10 @@ class VCregression(GaussianProcessRegressor):
             raise ValueError(msg.format(cv_loss_function, allowed_functions))
         self.cv_loss_function = cv_loss_function
 
-    def cv_fit(self, data, beta):
+    def cv_fit(self, data, beta, method='L-BFGS-B'):
         X, y, y_var, cov, ns = data
         self.set_data(X=X, y=y, y_var=y_var, cov=cov, ns=ns)
-        lambdas = self._fit(beta)
+        lambdas = self._fit(beta, method=method)
         return lambdas
 
     def cv_evaluate(self, data, lambdas):
@@ -684,7 +684,7 @@ class VCregression(GaussianProcessRegressor):
 
         return loss
 
-    def _fit(self, beta=None):
+    def _fit(self, beta=None, method='L-BFGS-B'):
         if beta is None:
             beta = self.beta
 
@@ -698,10 +698,10 @@ class VCregression(GaussianProcessRegressor):
             cov, ns = self.gpdata.calc_covariance_distance(centered=False)
 
         self.kernel_aligner.regularizer.set_beta(beta)
-        lambdas = self.kernel_aligner.fit(cov, ns)
+        lambdas = self.kernel_aligner.fit(cov, ns, method=method)
         return lambdas
 
-    def fit(self, X, y, y_var=None):
+    def fit(self, X, y, y_var=None, method='L-BFGS-B'):
         """
         Infers the Variance Components from the provided data.
 
@@ -727,6 +727,9 @@ class VCregression(GaussianProcessRegressor):
             Array containing the empirical or experimental variance for the
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
+        
+        method : str, optional
+            Optimization method to use during kernel alignment. Default is 'L-BFGS-B'.
         """
 
         t0 = time()
@@ -740,7 +743,7 @@ class VCregression(GaussianProcessRegressor):
             self.fit_beta_cv()
             self.set_data(X, y, y_var=y_var)
 
-        lambdas = self._fit()
+        lambdas = self._fit(method=method)
 
         self.fit_time = time() - t0
         self.set_lambdas(lambdas)
@@ -829,7 +832,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         df = pd.DataFrame({"decay_factor": decay_factors}, index=sites)
         return df
 
-    def fit(self, X, y, y_var=None):
+    def fit(self, X, y, y_var=None, method='L-BFGS-B'):
         """
         Infers the site-specific decay factors from the provided data.
 
@@ -855,6 +858,9 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             Array containing the empirical or experimental variance for the
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
+            
+        method : str, optional
+            Optimization method to use during kernel alignment. Default is 'L-BFGS-B'.
         """
         self.define_space(genotypes=X)
         self.kernel_aligner = ConnectednessKernelAligner(
@@ -862,7 +868,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         )
         self.set_data(X, y, y_var=y_var)
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
-        mu = self.kernel_aligner.fit(cov, ns)
+        mu = self.kernel_aligner.fit(cov, ns, method=method)
         self.set_params(mu=mu)
 
 
