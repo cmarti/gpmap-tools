@@ -187,6 +187,18 @@ class KernelAlignerTest(unittest.TestCase):
             assert np.allclose(cov_pred, cov_true, atol=1e-2)
             assert np.allclose(np.exp(x), np.exp(x_hat), atol=1e-2, rtol=0.1)
 
+    def test_connectedness_kernel_alignment_initialization(self):
+        aligner = ConnectednessKernelAligner(n_alleles=3, seq_length=2)
+
+        x = np.zeros(3)
+        cov_true = aligner.predict(x)
+        ns = np.ones_like(cov_true)
+        assert np.allclose(cov_true[1], cov_true[2])
+
+        aligner.set_data(cov_true, ns)
+        x0 = aligner.get_x0()
+        assert np.allclose(x0, x)
+
     def test_connectedness_kernel_alignment(self):
         aligner = ConnectednessKernelAligner(n_alleles=3, seq_length=2)
 

@@ -446,6 +446,20 @@ class ConnectednessKernelAligner(LowDimVUKernelAligner):
     seq_length : int
         The number of sites in the sequence.
     """
+    
+    def get_x0(self):
+        D = np.array(list(product([False, True], repeat=self.seq_length)))
+        d1_idx = np.where(D.sum(1) == 1)[0]
+        cov_d0 = self.covs[0]
+        cov_d1 = self.covs[d1_idx]
+        cor_d1 = cov_d1 / cov_d0
+        mu_i = (1 - cor_d1) / (1 + (self.n_alleles - 1) * cor_d1)
+        m = np.sum(np.log(1 + (self.n_alleles - 1) * mu_i)) / self.seq_length
+        log_mu_0 = np.log(cov_d0) / self.seq_length + np.log(self.n_alleles) - m
+        log_mu_i = np.log(mu_i) + log_mu_0
+        x0 = np.append([log_mu_0], log_mu_i)
+        return x0
+
     def __init__(self, n_alleles, seq_length):
         transform = ConnectednessToVUTransform(n_alleles, seq_length)
         super().__init__(n_alleles, seq_length, transform=transform)
