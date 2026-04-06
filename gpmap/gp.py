@@ -3,11 +3,10 @@ from time import time
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import minimize
 from scipy.sparse.linalg import aslinearoperator
 from scipy.stats import norm
-from scipy.optimize import minimize
 
-from gpmap.summary import GPDataSummarizer
 from gpmap.likelihood import GaussianLikelihood
 from gpmap.linop import (
     DiagonalOperator,
@@ -22,6 +21,7 @@ from gpmap.seq import (
     get_seqs_from_alleles,
     guess_space_configuration,
 )
+from gpmap.summary import GPDataSummarizer
 from gpmap.utils import (
     calc_cv_loss,
     check_error,
@@ -30,7 +30,7 @@ from gpmap.utils import (
 )
 
 
-class SeqGaussianProcessRegressor(object):
+class SeqGaussianProcessRegressor:
     def __init__(self, expand_alphabet=True):
         self.expand_alphabet = expand_alphabet
 
@@ -493,7 +493,7 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
 
     @property
     def K_xx_inv(self):
-        if np.any(self.likelihood.y_var == 0.0):
+        if np.any(self.likelihood.y_var < 1e-4):
             K_xx = self.X @ self.K @ self.X_t + self.likelihood.D_var
             K_xx_inv = InverseOperator(K_xx, method="cg", rtol=self.cg_rtol)
         else:
