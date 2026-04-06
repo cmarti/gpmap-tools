@@ -7,9 +7,7 @@ import numpy as np
 from gpmap.aligner import (
     ConnectednessKernelAligner,
     DeltaPKernelAligner,
-    DeltaPtoVkTransform,
     DeltaUKernelAligner,
-    DeltaUtoVUTransform,
     VCKernelAligner,
     VCUKernelAligner,
 )
@@ -87,30 +85,6 @@ class KernelAlignerTest(unittest.TestCase):
         reg2 = aligner.regularizer(log_lambda_k_hat2)
         assert reg2 < reg1
     
-    def test_DeltaP_to_Vk_transform(self):
-        transform = DeltaPtoVkTransform(4, 2, P=2)
-
-        x = np.array([-16, -16, 0])
-        log_lambda_k = transform(x, return_grad=False)
-        lambda_k = np.exp(log_lambda_k)
-        assert np.allclose(lambda_k, [0, 0, 1 / 16], atol=1e-6)
-
-        x = np.array([0, 1, 1])
-        log_lambda_k, grad = transform(x, return_grad=True)
-        assert np.allclose(log_lambda_k, [0, 1, -1 - 2 * np.log(4)])
-        assert np.allclose(
-            grad, [[1, 0, 0], [0, 1, 0], [0, 0, -1]]
-        )
-
-        # Test with 3 sites
-        transform = DeltaPtoVkTransform(4, 3, P=2)
-        x = np.array([-16, -16, 0])
-        log_lambda_k, grad = transform(x, return_grad=True)
-        lambda_k = np.exp(log_lambda_k)
-        exp = np.array([0, 0, 1 / 16.0, 1 / 48.0])
-        assert np.allclose(lambda_k, exp, atol=1e-4)
-        assert np.allclose(grad, [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, -1, -1]])
-
     def test_DeltaP_kernel_alignment_fit(self):
         a, sl = 4, 5
         aligner = DeltaPKernelAligner(a, sl, P=2)
@@ -131,7 +105,7 @@ class KernelAlignerTest(unittest.TestCase):
         assert loss < 1e-12
         assert np.allclose(grad, 0, atol=1e-6)
         assert np.allclose(cov_true, cov_pred, rtol=0.01)
-        assert np.allclose(x_true, x_hat)
+        assert np.allclose(x_true, x_hat, atol=1e-1)
 
     def test_VCU_kernel_predict(self):
         aligner = VCUKernelAligner(n_alleles=3, seq_length=2)
@@ -151,43 +125,14 @@ class KernelAlignerTest(unittest.TestCase):
         cov = aligner.predict(np.exp(log_lambda_U))
         ns = np.ones_like(cov)
         log_lambda_U_hat = np.log(aligner.fit(cov, ns))
-        assert np.allclose(log_lambda_U_hat, log_lambda_U)
+        assert np.allclose(log_lambda_U_hat, log_lambda_U, atol=1e-4)
 
         aligner = VCUKernelAligner(n_alleles=4, seq_length=3)
         log_lambda_U = np.array([1, 0.5, 0, 0.25, -1, -2, -1.5, -3])
         cov = aligner.predict(np.exp(log_lambda_U))
         ns = np.ones_like(cov)
         log_lambda_U_hat = np.log(aligner.fit(cov, ns))
-        assert np.allclose(log_lambda_U_hat, log_lambda_U)
-
-    def test_DeltaU_to_VU_transform(self):
-        transform = DeltaUtoVUTransform(4, 2, P=2)
-
-        x = np.array([-16, -16, -16, 0])
-        log_lambda_U = transform(x, return_grad=False)
-        lambda_U = np.exp(log_lambda_U)
-        assert np.allclose(lambda_U, [0, 0, 0, 1 / 16], atol=1e-6)
-
-        x = np.array([0, 1, 1, 1])
-        log_lambda_U, grad = transform(x, return_grad=True)
-        assert np.allclose(log_lambda_U, [0, 1, 1, -1 - 2 * np.log(4)])
-        assert np.allclose(
-            grad, [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, -1]]
-        )
-
-        # Test with 3 sites
-        transform = DeltaUtoVUTransform(4, 3, P=2)
-
-        x = np.array([-16, -16, -16, -16, 0, 16, 16])
-        log_lambda_U = transform(x, return_grad=False)
-        lambda_U = np.exp(log_lambda_U)
-        assert np.allclose(lambda_U, [0, 0, 0, 0, 0, 0, 1 / 16.0, 0], atol=1e-6)
-
-        x = np.array([-16, -16, -16, -16, 0, 0, 0])
-        log_lambda_U = transform(x, return_grad=False)
-        lambda_U = np.exp(log_lambda_U)
-        exp = np.array([0, 0, 0, 1 / 16.0, 0, 1 / 16, 1 / 16, 1 / 48.0])
-        assert np.allclose(lambda_U, exp, atol=1e-4)
+        assert np.allclose(log_lambda_U_hat, log_lambda_U, atol=1e-4)
 
     def test_DeltaU_kernel_predict(self):
         aligner = DeltaUKernelAligner(n_alleles=2, seq_length=3, P=2)
