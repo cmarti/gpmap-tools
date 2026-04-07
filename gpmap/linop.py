@@ -1001,6 +1001,7 @@ class VUProjectionOperator(VUOperator):
             sqnorm = self.repeats * np.sum((A @ u.flatten()) ** 2)
         return sqnorm
 
+
 class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
     def __init__(self, n_alleles, seq_length, lambdas=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
@@ -1029,9 +1030,19 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
         else:
             site = sites[-1]
             site_included = sites_included[-1]
-            P = self.W1 if site_included else self.W0
             v_prev = self.calc_V_U_product(v, sites[:-1], sites_included[:-1])
-            u = tensordot(P, v_prev, site)
+            
+            if self.cached_means[site] is None:
+                mean = np.mean(v_prev, axis=site, keepdims=True)
+                self.cached_means[site] = mean
+            else:
+                mean = self.cached_means[site]
+            
+            if site_included:
+                u = v_prev - mean
+            else:
+                u = mean
+            u = np.moveaxis(u, site, 0)
             self.n_products += 1
 
             self.cached_matvecs[site] = u
@@ -1039,6 +1050,7 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
             for i in range(site + 1, self.seq_length):
                 self.cached_U[i] = None
                 self.cached_matvecs[i] = None
+                self.cached_means[i] = None
 
             return u
 
@@ -1049,6 +1061,7 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
 
         self.cached_matvecs = [None] * self.seq_length
         self.cached_U = [None] * self.seq_length
+        self.cached_means = [None] * self.seq_length
         self.n_products = 0
         check_error(
             v.shape[0] == self.shape[1],

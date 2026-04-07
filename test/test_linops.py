@@ -306,30 +306,6 @@ class LinOpsTests(unittest.TestCase):
         u2 = A @ v
         assert np.allclose(u1, u2)
 
-    def test_deltaU_operator_equivalences(self):
-        a, sl = 2, 3
-        n = a**sl
-        P = 2
-        v = np.random.normal(size=n)
-
-        # Ensure equivalence with the PU operators
-        DU = DeltaUOperator(a, sl, U=[0, 1])
-        u1 = DU @ v
-        PU1 = VjProjectionOperator(a, sl, j=[0, 1])
-        PU2 = VjProjectionOperator(a, sl, j=[0, 1, 2])
-        u2 = a ** 2 * (PU1 + PU2) @ v
-        assert np.allclose(u1, u2)
-
-        # Ensure summing over all DeltaU with |U|=P gives DeltaP
-        u1 = np.zeros(n)
-        for U in combinations(np.arange(sl), P):
-            DU = DeltaUOperator(a, sl, U=U)
-            u1 += DU @ v
-        
-        DP = DeltaPOperator(a, sl, P=P)
-        u2 = DP @ v
-        assert np.allclose(u1, u2)
-
     def test_deltaU_weighed_sum_operator(self):
         a, sl = 2, 3
         n = a**sl
@@ -352,42 +328,6 @@ class LinOpsTests(unittest.TestCase):
         u2 = A2 @ v
         assert np.allclose(u1, u2)
     
-    def test_P_U_weighed_sum_operator(self):
-        a, sl = 4, 8
-        n = a**sl
-        v = np.random.normal(size=n)
-        
-        t0 = time()
-        lambdas = np.exp(np.random.normal(size=2 ** sl))
-        sites = np.arange(sl)
-        Us = product([False, True], repeat=sl)
-        u1 = np.zeros_like(v)
-        for U, lambda_U in zip(Us, lambdas):
-            j = list(sites[np.array(U)])
-            u1 += lambda_U * VjProjectionOperator(a, sl, j=j) @ v
-        time1 = time() - t0
-        
-        t0 = time()
-        P = VUProjectionWeightedSumOperator(a, sl, lambdas=lambdas)
-        u2 = P @ v
-        time2 = time() - t0
-        assert np.allclose(u1, u2)
-        assert(time2 < time1)
-
-    def test_deltaU_operator(self):
-        a, sl = 2, 3
-        n = a**sl
-        v = np.random.normal(size=n)
-        DU = DeltaUOperator(a, sl, U=[0, 1])
-        u1 = DU @ v
-
-        # Ensure equivalence with the dense matrix
-        C0 = np.eye(a)
-        C1 = a * np.eye(a) - np.ones((a, a))
-        A = np.kron(C1, np.kron(C1, C0))
-        u2 = A @ v
-        assert np.allclose(u1, u2)
-
     def test_deltaU_operator_equivalences(self):
         a, sl = 2, 3
         n = a**sl
@@ -412,29 +352,25 @@ class LinOpsTests(unittest.TestCase):
         u2 = DP @ v
         assert np.allclose(u1, u2)
 
-    def test_deltaU_weighed_sum_operator(self):
-        a, sl = 2, 3
+    def test_P_U_weighed_sum_operator_small(self):
+        a, sl = 3, 2
         n = a**sl
         v = np.random.normal(size=n)
+        v = np.arange(n).astype(float)
 
-        # Ensure equivalence with the DeltaU
-        a_values = np.ones(int(comb(sl, 2)))
-        a_values[1:] = 0
-        A1 = DeltaUWeighedSumOperator(a, sl, P=2, a=a_values)
-        A2 = DeltaUOperator(a, sl, U=[0, 1])
-        u1 = A1 @ v
-        u2 = A2 @ v
+        lambdas = np.exp(np.random.normal(size=2**sl))
+        sites = np.arange(sl)
+        Us = product([False, True], repeat=sl)
+        u1 = np.zeros_like(v)
+        for U, lambda_U in zip(Us, lambdas):
+            j = list(sites[np.array(U)])
+            u1 += lambda_U * VUProjectionOperator(a, sl, j=j) @ v
+
+        P = VUProjectionWeightedSumOperator(a, sl, lambdas=lambdas)
+        u2 = P @ v
         assert np.allclose(u1, u2)
 
-        # Ensure equivalence with the DeltaP
-        a_values = np.ones(int(comb(sl, 2)))
-        A1 = DeltaUWeighedSumOperator(a, sl, P=2, a=a_values)
-        A2 = DeltaPOperator(a, sl, P=2)
-        u1 = A1 @ v
-        u2 = A2 @ v
-        assert np.allclose(u1, u2)
-
-    def test_P_U_weighed_sum_operator(self):
+    def test_P_U_weighed_sum_operator_big(self):
         a, sl = 4, 8
         n = a**sl
         v = np.random.normal(size=n)
@@ -453,6 +389,7 @@ class LinOpsTests(unittest.TestCase):
         P = VUProjectionWeightedSumOperator(a, sl, lambdas=lambdas)
         u2 = P @ v
         time2 = time() - t0
+        print(time2)
         assert np.allclose(u1, u2)
         assert time2 < time1
 
@@ -530,7 +467,7 @@ class LinOpsTests(unittest.TestCase):
         x2 = L_inv @ b
         assert np.allclose(x1, x2)
 
-    def test_vj_projection_operator(self):
+    def test_VU_projection_operator(self):
         a, sl = 2, 2
 
         # Purely additive function
@@ -538,20 +475,20 @@ class LinOpsTests(unittest.TestCase):
         y01 = np.array([-1, -1, 1, 1])
         y10 = np.array([-0.5, 0.5, -0.5, 0.5])
 
-        Pj = VUProjectionOperator(a, sl, j=[0])
-        f01 = Pj.dot(y)
+        P_U = VUProjectionOperator(a, sl, j=[0])
+        f01 = P_U.dot(y)
         assert np.allclose(f01, y01)
 
-        Pj = VUProjectionOperator(a, sl, j=[1])
-        f10 = Pj.dot(y)
+        P_U = VUProjectionOperator(a, sl, j=[1])
+        f10 = P_U.dot(y)
         assert np.allclose(f10, y10)
 
-        Pj = VUProjectionOperator(a, sl, j=[])
-        f00 = Pj.dot(y)
+        P_U = VUProjectionOperator(a, sl, j=[])
+        f00 = P_U.dot(y)
         assert np.allclose(f00, 0)
 
-        Pj = VUProjectionOperator(a, sl, j=[0, 1])
-        f11 = Pj.dot(y)
+        P_U = VUProjectionOperator(a, sl, j=[0, 1])
+        f11 = P_U.dot(y)
         assert np.allclose(f11, 0)
 
         # Tests that projections add up to the whole subspace in larger case
@@ -564,8 +501,8 @@ class LinOpsTests(unittest.TestCase):
 
             u2 = np.zeros(v.shape[0])
             for j in combinations(np.arange(W.seq_length), k):
-                Pj = VUProjectionOperator(a, sl, j=list(j))
-                u2 += Pj.dot(v)
+                P_U = VUProjectionOperator(a, sl, j=list(j))
+                u2 += P_U.dot(v)
 
             assert np.allclose(u1, u2)
 
@@ -574,16 +511,16 @@ class LinOpsTests(unittest.TestCase):
         y = np.array([-1.5, -0.5, 0.5, 1.5])
 
         for j in [[], [0], [1], [0, 1]]:
-            Pj = VUProjectionOperator(a, sl, j=j)
-            fsqn = Pj.dot_square_norm(y)
-            exp = np.sum(Pj.dot(y) ** 2)
+            P_U = VUProjectionOperator(a, sl, j=j)
+            fsqn = P_U.dot_square_norm(y)
+            exp = np.sum(P_U.dot(y) ** 2)
             assert np.allclose(fsqn, exp)
 
         # Test with bigger operator
-        Pj = VUProjectionOperator(4, 8, j=[0, 3, 5])
-        y = np.random.normal(size=Pj.shape[1])
-        exp = np.sum(Pj.dot(y) ** 2)
-        fsqn = Pj.dot_square_norm(y)
+        P_U = VUProjectionOperator(4, 8, j=[0, 3, 5])
+        y = np.random.normal(size=P_U.shape[1])
+        exp = np.sum(P_U.dot(y) ** 2)
+        fsqn = P_U.dot_square_norm(y)
         assert np.allclose(fsqn, exp)
 
     def test_vj_basis_operator(self):
@@ -899,5 +836,5 @@ class LinOpsTests(unittest.TestCase):
 if __name__ == "__main__":
     import sys
 
-    sys.argv = ["", "LinOpsTests"]
+    sys.argv = ["", "LinOpsTests.test_P_U_weighed_sum_operator"]
     unittest.main()
