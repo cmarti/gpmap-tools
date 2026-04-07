@@ -134,6 +134,36 @@ class KernelAlignerTest(unittest.TestCase):
         log_lambda_U_hat = np.log(aligner.fit(cov, ns))
         assert np.allclose(log_lambda_U_hat, log_lambda_U, atol=1e-4)
 
+    def test_DeltaU_kernel_alignment_initialization(self):
+        # For l=2 we can get any covariance matrix
+        aligner = DeltaUKernelAligner(n_alleles=4, seq_length=2, P=2)
+        cov_true = np.array([1, 0.5, 0.5, 0.25])
+        ns = np.ones_like(cov_true)
+        aligner.set_data(cov_true, ns)
+        x0 = aligner.get_x0()
+        assert np.allclose(aligner.predict(x0), cov_true)
+        
+        # For l=3 P=1
+        aligner = DeltaUKernelAligner(n_alleles=4, seq_length=3, P=1)
+        x = np.array([0, -1, -1, -1])
+        cov_true = aligner.predict(x)
+        ns = np.ones_like(cov_true)
+        aligner.set_data(cov_true, ns)
+        x0 = aligner.get_x0()
+        assert np.allclose(aligner.predict(x0), cov_true)
+        assert np.allclose(x0, x)
+        
+        # For l=3 P=1
+        aligner = DeltaUKernelAligner(n_alleles=4, seq_length=3, P=2)
+        x = np.array([0, 0, 1, 2, -1, -2, -3])
+        cov_true = aligner.predict(x)
+        ns = np.ones_like(cov_true)
+        aligner.set_data(cov_true, ns)
+        x0 = aligner.get_x0()
+        assert np.allclose(aligner.predict(x0), cov_true)
+        assert np.allclose(x0, x)
+        
+
     def test_DeltaU_kernel_predict(self):
         aligner = DeltaUKernelAligner(n_alleles=2, seq_length=3, P=2)
         x = np.array([-16, -16, -16, -16, 0, 0, 0])
@@ -189,15 +219,20 @@ class KernelAlignerTest(unittest.TestCase):
 
     def test_connectedness_kernel_alignment_initialization(self):
         aligner = ConnectednessKernelAligner(n_alleles=3, seq_length=2)
-
-        x = np.zeros(3)
-        cov_true = aligner.predict(x)
+        cov_true = np.array([1, 0, 0, 0])
         ns = np.ones_like(cov_true)
-        assert np.allclose(cov_true[1], cov_true[2])
-
         aligner.set_data(cov_true, ns)
         x0 = aligner.get_x0()
-        assert np.allclose(x0, x)
+        assert np.allclose(aligner.predict(x0), cov_true)
+        assert np.allclose(x0, 0)
+        
+        # With site-specific correlations
+        cov_true = np.array([1, 0.5, 0.3, 0.15])
+        ns = np.ones_like(cov_true)
+        aligner.set_data(cov_true, ns)
+        x0 = aligner.get_x0()
+        assert np.allclose(aligner.predict(x0), cov_true)
+        assert np.allclose(x0, [0.5815754,  -0.24510317, -0.80471896])
 
     def test_connectedness_kernel_alignment(self):
         aligner = ConnectednessKernelAligner(n_alleles=3, seq_length=2)

@@ -69,7 +69,7 @@ class ConnectednessModelTests(unittest.TestCase):
         
     def test_fit(self):
         np.random.seed(0)
-        mu = np.array([1, 0.5, 0.1, 0.2, 0, 0.05])
+        mu = 5 * np.array([1, 0.5, 0.1, 0.2, 0.1, 0.05])
         model = ConnectednessModelRegression(seq_length=5,
                                              n_alleles=4,
                                              mu=mu)

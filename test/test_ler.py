@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import sys
 import unittest
 from itertools import product
@@ -48,8 +47,6 @@ class LERTests(unittest.TestCase):
         # Fit a constant function
         f = np.array([1, 1, 1, 1, 1, 1, 1, 1])
         model.fit(X, f)
-        # print(model.a_values, model.lambda_U_lower_than_P)
-        # x = np.log(np.append(model.lambda_U_lower_than_P, model.a_values))
         assert np.all(model.a_values > 50)
         assert np.all(model.lambda_U_lower_than_P >= 0)
         assert np.all(model.lambda_U_lower_than_P[1:] < 1e-2)

@@ -77,7 +77,8 @@ class KernelAligner:
         self.eta = self.n_alleles - 1
         self.n_genotypes = n_alleles**seq_length
 
-    def set_data(self, covs, ns):
+    def set_data(self, covs, ns, mean=0):
+        self.mean = mean
         if covs.shape[0] != ns.shape[0]:
             msg = "covs and ns must be the same shape"
             raise ValueError(msg)
@@ -92,10 +93,10 @@ class KernelAligner:
     def calc_loss(self, x, return_grad=False):
         return self.frobenius_norm(x, return_grad=return_grad)
 
-    def fit(self, covs, ns, x0=None, method="L-BFGS-B"):
+    def fit(self, covs, ns, mean=0, x0=None, method="L-BFGS-B"):
         """
         Fits kernel parameters by minimizing the Frobenius Norm
-        with the empirical covariance betwen sequences at different
+        with the empirical covariance between sequences at different
         distance classes.
 
         Parameters
@@ -105,13 +106,21 @@ class KernelAligner:
             combination of sites.
         ns : array-like of shape (2 ** seq_length)
             Number of pairs of sequences at every possible combination of sites.
+        mean : float, optional
+            Mean value to subtract from the covariances. Default is 0.
+        x0 : array-like, optional
+            Initial guess for the optimization. If None, it will be
+            determined automatically. Default is None.
+        method : str, optional
+            Optimization method to use. Default is "L-BFGS-B".
+
         Returns
         -------
         params : array-like or tuple of array-like
             Parameter values that best fit the empirical second moments.
         """
 
-        self.set_data(covs, ns)
+        self.set_data(covs, ns, mean=mean)
         if x0 is None:
             x0 = self.get_x0()
         res = minimize(
@@ -409,28 +418,25 @@ class DeltaUKernelAligner(LowDimVUKernelAligner):
         super().__init__(n_alleles, seq_length, transform=transform)
 
     def get_x0(self):
-        x0 = np.zeros(self.n_params)
-        distances = self.params_to_log_lambda_U.V.sum(1)
-
-        cov, ns = [], []
-        for d in range(self.seq_length + 1):
-            d_idx = distances == d
-            cov.append(self.covs[d_idx].mean())
-            ns.append(self.ns[d_idx].sum())
-        cov, ns = np.array(cov), np.array(ns)
-        aligner = DeltaPKernelAligner(self.n_alleles, self.seq_length, self.P)
-        params = aligner.fit(cov, ns)
-        x = np.log(params)
-
-        ks = distances[self.params_to_log_lambda_U.no_U_idx]
-        for k in range(self.P):
-            k_idx = np.where(ks == k)[0]
-            x0[k_idx] = x[k]
-        x0[self.params_to_log_lambda_U.m:]  = x[-1]
-
+        D = np.array(list(product([False, True], repeat=self.seq_length)))
+        d = D.sum(1)
+        idx = np.where(d <= self.P)[0]
+        
+        # Solve full system and extract up to P-th order lambdas
+        lambda_U = lsq_linear(
+            self.frobenius_norm.A,
+            self.frobenius_norm.b,
+            bounds=(0, np.inf),
+            method="bvls",
+        ).x[idx]
+        
+        # Get into right parametrization for the DeltaU models
+        d = d[idx]
+        log_lambda_U = np.log(lambda_U[d < self.P] + 1e-16)
+        log_a = -self.P * np.log(self.n_alleles) - np.log(lambda_U[d == self.P]  + 1e-16)
+        x0 = np.append(log_lambda_U, log_a[::-1])
         return x0
     
-
 
 class ConnectednessKernelAligner(LowDimVUKernelAligner):
     """
@@ -450,14 +456,22 @@ class ConnectednessKernelAligner(LowDimVUKernelAligner):
     def get_x0(self):
         D = np.array(list(product([False, True], repeat=self.seq_length)))
         d1_idx = np.where(D.sum(1) == 1)[0]
-        cov_d0 = self.covs[0]
-        cov_d1 = self.covs[d1_idx]
+        covs = self.covs - self.mean ** 2
+        cov_d0 = covs[0]
+        cov_d1 = covs[d1_idx]
         cor_d1 = cov_d1 / cov_d0
+        
+        # Make sure correlations are in the valid range to avoid numerical issues
+        # These can occur when the empirical covariances are very close to 0 or 1 due to finite sampling
+        cor_d1[cor_d1 >= 1.0] = 1-1e-4
+        cor_d1[cor_d1 <= -1/self.n_alleles] = -1/self.n_alleles + 1e-4
+        
+        # Estimate the parameters of the connectedness model from the empirical covariances
         mu_i = (1 - cor_d1) / (1 + (self.n_alleles - 1) * cor_d1)
         m = np.sum(np.log(1 + (self.n_alleles - 1) * mu_i)) / self.seq_length
         log_mu_0 = np.log(cov_d0) / self.seq_length + np.log(self.n_alleles) - m
         log_mu_i = np.log(mu_i) + log_mu_0
-        x0 = np.append([log_mu_0], log_mu_i)
+        x0 = np.append([log_mu_0], log_mu_i[::-1])
         return x0
 
     def __init__(self, n_alleles, seq_length):
