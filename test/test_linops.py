@@ -33,6 +33,7 @@ from gpmap.linop import (
     MultivariateGaussian,
     PaddOperator,
     PconOperator,
+    PconPaddWeightedSumOperator,
     PolynomialOperator,
     ProjectionOperator,
     SelIdxOperator,
@@ -82,6 +83,7 @@ class LinOpsTests(unittest.TestCase):
         B = np.random.normal(size=(n, 2))
         U = P @ B
         assert np.allclose(U, B.mean(axis=0, keepdims=True))
+        
     def test_Padd_operator(self):
         n = 3
         P = PaddOperator(n)
@@ -95,6 +97,20 @@ class LinOpsTests(unittest.TestCase):
         B = np.random.normal(size=(n, 2))
         U = P @ B
         assert np.allclose(U.mean(axis=0), 0.0)
+    
+    def test_PconPaddWeightedSumOperator(self):
+        n = 3
+        lda0, lda1 = 1.2, 0.5
+        P1 = lda0 * PconOperator(n) + lda1 * PaddOperator(n)
+        P2 = PconPaddWeightedSumOperator(n, lda0=lda0, lda1=lda1)
+
+        # With a vector
+        v = np.random.normal(size=n)
+        assert np.allclose(P1 @ v, P2 @ v)
+
+        # With a matrix
+        B = np.random.normal(size=(n, 2))
+        assert np.allclose(P2 @ B, P1 @ B)
 
     def test_site_laplacian_operator(self):
         n = 3

@@ -282,6 +282,20 @@ class PaddOperator(SymmetricOperator):
         return B - np.tile(np.mean(B, axis=0), (B.shape[0], 1))
 
 
+class PconPaddWeightedSumOperator(SymmetricOperator):
+    def __init__(self, n, lda0, lda1):
+        self.shape = (n, n)
+        self.lda0 = lda0
+        self.lda1 = lda1
+        self._init_dtype()
+
+    def _matvec(self, v):
+        return self.lda1 * v  + v.mean() * (self.lda0 - self.lda1)
+
+    def _matmat(self, B):
+        return self.lda1 * B  + B.mean(axis=0, keepdims=True) * (self.lda0 - self.lda1)
+
+
 class SiteLaplacianOperator(SymmetricOperator):
     def __init__(self, n):
         self.n = n
@@ -1073,9 +1087,8 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
-        W0 = PconOperator(self.alpha)
-        W1 = PaddOperator(self.alpha)
-        return [self.mu[0] * W0 + mu_i * W1 for mu_i in self.mu[1:]]
+        return [PconPaddWeightedSumOperator(self.alpha, self.mu[0], mu_i)
+                for mu_i in self.mu[1:]]
 
     def get_mu(self):
         return self.mu
