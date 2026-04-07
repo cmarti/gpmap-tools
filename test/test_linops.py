@@ -11,7 +11,7 @@ from scipy.stats import multivariate_normal
 
 from gpmap.linop import (
     ConnectednessKernel,
-    ConnectednessProjectionOpererator,
+    ConnectednessProjectionOperator,
     CovarianceDistanceOperator,
     CovarianceSitesOperator,
     DeltaKernelBasisOperator,
@@ -778,7 +778,7 @@ class LinOpsTests(unittest.TestCase):
 
     def test_inverse_operator_big(self):
         mu = np.full(9, 0.5)
-        A = ConnectednessProjectionOpererator(4, 8, mu=mu)
+        A = ConnectednessProjectionOperator(4, 8, mu=mu)
         b = np.random.normal(size=A.shape[1])
 
         for method in ["exact", "cg"]:
@@ -789,7 +789,7 @@ class LinOpsTests(unittest.TestCase):
     def test_inverse_operator_preconditioned(self):
         mu = np.full(9, 0.5)
         mu[0] = 1.0
-        K = ConnectednessProjectionOpererator(4, 8, mu=mu)
+        K = ConnectednessProjectionOperator(4, 8, mu=mu)
         D = DiagonalOperator(0.1 * np.ones(K.shape[1]))
         A = K + D
         b = np.random.normal(size=A.shape[1])

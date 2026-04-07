@@ -4,13 +4,13 @@ import numpy as np
 
 from gpmap.linop import (LaplacianOperator, ProjectionOperator,
                              VarianceComponentKernel,
-                             ConnectednessProjectionOpererator, ConnectednessKernel,
+                             ConnectednessProjectionOperator, ConnectednessKernel,
                              ExtendedLinearOperator)
 
 
 class LinalgTests(unittest.TestCase):
     def xtest_calc_trace(self):
-        P = ConnectednessProjectionOpererator(4, 5)
+        P = ConnectednessProjectionOperator(4, 5)
         P.set_rho(0.5)
         trace = P.calc_trace(exact=True)
         assert(np.allclose(trace, P.get_diag().sum()))
@@ -49,7 +49,7 @@ class LinalgTests(unittest.TestCase):
         assert(np.allclose(trace, K.get_diag().sum()))
     
     def xtest_calc_trace_approx(self):
-        P = ConnectednessProjectionOpererator(4, 5)
+        P = ConnectednessProjectionOperator(4, 5)
         P.set_rho(0.5)
         trace = P.calc_trace(exact=False, n_vectors=100)
         assert(np.allclose(trace, P.get_diag().sum(), rtol=0.01))

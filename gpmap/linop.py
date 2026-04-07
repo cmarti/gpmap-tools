@@ -1075,7 +1075,7 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
         )
 
 
-class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
+class ConnectednessProjectionOperator(ConstantDiagSeqOperator, KronOperator):
     symmetric = True
 
     def __init__(self, n_alleles, seq_length, mu):
@@ -1122,13 +1122,13 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
 
     def inv(self):
         mu = 1.0 / self.mu
-        return ConnectednessProjectionOpererator(
+        return ConnectednessProjectionOperator(
             self.alpha, self.seq_length, mu=mu
         )
 
     def matrix_sqrt(self):
         mu = np.sqrt(self.mu)
-        return ConnectednessProjectionOpererator(
+        return ConnectednessProjectionOperator(
             self.alpha, self.seq_length, mu=mu
         )
 
@@ -1242,7 +1242,7 @@ class VUKernel(VUProjectionWeightedSumOperator, Kernel):
         return np.log(self.get_lambdas())
 
 
-class ConnectednessKernel(ConnectednessProjectionOpererator, Kernel):
+class ConnectednessKernel(ConnectednessProjectionOperator, Kernel):
     symmetric = True
 
     def set_params(self, params):
