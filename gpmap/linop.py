@@ -20,6 +20,7 @@ except ImportError:
 
 from gpmap.matrix import is_lower_triangular, kron, tensordot
 from gpmap.utils import check_error
+from gpmap.transform import ConnectednessToVUTransform
 
 
 class ExtendedLinearOperator(_CustomLinearOperator):
@@ -81,7 +82,7 @@ class LowRankPerturbationOperator(ExtendedLinearOperator):
         else:
             diag = np.ones(A.shape[1])
         self.D = DiagonalOperator(diag)
-        
+
     def _matvec(self, v):
         return (self.D + self.Q @ self.Lambda @ self.Q.T) @ v
 
@@ -162,7 +163,7 @@ class InverseOperator(ExtendedLinearOperator):
                     callback=counter,
                     **self.kwargs,
                 )
-            except TypeError: # Captures error from newer scipy versions
+            except TypeError:  # Captures error from newer scipy versions
                 res = cg(
                     self.linop,
                     v,
@@ -173,7 +174,7 @@ class InverseOperator(ExtendedLinearOperator):
                     callback=counter,
                     **self.kwargs,
                 )
-                
+
             self.cg_n_iter = counter.niter
             if res[1] != 0:
                 msg = "Conjugate gradient did not converge"
@@ -290,10 +291,12 @@ class PconPaddWeightedSumOperator(SymmetricOperator):
         self._init_dtype()
 
     def _matvec(self, v):
-        return self.lda1 * v  + v.mean() * (self.lda0 - self.lda1)
+        return self.lda1 * v + v.mean() * (self.lda0 - self.lda1)
 
     def _matmat(self, B):
-        return self.lda1 * B  + B.mean(axis=0, keepdims=True) * (self.lda0 - self.lda1)
+        return self.lda1 * B + B.mean(axis=0, keepdims=True) * (
+            self.lda0 - self.lda1
+        )
 
 
 class SiteLaplacianOperator(SymmetricOperator):
@@ -860,8 +863,10 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
         return self.W_kd.T.dot(self.lambdas)
 
     def inv(self):
+        lambda_inv = np.zeros_like(self.lambdas)
+        lambda_inv[self.lambdas != 0] = 1.0 / self.lambdas[self.lambdas != 0]
         return ProjectionOperator(
-            self.alpha, self.seq_length, lambdas=1.0 / self.lambdas
+            self.alpha, self.seq_length, lambdas=lambda_inv
         )
 
     def calc_log_det(self):
@@ -960,6 +965,7 @@ class CovarianceSitesOperator(SeqOperator, KronOperator):
 class VUOperator(ConstantDiagSeqOperator, KronOperator):
     def __init__(self, n_alleles, seq_length, j):
         self.j = j
+        self.no_U = tuple([i for i in range(seq_length) if i not in self.j])
         self.k = len(j)
 
         ConstantDiagSeqOperator.__init__(
@@ -1000,6 +1006,15 @@ class VUProjectionOperator(VUOperator):
             A = KronOperator([self.W1] * self.k)
             sqnorm = self.repeats * np.sum((A @ u.flatten()) ** 2)
         return sqnorm
+    
+    def _matvec(self, v):
+        t = self.contract_v(v)
+        u = np.zeros_like(t)
+        t = np.mean(t, axis=self.no_U, keepdims=True)
+        for i in self.j:
+            t -= np.mean(t, axis=i, keepdims=True)
+        u += t
+        return self.expand_v(u)
 
 
 class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
@@ -1031,13 +1046,13 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
             site = sites[-1]
             site_included = sites_included[-1]
             v_prev = self.calc_V_U_product(v, sites[:-1], sites_included[:-1])
-            
+
             if self.cached_means[site] is None:
                 mean = np.mean(v_prev, axis=site, keepdims=True)
                 self.cached_means[site] = mean
             else:
                 mean = self.cached_means[site]
-            
+
             if site_included:
                 u = v_prev - mean
             else:
@@ -1056,7 +1071,9 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
 
     def _matvec(self, v):
         if self.lambdas is None:
-            msg = "lambdas must be defined for computing matrix-vector products"
+            msg = (
+                "lambdas must be defined for computing matrix-vector products"
+            )
             raise ValueError(msg)
 
         self.cached_matvecs = [None] * self.seq_length
@@ -1095,17 +1112,21 @@ class ConnectednessProjectionOperator(ConstantDiagSeqOperator, KronOperator):
         ConstantDiagSeqOperator.__init__(
             self, n_alleles=n_alleles, seq_length=seq_length
         )
-
+        self.log_mu_to_log_lambda_U = ConnectednessToVUTransform(
+            n_alleles, seq_length
+        )
         self.set_mu(mu)
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
-        return [PconPaddWeightedSumOperator(self.alpha, self.mu[0], mu_i)
-                for mu_i in self.mu[1:]]
+        return [
+            PconPaddWeightedSumOperator(self.alpha, self.mu[0], mu_i)
+            for mu_i in self.mu[1:]
+        ]
 
     def get_mu(self):
         return self.mu
-    
+
     def get_decay_factors(self):
         decay_factors = []
         for m in self.matrices:
@@ -1132,17 +1153,18 @@ class ConnectednessProjectionOperator(ConstantDiagSeqOperator, KronOperator):
         )
         self.check_mu(self.mu, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
+        self.lambdas = np.exp(
+            self.log_mu_to_log_lambda_U(np.log(self.mu), return_grad=False)
+        )
 
     def inv(self):
-        mu = 1.0 / self.mu
         return ConnectednessProjectionOperator(
-            self.alpha, self.seq_length, mu=mu
+            self.alpha, self.seq_length, mu=1.0 / self.mu
         )
 
     def matrix_sqrt(self):
-        mu = np.sqrt(self.mu)
         return ConnectednessProjectionOperator(
-            self.alpha, self.seq_length, mu=mu
+            self.alpha, self.seq_length, mu=np.sqrt(self.mu)
         )
 
 
