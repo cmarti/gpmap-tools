@@ -455,22 +455,20 @@ class ConnectednessKernelAligner(LowDimVUKernelAligner):
     
     def get_x0(self):
         D = np.array(list(product([False, True], repeat=self.seq_length)))
-        d1_idx = np.where(D.sum(1) == 1)[0]
-        covs = self.covs - self.mean ** 2
-        cov_d0 = covs[0]
-        cov_d1 = covs[d1_idx]
-        cor_d1 = cov_d1 / cov_d0
+        d = D.sum(1)
+        idx = np.where(d <= 1)[0]
         
-        # Make sure correlations are in the valid range to avoid numerical issues
-        # These can occur when the empirical covariances are very close to 0 or 1 due to finite sampling
-        cor_d1[cor_d1 >= 1.0] = 1-1e-4
-        cor_d1[cor_d1 <= -1/self.n_alleles] = -1/self.n_alleles + 1e-4
+        # Solve full system and extract up to P-th order lambdas
+        lambda_U = lsq_linear(
+            self.frobenius_norm.A,
+            self.frobenius_norm.b,
+            bounds=(0, np.inf),
+            method="bvls",
+        ).x[idx]
         
-        # Estimate the parameters of the connectedness model from the empirical covariances
-        mu_i = (1 - cor_d1) / (1 + (self.n_alleles - 1) * cor_d1)
-        m = np.sum(np.log(1 + (self.n_alleles - 1) * mu_i)) / self.seq_length
-        log_mu_0 = np.log(cov_d0) / self.seq_length + np.log(self.n_alleles) - m
-        log_mu_i = np.log(mu_i) + log_mu_0
+        # Get into right parametrization for the DeltaU models
+        log_mu_0 = 1 / self.seq_length * np.log(lambda_U[0] + 1e-16)
+        log_mu_i = np.log(lambda_U[1:] + 1e-16) - (self.seq_length - 1) * log_mu_0
         x0 = np.append([log_mu_0], log_mu_i[::-1])
         return x0
 
