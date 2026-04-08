@@ -5,7 +5,7 @@ from time import time
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
-from scipy.special import comb, logsumexp
+from scipy.special import logsumexp
 from scipy.stats import norm, pearsonr
 from tqdm import tqdm
 
@@ -25,10 +25,12 @@ from gpmap.linop import (
     DeltaKernelBasisOperator,
     DeltaKernelRegularizerOperator,
     DeltaPOperator,
+    DeltaUWeighedSumOperator,
     DiagonalOperator,
     ProjectionOperator,
     VarianceComponentKernel,
     VUKernel,
+    VUProjectionOperator,
 )
 from gpmap.matrix import quad
 from gpmap.summary import GPDataSummarizer
@@ -277,9 +279,10 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         )
         self.Us = self.aligner.params_to_log_lambda_U.Us
         self.n_U = len(self.Us)
-        self.n_U_lower_than_P = int(
-            sum([comb(self.seq_length, k) for k in range(P)])
-        )
+        self.U_lower_than_P = [
+            np.where(x)[0] for x in self.all_Us[self.all_Us.sum(1) < P, :]
+        ]
+        self.n_U_lower_than_P = len(self.U_lower_than_P)
         self.set_lambda_Us(a_values, lambda_U_lower_than_P)
         self.cg_rtol = cg_rtol
 
@@ -297,6 +300,14 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             )
             self.lambdas = np.exp(log_lambda)
             self.K = VUKernel(self.n_alleles, self.seq_length, self.lambdas)
+            self.C = DeltaUWeighedSumOperator(
+                self.n_alleles, self.seq_length, self.P, a=a_values
+            )
+            for U, lambda_U in zip(self.U_lower_than_P, lambda_U_lower_than_P):
+                P_U = VUProjectionOperator(
+                    self.n_alleles, self.seq_length, j=U
+                )
+                self.C += 1 / lambda_U * P_U
 
     def calc_posterior(self, X_pred=None, B=None):
         mean_post = self.calc_posterior_mean()
@@ -307,8 +318,8 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         return self.transform_posterior(
             mean_post, Sigma_post, X_pred=X_pred, B=B
         )
-        
-    def fit(self, X, y, y_var=None, method='L-BFGS-B'):
+
+    def fit(self, X, y, y_var=None, method="L-BFGS-B"):
         """
         Fits the Local Epistasis Regression (LER) model hyperparameters
         to the provided data.
@@ -332,13 +343,13 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             Array containing the empirical or experimental variance for the
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
-            
+
         method : str, optional
             Optimization method to use during kernel alignment. Default is 'L-BFGS-B'.
         """
         self.set_data(X, y, y_var=y_var)
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
-        x = self.aligner.fit(cov, ns, method=method)
+        x = self.aligner.fit(cov, ns, mean=y.mean(), method=method)
         lambda_U_lower_than_P = x[: self.n_U_lower_than_P]
         a_values = x[self.n_U_lower_than_P :]
 
@@ -554,17 +565,19 @@ class VCregression(GaussianProcessRegressor):
             alphabet_type=alphabet_type,
         )
 
+        self.cg_rtol = cg_rtol
         if lambdas is not None:
             self.set_lambdas(lambdas)
 
-        self.cg_rtol = cg_rtol
 
     def set_lambdas(self, lambdas=None, k=None):
         K = VarianceComponentKernel(
             self.n_alleles, self.seq_length, lambdas=lambdas, k=k
         )
         self.lambdas = K.lambdas
-        super().__init__(base_kernel=K, progress=self.progress)
+        super().__init__(
+            base_kernel=K, progress=self.progress, cg_rtol=self.cg_rtol
+        )
 
     def set_data(self, X, y, y_var=None, cov=None, ns=None):
         """
@@ -656,7 +669,7 @@ class VCregression(GaussianProcessRegressor):
             raise ValueError(msg.format(cv_loss_function, allowed_functions))
         self.cv_loss_function = cv_loss_function
 
-    def cv_fit(self, data, beta, method='L-BFGS-B'):
+    def cv_fit(self, data, beta, method="L-BFGS-B"):
         X, y, y_var, cov, ns = data
         self.set_data(X=X, y=y, y_var=y_var, cov=cov, ns=ns)
         lambdas = self._fit(beta, method=method)
@@ -666,9 +679,9 @@ class VCregression(GaussianProcessRegressor):
         X, y, y_var, cov, ns = data
 
         if self.cv_loss_function == "frobenius_norm":
-            self.kernel_aligner.set_data(cov, ns)
-            self.kernel_aligner.regularizer.set_beta(self.beta)
-            loss = self.kernel_aligner.calc_loss(lambdas, return_grad=False)
+            self.aligner.set_data(cov, ns)
+            self.aligner.regularizer.set_beta(self.beta)
+            loss = self.aligner.calc_loss(lambdas, return_grad=False)
 
         else:
             self.set_lambdas(lambdas)
@@ -684,7 +697,7 @@ class VCregression(GaussianProcessRegressor):
 
         return loss
 
-    def _fit(self, beta=None, method='L-BFGS-B'):
+    def _fit(self, beta=None, method="L-BFGS-B"):
         if beta is None:
             beta = self.beta
 
@@ -697,11 +710,13 @@ class VCregression(GaussianProcessRegressor):
             )
             cov, ns = self.gpdata.calc_covariance_distance(centered=False)
 
-        self.kernel_aligner.regularizer.set_beta(beta)
-        lambdas = self.kernel_aligner.fit(cov, ns, method=method)
+        self.aligner.regularizer.set_beta(beta)
+        lambdas = self.aligner.fit(
+            cov, ns, mean=self.likelihood.y.mean(), method=method
+        )
         return lambdas
 
-    def fit(self, X, y, y_var=None, method='L-BFGS-B'):
+    def fit(self, X, y, y_var=None, method="L-BFGS-B"):
         """
         Infers the Variance Components from the provided data.
 
@@ -727,14 +742,14 @@ class VCregression(GaussianProcessRegressor):
             Array containing the empirical or experimental variance for the
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
-        
+
         method : str, optional
             Optimization method to use during kernel alignment. Default is 'L-BFGS-B'.
         """
 
         t0 = time()
         self.define_space(genotypes=X)
-        self.kernel_aligner = VCKernelAligner(
+        self.aligner = VCKernelAligner(
             n_alleles=self.n_alleles, seq_length=self.seq_length
         )
         self.set_data(X, y, y_var=y_var)
@@ -804,15 +819,17 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             alphabet_type=alphabet_type,
         )
 
+        self.cg_rtol = cg_rtol
         if mu is not None:
             self.set_params(mu)
 
-        self.cg_rtol = cg_rtol
 
     def set_params(self, mu):
         self.mu = mu
         K = ConnectednessKernel(self.n_alleles, self.seq_length, mu=mu)
-        super().__init__(base_kernel=K, progress=self.progress)
+        super().__init__(
+            base_kernel=K, progress=self.progress, cg_rtol=self.cg_rtol
+        )
 
     def get_decay_factors(self):
         r"""
@@ -832,7 +849,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         df = pd.DataFrame({"decay_factor": decay_factors}, index=sites)
         return df
 
-    def fit(self, X, y, y_var=None, method='L-BFGS-B'):
+    def fit(self, X, y, y_var=None, method="L-BFGS-B"):
         """
         Infers the site-specific decay factors from the provided data.
 
@@ -858,17 +875,17 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             Array containing the empirical or experimental variance for the
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
-            
+
         method : str, optional
             Optimization method to use during kernel alignment. Default is 'L-BFGS-B'.
         """
         self.define_space(genotypes=X)
-        self.kernel_aligner = ConnectednessKernelAligner(
+        self.aligner = ConnectednessKernelAligner(
             n_alleles=self.n_alleles, seq_length=self.seq_length
         )
         self.set_data(X, y, y_var=y_var)
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
-        mu = self.kernel_aligner.fit(cov, ns, method=method)
+        mu = self.aligner.fit(cov, ns, mean=y.mean(), method=method)
         self.set_params(mu=mu)
 
 

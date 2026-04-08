@@ -37,6 +37,66 @@ class LERTests(unittest.TestCase):
         Sigma = Sigma @ np.eye(4)
         assert np.allclose(mu, [0, 1, 1, 2], atol=0.5)
         assert Sigma[0, 0] < Sigma[3, 3]
+    
+    def test_predict_variable_noise(self):
+        # Partial dataset that can recapitulate MEI
+        X = np.array(["AA", "AB", "BA"])
+        y = np.array([0, 1, 1.0])
+        a_values = np.array([1.0])
+        lambda_U = np.array([1e3, 10, 10])
+
+        model = LocalEpistasisRegression(
+            seq_length=2,
+            n_alleles=2,
+            genotypes=X,
+            a_values=a_values,
+            lambda_U_lower_than_P=lambda_U,
+        )
+        
+        # No noise
+        model.set_data(X, y)
+        mu, Sigma = model.calc_posterior()
+        Sigma = Sigma @ np.eye(4)
+        assert np.allclose(mu, [0, 1, 1, 2], atol=0.5)
+        assert Sigma[0, 0] < Sigma[3, 3]
+        
+        # Heteroscedastic noise
+        y_var = np.array([0.1, 0.001, 0.05])
+        model.set_data(X, y, y_var)
+        mu, Sigma = model.calc_posterior()
+        Sigma = Sigma @ np.eye(4)
+        assert np.allclose(mu, [0, 1, 1, 2], atol=0.5)
+        assert Sigma[0, 0] < Sigma[3, 3]
+        
+        # Homoskedastic large noise
+        y_var = np.array([1, 1, 1])
+        model.set_data(X, y, y_var)
+        mu, Sigma = model.calc_posterior()
+        Sigma = Sigma @ np.eye(4)
+        assert np.allclose(mu, [0, 1, 1, 2], atol=0.5)
+        assert Sigma[0, 0] < Sigma[3, 3]
+    
+    def test_predict_conditioning(self):
+        X = np.array(["AA", "AB", "BA"])
+        y = np.array([0, 1, 1.0])
+        a_values = np.array([1.0])
+        
+        # Large variance for the constant component induces bad conditioning on K
+        lambda_U = np.array([1e5, 10, 10])
+        model = LocalEpistasisRegression(
+            seq_length=2,
+            n_alleles=2,
+            genotypes=X,
+            a_values=a_values,
+            lambda_U_lower_than_P=lambda_U,
+        )
+        
+        y_var = np.array([1e-4]  * 3)
+        model.set_data(X, y, y_var)
+        mu, Sigma = model.calc_posterior()
+        Sigma = Sigma @ np.eye(4)
+        assert np.allclose(mu, [0, 1, 1, 2], atol=0.5)
+        assert Sigma[0, 0] < Sigma[3, 3]
 
     def test_fit_complete(self):
         X = np.array(["".join(x) for x in product(list("AB"), repeat=3)])
