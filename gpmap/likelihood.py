@@ -228,7 +228,7 @@ class GaussianLikelihood:
 
         self.X = X
         self.y = y
-        self.zero_var = y_var is None
+        self.zero_var = y_var is None or np.allclose(y_var, 0)
         self.y_var = np.zeros_like(y) if y_var is None else y_var
         self.n_obs = self.X.shape[0]
         self.constant = 0.5 * self.n_obs * np.log(2 * np.pi)
