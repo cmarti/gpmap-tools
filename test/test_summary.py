@@ -29,27 +29,27 @@ class GPmapSummaryTests(unittest.TestCase):
         self.V_U_vcs_error = pd.DataFrame(V_U_vcs)
         self.gb1 = GPmapSummarizer(20, 4, f=f)
         return super().setUp()
-    
+
     def test_root_mean_squared_epistatic_coeff_constant(self):
         f = np.array([1, 1, 1, 1])
         rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2, f=f)
         assert np.allclose(rmsec, 0)
-    
+
     def test_root_mean_squared_epistatic_coeff_additive(self):
         f = np.array([1, 0, 0, -1])
         rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2, f=f)
         assert np.allclose(rmsec, 0)
-    
+
     def test_root_mean_squared_epistatic_coeff_pairwise(self):
         f = np.array([1, -1, -1, 1])
         rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2, f=f)
-        assert np.allclose(rmsec, 4.)
-        
+        assert np.allclose(rmsec, 4.0)
+
     def test_root_U_mean_squared_epistatic_coeffs(self):
         summarizer = GPmapSummarizer(2, 3)
         f = np.array([1, -1, -1, 1, 1, -1, -1, 1])
         rmsecs = summarizer.calc_U_root_mean_squared_epistatic_coeffs(P=2, f=f)
-        assert np.allclose(rmsecs['rmsec'], [0, 0, 4.])
+        assert np.allclose(rmsecs["rmsec"], [0, 0, 4.0])
 
     def test_calc_V_k_variance_components_constant(self):
         f = np.array([1, 1, 1, 1])
@@ -68,22 +68,22 @@ class GPmapSummaryTests(unittest.TestCase):
         assert np.allclose(k_vcs["variance"], [0, 4])
 
     def test_calc_V_U_variance_components_constant(self):
-        f = np.array([1, 1, 1, 1])
+        f = np.array([1, 1, 1, 1.0])
         V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
         assert np.allclose(V_U_vcs["variance"], 0)
 
     def test_calc_V_U_variance_components_site1(self):
-        f = np.array([1, 1, -1, -1])
+        f = np.array([1, 1, -1, -1.0])
         V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
         assert np.allclose(V_U_vcs["variance"], [4, 0, 0])
 
     def test_calc_V_U_variance_components_site2(self):
-        f = np.array([1, -1, 1, -1])
+        f = np.array([1, -1, 1, -1.0])
         V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
         assert np.allclose(V_U_vcs["variance"], [0, 4, 0])
 
     def test_calc_V_U_variance_components_pairwise(self):
-        f = np.array([1, -1, -1, 1])
+        f = np.array([1, -1, -1, 1.0])
         V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
         assert np.allclose(V_U_vcs["variance"], [0, 0, 4])
 
@@ -110,8 +110,8 @@ class GPmapSummaryTests(unittest.TestCase):
 
     def test_summarize_gb1(self):
         rmsec = self.gb1.calc_root_mean_squared_epistatic_coeff(P=2)
-        assert(rmsec > 0.)
-        
+        assert rmsec > 0.0
+
         k_vcs = self.gb1.calc_V_k_variance_components()
         k_vcs = k_vcs.set_index("k")["variance"].to_dict()
         for k in range(1, 4):
@@ -142,45 +142,47 @@ class GPmapSummaryTests(unittest.TestCase):
 class GPDataSummaryTests(unittest.TestCase):
     def setUp(self):
         np.random.seed(0)
-        self.alphabet = list('ACGT')
+        self.alphabet = list("ACGT")
         self.seq_length = 4
         s = product(self.alphabet, repeat=self.seq_length)
-        self.genotypes = np.array([''.join(x) for x in s])
+        self.genotypes = np.array(["".join(x) for x in s])
         idx = np.random.uniform(size=self.genotypes.shape[0]) < 0.9
         self.X = self.genotypes[idx]
         self.y = np.random.normal(size=self.X.shape[0])
         self.y_var = np.full_like(self.y, 0.1)
-    
+
     def test_define_summarizer(self):
-        configs = [{'seq_length': self.seq_length, 'alphabet_type': 'dna'},
-                   {'seq_length': self.seq_length, 'alphabet': self.alphabet},
-                   {'genotypes': self.genotypes}]
-        
+        configs = [
+            {"seq_length": self.seq_length, "alphabet_type": "dna"},
+            {"seq_length": self.seq_length, "alphabet": self.alphabet},
+            {"genotypes": self.genotypes},
+        ]
+
         for config in configs:
             # Using set_data
             data = GPDataSummarizer(**config)
             data.set_data(self.X, self.y, y_var=self.y_var)
             X_op = data.get_X_operator(self.X)
-            assert(X_op.shape[0] == self.X.shape[0])
-            
+            assert X_op.shape[0] == self.X.shape[0]
+
             # Providing data in construction
-            config.update({'X': self.X, 'y': self.y, 'y_var': self.y_var})
+            config.update({"X": self.X, "y": self.y, "y_var": self.y_var})
             data = GPDataSummarizer(**config)
             X_op = data.get_X_operator(self.X)
-            assert(X_op.shape[0] == self.X.shape[0])
-    
+            assert X_op.shape[0] == self.X.shape[0]
+
     def test_calc_distance_covariance(self):
         # Test simple cases
-        X = np.array(['AA', 'AB', 'BA', 'BB'])
-        s = GPDataSummarizer(alphabet=list('AB'), seq_length=2)
-        
+        X = np.array(["AA", "AB", "BA", "BB"])
+        s = GPDataSummarizer(alphabet=list("AB"), seq_length=2)
+
         # Constant function
         y = np.array([1, 1, 1, 1])
         s.set_data(X, y)
         cov, ns = s.calc_covariance_distance(centered=False)
         assert np.allclose(cov, 1)
         assert np.allclose(ns, [4, 8, 4])
-        
+
         cov, ns = s.calc_covariance_distance(centered=True)
         assert np.allclose(cov, 0)
 
@@ -190,7 +192,7 @@ class GPDataSummaryTests(unittest.TestCase):
         cov, ns = s.calc_covariance_distance(centered=False)
         assert np.allclose(cov, [2, 0, -2])
         assert np.allclose(ns, [4, 8, 4])
-        
+
         cov, ns = s.calc_covariance_distance(centered=True)
         assert np.allclose(cov, [2, 0, -2])
 
@@ -200,10 +202,10 @@ class GPDataSummaryTests(unittest.TestCase):
         cov, ns = s.calc_covariance_distance(centered=False)
         assert np.allclose(cov, [1, -1, 1])
         assert np.allclose(ns, [4, 8, 4])
-        
+
         cov, ns = s.calc_covariance_distance(centered=True)
         assert np.allclose(cov, [1, -1, 1])
-        
+
         # Test with simulated data
         np.random.seed(1)
         lambdas = np.array([0, 200, 20, 2, 0.2])
@@ -213,17 +215,17 @@ class GPDataSummaryTests(unittest.TestCase):
             n_alleles=n_alleles, seq_length=seq_length, lambdas=lambdas
         )
         _, X, y, y_var = vc.simulate(y_var=0.01)
-        
+
         s = GPDataSummarizer(genotypes=X)
-        s.set_data(X=X, y=y, y_var=y_var) # type: ignore
+        s.set_data(X=X, y=y, y_var=y_var)  # type: ignore
         cov1, ns = s.calc_covariance_distance(centered=True)
         cov1_uncentered, ns = s.calc_covariance_distance(centered=False)
-        
-        s.set_data(X=X, y=y + 5., y_var=y_var) # type: ignore
+
+        s.set_data(X=X, y=y + 5.0, y_var=y_var)  # type: ignore
         cov2, ns = s.calc_covariance_distance(centered=True)
         cov2_uncentered, ns = s.calc_covariance_distance(centered=False)
-        assert(np.allclose(cov2, cov1))
-        assert(not np.allclose(cov2_uncentered, cov1_uncentered, rtol=0.1))
+        assert np.allclose(cov2, cov1)
+        assert not np.allclose(cov2_uncentered, cov1_uncentered, rtol=0.1)
 
         # Ensure we get the expected number of pairs per distance category
         for d in range(seq_length + 1):
@@ -238,25 +240,25 @@ class GPDataSummaryTests(unittest.TestCase):
 
         # With missing data
         _, X, y, y_var = vc.simulate(y_var=0.01, p_missing=0.1)
-        s.set_data(X=X, y=y, y_var=y_var) # type: ignore
+        s.set_data(X=X, y=y, y_var=y_var)  # type: ignore
         cov, ns = s.calc_covariance_distance(centered=True)
 
         # Ensure anticorrelated distances
         assert cov[3] < 0
         assert cov[4] < 0
-    
+
     def test_calc_covariance_U_sites(self):
         # Test simple cases
-        X = np.array(['AA', 'AB', 'BA', 'BB'])
-        s = GPDataSummarizer(alphabet=list('AB'), seq_length=2)
-        
+        X = np.array(["AA", "AB", "BA", "BB"])
+        s = GPDataSummarizer(alphabet=list("AB"), seq_length=2)
+
         # Constant function
         y = np.array([1, 1, 1, 1])
         s.set_data(X, y)
         cov, ns = s.calc_covariance_U_sites(centered=False)
         assert np.allclose(cov, 1)
         assert np.allclose(ns, 4)
-        
+
         cov, ns = s.calc_covariance_distance(centered=True)
         assert np.allclose(cov, 0)
 
@@ -266,7 +268,7 @@ class GPDataSummaryTests(unittest.TestCase):
         cov, ns = s.calc_covariance_U_sites(centered=False)
         assert np.allclose(cov, [1, -1, 1, -1])
         assert np.allclose(ns, 4)
-        
+
         cov, ns = s.calc_covariance_U_sites(centered=True)
         assert np.allclose(cov, [1, -1, 1, -1])
 
@@ -276,7 +278,7 @@ class GPDataSummaryTests(unittest.TestCase):
         cov, ns = s.calc_covariance_U_sites(centered=False)
         assert np.allclose(cov, [1, 1, -1, -1])
         assert np.allclose(ns, 4)
-        
+
         cov, ns = s.calc_covariance_U_sites(centered=True)
         assert np.allclose(cov, [1, 1, -1, -1])
 
@@ -286,27 +288,27 @@ class GPDataSummaryTests(unittest.TestCase):
         cov, ns = s.calc_covariance_U_sites(centered=False)
         assert np.allclose(cov, [2, 0, 0, -2])
         assert np.allclose(ns, 4)
-        
+
         cov, ns = s.calc_covariance_U_sites(centered=True)
         assert np.allclose(cov, [2, 0, 0, -2])
-        
+
         # Pairwise function
         y = np.array([1, -1, -1, 1])
         s.set_data(X, y)
         cov, ns = s.calc_covariance_U_sites(centered=False)
         assert np.allclose(cov, [1, -1, -1, 1])
         assert np.allclose(ns, 4)
-        
+
         cov, ns = s.calc_covariance_U_sites(centered=True)
         assert np.allclose(cov, [1, -1, -1, 1])
 
     def test_calc_covariance_U_sites_longer_seqs(self):
         sl = 5
-        s = GPDataSummarizer(alphabet=list('ABCD'), seq_length=sl)
+        s = GPDataSummarizer(alphabet=list("ABCD"), seq_length=sl)
         X = s.genotypes
         y = np.random.normal(size=s.n_genotypes)
-        expected_cov = np.zeros(2 ** sl)
-        expected_cov[0] = 1.
+        expected_cov = np.zeros(2**sl)
+        expected_cov[0] = 1.0
 
         # Verify output shapes
         s.set_data(X, y)
@@ -326,10 +328,10 @@ class GPDataSummaryTests(unittest.TestCase):
         assert np.all(ns2 <= ns)
         assert np.all(cov2 != cov)
         assert np.allclose(cov, expected_cov, atol=0.05)
-    
+
     def test_calc_avg_local_epistatic_coeff(self):
-        X = np.array(['AA', 'AB', 'BA', 'BB'])
-        s = GPDataSummarizer(alphabet=list('AB'), seq_length=2)
+        X = np.array(["AA", "AB", "BA", "BB"])
+        s = GPDataSummarizer(alphabet=list("AB"), seq_length=2)
         y_constant = np.array([1, 1, 1, 1])
         s.set_data(X, y_constant)
         assert np.allclose(
@@ -343,10 +345,10 @@ class GPDataSummaryTests(unittest.TestCase):
             s.calc_avg_squared_local_epistatic_coeff(P=2),
             16.0,
         )
-        
 
 
 if __name__ == "__main__":
     import sys
+
     sys.argv = ["", "GPmapSummaryTests", "GPDataSummaryTests"]
     unittest.main()
