@@ -38,7 +38,7 @@ Complete landscapes
 .. autoclass:: gpmap.summary.GPmapSummarizer
     :members: calc_V_k_variance_components, calc_root_mean_squared_epistatic_coeff,
         calc_V_U_variance_components, calc_sites_variance_perc, 
-        calc_site_pairs_variance_perc, test_root_U_mean_squared_epistatic_coeffs
+        calc_site_pairs_variance_perc, calc_U_root_mean_squared_epistatic_coeffs
 
 Visualization
 -------------
