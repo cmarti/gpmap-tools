@@ -371,9 +371,7 @@ class GeneralSequenceSpace(DiscreteSpace):
 
         else:
             alphabet_types = ["dna", "rna", "protein", "custom"]
-            raise ValueError(
-                f"alphabet_type can only be: {alphabet_types}"
-            )
+            raise ValueError(f"alphabet_type can only be: {alphabet_types}")
 
         if add_stop and alphabet_type == "protein":
             self.alphabet = [a + ["*"] for a in self.alphabet]
@@ -418,7 +416,13 @@ class GeneralSequenceSpace(DiscreteSpace):
             d12 = hamming_distance(node1, end)
             d22 = hamming_distance(node2, end)
 
-            if allow_bypasses and d21 >= d11 and d22 <= d12 or d21 > d11 and d22 < d12:
+            if (
+                allow_bypasses
+                and d21 >= d11
+                and d22 <= d12
+                or d21 > d11
+                and d22 < d12
+            ):
                 yield (node1, node2)
 
     def calc_graph(self, start, end, allow_bypasses, monotonic=False):
@@ -960,7 +964,7 @@ class SequenceSpace(GeneralSequenceSpace, ProductSpace):
         if transitions is None:
             m = np.ones((n_alleles, n_alleles))
         else:
-            m = transitions.loc[alleles, alleles].values
+            m = transitions.loc[alleles, alleles].values.copy()
         np.fill_diagonal(m, np.zeros(n_alleles))
         return csr_matrix(m)
 
@@ -1034,7 +1038,7 @@ class CodonSpace(SequenceSpace):
         protein_y = np.append(np.ones(20), [0])
         protein_y = pd.Series(protein_y, index=PROTEIN_ALPHABET + ["*"])
         protein_y.loc[allowed_aminoacids] = 2
-        y = protein_y.reindex(prot).values
+        y = protein_y.reindex(prot).values.copy()
 
         if add_variation:
             if seed is not None:
