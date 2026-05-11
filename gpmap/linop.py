@@ -20,6 +20,7 @@ except ImportError:
 
 from gpmap.matrix import is_lower_triangular, kron, tensordot
 from gpmap.utils import check_error
+from gpmap.transform import ConnectednessToVUTransform
 
 
 class ExtendedLinearOperator(_CustomLinearOperator):
@@ -81,7 +82,7 @@ class LowRankPerturbationOperator(ExtendedLinearOperator):
         else:
             diag = np.ones(A.shape[1])
         self.D = DiagonalOperator(diag)
-        
+
     def _matvec(self, v):
         return (self.D + self.Q @ self.Lambda @ self.Q.T) @ v
 
@@ -99,9 +100,9 @@ class InverseOperator(ExtendedLinearOperator):
         self,
         linop,
         method="cg",
-        atol=0,
+        atol=1e-5,
         rtol=1e-5,
-        maxiter=1000,
+        maxiter=10000,
         preconditioner_size=0,
         **kwargs,
     ):
@@ -162,7 +163,7 @@ class InverseOperator(ExtendedLinearOperator):
                     callback=counter,
                     **self.kwargs,
                 )
-            except TypeError: # Captures error from newer scipy versions
+            except TypeError:  # Captures error from newer scipy versions
                 res = cg(
                     self.linop,
                     v,
@@ -173,7 +174,7 @@ class InverseOperator(ExtendedLinearOperator):
                     callback=counter,
                     **self.kwargs,
                 )
-                
+
             self.cg_n_iter = counter.niter
             if res[1] != 0:
                 msg = "Conjugate gradient did not converge"
@@ -280,6 +281,22 @@ class PaddOperator(SymmetricOperator):
 
     def _matmat(self, B):
         return B - np.tile(np.mean(B, axis=0), (B.shape[0], 1))
+
+
+class PconPaddWeightedSumOperator(SymmetricOperator):
+    def __init__(self, n, lda0, lda1):
+        self.shape = (n, n)
+        self.lda0 = lda0
+        self.lda1 = lda1
+        self._init_dtype()
+
+    def _matvec(self, v):
+        return self.lda1 * v + v.mean() * (self.lda0 - self.lda1)
+
+    def _matmat(self, B):
+        return self.lda1 * B + B.mean(axis=0, keepdims=True) * (
+            self.lda0 - self.lda1
+        )
 
 
 class SiteLaplacianOperator(SymmetricOperator):
@@ -681,8 +698,10 @@ class DeltaUOperator(SeqOperator, KronOperator):
 
     def __init__(self, n_alleles, seq_length, U):
         self.U = U
+        self.P = len(U)
         SeqOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length)
         KronOperator.__init__(self, self.get_matrices())
+        self.n_U_faces = comb(self.alpha, 2) ** self.P * self.alpha ** (self.seq_length - self.P)
         self.L = SiteLaplacianOperator(self.alpha)
 
     def get_matrices(self):
@@ -846,8 +865,10 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
         return self.W_kd.T.dot(self.lambdas)
 
     def inv(self):
+        lambda_inv = np.zeros_like(self.lambdas)
+        lambda_inv[self.lambdas != 0] = 1.0 / self.lambdas[self.lambdas != 0]
         return ProjectionOperator(
-            self.alpha, self.seq_length, lambdas=1.0 / self.lambdas
+            self.alpha, self.seq_length, lambdas=lambda_inv
         )
 
     def calc_log_det(self):
@@ -946,6 +967,7 @@ class CovarianceSitesOperator(SeqOperator, KronOperator):
 class VUOperator(ConstantDiagSeqOperator, KronOperator):
     def __init__(self, n_alleles, seq_length, j):
         self.j = j
+        self.no_U = tuple([i for i in range(seq_length) if i not in self.j])
         self.k = len(j)
 
         ConstantDiagSeqOperator.__init__(
@@ -986,6 +1008,16 @@ class VUProjectionOperator(VUOperator):
             A = KronOperator([self.W1] * self.k)
             sqnorm = self.repeats * np.sum((A @ u.flatten()) ** 2)
         return sqnorm
+    
+    def _matvec(self, v):
+        t = self.contract_v(v)
+        u = np.zeros_like(t)
+        t = np.mean(t, axis=self.no_U, keepdims=True)
+        for i in self.j:
+            t -= np.mean(t, axis=i, keepdims=True)
+        u += t
+        return self.expand_v(u)
+
 
 class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
     def __init__(self, n_alleles, seq_length, lambdas=None):
@@ -1015,9 +1047,19 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
         else:
             site = sites[-1]
             site_included = sites_included[-1]
-            P = self.W1 if site_included else self.W0
             v_prev = self.calc_V_U_product(v, sites[:-1], sites_included[:-1])
-            u = tensordot(P, v_prev, site)
+
+            if self.cached_means[site] is None:
+                mean = np.mean(v_prev, axis=site, keepdims=True)
+                self.cached_means[site] = mean
+            else:
+                mean = self.cached_means[site]
+
+            if site_included:
+                u = v_prev - mean
+            else:
+                u = mean
+            u = np.moveaxis(u, site, 0)
             self.n_products += 1
 
             self.cached_matvecs[site] = u
@@ -1025,16 +1067,20 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
             for i in range(site + 1, self.seq_length):
                 self.cached_U[i] = None
                 self.cached_matvecs[i] = None
+                self.cached_means[i] = None
 
             return u
 
     def _matvec(self, v):
         if self.lambdas is None:
-            msg = "lambdas must be defined for computing matrix-vector products"
+            msg = (
+                "lambdas must be defined for computing matrix-vector products"
+            )
             raise ValueError(msg)
 
         self.cached_matvecs = [None] * self.seq_length
         self.cached_U = [None] * self.seq_length
+        self.cached_means = [None] * self.seq_length
         self.n_products = 0
         check_error(
             v.shape[0] == self.shape[1],
@@ -1061,25 +1107,28 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
         )
 
 
-class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
+class ConnectednessProjectionOperator(ConstantDiagSeqOperator, KronOperator):
     symmetric = True
 
     def __init__(self, n_alleles, seq_length, mu):
         ConstantDiagSeqOperator.__init__(
             self, n_alleles=n_alleles, seq_length=seq_length
         )
-
+        self.log_mu_to_log_lambda_U = ConnectednessToVUTransform(
+            n_alleles, seq_length
+        )
         self.set_mu(mu)
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
-        W0 = PconOperator(self.alpha)
-        W1 = PaddOperator(self.alpha)
-        return [self.mu[0] * W0 + mu_i * W1 for mu_i in self.mu[1:]]
+        return [
+            PconPaddWeightedSumOperator(self.alpha, self.mu[0], mu_i)
+            for mu_i in self.mu[1:]
+        ]
 
     def get_mu(self):
         return self.mu
-    
+
     def get_decay_factors(self):
         decay_factors = []
         for m in self.matrices:
@@ -1106,17 +1155,18 @@ class ConnectednessProjectionOpererator(ConstantDiagSeqOperator, KronOperator):
         )
         self.check_mu(self.mu, ignore_bound=ignore_bound)
         self.d = np.prod([1 + (self.alpha - 1) * r for r in self.mu]) / self.n
+        self.lambdas = np.exp(
+            self.log_mu_to_log_lambda_U(np.log(self.mu), return_grad=False)
+        )
 
     def inv(self):
-        mu = 1.0 / self.mu
-        return ConnectednessProjectionOpererator(
-            self.alpha, self.seq_length, mu=mu
+        return ConnectednessProjectionOperator(
+            self.alpha, self.seq_length, mu=1.0 / self.mu
         )
 
     def matrix_sqrt(self):
-        mu = np.sqrt(self.mu)
-        return ConnectednessProjectionOpererator(
-            self.alpha, self.seq_length, mu=mu
+        return ConnectednessProjectionOperator(
+            self.alpha, self.seq_length, mu=np.sqrt(self.mu)
         )
 
 
@@ -1229,7 +1279,7 @@ class VUKernel(VUProjectionWeightedSumOperator, Kernel):
         return np.log(self.get_lambdas())
 
 
-class ConnectednessKernel(ConnectednessProjectionOpererator, Kernel):
+class ConnectednessKernel(ConnectednessProjectionOperator, Kernel):
     symmetric = True
 
     def set_params(self, params):

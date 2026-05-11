@@ -1958,8 +1958,8 @@ def plot_correlation_U_sites(corr, axes, x="d_jittered", y="emp_cor"):
     plot_edges(axes, corr, edges_df, x=x, y=y, alpha=0.1, color="black")
     axes.axhline(0, color="grey", linestyle="--", lw=0.75, alpha=0.5)
     axes.set(
-        xlabel=x,
-        ylabel=y,
+        xlabel='Hamming distance',
+        ylabel="Empirical correlation",
         xticks=np.arange(space.seq_length + 1),
     )
 
@@ -1973,7 +1973,7 @@ def plot_interaction_matrix(
     position_labels=None,
     xlabel="Site 1",
     ylabel="Site 2",
-    cbar_label="Value",
+    cbar_label="Interaction strength ($a_{ij}$)",
 ):
     """
     Plots a heatmap of the estimated interaction strengths using local

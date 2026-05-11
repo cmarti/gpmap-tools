@@ -44,6 +44,12 @@ class GPmapSummaryTests(unittest.TestCase):
         f = np.array([1, -1, -1, 1])
         rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2, f=f)
         assert np.allclose(rmsec, 4.)
+        
+    def test_root_U_mean_squared_epistatic_coeffs(self):
+        summarizer = GPmapSummarizer(2, 3)
+        f = np.array([1, -1, -1, 1, 1, -1, -1, 1])
+        rmsecs = summarizer.calc_U_root_mean_squared_epistatic_coeffs(P=2, f=f)
+        assert np.allclose(rmsecs['rmsec'], [0, 0, 4.])
 
     def test_calc_V_k_variance_components_constant(self):
         f = np.array([1, 1, 1, 1])

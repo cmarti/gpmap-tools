@@ -1,18 +1,22 @@
+from itertools import product
+
 import numpy as np
-
-from itertools import combinations, product
-from scipy.special import comb, logsumexp, gammaln
-from scipy.optimize import minimize, lsq_linear
-
+from scipy.optimize import lsq_linear, minimize
+from scipy.special import comb, gammaln
 
 from gpmap.matrix import kron
+from gpmap.transform import (
+    ConnectednessToVUTransform,
+    DeltaPtoVkTransform,
+    DeltaUtoVUTransform,
+)
 from gpmap.utils import check_error, safe_exp
 
 
 def log_comb(n, k):
     return gammaln(n + 1) - gammaln(n - k + 1) - gammaln(k + 1)
 
-class FrobeniusNorm(object):
+class FrobeniusNorm:
     def __init__(self, covs, ns, W):
         WD = W * ns[None, :]
         self.A = WD @ W.T
@@ -32,7 +36,7 @@ class FrobeniusNorm(object):
             return Frob
 
 
-class VCLogLambdaRegularizer(object):
+class VCLogLambdaRegularizer:
     def __init__(self, seq_length, beta=0):
         self.seq_length = seq_length
         self.set_beta(beta)
@@ -66,144 +70,15 @@ class VCLogLambdaRegularizer(object):
             return reg
 
 
-class DeltaPtoVkTransform(object):
-    def __init__(self, n_alleles, seq_length, P):
-        self.n_alleles = n_alleles
-        self.seq_length = seq_length
-        self.P = P
-        self.log_alphaP = P * np.log(self.n_alleles)
-
-        self.DeltaP_log_lambdas = []
-        for k in range(self.seq_length + 1):
-            if k < P:
-                self.DeltaP_log_lambdas.append(-16)
-            else:
-                self.DeltaP_log_lambdas.append(self.log_alphaP + log_comb(k, P))
-        self.input_size = self.P + 1
-        self.output_size = self.seq_length + 1
-
-    def get_log_lambda_k(self, x):
-        return x[: self.P]
-
-    def get_log_a(self, x):
-        return x[-1]
-    
-    def __call__(self, x, return_grad=True):
-        if x.shape[0] != self.input_size:
-            msg = f"input x should have size {self.input_size} but got {x.shape[0]}"
-            raise ValueError(msg)
-
-        log_lambda_k = self.get_log_lambda_k(x)
-        log_a = self.get_log_a(x)
-
-        log_lambda_m = np.zeros(self.seq_length + 1)
-        log_lambda_m[:self.P] = log_lambda_k
-        log_lambda_m[self.P:] = -log_a - self.DeltaP_log_lambdas[self.P:]
-
-        if return_grad:
-            grad = np.zeros((self.input_size, self.output_size))
-            idx = np.arange(self.P)
-            grad[idx, idx] = 1
-            grad[-1, self.P:] = -1
-            return log_lambda_m, grad
-        else:
-            return log_lambda_m
-
-
-class ConnectednessToVUTransform(object):
-    def __init__(self, n_alleles, seq_length):
-        self.n_alleles = n_alleles
-        self.seq_length = seq_length
-
-        # All possible subsets of sites
-        U = np.array(list(product([False, True], repeat=seq_length)))
-        U0 = self.seq_length - U.sum(1)
-        self.U = np.hstack([U0[:, None], U])
-        self.input_size = self.seq_length + 1
-        self.output_size = 2**seq_length
-
-    def __call__(self, x, return_grad=True):
-        if x.shape[0] != self.input_size:
-            msg = f"input x should have size {self.input_size} but got {x.shape[0]}"
-            raise ValueError(msg)
-
-        log_lambda_U = self.U @ x
-        if return_grad:
-            grad = self.U.T
-            return log_lambda_U, grad
-        else:
-            return log_lambda_U
-
-
-class DeltaUtoVUTransform(object):
-    def __init__(self, n_alleles, seq_length, P):
-        self.n_alleles = n_alleles
-        self.seq_length = seq_length
-        self.P = P
-        self.log_alphaP = P * np.log(self.n_alleles)
-
-        # All possible subsets of sites
-        self.V = np.array(list(product([False, True], repeat=seq_length)))
-
-        # All subsets of size P
-        self.Us = list(combinations(range(self.seq_length), P))
-        self.n_Us = len(self.Us)
-
-        # Matrix storing whether all sites in U are in each V
-        self.V_to_U = np.array(
-            [[np.all([x[s] for s in U]) for U in self.Us] for x in self.V]
-        )
-
-        self.no_U_idx = self.V.sum(1) < P
-        self.U_idx = np.where(~self.no_U_idx)[0]
-        self.m = self.no_U_idx.sum()
-        self.input_size = self.m + self.n_Us
-        self.output_size = 2**seq_length
-
-    def get_log_lambda_U(self, x):
-        return x[: self.m]
-
-    def get_log_a_U(self, x):
-        return x[self.m :]
-
-    def __call__(self, x, return_grad=True):
-        if x.shape[0] != self.input_size:
-            msg = f"input x should have size {self.input_size} but got {x.shape[0]}"
-            raise ValueError(msg)
-
-        log_lambda_U = self.get_log_lambda_U(x)
-        log_a = self.get_log_a_U(x)
-
-        log_lambda_V = np.zeros(self.output_size)
-        log_lambda_V[self.no_U_idx] = log_lambda_U
-
-        if return_grad:
-            grad = np.zeros((self.input_size, self.output_size))
-            grad[np.arange(self.m), self.no_U_idx] = 1
-
-        for i in self.U_idx:
-            idx = np.where(self.V_to_U[i])[0]
-            log_a_i = log_a[idx]
-
-            x_i = logsumexp(log_a_i)
-            log_lambda_V[i] = -(self.log_alphaP + x_i)
-            if return_grad:
-                grad[self.m + idx, i] = -np.exp(log_a_i - x_i)
-
-        if return_grad:
-            return log_lambda_V, grad
-        else:
-            return log_lambda_V
-
-
-class KernelAligner(object):
+class KernelAligner:
     def __init__(self, n_alleles, seq_length):
         self.seq_length = seq_length
         self.n_alleles = n_alleles
         self.eta = self.n_alleles - 1
         self.n_genotypes = n_alleles**seq_length
 
-    def set_data(self, covs, ns):
+    def set_data(self, covs, ns, mean=0):
+        self.mean = mean
         if covs.shape[0] != ns.shape[0]:
             msg = "covs and ns must be the same shape"
             raise ValueError(msg)
@@ -218,10 +93,10 @@ class KernelAligner(object):
     def calc_loss(self, x, return_grad=False):
         return self.frobenius_norm(x, return_grad=return_grad)
 
-    def fit(self, covs, ns, x0=None, method="L-BFGS-B"):
+    def fit(self, covs, ns, mean=0, x0=None, method="L-BFGS-B"):
         """
         Fits kernel parameters by minimizing the Frobenius Norm
-        with the empirical covariance betwen sequences at different
+        with the empirical covariance between sequences at different
         distance classes.
 
         Parameters
@@ -231,13 +106,21 @@ class KernelAligner(object):
             combination of sites.
         ns : array-like of shape (2 ** seq_length)
             Number of pairs of sequences at every possible combination of sites.
+        mean : float, optional
+            Mean value to subtract from the covariances. Default is 0.
+        x0 : array-like, optional
+            Initial guess for the optimization. If None, it will be
+            determined automatically. Default is None.
+        method : str, optional
+            Optimization method to use. Default is "L-BFGS-B".
+
         Returns
         -------
         params : array-like or tuple of array-like
             Parameter values that best fit the empirical second moments.
         """
 
-        self.set_data(covs, ns)
+        self.set_data(covs, ns, mean=mean)
         if x0 is None:
             x0 = self.get_x0()
         res = minimize(
@@ -248,6 +131,17 @@ class KernelAligner(object):
             method=method,
             options={"ftol": 1e-20, "maxiter": 10000, "gtol": 1e-16},
         )
+        res = minimize(
+            fun=self.calc_loss,
+            x0=res.x,
+            args=(False,),
+            method='Powell',
+            options={"ftol": 1e-20, "maxiter": 10000},
+        )
+        if not res.success:
+            msg = f'kernel alignment did not converge: {res}'
+            raise ValueError(msg)
+        
         self.res = res
         return self.x_to_params(res.x)
 
@@ -524,28 +418,25 @@ class DeltaUKernelAligner(LowDimVUKernelAligner):
         super().__init__(n_alleles, seq_length, transform=transform)
 
     def get_x0(self):
-        x0 = np.zeros(self.n_params)
-        distances = self.params_to_log_lambda_U.V.sum(1)
-
-        cov, ns = [], []
-        for d in range(self.seq_length + 1):
-            d_idx = distances == d
-            cov.append(self.covs[d_idx].mean())
-            ns.append(self.ns[d_idx].sum())
-        cov, ns = np.array(cov), np.array(ns)
-        aligner = DeltaPKernelAligner(self.n_alleles, self.seq_length, self.P)
-        params = aligner.fit(cov, ns)
-        x = np.log(params)
-
-        ks = distances[self.params_to_log_lambda_U.no_U_idx]
-        for k in range(self.P):
-            k_idx = np.where(ks == k)[0]
-            x0[k_idx] = x[k]
-        x0[self.params_to_log_lambda_U.m:]  = x[-1]
-
+        D = np.array(list(product([False, True], repeat=self.seq_length)))
+        d = D.sum(1)
+        idx = np.where(d <= self.P)[0]
+        
+        # Solve full system and extract up to P-th order lambdas
+        lambda_U = lsq_linear(
+            self.frobenius_norm.A,
+            self.frobenius_norm.b,
+            bounds=(0, np.inf),
+            method="bvls",
+        ).x[idx]
+        
+        # Get into right parametrization for the DeltaU models
+        d = d[idx]
+        log_lambda_U = np.log(lambda_U[d < self.P] + 1e-16)
+        log_a = -self.P * np.log(self.n_alleles) - np.log(lambda_U[d == self.P]  + 1e-16)
+        x0 = np.append(log_lambda_U, log_a[::-1])
         return x0
     
-
 
 class ConnectednessKernelAligner(LowDimVUKernelAligner):
     """
@@ -561,6 +452,26 @@ class ConnectednessKernelAligner(LowDimVUKernelAligner):
     seq_length : int
         The number of sites in the sequence.
     """
+    
+    def get_x0(self):
+        D = np.array(list(product([False, True], repeat=self.seq_length)))
+        d = D.sum(1)
+        idx = np.where(d <= 1)[0]
+        
+        # Solve full system and extract up to P-th order lambdas
+        lambda_U = lsq_linear(
+            self.frobenius_norm.A,
+            self.frobenius_norm.b,
+            bounds=(0, np.inf),
+            method="bvls",
+        ).x[idx]
+        
+        # Get into right parametrization for the DeltaU models
+        log_mu_0 = 1 / self.seq_length * np.log(lambda_U[0] + 1e-16)
+        log_mu_i = np.log(lambda_U[1:] + 1e-16) - (self.seq_length - 1) * log_mu_0
+        x0 = np.append([log_mu_0], log_mu_i[::-1])
+        return x0
+
     def __init__(self, n_alleles, seq_length):
         transform = ConnectednessToVUTransform(n_alleles, seq_length)
         super().__init__(n_alleles, seq_length, transform=transform)
