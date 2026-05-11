@@ -698,8 +698,10 @@ class DeltaUOperator(SeqOperator, KronOperator):
 
     def __init__(self, n_alleles, seq_length, U):
         self.U = U
+        self.P = len(U)
         SeqOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length)
         KronOperator.__init__(self, self.get_matrices())
+        self.n_U_faces = comb(self.alpha, 2) ** self.P * self.alpha ** (self.seq_length - self.P)
         self.L = SiteLaplacianOperator(self.alpha)
 
     def get_matrices(self):

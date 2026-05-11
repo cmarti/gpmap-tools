@@ -11,6 +11,7 @@ from gpmap.linop import (
     CovarianceDistanceOperator,
     CovarianceSitesOperator,
     DeltaPOperator,
+    DeltaUOperator,
     ProjectionOperator,
     VUProjectionOperator,
 )
@@ -108,6 +109,40 @@ class GPmapSummarizer:
         Delta = DeltaPOperator(self.n_alleles, self.seq_length, P)
         rmsec = np.sqrt(quad(Delta, f) / Delta.n_p_faces)
         return rmsec
+    
+    def calc_U_root_mean_squared_epistatic_coeffs(self, P=2, f=None):
+        """
+        Compute root mean squared P-way epistatic coefficient 
+        for each possible all possible combinations of P mutations
+        in the complete genotype-phenotype map.
+
+        Parameters
+        ----------
+        P : int
+            The order of local epistatic coefficients to compute e.g. P=1
+            reflects mutational effects, P=2 epistatic coefficients, etc.
+
+        f : array-like, optional
+            Phenotype values for every genotype in lexicographic order.
+            If None, the instance attribute `self.f` is used. If both are None,
+            a ValueError is raised.
+
+        Returns
+        -------
+        rmsec : pd.DataFrame
+            Root mean squared epistatic coefficient of order for each
+            combination of sites U.
+        """
+        f = self.get_f(f)
+        
+        rmsecs = []
+        for U in combinations(self.positions, P):
+            DeltaU = DeltaUOperator(self.n_alleles, self.seq_length, U)
+            rmsec = np.sqrt(quad(DeltaU, f) / DeltaU.n_U_faces)
+            rmsecs.append(list(U) + [rmsec])
+        columns = [f'site{i+1}' for i in range(P)] + ['rmsec']
+        rmsecs = pd.DataFrame(rmsecs, columns=columns)
+        return rmsecs
 
     def calc_V_k_variance_components(self, f=None):
         """
