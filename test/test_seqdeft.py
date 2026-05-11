@@ -440,7 +440,7 @@ class SeqDEFTTests(unittest.TestCase):
         phi, X = model.simulate(N=1000)
 
         seqs = ["AGCTA", "AGCTG"]
-        idx = model.get_obs_idx(seqs)
+        idx = model.get_obs_idx(seqs).values
         mut_eff = phi[idx[1]] - phi[idx[0]]
 
         # Inference
