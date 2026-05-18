@@ -148,6 +148,26 @@ class RandomWalkTests(unittest.TestCase):
         mc.calc_jump_matrix()
         assert(np.allclose(mc.jump_matrix.sum(1), 1))
     
+    def test_calc_hitting_times(self):
+        A = csr_matrix([[0, 1, 1, 0],
+                        [1, 0, 0, 1],
+                        [1, 0, 0, 1],
+                        [0, 1, 1, 0]])
+        y = np.array([1, 1, 1, 1])
+        space = DiscreteSpace(A, y=y, state_labels=['A', 'B', 'C', 'D'])
+        mc = WMWalk(space, Ns=1)
+        mc.calc_rate_matrix()
+        h = mc.calc_hitting_times(['D'])
+        assert(np.allclose(h, [2, 1.5, 1.5, 0]))
+        
+        # With the Ser codon landscape
+        ser4 = ['TCT', 'TCC', 'TCA', 'TCG']
+        mc = WMWalk(CodonSpace(['S'], add_variation=True, seed=0), Ns=1)
+        mc.calc_rate_matrix()
+        h = mc.calc_hitting_times(ser4)
+        assert(np.allclose(h.loc[ser4], 0))
+        assert(np.allclose(h.loc['AAC'], 2.380739))
+    
     def test_calc_hitting_prob_through(self):
         # Ensure right results when the probability is clearly 0.5 in a small
         # case with only 2 possible paths with the same probability

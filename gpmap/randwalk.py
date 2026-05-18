@@ -61,8 +61,57 @@ class RandomWalk:
                 times.append(t)
                 remaining_time = remaining_time - t
         return (times, path)
+    
+    def calc_hitting_times(self, state_labels):
+        '''Calculates the expected hitting times to the provided states.
+        
+        Parameters
+        ----------
+        state_labels : list of str
+            List of state labels for which to calculate the expected hitting times.
+            
+        Returns
+        -------
+        h : array-like of shape (n_states,)
+            Expected hitting times to the provided states for each state in the space.
+        '''
+        
+        states_idxs = self.space.get_state_idxs(state_labels).values
+        Q = self.rate_matrix
+
+        idx = np.full(Q.shape[0], True)
+        idx[states_idxs] = False
+
+        Q_tilde = Q[idx, :][:, idx]
+        b = -np.ones(Q_tilde.shape[0])
+        h_tilde, res = bicgstab(Q_tilde, b, atol=1e-16)
+
+        if res != 0:
+            rmse = np.sqrt(np.mean((Q_tilde @ h_tilde - b) ** 2))
+            msg = f"Warning: BICGSTAB exitCode: {res}. RMSE={rmse}\n"
+            sys.stderr.write(msg)
+
+        h = np.zeros(Q.shape[0])
+        h[idx] = h_tilde
+        return pd.Series(h, index=self.space.state_labels)
 
     def calc_hitting_prob_through(self, state_labels, through_labels):
+        '''
+        Calculates the probability that a trajectory starting at each state in the space will hit any of the states in `state_labels` by passing through any of the states in `through_labels`.
+        
+        Parameters
+        ----------
+        state_labels : list of str
+            List of state labels for which to calculate the hitting probabilities.
+        through_labels : list of str
+            List of state labels that the trajectory must pass through to be counted in the hitting probability.
+            
+        Returns
+        -------
+        q : array-like of shape (n_states,)
+            Hitting probabilities for each state in the space to hit any of the states in `state_labels` by passing through any of the states in `through_labels`.
+        
+        '''
         states_idxs = self.space.get_state_idxs(state_labels).values
         through_idxs = self.space.get_state_idxs(through_labels).values
         Q = self.rate_matrix
