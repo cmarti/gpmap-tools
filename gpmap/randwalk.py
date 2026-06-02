@@ -122,13 +122,16 @@ class RandomWalk:
         idx = np.full(Q.shape[0], True)
         idx[states_idxs] = False
 
-        Q_tilde = Q[idx, :][:, idx]
+        Q_tilde = Q[idx, :][:, idx].T
 
-        n = Q_tilde.shape[0]
+        n = Q_tilde.shape[1]
         if pi is None:
             pi = np.full(n, fill_value=1.0 / n)
         if pi.shape[0] != n:
             msg = "pi must have the same length as the number of states in A"
+            raise ValueError(msg)
+        if not np.isclose(pi.sum(), 1):
+            msg = "pi must sum to 1"
             raise ValueError(msg)
 
         b = -pi
@@ -237,7 +240,7 @@ class TimeReversibleRandomWalk(RandomWalk):
         D_sqrt = DiagonalOperator(stat_pi_sqrt)
         D_sqrt_inv = DiagonalOperator(1.0 / stat_pi_sqrt)
 
-        S_tilde = self.sandwich_rate_matrix[idx, :][:, idx]
+        S_tilde = self.sandwich_rate_matrix[idx, :][:, idx].T
         S_tilde_inv = InverseOperator(S_tilde, method="cg", atol=1e-16)
 
         n = S_tilde.shape[0]
@@ -248,17 +251,21 @@ class TimeReversibleRandomWalk(RandomWalk):
                 "pi must have the same length as the number of states not in A"
             )
             raise ValueError(msg)
-        m_tilde = -D_sqrt_inv @ S_tilde_inv @ D_sqrt @ pi
+        if not np.isclose(pi.sum(), 1):
+            msg = "pi must sum to 1"
+            raise ValueError(msg)
+
+        m_tilde = -D_sqrt @ S_tilde_inv @ D_sqrt_inv @ pi
 
         m = np.zeros(self.space.n_states)
         m[idx] = m_tilde
         return pd.Series(m, index=self.space.state_labels)
 
-    def calc_entry_rates(self, state_labels, pi=None):
+    def calc_absorption_probabilities(self, state_labels, pi=None):
         """
-        Calculates the rate at which the random walk enters the set of states
-        A defined by `state_labels` when starting at the probability distribution
-        pi over the states not in A via each state in A.
+        Calculates the absorption probabilities into the set of states
+        `state_labels` for each state in the set when starting at the
+        probability distribution `pi` over the states not in A.
 
         Parameters
         ----------
@@ -266,18 +273,19 @@ class TimeReversibleRandomWalk(RandomWalk):
             List of state labels for the set A.
         pi : array-like of shape (n_genotypes - n_states,)
             Starting probability distribution over the states not in A.
+            These values must sum to 1.
 
         Returns
         -------
-        v : pd.Series of shape (n_genotypes,)
-            Rate at which the random walk enters A through each state in the space.
+        p : pd.Series of shape (n_states,)
+            Probability is absorbed at A for each state in A.
         """
 
         idxs = self.space.get_state_idxs(state_labels).values
         m = self.calc_average_occupancy_times(state_labels, pi)
 
-        v = self.rate_matrix[:, idxs].T @ m
-        return pd.Series(v, index=state_labels)
+        p = self.rate_matrix[:, idxs].T @ m
+        return pd.Series(p, index=state_labels)
 
     def set_stationary_freqs(self, log_freqs):
         self.stationary_freqs = np.exp(log_freqs)

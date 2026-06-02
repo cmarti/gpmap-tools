@@ -13,7 +13,12 @@ from scipy.sparse import load_npz, csr_matrix
 from gpmap.datasets import DataSet
 from gpmap.settings import BIN_DIR
 from gpmap.space import CodonSpace, SequenceSpace, DiscreteSpace
-from gpmap.randwalk import WMWalk, ReactivePaths, PopulationSizeModel
+from gpmap.randwalk import (
+    RandomWalk,
+    WMWalk,
+    ReactivePaths,
+    PopulationSizeModel,
+)
 from gpmap.seq import get_seqs_from_alleles, translate_seqs
 
 
@@ -184,32 +189,45 @@ class RandomWalkTests(unittest.TestCase):
         mc.calc_rate_matrix()
         m = mc.calc_average_occupancy_times(ser4)
         assert np.allclose(m.loc[ser4], 0)
-        assert np.allclose(m.loc["AAC"], 0.039679)
+        assert np.allclose(m.loc["AAC"], 0.038581473)
 
-    def test_calc_entry_rates(self):
+        # Ensure time-reversible method gives the same result
+        m2 = RandomWalk.calc_average_occupancy_times(mc, ser4)
+        assert np.allclose(m, m2)
+
+    def test_calc_absorption_probabilities(self):
         A = csr_matrix([[0, 1, 1, 0], [1, 0, 0, 1], [1, 0, 0, 1], [0, 1, 1, 0]])
         y = np.array([1, 1, 1, 1])
         space = DiscreteSpace(A, y=y, state_labels=["A", "B", "C", "D"])
         mc = WMWalk(space, Ns=1)
         mc.calc_rate_matrix()
-        m = mc.calc_entry_rates(["C", "D"])
+        m = mc.calc_absorption_probabilities(["C", "D"])
         assert np.allclose(m, [0.5, 0.5])
+        assert np.allclose(m.sum(), 1.0)
 
         # With the Ser codon landscape
         ser = ["TCT", "TCC", "TCA", "TCG", "AGT", "AGC"]
-        mc = WMWalk(CodonSpace(["S"], add_variation=True, seed=0), Ns=1)
-        mc.calc_rate_matrix()
+        space = CodonSpace(["S"], add_variation=True, seed=0)
+        mc = WMWalk(space)
+        mc.calc_rate_matrix(Ns=1)
+        m = mc.calc_absorption_probabilities(ser)
+        assert np.allclose(m.shape[0], 6)
+        assert np.allclose(m.sum(), 1.0)
+        assert np.allclose(m.loc["AGC"], 0.199668)
+        assert np.allclose(m.loc["TCC"], 0.144478)
+
         pi = np.array(
             [
-                0 if x in ["TAA", "TAG", "TGA"] else 1.0 / 61
+                0 if x in ["TAA", "TAG", "TGA"] else 1.0 / 55
                 for x in mc.space.genotypes
                 if x not in ser
             ]
         )
-        m = mc.calc_entry_rates(ser, pi=pi)
+        m = mc.calc_absorption_probabilities(ser, pi=pi)
+        assert np.allclose(m.sum(), 1.0)
         assert np.allclose(m.shape[0], 6)
-        assert np.allclose(m.loc["AGC"], 0.190877)
-        assert np.allclose(m.loc["TCC"], 0.130535)
+        assert np.allclose(m.loc["AGC"], 0.201986)
+        assert np.allclose(m.loc["TCC"], 0.145702)
 
     def test_calc_hitting_prob_through(self):
         # Ensure right results when the probability is clearly 0.5 in a small
