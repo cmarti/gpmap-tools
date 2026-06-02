@@ -261,7 +261,9 @@ class TimeReversibleRandomWalk(RandomWalk):
         m[idx] = m_tilde
         return pd.Series(m, index=self.space.state_labels)
 
-    def calc_absorption_probabilities(self, state_labels, pi=None):
+    def calc_absorption_probabilities(
+        self, state_labels, pi=None, return_time=False
+    ):
         """
         Calculates the absorption probabilities into the set of states
         `state_labels` for each state in the set when starting at the
@@ -274,18 +276,25 @@ class TimeReversibleRandomWalk(RandomWalk):
         pi : array-like of shape (n_genotypes - n_states,)
             Starting probability distribution over the states not in A.
             These values must sum to 1.
+        return_time : bool (False)
+            Returns also the average time until absorption.
 
         Returns
         -------
         p : pd.Series of shape (n_states,)
             Probability is absorbed at A for each state in A.
+        t : float (Optional)
+            Time spent before absorption into states in A.
         """
 
         idxs = self.space.get_state_idxs(state_labels).values
         m = self.calc_average_occupancy_times(state_labels, pi)
 
-        p = self.rate_matrix[:, idxs].T @ m
-        return pd.Series(p, index=state_labels)
+        p = pd.Series(self.rate_matrix[:, idxs].T @ m, index=state_labels)
+        if return_time:
+            return (p, m.sum())
+        else:
+            return p
 
     def set_stationary_freqs(self, log_freqs):
         self.stationary_freqs = np.exp(log_freqs)
