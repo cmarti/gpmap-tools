@@ -11,6 +11,7 @@ from scipy.sparse.linalg import bicgstab, cg, eigsh
 from scipy.special import comb, logsumexp
 
 from gpmap.graph import calc_bottleneck, calc_pathway, has_path
+from gpmap.linop import InverseOperator, DiagonalOperator
 from gpmap.matrix import (
     calc_cartesian_product,
     get_sparse_diag_matrix,
@@ -61,21 +62,22 @@ class RandomWalk:
                 times.append(t)
                 remaining_time = remaining_time - t
         return (times, path)
-    
+
     def calc_hitting_times(self, state_labels):
-        '''Calculates the expected hitting times to the provided states.
-        
+        """
+        Calculates the expected hitting times to the provided states.
+
         Parameters
         ----------
         state_labels : list of str
             List of state labels for which to calculate the expected hitting times.
-            
+
         Returns
         -------
         h : array-like of shape (n_states,)
             Expected hitting times to the provided states for each state in the space.
-        '''
-        
+        """
+
         states_idxs = self.space.get_state_idxs(state_labels).values
         Q = self.rate_matrix
 
@@ -95,23 +97,69 @@ class RandomWalk:
         h[idx] = h_tilde
         return pd.Series(h, index=self.space.state_labels)
 
+    def calc_average_occupancy_times(self, state_labels, pi=None):
+        """
+        Calculates the average time spent at each state before hitting
+        any state in A when starting from the probability distribution
+        pi over the states not in A.
+
+        Parameters
+        ----------
+        state_labels : list of str
+            List of state labels for the set A.
+        pi : array-like of shape (n_states - len(state_labels),)
+            Starting probability distribution over the states not in A.
+
+        Returns
+        -------
+        m : pandas.Series of shape (n_states,)
+            Average time spent in each state before entering A.
+        """
+
+        states_idxs = self.space.get_state_idxs(state_labels).values
+        Q = self.rate_matrix
+
+        idx = np.full(Q.shape[0], True)
+        idx[states_idxs] = False
+
+        Q_tilde = Q[idx, :][:, idx]
+
+        n = Q_tilde.shape[0]
+        if pi is None:
+            pi = np.full(n, fill_value=1.0 / n)
+        if pi.shape[0] != n:
+            msg = "pi must have the same length as the number of states in A"
+            raise ValueError(msg)
+
+        b = -pi
+        m_tilde, res = bicgstab(Q_tilde, b, atol=1e-16)
+
+        if res != 0:
+            rmse = np.sqrt(np.mean((Q_tilde @ m_tilde - b) ** 2))
+            msg = f"Warning: BICGSTAB exitCode: {res}. RMSE={rmse}\n"
+            sys.stderr.write(msg)
+
+        m = np.zeros(Q.shape[0])
+        m[idx] = m_tilde
+        return pd.Series(m, index=self.space.state_labels)
+
     def calc_hitting_prob_through(self, state_labels, through_labels):
-        '''
+        """
         Calculates the probability that a trajectory starting at each state in the space will hit any of the states in `state_labels` by passing through any of the states in `through_labels`.
-        
+
         Parameters
         ----------
         state_labels : list of str
             List of state labels for which to calculate the hitting probabilities.
         through_labels : list of str
             List of state labels that the trajectory must pass through to be counted in the hitting probability.
-            
+
         Returns
         -------
         q : array-like of shape (n_states,)
             Hitting probabilities for each state in the space to hit any of the states in `state_labels` by passing through any of the states in `through_labels`.
-        
-        '''
+
+        """
         states_idxs = self.space.get_state_idxs(state_labels).values
         through_idxs = self.space.get_state_idxs(through_labels).values
         Q = self.rate_matrix
@@ -162,6 +210,75 @@ class TimeReversibleRandomWalk(RandomWalk):
     @property
     def is_time_reversible(self):
         return True
+
+    def calc_average_occupancy_times(self, state_labels, pi=None):
+        """
+        Calculates the average time spent at each state before hitting
+        any state in A when starting at the probality distribution
+        pi over the states not in A.
+
+        Parameters
+        ----------
+        state_labels : list of str
+            List of state labels for the set A.
+        pi : array-like of shape (n_genotypes - n_states,)
+            Starting probability distribution over the states not in A.
+
+        Returns
+        -------
+        m : pd.Series of shape (n_genotypes,)
+            Average time spent in every state before entering A.
+        """
+
+        states_idxs = self.space.get_state_idxs(state_labels).values
+        idx = np.full(self.space.n_states, True)
+        idx[states_idxs] = False
+        stat_pi_sqrt = np.sqrt(self.stationary_freqs[idx])
+        D_sqrt = DiagonalOperator(stat_pi_sqrt)
+        D_sqrt_inv = DiagonalOperator(1.0 / stat_pi_sqrt)
+
+        S_tilde = self.sandwich_rate_matrix[idx, :][:, idx]
+        S_tilde_inv = InverseOperator(S_tilde, method="cg", atol=1e-16)
+
+        n = S_tilde.shape[0]
+        if pi is None:
+            pi = np.full(n, fill_value=1.0 / n)
+        if pi.shape[0] != n:
+            msg = (
+                "pi must have the same length as the number of states not in A"
+            )
+            raise ValueError(msg)
+        m_tilde = -D_sqrt_inv @ S_tilde_inv @ D_sqrt @ pi
+
+        m = np.zeros(self.space.n_states)
+        m[idx] = m_tilde
+        return pd.Series(m, index=self.space.state_labels)
+
+    def calc_entry_rates(self, state_labels, pi=None):
+        """
+        Calculates the rate at which the random walk enters the set of states
+        A defined by `state_labels` when starting at the probability distribution
+        pi over the states not in A via each state in A.
+
+        Parameters
+        ----------
+        state_labels : list of str
+            List of state labels for the set A.
+        pi : array-like of shape (n_genotypes - n_states,)
+            Starting probability distribution over the states not in A.
+
+        Returns
+        -------
+        v : pd.Series of shape (n_genotypes,)
+            Rate at which the random walk enters A through each state in the space.
+        """
+
+        idxs = self.space.get_state_idxs(state_labels).values
+        m = self.calc_average_occupancy_times(state_labels, pi)
+
+        v = np.zeros(self.space.n_states)
+        v[idxs] = self.rate_matrix[:, idxs].T @ m
+        return pd.Series(v, index=self.space.state_labels)
 
     def set_stationary_freqs(self, log_freqs):
         self.stationary_freqs = np.exp(log_freqs)
@@ -274,7 +391,7 @@ class TimeReversibleRandomWalk(RandomWalk):
             time-reversible neutral dynamics. If not provided, uniform
             stationary frequencies are assumed.
 
-        neutral_exchange_rates : scipy.sparse.csr.csr_matrix of shape 
+        neutral_exchange_rates : scipy.sparse.csr.csr_matrix of shape
             (n_states, n_states), optional
             Sparse matrix containing the neutral exchange rates for the
             whole sequence space. If not provided, uniform mutational
@@ -356,9 +473,7 @@ class TimeReversibleRandomWalk(RandomWalk):
             but CSV can be used for smaller datasets or when plain text
             storage is preferred.
         """
-        self.decay_rates_df.to_csv(
-            f"{prefix}.decay_rates.csv", index=False
-        )
+        self.decay_rates_df.to_csv(f"{prefix}.decay_rates.csv", index=False)
 
         if nodes_format in ["parquet", "pq"]:
             self.nodes_df.to_parquet(f"{prefix}.nodes.pq")
@@ -483,16 +598,16 @@ class WMWalk(TimeReversibleRandomWalk):
         Parameters
         ----------
         sites_stat_freqs: list of array-like of shape (n_alleles,)
-            A list where each element is an array representing the stationary 
-            frequencies of alleles at a specific site. These frequencies are 
-            used to parameterize the neutral dynamics with mutational biases 
-            for each independent site. If `None`, uniform frequencies across 
+            A list where each element is an array representing the stationary
+            frequencies of alleles at a specific site. These frequencies are
+            used to parameterize the neutral dynamics with mutational biases
+            for each independent site. If `None`, uniform frequencies across
             alleles will be assumed.
 
         Returns
         -------
         neutral_stat_freqs : array-like of shape (n_states,)
-            The genotype stationary frequencies derived from the product of 
+            The genotype stationary frequencies derived from the product of
             the site-level stationary frequencies under neutrality.
         """
         if sites_stat_freqs is None:
@@ -514,9 +629,7 @@ class WMWalk(TimeReversibleRandomWalk):
         self.neutral_exchange_rates = self.calc_exchange_rate_matrix(
             sites_exchange_rates
         )
-        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(
-            sites_stat_freqs
-        )
+        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(sites_stat_freqs)
         return self.calc_gtr_rate_matrix(
             self.neutral_exchange_rates, self.neutral_stat_freqs
         )
@@ -526,34 +639,34 @@ class WMWalk(TimeReversibleRandomWalk):
     ):
         """
         Computes the neutral mixing rates for a SequenceSpace.
-        If no GTR mutation model is specified, the neutral mixing rate is 
-        determined by the site with the fewest alleles. Otherwise, assuming 
-        site-independent mutations, the slowest neutral mixing rate is 
-        governed by the site with the smallest second eigenvalue in its 
+        If no GTR mutation model is specified, the neutral mixing rate is
+        determined by the site with the fewest alleles. Otherwise, assuming
+        site-independent mutations, the slowest neutral mixing rate is
+        governed by the site with the smallest second eigenvalue in its
         site-specific rate matrix.
 
         Parameters
         ----------
         neutral_site_Qs : list of array-like of shape (n_alleles, n_alleles)
-            A list of site-specific rate matrices used to calculate the 
-            limiting mixing rate under neutrality. If not provided, uniform 
+            A list of site-specific rate matrices used to calculate the
+            limiting mixing rate under neutrality. If not provided, uniform
             mutation rates are assumed.
 
         neutral_site_freqs : list of array-like of shape (n_alleles,)
-            A list of vectors representing the stationary frequencies under 
-            neutrality for each site. These are used to compute the eigenvalues 
-            of the time-reversible site-specific neutral chain. By default, 
+            A list of vectors representing the stationary frequencies under
+            neutrality for each site. These are used to compute the eigenvalues
+            of the time-reversible site-specific neutral chain. By default,
             uniform frequencies are assumed across sites and alleles.
 
         site_weights : array-like of shape (seq_length,)
-            A vector of relative weights for each site. These weights scale 
-            the individually normalized rate matrices to ensure the specified 
+            A vector of relative weights for each site. These weights scale
+            the individually normalized rate matrices to ensure the specified
             leaving rate. By default, all weights are equal.
 
         Returns
         -------
         neutral_mixing_rate: float
-            The neutral mixing rate, defined as the smallest second-largest 
+            The neutral mixing rate, defined as the smallest second-largest
             eigenvalue across all sites.
 
         """
@@ -572,7 +685,7 @@ class WMWalk(TimeReversibleRandomWalk):
             Scaled effective population size for the evolutionary model.
 
         neutral_stat_freqs : array-like of shape (n_states,), optional
-            Genotype stationary frequencies derived from the product of 
+            Genotype stationary frequencies derived from the product of
             site-level stationary frequencies under neutrality.
 
         Returns
@@ -792,9 +905,7 @@ class WMWalk(TimeReversibleRandomWalk):
             whole sequence space. If not provided, uniform mutational dynamics
             are assumed.
         """
-        self.report(
-            f"Calculating D^(1/2) Q D^(-1/2) matrix with Ns={Ns}"
-        )
+        self.report(f"Calculating D^(1/2) Q D^(-1/2) matrix with Ns={Ns}")
 
         if neutral_stat_freqs is None and hasattr(self, "neutral_stat_freqs"):
             neutral_stat_freqs = self.neutral_stat_freqs
@@ -810,9 +921,7 @@ class WMWalk(TimeReversibleRandomWalk):
         m = csr_matrix((values, (i, j)), shape=self.shape).tolil()
 
         # Fill diagonal entries
-        log_freqs = self.calc_log_stationary_frequencies(
-            Ns, neutral_stat_freqs
-        )
+        log_freqs = self.calc_log_stationary_frequencies(Ns, neutral_stat_freqs)
         self.set_stationary_freqs(log_freqs)
         sqrt_freqs = np.exp(0.5 * (log_freqs + np.log(self.space.n_states)))
         m.setdiag(-m.dot(sqrt_freqs) / sqrt_freqs)
@@ -862,35 +971,35 @@ class WMWalk(TimeReversibleRandomWalk):
         """
         Compute the neutral rate matrix for nucleotide substitution models.
 
-        This method calculates the neutral rate matrix for standard nucleotide 
+        This method calculates the neutral rate matrix for standard nucleotide
         substitution models, parameterized as described in:
 
         https://en.wikipedia.org/wiki/Substitution_model
 
-        The computed neutral stationary frequencies and exchangeability rates 
-        are stored in the attributes `neutral_stat_freqs` and 
+        The computed neutral stationary frequencies and exchangeability rates
+        are stored in the attributes `neutral_stat_freqs` and
         `neutral_exchange_rates`.
 
         Parameters
         ----------
         model : str, {'F81', 'K80', 'HKY85', 'K81', 'TN93', 'SYM', 'GTR'}
-            The nucleotide substitution model to use for each site in the 
+            The nucleotide substitution model to use for each site in the
             nucleotide sequence.
 
         stat_freqs : dict, optional
-            A dictionary with keys {'A', 'C', 'G', 'T'} specifying the allele 
-            stationary frequencies for models that allow them to vary. If not 
+            A dictionary with keys {'A', 'C', 'G', 'T'} specifying the allele
+            stationary frequencies for models that allow them to vary. If not
             provided, default frequencies will be used.
 
         exchange_rates : dict, optional
-            A dictionary with keys {'a', 'b', 'c', 'd', 'e', 'f'} specifying 
-            the parameter values for the chosen model. Only the relevant 
-            parameters need to be specified. Default values will be used for 
+            A dictionary with keys {'a', 'b', 'c', 'd', 'e', 'f'} specifying
+            the parameter values for the chosen model. Only the relevant
+            parameters need to be specified. Default values will be used for
             unspecified parameters.
 
         Notes
         -----
-        - Ensure the sequence space is a "dna" space when using nucleotide 
+        - Ensure the sequence space is a "dna" space when using nucleotide
           substitution models for neutral dynamics.
         - The provided stationary frequencies must sum to 1.
         """
@@ -968,9 +1077,7 @@ class WMWalk(TimeReversibleRandomWalk):
         check_error(np.sum(stat_freqs) == 1, msg=msg)
 
         sites_stat_freqs = [np.array(stat_freqs)] * self.space.seq_length
-        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(
-            sites_stat_freqs
-        )
+        self.neutral_stat_freqs = self.calc_neutral_stat_freqs(sites_stat_freqs)
 
         exchange_rates = [np.array(exchange_rates)] * self.space.seq_length
         self.neutral_exchange_rates = self.calc_exchange_rate_matrix(
@@ -1044,9 +1151,7 @@ class ReactivePaths:
         rmse = np.sqrt(np.mean((U.dot(q_partial) - v) ** 2))
 
         if res != 0:
-            sys.stderr.write(
-                f"Warning: BICGSTAB exitCode: {res}. RMSE={rmse}"
-            )
+            sys.stderr.write(f"Warning: BICGSTAB exitCode: {res}. RMSE={rmse}")
 
         return (q_partial, rmse)
 
