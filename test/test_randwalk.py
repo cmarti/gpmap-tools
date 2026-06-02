@@ -193,7 +193,7 @@ class RandomWalkTests(unittest.TestCase):
         mc = WMWalk(space, Ns=1)
         mc.calc_rate_matrix()
         m = mc.calc_entry_rates(["C", "D"])
-        assert np.allclose(m, [0, 0.0, 0.5, 0.5])
+        assert np.allclose(m, [0.5, 0.5])
 
         # With the Ser codon landscape
         ser = ["TCT", "TCC", "TCA", "TCG", "AGT", "AGC"]
@@ -207,7 +207,7 @@ class RandomWalkTests(unittest.TestCase):
             ]
         )
         m = mc.calc_entry_rates(ser, pi=pi)
-        assert np.allclose(m.loc[~np.isin(m.index, ser)], 0)
+        assert np.allclose(m.shape[0], 6)
         assert np.allclose(m.loc["AGC"], 0.190877)
         assert np.allclose(m.loc["TCC"], 0.130535)
 

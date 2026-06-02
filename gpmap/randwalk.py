@@ -276,9 +276,8 @@ class TimeReversibleRandomWalk(RandomWalk):
         idxs = self.space.get_state_idxs(state_labels).values
         m = self.calc_average_occupancy_times(state_labels, pi)
 
-        v = np.zeros(self.space.n_states)
-        v[idxs] = self.rate_matrix[:, idxs].T @ m
-        return pd.Series(v, index=self.space.state_labels)
+        v = self.rate_matrix[:, idxs].T @ m
+        return pd.Series(v, index=state_labels)
 
     def set_stationary_freqs(self, log_freqs):
         self.stationary_freqs = np.exp(log_freqs)
