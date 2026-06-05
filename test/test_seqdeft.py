@@ -16,6 +16,7 @@ from gpmap.matrix import quad
 from gpmap.linop import ProjectionOperator, DeltaKernelRegularizerOperator
 from gpmap.inference import SeqDEFT
 from gpmap.plot.mpl import figure_SeqDEFT_summary, savefig
+from gpmap.datasets import DataSet
 
 
 class SeqDEFTTests(unittest.TestCase):
@@ -473,6 +474,13 @@ class SeqDEFTTests(unittest.TestCase):
         # Ensure it is similar the true probabilities
         r = pearsonr(-phi, np.log(pred["Q_star"]))[0]
         assert r > 0.6
+
+    def test_docs_5ss(self):
+        X = DataSet("5ss").data["X"].values
+        model = SeqDEFT(seq_length=7, alphabet_type="dna", P=2)
+        model.fit(X=X)
+        pred = model.predict()
+        assert np.allclose(pred["Q_star"].sum(), 1)
 
     def test_inference_weigths(self):
         model = SeqDEFT(seq_length=5, alphabet_type="dna", P=2, a=500)

@@ -452,7 +452,7 @@ class SeqGaussianProcessRegressor:
 
 
 class GaussianProcessRegressor(SeqGaussianProcessRegressor):
-    def __init__(self, base_kernel, progress=True, cg_rtol=1e-5):
+    def __init__(self, base_kernel, progress=True, cg_rtol=1e-4):
         self.K = base_kernel
         if hasattr(self.K, "inv"):
             self.C = self.K.inv()
@@ -481,7 +481,7 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
         self.likelihood = GaussianLikelihood(self.genotypes)
         if y_var is None:
             y_var = np.zeros_like(y)
-        noise_var = getattr(self, 'noise_var', 0.)
+        noise_var = getattr(self, "noise_var", 0.0)
         self.likelihood.set_data(X, y, y_var + noise_var)
         self.X = self.likelihood.Xop
         self.X_t = self.X.transpose()
@@ -492,7 +492,7 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
             y=y,
             y_var=y_var,
         )
-    
+
     @property
     def K_xx_inv(self):
         if np.any(self.likelihood.y_var < 1e-4):
@@ -506,30 +506,35 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
             A_inv = InverseOperator(A, method="cg", rtol=self.cg_rtol)
             K_xx_inv = D_sqrt @ A_inv @ D_sqrt
         return K_xx_inv
-    
+
     def calc_posterior_mean(self):
         X_t = self.likelihood.Xop.transpose()
         y = self.likelihood.y
-        y_var_min, y_var_max = np.min(self.likelihood.y_var), np.max(self.likelihood.y_var)
+        y_var_min, y_var_max = (
+            np.min(self.likelihood.y_var),
+            np.max(self.likelihood.y_var),
+        )
         eigval_min, eigval_max = np.min(self.K.lambdas), np.max(self.K.lambdas)
-        
+
         K_cond_bound = (eigval_max + y_var_max) / (eigval_min + y_var_min)
-        C_cond_bound = (1/eigval_min + 1/y_var_min) / (1/eigval_max)
-        
-        if hasattr(self, 'C') and self.likelihood.zero_var:
+        C_cond_bound = (1 / eigval_min + 1 / y_var_min) / (1 / eigval_max)
+
+        if hasattr(self, "C") and self.likelihood.zero_var:
             Z = self.likelihood.Zop
             Z_t = self.likelihood.Zop.transpose()
-            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol)
+            C_zz_inv = InverseOperator(
+                Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol
+            )
             C_zx = Z @ self.C @ X_t
             mean_post = X_t @ y - Z_t @ C_zz_inv @ C_zx @ y
-        elif hasattr(self, 'C') and C_cond_bound < K_cond_bound:
+        elif hasattr(self, "C") and C_cond_bound < K_cond_bound:
             C_D_inv = InverseOperator(
                 self.C + self.likelihood.D, method="cg", rtol=self.cg_rtol
             )
             mean_post = C_D_inv @ X_t @ self.likelihood.D_var_inv @ y
         else:
             mean_post = self.K @ self.X_t @ self.K_xx_inv @ self.likelihood.y
-            
+
         if hasattr(self, "deterministic_mean"):
             mean_post += self.deterministic_mean
         return mean_post
@@ -537,14 +542,14 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
     def calc_posterior_covariance(self):
         y_var_min = np.min(self.likelihood.y_var)
         eigval_min = np.min(self.K.lambdas)
-        if hasattr(self, 'C') and self.likelihood.zero_var:
+        if hasattr(self, "C") and self.likelihood.zero_var:
             Z = self.likelihood.Zop
             Z_t = self.likelihood.Zop.transpose()
             C_zz_inv = InverseOperator(
                 Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol
             )
             Sigma_post = Z_t @ C_zz_inv @ Z
-        elif hasattr(self, 'C') and (y_var_min / eigval_min) < 1e-2:
+        elif hasattr(self, "C") and (y_var_min / eigval_min) < 1e-2:
             Sigma_post = InverseOperator(
                 self.C + self.likelihood.D, method="cg", rtol=self.cg_rtol
             )
@@ -559,7 +564,7 @@ class GaussianProcessRegressor(SeqGaussianProcessRegressor):
             try:
                 return self.K.cholesky()
             except np.linalg.LinAlgError:
-                return self.K.matrix_sqrt()    
+                return self.K.matrix_sqrt()
         else:
             return self.K.matrix_sqrt()
 
@@ -572,7 +577,7 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         genotypes=None,
         alphabet_type="custom",
         progress=True,
-        cg_rtol=1e-5,
+        cg_rtol=1e-4,
     ):
         self.progress = progress
         self.cg_rtol = cg_rtol
@@ -604,7 +609,9 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         if self.likelihood.zero_var:
             Z = self.likelihood.Zop
             Z_t = self.likelihood.Zop.transpose()
-            C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol)
+            C_zz_inv = InverseOperator(
+                Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol
+            )
             b = Z @ self.C @ X_t @ y
             mean_post = X_t @ y - Z_t @ C_zz_inv @ b
         else:
