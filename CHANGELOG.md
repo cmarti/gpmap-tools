@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 
 
+## New release [0.4.2] - 2026-06-05
+
+### Changed
+
+- **Bug fixed**  when running the inference of GB1 landscape from the documentation. Default CG tolerance was reduced in a previous version to a numerical precision that cannot be reached in this dataset. Tests have been added to ensure that GB1 and the 5ss examples from the documentation run as expected.
+
 ## New release [0.4.0] - 2026-03-27
 
 ### Added
