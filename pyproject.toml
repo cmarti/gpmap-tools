@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gpmap_tools"
-version = "0.4.0"
+version = "0.4.2"
 description = "Tools for inference and visualization of complex genotype-phenotype maps"
 readme = "README.md"
 license = { text = "MIT" }
