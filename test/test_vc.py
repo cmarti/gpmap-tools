@@ -7,7 +7,6 @@ from tempfile import NamedTemporaryFile
 
 import numpy as np
 import pandas as pd
-from scipy.special import comb
 from scipy.stats import pearsonr
 
 from gpmap.inference import VCregression
@@ -17,6 +16,7 @@ from gpmap.linop import (
 )
 from gpmap.matrix import rayleigh_quotient
 from gpmap.settings import BIN_DIR
+from gpmap.datasets import DataSet
 
 
 class VCTests(unittest.TestCase):
@@ -110,7 +110,7 @@ class VCTests(unittest.TestCase):
         X, _, _, _, ns = vc.process_data((X, y, y_var))
         assert np.isclose(X.shape[0] ** 2, ns.sum())
 
-    def test_vc_docs(self):
+    def test_vc_docs_simulation(self):
         # Simulate data
         np.random.seed(0)
         lambdas_true = np.array([1e3, 1e3, 2e2, 1e0, 1e-1, 3e-3, 1e-5])
@@ -140,6 +140,15 @@ class VCTests(unittest.TestCase):
             cv_loss_function="logL",
         )
         cvmodel.fit(X, y, y_var)
+
+    def test_vc_docs_gb1(self):
+        data = DataSet("gb1").data
+        X, y, y_var = data.index.values, data.y.values, data.y_var.values
+        model = VCregression(seq_length=4, alphabet_type="protein")
+        model.fit(X, y, y_var)
+        f = model.predict(X_pred=X)["f"]
+        r2 = pearsonr(f, y)[0] ** 2
+        assert r2 > 0.8
 
     def test_vc_calc_posterior(self):
         np.random.seed(0)
@@ -235,8 +244,10 @@ class VCTests(unittest.TestCase):
 
         # Estimate posterior variances
         pred = vc.predict(X_pred=X_test, calc_variance=True)
-        r = pearsonr(pred['f'], f_test)[0]
-        p = np.mean((pred['ci_95_lower'] < f_test) & (f_test < pred['ci_95_upper']))
+        r = pearsonr(pred["f"], f_test)[0]
+        p = np.mean(
+            (pred["ci_95_lower"] < f_test) & (f_test < pred["ci_95_upper"])
+        )
         assert "f_var" in pred.columns
         assert np.all(pred["f_var"] > 0)
         assert r > 0.9
@@ -269,7 +280,7 @@ class VCTests(unittest.TestCase):
             )
             _, X, y, y_var = vc.simulate(y_var=0.0025, p_missing=0.05)
             X_test = np.delete(vc.genotypes, vc.genotype_idxs.loc[X])
-            data = pd.DataFrame({'y': y, 'y_var': y_var}, index=X)
+            data = pd.DataFrame({"y": y, "y_var": y_var}, index=X)
 
             # Save simulated data in temporary files
             data.to_csv(data_fpath)
@@ -351,8 +362,7 @@ class SkewedVCTests(unittest.TestCase):
 
         # with variable ps
         ps = (
-            np.random.dirichlet(np.ones(n_alleles), size=seq_length)
-            * n_alleles
+            np.random.dirichlet(np.ones(n_alleles), size=seq_length) * n_alleles
         )
         L = LaplacianOperator(n_alleles, seq_length, ps=ps)
         vc.init(seq_length, n_alleles, ps=ps)

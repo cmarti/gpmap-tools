@@ -116,7 +116,7 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
         alphabet_type="custom",
         P=2,
         a=None,
-        cg_rtol=1e-5,
+        cg_rtol=1e-4,
     ):
         super().__init__(
             seq_length=seq_length,
@@ -261,7 +261,7 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
         P=2,
         a_values=None,
         lambda_U_lower_than_P=None,
-        cg_rtol=1e-5,
+        cg_rtol=1e-4,
         progress=True,
     ):
         self.progress = progress
@@ -304,9 +304,7 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
                 self.n_alleles, self.seq_length, self.P, a=a_values
             )
             for U, lambda_U in zip(self.U_lower_than_P, lambda_U_lower_than_P):
-                P_U = VUProjectionOperator(
-                    self.n_alleles, self.seq_length, j=U
-                )
+                P_U = VUProjectionOperator(self.n_alleles, self.seq_length, j=U)
                 self.C += 1 / lambda_U * P_U
 
     def calc_posterior(self, X_pred=None, B=None):
@@ -544,7 +542,7 @@ class VCregression(GaussianProcessRegressor):
         num_beta=20,
         min_log_beta=-2,
         max_log_beta=7,
-        cg_rtol=1e-5,
+        cg_rtol=1e-4,
         progress=True,
     ):
         self.progress = progress
@@ -568,7 +566,6 @@ class VCregression(GaussianProcessRegressor):
         self.cg_rtol = cg_rtol
         if lambdas is not None:
             self.set_lambdas(lambdas)
-
 
     def set_lambdas(self, lambdas=None, k=None):
         K = VarianceComponentKernel(
@@ -795,7 +792,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         they will be inferred during fitting.
 
     cg_rtol : float, optional
-        The relative tolerance for the conjugate gradient solver. Default is 1e-5.
+        The relative tolerance for the conjugate gradient solver. Default is 1e-4.
 
     progress : bool, optional
         Whether to display progress bars during fitting. Default is True.
@@ -808,7 +805,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         genotypes=None,
         alphabet_type="custom",
         mu=None,
-        cg_rtol=1e-5,
+        cg_rtol=1e-4,
         progress=True,
     ):
         self.progress = progress
@@ -822,7 +819,6 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         self.cg_rtol = cg_rtol
         if mu is not None:
             self.set_params(mu)
-
 
     def set_params(self, mu):
         self.mu = mu
