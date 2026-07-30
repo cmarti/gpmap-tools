@@ -119,6 +119,7 @@ class MEITests(unittest.TestCase):
         model2.set_data(X, y, y_var)
         mu2, Sigma2 = model2.calc_posterior()
 
+        print(mu1, mu2)
         assert np.allclose(mu1, mu2)
         assert np.allclose(Sigma1 @ np.eye(4), Sigma2 @ np.eye(4))
 
@@ -270,6 +271,37 @@ class MEITests(unittest.TestCase):
         model = MinimumEpistasisInterpolator(
             seq_length=5, alphabet_type="dna", a=100
         )
+        model.set_data(X, y, y_var)
+        pred = model.predict(X_test, calc_variance=True)
+        r = pearsonr(pred["f"], f_test)[0]
+        p = np.mean(
+            (pred["ci_95_lower"] < f_test) & (f_test < pred["ci_95_upper"])
+        )
+        assert r > 0.5
+        assert p > 0.9
+    
+    def test_predict_missing_alleles(self):
+        np.random.seed(0)
+        model = MinimumEpistasisInterpolator(
+            seq_length=5, alphabet_type="dna", a=100
+        )
+        f, X, y, y_var = model.simulate(y_var=0.1, p_missing=0.1)
+        idx = np.array([x[0] != 'A' for x in X])
+        X, y, y_var = X[idx], y[idx], y_var[idx]
+        
+        idx = model.genotype_idxs.loc[X]
+        X_test = np.delete(model.genotypes, idx)
+        f_test = np.delete(f, idx)
+        idx = np.array([x[0] != 'A' for x in X_test])
+        X_test, f_test = X_test[idx], f_test[idx]
+
+        # Interpolation solution
+        model.set_data(X, y)
+        pred = model.predict(X_test)
+        r = pearsonr(pred["f"], f_test)[0]
+        assert r > 0.5
+        
+        # Regression solution with variances
         model.set_data(X, y, y_var)
         pred = model.predict(X_test, calc_variance=True)
         r = pearsonr(pred["f"], f_test)[0]

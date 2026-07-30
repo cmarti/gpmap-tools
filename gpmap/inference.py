@@ -29,10 +29,12 @@ from gpmap.linop import (
     DeltaPOperator,
     DeltaUWeighedSumOperator,
     DiagonalOperator,
+    IdentityOperator,
     ProjectionOperator,
     VarianceComponentKernel,
     VUKernel,
     VUProjectionOperator,
+    SelIdxOperator,
 )
 from gpmap.matrix import quad
 from gpmap.summary import GPDataSummarizer
@@ -145,12 +147,12 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
         y_pred -= 1 / self.p * self.DP @ y_pred
         return y_pred
 
-    def calc_posterior_covariance(self):
+    def calc_posterior_covariance(self, Zop=None):
         if self.a is None:
             msg = "a must be defined to compute posterior covariance"
             raise ValueError(msg)
         else:
-            return super().calc_posterior_covariance()
+            return super().calc_posterior_covariance(Zop=Zop)
 
     def check_unique_solution(self):
         basis = self.kernel_basis
@@ -163,12 +165,20 @@ class MinimumEpistasisInterpolator(MinimizerRegressor, _DeltaPpriorGP):
             raise ValueError(msg)
 
     def calc_posterior(self, X_pred=None, B=None):
-        self.check_unique_solution()
-        mean_post = self.calc_posterior_mean()
+        if X_pred is None:
+            self.check_unique_solution()
+            Zop = None
+        else:
+            if np.intersect1d(X_pred, self.likelihood.X).shape[0] > 0:
+                msg = "X_pred should not contain any of the training genotypes"
+                raise ValueError(msg)
+            Zop = SelIdxOperator(self.n_genotypes, self.likelihood.idx.loc[X_pred])
+        
+        mean_post = self.calc_posterior_mean(Zop=Zop)
         if self.a is None:
             Sigma_post = None
         else:
-            Sigma_post = self.calc_posterior_covariance()
+            Sigma_post = self.calc_posterior_covariance(Zop=Zop)
         return self.transform_posterior(
             mean_post, Sigma_post, X_pred=X_pred, B=B
         )

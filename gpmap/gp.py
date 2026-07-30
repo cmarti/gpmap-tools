@@ -587,8 +587,9 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
         self.define_space(genotypes=X)
         self.likelihood = GaussianLikelihood(self.genotypes)
         self.likelihood.set_data(X, y, y_var)
+        alphabet = np.unique(np.hstack(self.alphabet))
         self.gpdata = GPDataSummarizer(
-            alphabet=self.alphabet[0],
+            alphabet=alphabet,
             seq_length=self.seq_length,
             X=X,
             y=y,
@@ -598,15 +599,18 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
     def calc_loss_prior(self, v):
         return quad(self.C, v)
 
-    def calc_posterior_mean(self):
+    def calc_posterior_mean(self, Zop=None):
         X_t = self.likelihood.Xop.transpose()
         y = self.likelihood.y
+        
+        Z = self.likelihood.Zop if Zop is None else Zop
+        Z_t = Z.transpose()
+        
         if self.likelihood.zero_var:
-            Z = self.likelihood.Zop
-            Z_t = self.likelihood.Zop.transpose()
             C_zz_inv = InverseOperator(Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol)
-            b = Z @ self.C @ X_t @ y
-            mean_post = X_t @ y - Z_t @ C_zz_inv @ b
+            C_zx = Z @ self.C @ X_t
+            y_pred_z = -C_zz_inv @ C_zx @ y
+            mean_post = X_t @ y + Z_t @ y_pred_z
         else:
             A = InverseOperator(
                 self.C + self.likelihood.D, method="cg", rtol=self.cg_rtol
@@ -614,10 +618,12 @@ class MinimizerRegressor(SeqGaussianProcessRegressor):
             mean_post = A @ X_t @ self.likelihood.D_var_inv @ y
         return mean_post
 
-    def calc_posterior_covariance(self):
+    def calc_posterior_covariance(self, Zop=None):
+        
+        Z = self.likelihood.Zop if Zop is None else Zop
+        Z_t = Z.transpose()
+        
         if self.likelihood.zero_var:
-            Z = self.likelihood.Zop
-            Z_t = self.likelihood.Zop.transpose()
             C_zz_inv = InverseOperator(
                 Z @ self.C @ Z_t, method="cg", rtol=self.cg_rtol
             )

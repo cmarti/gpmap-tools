@@ -432,6 +432,7 @@ class ExpandIdxOperator(ExtendedLinearOperator):
         self.n = n
         self.idx = idx
         self.shape = (n, self.idx.shape[0])
+        self._init_dtype()
 
     def _matvec(self, v):
         u = np.zeros(self.n)
