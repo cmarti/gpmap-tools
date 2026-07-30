@@ -5,6 +5,7 @@ from scipy.optimize import lsq_linear, minimize
 from scipy.special import comb, gammaln
 
 from gpmap.matrix import kron
+from gpmap.linop import DeltaPOperator
 from gpmap.transform import (
     ConnectednessToVUTransform,
     DeltaPtoVkTransform,
@@ -65,6 +66,34 @@ class VCLogLambdaRegularizer:
                 grad = np.zeros_like(log_lambdas)
             else:
                 grad = self.beta * np.append([0], 2 * reg_Av)
+            return reg, grad
+        else:
+            return reg
+
+
+class SitesVCLogLambdaRegularizer:
+    def __init__(self, seq_length, beta=0):
+        self.seq_length = seq_length
+        self.set_beta(beta)
+        self.A = DeltaPOperator(n_alleles=2, seq_length=seq_length, P=2)
+        self.A = 1. / self.A.n_p_faces * self.A 
+
+    def set_beta(self, beta):
+        check_error(beta >= 0, msg="beta must be >= 0")
+        self.beta = beta
+
+    def __call__(self, log_lambdas, return_grad=True):
+        if self.beta == 0:
+            reg = 0
+        else:
+            reg_Av = self.A @ log_lambdas
+            reg = self.beta * np.dot(reg_Av, log_lambdas)
+
+        if return_grad:
+            if self.beta == 0:
+                grad = np.zeros_like(log_lambdas)
+            else:
+                grad = self.beta * 2 * reg_Av
             return reg, grad
         else:
             return reg
@@ -337,7 +366,35 @@ class VUKernelAligner(KernelAligner):
         self.W_UD = np.vstack(W_UD) / self.n_genotypes
 
 
-class VCUKernelAligner(VUKernelAligner):
+class SitesVCKernelAligner(RegularizedKernelAligner, VUKernelAligner):
+    """
+    Class to perform kernel alignment of empirical
+    covariance-distance relationships with the Site(s) Variance Components
+    that generate them by minimizing the Frobenius norm
+    of the resulting matrices.
+
+    Parameters
+    ----------
+    n_alleles: int
+        Number of alleles per site.
+
+    seq_length: int
+        Number of sites in the sequence.
+
+    beta: float
+        Regularization constant to penalize deviations from
+        the linear decay of the log lambdas. By default, it does
+        not perform regularization (beta=0).
+    """
+    def __init__(self, n_alleles, seq_length, beta=0):
+        RegularizedKernelAligner.__init__(
+            self,
+            n_alleles=n_alleles,
+            seq_length=seq_length,
+            regularizer=SitesVCLogLambdaRegularizer,
+            beta=beta,
+        )
+        
     def get_x0(self):
         lambdas = lsq_linear(
             self.frobenius_norm.A,

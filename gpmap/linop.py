@@ -1023,6 +1023,8 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
     def __init__(self, n_alleles, seq_length, lambdas=None):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.n_V_U = 2**seq_length
+        self.Us = np.array(list(product([False, True], repeat=self.seq_length)))
+        self.m_U = self.Us.sum(axis=1)
         self.set_lambdas(lambdas)
         self.W0 = PconOperator(self.alpha)
         self.W1 = PaddOperator(self.alpha)
@@ -1089,8 +1091,7 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
         v = v.reshape(self.v_shape)
         sites = list(range(self.seq_length))
         u = np.zeros_like(v)
-        Us = product([False, True], repeat=self.seq_length)
-        for U, lambda_U in zip(Us, self.lambdas):
+        for U, lambda_U in zip(self.Us, self.lambdas):
             v_U = self.calc_V_U_product(v, sites, U)
             u += lambda_U * v_U
         return u.transpose().flatten()

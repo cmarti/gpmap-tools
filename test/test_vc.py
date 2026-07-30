@@ -10,10 +10,11 @@ import pandas as pd
 from scipy.special import comb
 from scipy.stats import pearsonr
 
-from gpmap.inference import VCregression
+from gpmap.inference import VCregression, SitesVCregression
 from gpmap.linop import (
     LaplacianOperator,
     ProjectionOperator,
+    VUProjectionOperator,
 )
 from gpmap.matrix import rayleigh_quotient
 from gpmap.settings import BIN_DIR
@@ -371,6 +372,113 @@ class SkewedVCTests(unittest.TestCase):
                 assert np.allclose(f_k_rq, k1 == k2)
 
 
+class SitesVCTests(unittest.TestCase):
+    def test_simulate(self):
+        np.random.seed(1)
+        seq_length, n_alleles = 4, 4
+
+        lambda_k = np.array([0, 200, 20, 2, 0.2])
+        vc = SitesVCregression(n_alleles=n_alleles, seq_length=seq_length)
+        idx = vc.Us.sum(1).astype(int)
+        lambda_U = lambda_k[idx]
+        vc.set_lambdas(lambda_U)
+
+        # Test functioning and size
+        y_true, X, y, y_var = vc.simulate(y_var=0.01)
+        assert y_true.shape[0] == 256
+        assert X.shape[0] == 256
+        assert y.shape[0] == 256
+        assert y_var.shape[0] == 256
+
+        # Test missing genotypes
+        y_true, X, y, y_var = vc.simulate(y_var=0.01, p_missing=0.1)
+        assert y_true.shape[0] == 256
+        assert X.shape[0] < 256
+        assert y.shape[0] < 256
+        assert y_var.shape[0] < 256
+
+        # Test pure components
+        for U_idx in range(2 ** seq_length):
+            lambda_U = np.zeros(vc.Us.shape[0])
+            lambda_U[U_idx] = 1.0
+            vc.set_lambdas(lambda_U)
+            f = vc.simulate()[0]
+
+            for U in vc.Us:
+                j = np.where(U)[0]
+                W_U = VUProjectionOperator(n_alleles, seq_length, j=j)
+                f_U_rq = rayleigh_quotient(W_U, f)
+                assert np.allclose(f_U_rq, np.all(U == vc.Us[U_idx]))
+    
+    def test_fit(self):
+        np.random.seed(1)
+        seq_length, n_alleles = 4, 4
+        lambda_k = np.array([2000, 200, 20, 2, 0.2])
+        vc = SitesVCregression(n_alleles=n_alleles, seq_length=seq_length)
+        idx = vc.Us.sum(1).astype(int)
+        lambda_U = lambda_k[idx]
+        vc.set_lambdas(lambda_U)
+        _, X, y, y_var = vc.simulate(y_var=0.01)
+        
+        # Ensure MSE is within a small range
+        vc = SitesVCregression(n_alleles=n_alleles, seq_length=seq_length)
+        vc.fit(X, y, y_var=y_var)
+        sd = np.log2((vc.lambdas[1:] + 1e-6) / (lambda_U[1:] + 1e-6)).std()
+        assert vc.beta == 0.
+        assert sd < 2
+        
+        # Try with regularization and CV
+        vc = SitesVCregression(
+            n_alleles=n_alleles,
+            seq_length=seq_length,
+            cross_validation=True,
+        )
+        vc.fit(X, y, y_var=y_var)
+        sd2 = np.log2((vc.lambdas[1:] + 1e-6) / (lambda_U[1:] + 1e-6)).std()
+        assert vc.beta > 0
+        assert sd2 < sd
+    
+    
+    def test_predict(self):
+        np.random.seed(1)
+        seq_length, n_alleles = 4, 4
+        lambda_k = np.array([2000, 200, 20, 2, 0.2])
+        vc = SitesVCregression(n_alleles=n_alleles, seq_length=seq_length)
+        idx = vc.Us.sum(1).astype(int)
+        lambda_U = lambda_k[idx]
+        vc.set_lambdas(lambda_U)
+        f, X, y, y_var = vc.simulate(y_var=0.01, p_missing=0.05)
+        idx = vc.likelihood.idx.loc[X]
+        X_test = np.delete(vc.genotypes, idx)
+        f_test = np.delete(f, idx)
+
+        # Using the a priori known variance components
+        vc.set_data(X, y, y_var)
+        pred = vc.predict()
+        mse = np.mean((pred["f"] - f) ** 2)
+        rho = pearsonr(pred["f"], f)[0]
+        assert rho > 0.95
+        assert mse < 0.05
+
+        # Estimate posterior variances
+        pred = vc.predict(X_pred=X_test, calc_variance=True)
+        r = pearsonr(pred['f'], f_test)[0]
+        p = np.mean((pred['ci_95_lower'] < f_test) & (f_test < pred['ci_95_upper']))
+        assert "f_var" in pred.columns
+        assert np.all(pred["f_var"] > 0)
+        assert r > 0.9
+        assert p > 0.9
+
+        # Capture error with missing lambdas
+        vc = SitesVCregression(seq_length=seq_length, n_alleles=n_alleles)
+        try:
+            vc.set_data(X, y, y_var)
+            pred = vc.predict()
+            self.fail()
+        except AttributeError:
+            pass
+
+
 if __name__ == "__main__":
-    sys.argv = ["", "VCTests"]
+    sys.argv = ["", "VCTests", "SitesVCTests"]
     unittest.main()

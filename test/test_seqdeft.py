@@ -209,6 +209,28 @@ class SeqDEFTTests(unittest.TestCase):
         b = model.phi_to_b(probs["phi"])
         _, grad = model.calc_loss(b)
         assert np.allclose(grad, 0, atol=1e-2)
+    
+    def test_fit_small(self):
+        X = np.array(['001', '010', '011', '100', '101', '110', '111'])
+        y = np.array([11347, 53, 179, 4764, 35106, 127, 1739])
+        model = SeqDEFT(seq_length=3, n_alleles=2, alphabet_type='custom', P=2)
+        model.fit(X, y=y)
+        print(model.logL_df.sort_values('log_a'))
+        print(model.logL_df.groupby('log_a')['logL'].mean())
+        print(model.a)
+        probs = model.predict()
+        print(probs)
+        assert np.allclose(probs["Q_star"].sum(), 1)
+        
+        model = SeqDEFT(seq_length=3, n_alleles=2, alphabet_type='custom', P=2)
+        model.fit(X, y=y)
+        print(model.logL_df.sort_values('log_a'))
+        print(model.logL_df.groupby('log_a')['logL'].mean())
+        print(model.a)
+        probs = model.predict()
+        print(probs)
+        assert np.allclose(probs["Q_star"].sum(), 1)
+
 
     def test_inference_reg_null_space(self):
         np.random.seed(0)

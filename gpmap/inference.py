@@ -12,7 +12,9 @@ from tqdm import tqdm
 from gpmap.aligner import (
     ConnectednessKernelAligner,
     DeltaUKernelAligner,
+    SitesVCKernelAligner,
     VCKernelAligner,
+    VUKernelAligner,
 )
 from gpmap.gp import (
     GaussianProcessRegressor,
@@ -887,6 +889,302 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
         mu = self.aligner.fit(cov, ns, mean=y.mean(), method=method)
         self.set_params(mu=mu)
+
+
+
+class SitesVCregression(GaussianProcessRegressor):
+    """
+    Site-specific Variance Component regression model for
+    sequence-function relationships.
+
+    This model enables the inference and prediction of a scalar function in
+    sequence spaces under a Gaussian Process prior. The prior is parameterized
+    by the contribution of different orders of interaction to the observed
+    genetic variability of a continuous phenotype.
+
+    Parameters
+    ----------
+    n_alleles : int, optional
+        The number of alleles per site. If not provided, it will be inferred
+        from the data.
+
+    seq_length : int, optional
+        The length of the genotype sequences. If not provided, it will be
+        inferred from the data.
+
+    genotypes : array-like, optional
+        A list or array of genotypes to be used in the interpolation.
+
+    alphabet_type : str, optional
+        The type of alphabet used for genotypes. Default is "custom".
+
+    lambdas : array-like, optional
+        Variance components for each order of interaction. If not provided,
+        they will be inferred during fitting.
+
+    beta : float, optional
+        The regularization parameter for the kernel alignment. Default is 0.
+
+    cross_validation : bool, optional
+        Whether to perform cross-validation to select the best penalization
+        constant for regularized variance component inference. Default is False.
+
+    nfolds : int, optional
+        The number of folds for cross-validation. Default is 5.
+
+    cv_loss_function : str, optional
+        The loss function to use during cross-validation. Options are
+        "frobenius_norm", "logL", or "r2". Default is "frobenius_norm".
+
+    num_beta : int, optional
+        The number of beta values to evaluate during cross-validation. Default is 20.
+
+    min_log_beta : float, optional
+        The minimum log10(beta) value for cross-validation. Default is -2.
+
+    max_log_beta : float, optional
+        The maximum log10(beta) value for cross-validation. Default is 7.
+
+    cg_rtol : float, optional
+        The relative tolerance for the conjugate gradient solver. Default is 1e-5.
+
+    progress : bool, optional
+        Whether to display progress bars during fitting. Default is True.
+    """
+
+    def __init__(
+        self,
+        n_alleles=None,
+        seq_length=None,
+        genotypes=None,
+        alphabet_type="custom",
+        lambdas=None,
+        beta=0,
+        cross_validation=False,
+        nfolds=5,
+        cv_loss_function="frobenius_norm",
+        num_beta=20,
+        min_log_beta=-5,
+        max_log_beta=10,
+        cg_rtol=1e-5,
+        progress=True,
+    ):
+        self.progress = progress
+        self.beta = beta
+        self.nfolds = nfolds
+        self.num_reg = num_beta
+        self.total_folds = self.nfolds * self.num_reg
+
+        self.min_log_reg = min_log_beta
+        self.max_log_reg = max_log_beta
+        self.run_cv = cross_validation
+        self.set_cv_loss_function(cv_loss_function)
+
+        self.define_space(
+            n_alleles=n_alleles,
+            seq_length=seq_length,
+            genotypes=genotypes,
+            alphabet_type=alphabet_type,
+        )
+        self.Us = np.array(list(product([False, True], repeat=self.seq_length)))
+
+        self.cg_rtol = cg_rtol
+        if lambdas is not None:
+            self.set_lambdas(lambdas)
+
+
+    def set_lambdas(self, lambdas=None):
+        K = VUKernel(
+            self.n_alleles, self.seq_length, lambdas=lambdas
+        )
+        self.lambdas = K.lambdas
+        super().__init__(
+            base_kernel=K, progress=self.progress, cg_rtol=self.cg_rtol
+        )
+
+    def set_data(self, X, y, y_var=None, cov=None, ns=None):
+        """
+        Set the data for the Variance Component regression model.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Array containing the genotypes for which observations are provided.
+
+        y : array-like of shape (n_obs,)
+            Array containing the observed phenotypes corresponding to the genotypes in `X`.
+
+        y_var : array-like of shape (n_obs,), optional
+            Array containing the empirical or experimental variance for the measurements in `y`.
+            If not provided, it is assumed to be uniform or unknown.
+
+        cov : array-like, optional
+            Precomputed covariance matrix or related data. If not provided, it will be calculated
+            from the input data.
+
+        ns : array-like, optional
+            Additional data or parameters related to the model. If not provided, it will be
+            calculated from the input data.
+
+        Notes
+        -----
+        - Providing `cov` and `ns` can save computational resources, as they will not be recalculated
+          from the input data.
+        """
+        super().set_data(X, y, y_var=y_var)
+        self.cov = cov
+        self.ns = ns
+
+    def lambdas_to_variance(self, lambdas):
+        variance_components = (lambdas * self.K.m_U)[1:]
+        variance_components = variance_components / variance_components.sum()
+        return variance_components
+
+    def get_variance_components(self, lambdas=None):
+        r"""
+        Return the variance components as a DataFrame from :math:`\lambda`s.
+
+        Parameters
+        ----------
+        lambdas : array-like, optional
+            An array of eigenvalues representing the variance components. If not provided,
+            the model's current `lambdas` attribute will be used.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame containing the following columns:
+
+            - ``U``: Set of site U.
+            - ``lambdas``: The input eigenvalues.
+            - ``var_perc``: The percentage of variance explained by each component.
+            - ``var_perc_cum``: The cumulative percentage of variance explained.
+        """
+        if lambdas is None:
+            lambdas = self.lambdas
+        U = ["".join([str(int(p)) for p in U]) for U in self.Us]
+        vc_perc = np.zeros(len(U))
+        vc_perc[1:] = self.lambdas_to_variance(lambdas) * 100
+        df = pd.DataFrame(
+            {
+                "U": U,
+                "lambdas": lambdas,
+                "var_perc": vc_perc,
+                "var_perc_cum": np.cumsum(vc_perc),
+            }
+        )
+        return df
+
+    def process_data(self, data):
+        X, y, y_var = data
+        if not hasattr(self, "gpdata"):
+            self.gpdata = GPDataSummarizer(genotypes=X)
+
+        self.gpdata.set_data(X, y, y_var=y_var)
+        cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
+        return (X, y, y_var, cov, ns)
+
+    def set_cv_loss_function(self, cv_loss_function):
+        allowed_functions = ["frobenius_norm", "logL", "r2"]
+        if cv_loss_function not in allowed_functions:
+            msg = "Loss function {} not allowed. Choose from {}"
+            raise ValueError(msg.format(cv_loss_function, allowed_functions))
+        self.cv_loss_function = cv_loss_function
+
+    def cv_fit(self, data, beta, method="L-BFGS-B"):
+        X, y, y_var, cov, ns = data
+        self.set_data(X=X, y=y, y_var=y_var, cov=cov, ns=ns)
+        lambdas = self._fit(beta, method=method)
+        return lambdas
+
+    def cv_evaluate(self, data, lambdas):
+        X, y, y_var, cov, ns = data
+
+        if self.cv_loss_function == "frobenius_norm":
+            self.aligner.set_data(cov, ns)
+            self.aligner.regularizer.set_beta(self.beta)
+            loss = self.aligner.calc_loss(lambdas, return_grad=False)
+
+        else:
+            self.set_lambdas(lambdas)
+            ypred = self.predict(X)["f"].values
+
+            if self.cv_loss_function == "logL":
+                loss = -norm.logpdf(y, loc=ypred, scale=np.sqrt(y_var)).sum()
+            elif self.cv_loss_function == "r2":
+                loss = -(pearsonr(ypred, y)[0] ** 2)
+            else:
+                msg = "Allowed loss functions are [frobenius_norm, r2, logL]"
+                raise ValueError(msg)
+
+        return loss
+
+    def _fit(self, beta=None, method="L-BFGS-B"):
+        if beta is None:
+            beta = self.beta
+
+        cov, ns = self.cov, self.ns
+        if cov is None or ns is None:
+            self.gpdata.set_data(
+                self.likelihood.X,
+                self.likelihood.y,
+                y_var=self.likelihood.y_var,
+            )
+            cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
+
+        self.aligner.regularizer.set_beta(beta)
+        lambdas = self.aligner.fit(
+            cov, ns, mean=self.likelihood.y.mean(), method=method
+        )
+        return lambdas
+
+    def fit(self, X, y, y_var=None, method="L-BFGS-B"):
+        """
+        Infers the Site(s) specificVariance Components from the provided data.
+
+        This method infers the variance components, which represent the relative
+        contribution of different orders of interaction to the variability in the
+        sequence-function relationships. Variance components are determined through
+        kernel alignment with the empirical U-site covariance function.
+
+        After fitting, the optimal variance components (`lambdas`) are stored in
+        the `VCregression.lambdas` attribute for use in predictions.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_obs,)
+            Array containing the genotypes for which observations are provided
+            in `y`.
+
+        y : array-like of shape (n_obs,)
+            Array containing the observed phenotypes corresponding to the
+            genotypes in `X`.
+
+        y_var : array-like of shape (n_obs,), optional
+            Array containing the empirical or experimental variance for the
+            measurements in `y`. If not provided, it is assumed to be uniform
+            or unknown.
+
+        method : str, optional
+            Optimization method to use during kernel alignment. Default is 'L-BFGS-B'.
+        """
+
+        t0 = time()
+        self.define_space(genotypes=X)
+        self.aligner = SitesVCKernelAligner(
+            n_alleles=self.n_alleles, seq_length=self.seq_length, beta=self.beta
+        )
+        self.set_data(X, y, y_var=y_var)
+
+        if self.run_cv:
+            self.fit_beta_cv()
+            self.set_data(X, y, y_var=y_var)
+
+        lambdas = self._fit(method=method)
+
+        self.fit_time = time() - t0
+        self.set_lambdas(lambdas)
+        self.vc_df = self.get_variance_components(lambdas)
 
 
 class SeqDEFT(GeneralizedGaussianProcessRegressor, _DeltaPpriorGP):

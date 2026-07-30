@@ -9,7 +9,7 @@ from gpmap.aligner import (
     DeltaPKernelAligner,
     DeltaUKernelAligner,
     VCKernelAligner,
-    VCUKernelAligner,
+    SitesVCKernelAligner,
 )
 
 
@@ -108,7 +108,7 @@ class KernelAlignerTest(unittest.TestCase):
         assert np.allclose(x_true, x_hat, atol=1e-1)
 
     def test_VCU_kernel_predict(self):
-        aligner = VCUKernelAligner(n_alleles=3, seq_length=2)
+        aligner = SitesVCKernelAligner(n_alleles=3, seq_length=2)
 
         c0 = aligner.predict(np.array([1, 0, 0, 0]))
         assert np.allclose(c0, 1 / 9)
@@ -120,14 +120,14 @@ class KernelAlignerTest(unittest.TestCase):
         assert np.allclose(c2, [4 / 9, -2 / 9, -2 / 9, 1 / 9])
 
     def test_VCU_kernel_alignment_fit(self):
-        aligner = VCUKernelAligner(n_alleles=3, seq_length=2)
+        aligner = SitesVCKernelAligner(n_alleles=3, seq_length=2)
         log_lambda_U = np.array([1, 0.5, 0, -1])
         cov = aligner.predict(np.exp(log_lambda_U))
         ns = np.ones_like(cov)
         log_lambda_U_hat = np.log(aligner.fit(cov, ns))
         assert np.allclose(log_lambda_U_hat, log_lambda_U, atol=1e-4)
 
-        aligner = VCUKernelAligner(n_alleles=4, seq_length=3)
+        aligner = SitesVCKernelAligner(n_alleles=4, seq_length=3)
         log_lambda_U = np.array([1, 0.5, 0, 0.25, -1, -2, -1.5, -3])
         cov = aligner.predict(np.exp(log_lambda_U))
         ns = np.ones_like(cov)
