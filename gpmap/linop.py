@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from itertools import combinations, product
 
 import numpy as np
@@ -19,8 +18,8 @@ except ImportError:
     from scipy.sparse.linalg._interface import _CustomLinearOperator
 
 from gpmap.matrix import is_lower_triangular, kron, tensordot
-from gpmap.utils import check_error
 from gpmap.transform import ConnectednessToVUTransform
+from gpmap.utils import check_error
 
 
 class ExtendedLinearOperator(_CustomLinearOperator):
@@ -115,7 +114,7 @@ class InverseOperator(ExtendedLinearOperator):
         self.kwargs = kwargs
 
         if method not in ["minres", "cg", "direct", "exact"]:
-            msg = "Method {} not allowed".format(method)
+            msg = f"Method {method} not allowed"
             raise ValueError(msg)
         if method == "exact":
             if not hasattr(self.linop, "inv"):
@@ -144,7 +143,7 @@ class InverseOperator(ExtendedLinearOperator):
 
         elif self.method == "cg":
 
-            class cb(object):
+            class cb:
                 def __init__(self):
                     self.niter = 0
 
@@ -322,13 +321,13 @@ class StackedOperator(ExtendedLinearOperator):
 
         if axis == 0:
             ncol = np.unique(ncols)
-            msg = "Missmatch in number of columns: {}".format(ncols)
+            msg = f"Missmatch in number of columns: {ncols}"
             check_error(ncol.shape[0] == 1, msg=msg)
             self.shape = (np.sum(nrows), ncol[0])
 
         elif axis == 1:
             nrow = np.unique(nrows)
-            msg = "Missmatch in number of rows: {}".format(nrows)
+            msg = f"Missmatch in number of rows: {nrows}"
             check_error(nrow.shape[0] == 1, msg=msg)
             self.shape = (nrow[0], np.sum(ncols))
         else:
@@ -602,7 +601,7 @@ class LaplacianOperator(ConstantDiagSeqOperator):
     def __init__(self, n_alleles, seq_length):
         super().__init__(n_alleles=n_alleles, seq_length=seq_length)
         self.d = (self.alpha - 1) * self.seq_length
-        self.lambdas = np.arange(self.seq_length + 1) * self.alpha
+        self.lambdas = np.arange(self.seq_length + 1, dtype=float) * self.alpha
         self.lambdas_multiplicity = [
             comb(self.seq_length, k) * (self.alpha - 1) ** k
             for k in range(self.lp1)
@@ -843,7 +842,7 @@ class ProjectionOperator(ConstantDiagSeqOperator, KrawtchoukOperator):
 
         if lambdas is None:
             lambdas = np.zeros(self.lp1)
-            lambdas[k] = 1
+            lambdas[k] = 1.0
 
         return lambdas
 
@@ -1256,7 +1255,7 @@ class KernelOperator(SubMatrixOperator):
             return self.n * self.P.d
 
 
-class Kernel(object):
+class Kernel:
     def compute(self, x1=None, x2=None, D=None):
         K = KernelOperator(self, x1, x2)
         if D is not None:
@@ -1290,7 +1289,7 @@ class ConnectednessKernel(ConnectednessProjectionOperator, Kernel):
         return np.log(self.get_mu())
 
 
-class MultivariateGaussian(object):
+class MultivariateGaussian:
     def __init__(self, mu, Sigma):
         msg = "The size of the mean should match the covariance matrix"
         check_error(mu.shape[0] == Sigma.shape[0], msg=msg)

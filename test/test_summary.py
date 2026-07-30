@@ -68,22 +68,22 @@ class GPmapSummaryTests(unittest.TestCase):
         assert np.allclose(k_vcs["variance"], [0, 4])
 
     def test_calc_V_U_variance_components_constant(self):
-        f = np.array([1, 1, 1, 1])
+        f = np.array([1, 1, 1, 1.])
         V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
         assert np.allclose(V_U_vcs["variance"], 0)
 
     def test_calc_V_U_variance_components_site1(self):
-        f = np.array([1, 1, -1, -1])
+        f = np.array([1, 1, -1, -1.])
         V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
         assert np.allclose(V_U_vcs["variance"], [4, 0, 0])
 
     def test_calc_V_U_variance_components_site2(self):
-        f = np.array([1, -1, 1, -1])
+        f = np.array([1, -1, 1, -1.])
         V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
         assert np.allclose(V_U_vcs["variance"], [0, 4, 0])
 
     def test_calc_V_U_variance_components_pairwise(self):
-        f = np.array([1, -1, -1, 1])
+        f = np.array([1, -1, -1, 1.])
         V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
         assert np.allclose(V_U_vcs["variance"], [0, 0, 4])
 
