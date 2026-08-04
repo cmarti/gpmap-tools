@@ -331,7 +331,7 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             mean_post, Sigma_post, X_pred=X_pred, B=B
         )
 
-    def fit(self, X, y, y_var=None, method="L-BFGS-B"):
+    def fit(self, X, y, y_var=None):
         """
         Fits the Local Epistasis Regression (LER) model hyperparameters
         to the provided data.
@@ -355,13 +355,10 @@ class LocalEpistasisRegression(GaussianProcessRegressor):
             Array containing the empirical or experimental variance for the
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
-
-        method : str, optional
-            Optimization method to use during kernel alignment. Default is 'L-BFGS-B'.
         """
         self.set_data(X, y, y_var=y_var)
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
-        x = self.aligner.fit(cov, ns, mean=y.mean(), method=method)
+        x = self.aligner.fit(cov, ns, mean=y.mean())
         lambda_U_lower_than_P = x[: self.n_U_lower_than_P]
         a_values = x[self.n_U_lower_than_P :]
 
@@ -861,7 +858,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         df = pd.DataFrame({"decay_factor": decay_factors}, index=sites)
         return df
 
-    def fit(self, X, y, y_var=None, method="L-BFGS-B"):
+    def fit(self, X, y, y_var=None):
         """
         Infers the site-specific decay factors from the provided data.
 
@@ -888,8 +885,6 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
             measurements in `y`. If not provided, it is assumed to be uniform
             or unknown.
 
-        method : str, optional
-            Optimization method to use during kernel alignment. Default is 'L-BFGS-B'.
         """
         self.define_space(genotypes=X)
         self.aligner = ConnectednessKernelAligner(
@@ -897,7 +892,7 @@ class ConnectednessModelRegression(GaussianProcessRegressor):
         )
         self.set_data(X, y, y_var=y_var)
         cov, ns = self.gpdata.calc_covariance_U_sites(centered=False)
-        mu = self.aligner.fit(cov, ns, mean=y.mean(), method=method)
+        mu = self.aligner.fit(cov, ns, mean=y.mean())
         self.set_params(mu=mu)
 
 
