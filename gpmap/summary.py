@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 from itertools import chain, combinations, product
 from typing import List, Optional
 
@@ -11,6 +10,7 @@ from gpmap.linop import (
     CovarianceDistanceOperator,
     CovarianceSitesOperator,
     DeltaPOperator,
+    DeltaUDOperator,
     DeltaUOperator,
     ProjectionOperator,
     VUProjectionOperator,
@@ -83,7 +83,7 @@ class GPmapSummarizer:
         vcs["variance_perc_cum"] = np.cumsum(vcs["variance_perc"])
         return vcs
 
-    def calc_root_mean_squared_epistatic_coeff(self, P=2, f=None):
+    def calc_root_mean_squared_epistatic_coeff(self, P=2):
         """
         Compute root mean squared epistatic coefficient of order `P`
         across all possible combinations of P mutations in the complete
@@ -95,24 +95,18 @@ class GPmapSummarizer:
             The order of local epistatic coefficients to compute e.g. P=1
             reflects mutational effects, P=2 epistatic coefficients, etc.
 
-        f : array-like, optional
-            Phenotype values for every genotype in lexicographic order.
-            If None, the instance attribute `self.f` is used. If both are None,
-            a ValueError is raised.
-
         Returns
         -------
         rmsec : float
             Root mean squared epistatic coefficient of order `P`
         """
-        f = self.get_f(f)
         Delta = DeltaPOperator(self.n_alleles, self.seq_length, P)
-        rmsec = np.sqrt(quad(Delta, f) / Delta.n_p_faces)
+        rmsec = np.sqrt(quad(Delta, self.f) / Delta.n_p_faces)
         return rmsec
-    
-    def calc_U_root_mean_squared_epistatic_coeffs(self, P=2, f=None):
+
+    def calc_U_root_mean_squared_epistatic_coeffs(self, P=2):
         """
-        Compute root mean squared P-way epistatic coefficient 
+        Compute root mean squared P-way epistatic coefficient
         for each possible all possible combinations of P mutations
         in the complete genotype-phenotype map.
 
@@ -122,29 +116,22 @@ class GPmapSummarizer:
             The order of local epistatic coefficients to compute e.g. P=1
             reflects mutational effects, P=2 epistatic coefficients, etc.
 
-        f : array-like, optional
-            Phenotype values for every genotype in lexicographic order.
-            If None, the instance attribute `self.f` is used. If both are None,
-            a ValueError is raised.
-
         Returns
         -------
         rmsec : pd.DataFrame
             Root mean squared epistatic coefficient of order for each
             combination of sites U.
         """
-        f = self.get_f(f)
-        
         rmsecs = []
         for U in combinations(self.positions, P):
-            DeltaU = DeltaUOperator(self.n_alleles, self.seq_length, U)
-            rmsec = np.sqrt(quad(DeltaU, f) / DeltaU.n_U_faces)
+            asec = self.calc_U_avg_squared_epistatic_coeff(U)
+            rmsec = np.sqrt(asec)
             rmsecs.append(list(U) + [rmsec])
-        columns = [f'site{i+1}' for i in range(P)] + ['rmsec']
+        columns = [f"site{i + 1}" for i in range(P)] + ["rmsec"]
         rmsecs = pd.DataFrame(rmsecs, columns=columns)
         return rmsecs
 
-    def calc_V_k_variance_components(self, f=None):
+    def calc_V_k_variance_components(self):
         """
         Compute variance components contributed by interactions of each order k.
 
@@ -153,12 +140,6 @@ class GPmapSummarizer:
         method projects `f` onto the corresponding subspace using
         ProjectionOperator and computes its norm.
 
-        Parameters
-        ----------
-        f : array-like, optional
-            Phenotype values for every genotype in lexicographic order.
-            If None, the instance attribute `self.f` is used. If both are None,
-            a ValueError is raised.
 
         Returns
         -------
@@ -174,17 +155,15 @@ class GPmapSummarizer:
         -----
         Percentages are scaled so that the sum of ``variance_perc`` is 100.
         """
-        f = self.get_f(f)
-
         vcs = []
         for k in np.arange(1, self.seq_length + 1):
             P_k = ProjectionOperator(self.n_alleles, self.seq_length, k=k)
-            vcs.append({"k": k, "variance": quad(P_k, f)})
+            vcs.append({"k": k, "variance": quad(P_k, self.f)})
         vcs = pd.DataFrame(vcs)
         vcs = self.calc_variance_perc(vcs)
         return vcs
 
-    def calc_V_U_variance_components(self, f=None):
+    def calc_V_U_variance_components(self):
         """
         Compute variance components contributed by interactions between every
         possible subset of sites U.
@@ -193,13 +172,6 @@ class GPmapSummarizer:
         genetic interactions involving all subsets of sites U. For each U this
         method projects `f` onto the corresponding subspace using
         VUProjectionOperator and computes its norm.
-
-        Parameters
-        ----------
-        f : array-like, optional
-            Phenotype values for every genotype in lexicographic order.
-            If None, the instance attribute `self.f` is used. If both are None,
-            a ValueError is raised.
 
         Returns
         -------
@@ -216,13 +188,11 @@ class GPmapSummarizer:
         -----
         Percentages are scaled so that the sum of ``variance_perc`` is 100.
         """
-        f = self.get_f(f)
-
         V_U_vcs = []
         for k in range(1, 10):
             for U in combinations(self.positions, k):
                 P_U = VUProjectionOperator(self.n_alleles, self.seq_length, U)
-                V_U_vcs.append({"U": set(U), "k": k, "variance": quad(P_U, f)})
+                V_U_vcs.append({"U": set(U), "k": k, "variance": quad(P_U, self.f)})
         V_U_vcs = pd.DataFrame(V_U_vcs)
         V_U_vcs = self.calc_variance_perc(V_U_vcs)
         return V_U_vcs
@@ -337,6 +307,162 @@ class GPmapSummarizer:
         vcs = pd.DataFrame(vcs)
         vcs["variance_perc"] = 100 * vcs["variance"] / total_variance
         return vcs
+
+    def calc_U_avg_squared_epistatic_coeff(self, U):
+        """
+        Compute the average of squared epistatic coefficients at sites U
+        across all genetic backgrounds.
+
+        Parameters
+        ----------
+        U : tuple of int
+            Subset of sites to consider epistatic coefficients.
+
+        Returns
+        -------
+        float
+            The average of squared epistatic coefficients at sites U.
+        """
+        DeltaU = DeltaUOperator(self.n_alleles, self.seq_length, U)
+        avg_squared_epistatic_coeff = quad(DeltaU, self.f) / DeltaU.n_U_faces
+        return avg_squared_epistatic_coeff
+
+    def calc_U_avg_squared_mean_epistatic_coeff(self, U):
+        """
+        Compute the average of squared mean epistatic coefficients at sites U
+        across all genetic backgrounds.
+
+        Parameters
+        ----------
+        U : tuple of int
+            Subset of sites to consider epistatic coefficients.
+
+        Returns
+        -------
+        float
+            The average of squared mean epistatic coefficients at sites U.
+        """
+        k = len(U)
+        a = self.n_alleles
+        l = self.seq_length
+        c = 2**k / (a ** (l - k) * (a - 1) ** k)
+        W_U = VUProjectionOperator(self.n_alleles, self.seq_length, U)
+        avg_sq_mean_epistatic_coeff = c * quad(W_U, self.f)
+        return avg_sq_mean_epistatic_coeff
+
+    def calc_Gamma_U_D(self, U, D):
+        """
+        Compute the Gamma statistic measuring the predictability of
+        epistatic coefficients between sites U across genetic backgrounds
+        differing at sites D.
+
+        Parameters
+        ----------
+        U : tuple of int
+            Subset of sites to consider epistatic coefficients.
+        D : int
+            Subset of sites at which genetic backgrounds differ.
+
+        Returns
+        -------
+        float
+            The Gamma statistic for the specified subset of sites and distance.
+        """
+        DeltaUD = DeltaUDOperator(self.n_alleles, self.seq_length, U, D)
+        Gamma_U_D = DeltaUD.c * quad(DeltaUD, self.f)
+        return Gamma_U_D
+
+    def calc_gamma_U_D(self, U, D):
+        """
+        Compute the gamma statistic measuring the predictability of
+        epistatic coefficients between sites U across genetic backgrounds
+        differing at sites D normalized by the variance in epistatic
+        coefficients at sites U.
+
+        Parameters
+        ----------
+        U : tuple of int
+            Subset of sites to consider epistatic coefficients.
+        D : int
+            Subset of sites at which genetic backgrounds differ.
+
+        Returns
+        -------
+        float
+            The gamma statistic for the specified subset of sites and distance.
+        """
+        Gamma_U_D = self.calc_Gamma_U_D(U, D)
+        Gamma_U_D0 = self.calc_Gamma_U_D(U, [])
+        gamma_U_D = Gamma_U_D / Gamma_U_D0
+        return gamma_U_D
+
+    def calc_covariance_U_D(self, U, D):
+        """
+        Compute the covariance in epistatic coefficients at sites U
+        across genetic backgrounds differing at sites D.
+
+        Parameters
+        ----------
+        U : tuple of int
+            Subset of sites to consider epistatic coefficients.
+        D : int
+            Subset of sites at which genetic backgrounds differ.
+
+        Returns
+        -------
+        float
+            The covariance in epistatic coefficients for the specified
+            subset of sites and distance.
+        """
+        Gamma_U_D = self.calc_Gamma_U_D(U, D)
+        asmec = self.calc_U_avg_squared_mean_epistatic_coeff(U)
+        covariance_U_D = Gamma_U_D - asmec
+        return covariance_U_D
+
+    def calc_correlation_U_D(self, U, D):
+        """
+        Compute the correlation in epistatic coefficients at sites U
+        across genetic backgrounds differing at sites D.
+
+        Parameters
+        ----------
+        U : tuple of int
+            Subset of sites to consider epistatic coefficients.
+        D : int
+            Subset of sites at which genetic backgrounds differ.
+
+        Returns
+        -------
+        float
+            The correlation in epistatic coefficients for the specified
+            subset of sites and distance.
+        """
+        covariance_U_D = self.calc_covariance_U_D(U, D)
+        covariance_U_D0 = self.calc_covariance_U_D(U, [])
+        correlation_U_D = covariance_U_D / covariance_U_D0
+        return correlation_U_D
+
+    def calc_gamma_i_to_j(self):
+        """
+        Compute the gamma statistic measuring the predictability of
+        mutational effects at site i across genetic backgrounds
+        differing at site j.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with columns 'site_i', 'site_j', and 'gamma'
+            containing the gamma statistics for all pairs of sites.
+        """
+        gammas = []
+        for i, j in combinations(self.positions, 2):
+            gamma_ij = self.calc_gamma_U_D([i], [j])
+            gammas.append({"site_i": i, "site_j": j, "gamma": gamma_ij})
+
+            gamma_ji = self.calc_gamma_U_D([j], [i])
+            gammas.append({"site_i": j, "site_j": i, "gamma": gamma_ji})
+
+        return pd.DataFrame(gammas)
 
 
 class GPDataSummarizer(SequenceSpaceRelatedObject):
@@ -558,7 +684,9 @@ class GPDataSummarizer(SequenceSpaceRelatedObject):
         from ``kron([[-1, 1]] * P)``.
         """
         if P < 1 or P > self.seq_length:
-            msg = f"P must be between 1 and sequence length of {self.seq_length}"
+            msg = (
+                f"P must be between 1 and sequence length of {self.seq_length}"
+            )
             raise ValueError(msg)
 
         v = dict(zip(self.X, self.y))

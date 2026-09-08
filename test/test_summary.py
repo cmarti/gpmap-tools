@@ -32,59 +32,70 @@ class GPmapSummaryTests(unittest.TestCase):
 
     def test_root_mean_squared_epistatic_coeff_constant(self):
         f = np.array([1, 1, 1, 1])
-        rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2, f=f)
+        self.summarizer.set_f(f)
+        rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2)
         assert np.allclose(rmsec, 0)
 
     def test_root_mean_squared_epistatic_coeff_additive(self):
         f = np.array([1, 0, 0, -1])
-        rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2, f=f)
+        self.summarizer.set_f(f)
+        rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2)
         assert np.allclose(rmsec, 0)
 
     def test_root_mean_squared_epistatic_coeff_pairwise(self):
         f = np.array([1, -1, -1, 1])
-        rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2, f=f)
+        self.summarizer.set_f(f)
+        rmsec = self.summarizer.calc_root_mean_squared_epistatic_coeff(P=2)
         assert np.allclose(rmsec, 4.0)
 
     def test_root_U_mean_squared_epistatic_coeffs(self):
         summarizer = GPmapSummarizer(2, 3)
         f = np.array([1, -1, -1, 1, 1, -1, -1, 1])
-        rmsecs = summarizer.calc_U_root_mean_squared_epistatic_coeffs(P=2, f=f)
+        summarizer.set_f(f)
+        rmsecs = summarizer.calc_U_root_mean_squared_epistatic_coeffs(P=2)
         assert np.allclose(rmsecs["rmsec"], [0, 0, 4.0])
 
     def test_calc_V_k_variance_components_constant(self):
         f = np.array([1, 1, 1, 1])
-        k_vcs = self.summarizer.calc_V_k_variance_components(f)
+        self.summarizer.set_f(f)
+        k_vcs = self.summarizer.calc_V_k_variance_components()
         assert k_vcs.shape[0] == 2
         assert np.allclose(k_vcs["variance"], 0)
 
     def test_calc_V_k_variance_components_additive(self):
         f = np.array([1, 0, 0, -1])
-        k_vcs = self.summarizer.calc_V_k_variance_components(f)
+        self.summarizer.set_f(f)
+        k_vcs = self.summarizer.calc_V_k_variance_components()
         assert np.allclose(k_vcs["variance"], [2, 0])
 
     def test_calc_V_k_variance_components_pairwise(self):
         f = np.array([1, -1, -1, 1])
-        k_vcs = self.summarizer.calc_V_k_variance_components(f)
+        self.summarizer.set_f(f)
+        k_vcs = self.summarizer.calc_V_k_variance_components()
         assert np.allclose(k_vcs["variance"], [0, 4])
 
     def test_calc_V_U_variance_components_constant(self):
-        f = np.array([1, 1, 1, 1.])
-        V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
+        f = np.array([1, 1, 1, 1.0])
+        self.summarizer.set_f(f)
+        V_U_vcs = self.summarizer.calc_V_U_variance_components()
         assert np.allclose(V_U_vcs["variance"], 0)
 
     def test_calc_V_U_variance_components_site1(self):
-        f = np.array([1, 1, -1, -1.])
-        V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
+        f = np.array([1, 1, -1, -1.0])
+        self.summarizer.set_f(f)
+        V_U_vcs = self.summarizer.calc_V_U_variance_components()
         assert np.allclose(V_U_vcs["variance"], [4, 0, 0])
 
     def test_calc_V_U_variance_components_site2(self):
-        f = np.array([1, -1, 1, -1.])
-        V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
+        f = np.array([1, -1, 1, -1.0])
+        self.summarizer.set_f(f)
+        V_U_vcs = self.summarizer.calc_V_U_variance_components()
         assert np.allclose(V_U_vcs["variance"], [0, 4, 0])
 
     def test_calc_V_U_variance_components_pairwise(self):
-        f = np.array([1, -1, -1, 1.])
-        V_U_vcs = self.summarizer.calc_V_U_variance_components(f)
+        f = np.array([1, -1, -1, 1.0])
+        self.summarizer.set_f(f)
+        V_U_vcs = self.summarizer.calc_V_U_variance_components()
         assert np.allclose(V_U_vcs["variance"], [0, 0, 4])
 
     def test_calc_sites_not_in_U_error(self):
@@ -107,6 +118,66 @@ class GPmapSummaryTests(unittest.TestCase):
         assert pairs_vcs.shape[0] == 1
         assert np.allclose(pairs_vcs["variance"], 1)
         assert np.allclose(pairs_vcs["variance_perc"], 100)
+
+    def test_calc_gamma_U_D_errors(self):
+        f = np.array([1, -1, -1, 1])
+        self.summarizer.set_f(f)
+
+        with self.assertRaises(ValueError):
+            self.summarizer.calc_gamma_U_D(U=[0, 1], D=[0, 1])
+
+        with self.assertRaises(ValueError):
+            self.summarizer.calc_gamma_U_D(U=[0, 1, 2], D=[])
+
+    def test_calc_gamma_U_D_additive(self):
+        f = np.array([1, 0, 0, -1])
+        self.summarizer.set_f(f)
+
+        gamma_1_to_2 = self.summarizer.calc_gamma_U_D(U=[1], D=[0])
+        assert np.allclose(gamma_1_to_2, 1.0)
+
+        gamma_2_to_1 = self.summarizer.calc_gamma_U_D(U=[0], D=[1])
+        assert np.allclose(gamma_2_to_1, 1.0)
+
+    def test_calc_gamma_U_D_anticorrelated(self):
+        f = np.array([1, -1, -1, 1])
+        self.summarizer.set_f(f)
+
+        gamma_1_to_2 = self.summarizer.calc_gamma_U_D(U=[1], D=[0])
+        assert np.allclose(gamma_1_to_2, -1.0)
+
+        gamma_2_to_1 = self.summarizer.calc_gamma_U_D(U=[0], D=[1])
+        assert np.allclose(gamma_2_to_1, -1.0)
+
+    def test_calc_gamma_U_D_arbitrary(self):
+        f = np.array([1, 0, 0, -2])
+        self.summarizer.set_f(f)
+        U, D = [1], [0]
+        
+        gamma_UD = self.summarizer.calc_gamma_U_D(U, D)
+        asec_U = self.summarizer.calc_U_avg_squared_epistatic_coeff(U)
+        asec_UD = self.summarizer.calc_U_avg_squared_epistatic_coeff(U + D)
+        assert np.allclose(gamma_UD, 1 - (asec_UD / (2 * asec_U)))
+    
+    def test_calc_gamma_U_D_random(self):
+        f = np.random.normal(size=4)
+        self.summarizer.set_f(f)
+        
+        U, D = [1], [0]
+        gamma_UD = self.summarizer.calc_gamma_U_D(U, D)
+        asec_U = self.summarizer.calc_U_avg_squared_epistatic_coeff(U)
+        asec_UD = self.summarizer.calc_U_avg_squared_epistatic_coeff(U + D)
+        assert np.allclose(gamma_UD, 1 - (asec_UD / (2 * asec_U)))
+    
+    def test_calc_gamma_U_D_random_epistatic_coeffs(self):
+        f = np.random.normal(size=8)
+        self.summarizer = GPmapSummarizer(2, 3, f=f)
+        
+        U, D = [1, 2], [0]
+        gamma_UD = self.summarizer.calc_gamma_U_D(U, D)
+        asec_U = self.summarizer.calc_U_avg_squared_epistatic_coeff(U)
+        asec_UD = self.summarizer.calc_U_avg_squared_epistatic_coeff(U + D)
+        assert np.allclose(gamma_UD, 1 - (asec_UD / (2 * asec_U)))
 
     def test_summarize_gb1(self):
         rmsec = self.gb1.calc_root_mean_squared_epistatic_coeff(P=2)
@@ -137,6 +208,15 @@ class GPmapSummaryTests(unittest.TestCase):
             V_U_vcs, min_k=3
         )
         assert not np.allclose(pairs_vcs, pairs_vcs_high_order)
+
+        U, D = [2], [3]
+        gamma_UD = self.gb1.calc_gamma_U_D(U=U, D=D)
+        asec_U = self.gb1.calc_U_avg_squared_epistatic_coeff(U)
+        asec_UD = self.gb1.calc_U_avg_squared_epistatic_coeff(U + D)
+        assert np.allclose(gamma_UD, 1 - (asec_UD / (2 * asec_U)))
+
+        gamma_i_to_j = self.gb1.calc_gamma_i_to_j()
+        assert gamma_i_to_j.shape == (12, 3)
 
 
 class GPDataSummaryTests(unittest.TestCase):

@@ -962,6 +962,41 @@ class CovarianceSitesOperator(SeqOperator, KronOperator):
         C0 = IdentityOperator(self.alpha)
         C1 = np.ones((self.alpha, self.alpha)) - np.eye(self.alpha)
         return [C1 if i in self.sites else C0 for i in range(self.seq_length)]
+    
+
+class DeltaUDOperator(SeqOperator, KronOperator):
+    symmetric = True
+
+    def __init__(self, n_alleles, seq_length, U, D):
+        k, d = len(U), len(D)
+        if len(set(U).intersection(set(D))) > 0:
+            msg = "U and D must be disjoint sets"
+            raise ValueError(msg)
+        sites = list(range(seq_length))
+        if len(set(sites).intersection(set(D))) > seq_length or d > seq_length:
+            msg = "D must be a subset of the sites"
+            raise ValueError(msg)
+        if len(set(sites).intersection(set(U))) > seq_length or k > seq_length:
+            msg = "U must be a subset of the sites"
+            raise ValueError(msg)
+        
+        SeqOperator.__init__(self, n_alleles, seq_length)
+        self.U = U
+        self.D = D
+        self.c = 2 ** len(U) / (self.alpha ** self.seq_length * (self.alpha - 1) ** (len(D) + len(U)))
+        KronOperator.__init__(self, self.get_matrices())
+
+    def get_matrices(self):
+        matrices = []
+        for site in range(self.seq_length):
+            if site in self.U:
+                m = self.alpha * PaddOperator(self.alpha)
+            elif site in self.D:
+                m = PonesOperator(self.alpha) - IdentityOperator(self.alpha)
+            else:
+                m = IdentityOperator(self.alpha)
+            matrices.append(m)
+        return matrices
 
 
 class VUOperator(ConstantDiagSeqOperator, KronOperator):
