@@ -192,7 +192,9 @@ class GPmapSummarizer:
         for k in range(1, 10):
             for U in combinations(self.positions, k):
                 P_U = VUProjectionOperator(self.n_alleles, self.seq_length, U)
-                V_U_vcs.append({"U": set(U), "k": k, "variance": quad(P_U, self.f)})
+                V_U_vcs.append(
+                    {"U": set(U), "k": k, "variance": quad(P_U, self.f)}
+                )
         V_U_vcs = pd.DataFrame(V_U_vcs)
         V_U_vcs = self.calc_variance_perc(V_U_vcs)
         return V_U_vcs
@@ -451,16 +453,32 @@ class GPmapSummarizer:
         Returns
         -------
         pd.DataFrame
-            A DataFrame with columns 'site_i', 'site_j', and 'gamma'
+            A DataFrame with columns 'site_i', 'site_j', 'gamma', and 'correlation'
             containing the gamma statistics for all pairs of sites.
         """
         gammas = []
         for i, j in combinations(self.positions, 2):
             gamma_ij = self.calc_gamma_U_D([i], [j])
-            gammas.append({"site_i": i, "site_j": j, "gamma": gamma_ij})
+            corr_ij = self.calc_correlation_U_D([i], [j])
+            gammas.append(
+                {
+                    "site_i": i,
+                    "site_j": j,
+                    "gamma": gamma_ij,
+                    "correlation": corr_ij,
+                }
+            )
 
             gamma_ji = self.calc_gamma_U_D([j], [i])
-            gammas.append({"site_i": j, "site_j": i, "gamma": gamma_ji})
+            corr_ji = self.calc_correlation_U_D([j], [i])
+            gammas.append(
+                {
+                    "site_i": j,
+                    "site_j": i,
+                    "gamma": gamma_ji,
+                    "correlation": corr_ji,
+                }
+            )
 
         return pd.DataFrame(gammas)
 

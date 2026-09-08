@@ -216,7 +216,7 @@ class GPmapSummaryTests(unittest.TestCase):
         assert np.allclose(gamma_UD, 1 - (asec_UD / (2 * asec_U)))
 
         gamma_i_to_j = self.gb1.calc_gamma_i_to_j()
-        assert gamma_i_to_j.shape == (12, 3)
+        assert gamma_i_to_j.shape == (12, 4)
 
 
 class GPDataSummaryTests(unittest.TestCase):
