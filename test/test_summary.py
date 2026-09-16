@@ -1,14 +1,13 @@
-#!/usr/bin/env python
 import unittest
+from itertools import product, combinations
 
 import numpy as np
 import pandas as pd
-
-from itertools import product
 from scipy.special import comb
+
 from gpmap.datasets import DataSet
 from gpmap.inference import VCregression
-from gpmap.summary import GPmapSummarizer, GPDataSummarizer
+from gpmap.summary import GPDataSummarizer, GPmapSummarizer
 
 
 class GPmapSummaryTests(unittest.TestCase):
@@ -139,6 +138,17 @@ class GPmapSummaryTests(unittest.TestCase):
         gamma_2_to_1 = self.summarizer.calc_gamma_U_D(U=[0], D=[1])
         assert np.allclose(gamma_2_to_1, 1.0)
 
+        alleles = [(0, 1)]
+        gamma_1_to_2 = self.summarizer.calc_gamma_U_D(
+            U=[1], D=[0], U_alleles=alleles, D_alleles=alleles
+        )
+        assert np.allclose(gamma_1_to_2, 1.0)
+
+        gamma_2_to_1 = self.summarizer.calc_gamma_U_D(
+            U=[0], D=[1], U_alleles=alleles, D_alleles=alleles
+        )
+        assert np.allclose(gamma_2_to_1, 1.0)
+
     def test_calc_gamma_U_D_anticorrelated(self):
         f = np.array([1, -1, -1, 1])
         self.summarizer.set_f(f)
@@ -149,16 +159,33 @@ class GPmapSummaryTests(unittest.TestCase):
         gamma_2_to_1 = self.summarizer.calc_gamma_U_D(U=[0], D=[1])
         assert np.allclose(gamma_2_to_1, -1.0)
 
+        alleles = [(0, 1)]
+        gamma_1_to_2 = self.summarizer.calc_gamma_U_D(
+            U=[1], D=[0], U_alleles=alleles, D_alleles=alleles
+        )
+        assert np.allclose(gamma_1_to_2, -1.0)
+
+        gamma_2_to_1 = self.summarizer.calc_gamma_U_D(
+            U=[0], D=[1], U_alleles=alleles, D_alleles=alleles
+        )
+        assert np.allclose(gamma_2_to_1, -1.0)
+
     def test_calc_gamma_U_D_arbitrary(self):
         f = np.array([1, 0, 0, -2])
         self.summarizer.set_f(f)
         U, D = [1], [0]
-        
+        alleles = [(0, 1)]
+
         gamma_UD = self.summarizer.calc_gamma_U_D(U, D)
         asec_U = self.summarizer.calc_U_avg_squared_epistatic_coeff(U)
         asec_UD = self.summarizer.calc_U_avg_squared_epistatic_coeff(U + D)
         assert np.allclose(gamma_UD, 1 - (asec_UD / (2 * asec_U)))
-    
+
+        gamma_UD_alleles = self.summarizer.calc_gamma_U_D(
+            U, D, U_alleles=alleles, D_alleles=alleles
+        )
+        assert np.allclose(gamma_UD_alleles, gamma_UD)
+
     def test_calc_gamma_U_D_order(self):
         f = np.array([1, 0, -5, -4])
         self.summarizer.set_f(f)
@@ -172,22 +199,159 @@ class GPmapSummaryTests(unittest.TestCase):
     def test_calc_gamma_U_D_random(self):
         f = np.random.normal(size=4)
         self.summarizer.set_f(f)
-        
+
         U, D = [1], [0]
         gamma_UD = self.summarizer.calc_gamma_U_D(U, D)
         asec_U = self.summarizer.calc_U_avg_squared_epistatic_coeff(U)
         asec_UD = self.summarizer.calc_U_avg_squared_epistatic_coeff(U + D)
         assert np.allclose(gamma_UD, 1 - (asec_UD / (2 * asec_U)))
-    
+
+    def test_calc_gamma_i_to_j_alleles_additive(self):
+        f = np.array([-1, 1, 0.0, -1, 1, 0.0, -1, 1, 0.0])
+        s = GPmapSummarizer(3, 2, f=f)
+
+        gamma_A1B_A2B = s.calc_gamma_U_D(
+            U=[1], D=[0], U_alleles=[(0, 1)], D_alleles=[(0, 1)]
+        )
+        assert np.allclose(gamma_A1B_A2B, 1)
+
+        gamma_A1B_A2C = s.calc_gamma_U_D(
+            U=[1], D=[0], U_alleles=[(0, 2)], D_alleles=[(0, 1)]
+        )
+        assert np.allclose(gamma_A1B_A2C, 1)
+
+    def test_calc_gamma_i_to_j_alleles_epistatic(self):
+        f = np.array([-1, 1, 0.0, -1, 1, 0.0, 1, -1, 0.0])
+        s = GPmapSummarizer(3, 2, f=f)
+
+        gamma_A1C_A2C = s.calc_gamma_U_D(
+            U=[1], D=[0], U_alleles=[(0, 2)], D_alleles=[(0, 2)]
+        )
+        assert np.allclose(gamma_A1C_A2C, -1.0)
+
+        gamma_A1C_A2B = s.calc_gamma_U_D(
+            U=[1], D=[0], U_alleles=[(0, 1)], D_alleles=[(0, 2)]
+        )
+        assert np.allclose(gamma_A1C_A2B, -1.0)
+
+    def test_calc_Gamma_i_to_j_alleles_random(self):
+        f = np.random.normal(size=4**8)
+        s = GPmapSummarizer(4, 8, f=f)
+        U, D = [1], [0]
+
+        Gamma_UD_1 = s.calc_Gamma_U_D(U, D)
+        Gamma_UD_2 = []
+        for c1, c2 in combinations(range(4), 2):
+            Gamma_UD_2.append(s.calc_Gamma_U_D(U, D, U_alleles=[(c1, c2)]))
+        Gamma_UD_2 = np.mean(Gamma_UD_2)
+        assert np.allclose(Gamma_UD_1, Gamma_UD_2)
+
+        Gamma_UD_3 = []
+        for c1, c2 in combinations(range(4), 2):
+            Gamma_UD_3.append(s.calc_Gamma_U_D(U, D, D_alleles=[(c1, c2)]))
+        Gamma_UD_3 = np.mean(Gamma_UD_3)
+        assert np.allclose(Gamma_UD_1, Gamma_UD_3)
+
+    def test_calc_Gamma_U_D_alleles_random(self):
+        alpha = 5
+        f = np.random.normal(size=alpha**8)
+        s = GPmapSummarizer(alpha, 8, f=f)
+        U, D = [0, 1], [2, 3]
+
+        Gamma_UD_1 = s.calc_Gamma_U_D(U, D)
+        Gamma_UD_2 = []
+        pairs = list(combinations(range(alpha), 2))
+        for U_alleles in product(pairs, repeat=2):
+            Gamma_UD_2.append(s.calc_Gamma_U_D(U, D, U_alleles=U_alleles))
+        Gamma_UD_2 = np.mean(Gamma_UD_2)
+        assert np.allclose(Gamma_UD_1, Gamma_UD_2)
+
+        Gamma_UD_3 = []
+        for D_alleles in product(pairs, repeat=2):
+            Gamma_UD_3.append(s.calc_Gamma_U_D(U, D, D_alleles=D_alleles))
+        Gamma_UD_3 = np.mean(Gamma_UD_3)
+        assert np.allclose(Gamma_UD_1, Gamma_UD_3)
+
     def test_calc_gamma_U_D_random_epistatic_coeffs(self):
         f = np.random.normal(size=8)
         self.summarizer = GPmapSummarizer(2, 3, f=f)
-        
+
         U, D = [1, 2], [0]
         gamma_UD = self.summarizer.calc_gamma_U_D(U, D)
         asec_U = self.summarizer.calc_U_avg_squared_epistatic_coeff(U)
         asec_UD = self.summarizer.calc_U_avg_squared_epistatic_coeff(U + D)
         assert np.allclose(gamma_UD, 1 - (asec_UD / (2 * asec_U)))
+
+    def test_calc_gamma_i_to_j(self):
+        alpha, ell = 4, 6
+        f = np.random.normal(size=alpha**ell)
+        s = GPmapSummarizer(alpha, ell, f=f)
+
+        gamma_i_to_j = s.calc_gamma_i_to_j()
+        assert gamma_i_to_j.shape == (30, 4)
+
+    def test_calc_gamma_ij_D(self):
+        alpha, ell = 4, 6
+        f = np.random.normal(size=alpha**ell)
+        s = GPmapSummarizer(alpha, ell, f=f)
+        D = [0]
+
+        gamma_ij_D = s.calc_gamma_ij_D(D)
+        assert gamma_ij_D.shape == (10, 4)
+
+    def test_calc_gamma_AiBi_to_AjBj(self):
+        alpha, ell = 4, 6
+        f = np.random.normal(size=alpha**ell)
+        s = GPmapSummarizer(alpha, ell, f=f)
+
+        gamma_AiBi_to_AjBj = s.calc_gamma_AiBi_to_AjBj()
+        assert gamma_AiBi_to_AjBj.shape == (1080, 8)
+
+    def test_calc_gamma_AiBiAjBj_D(self):
+        alpha, ell = 4, 6
+        f = np.random.normal(size=alpha**ell)
+        s = GPmapSummarizer(alpha, ell, f=f)
+
+        gamma_AiBiAjBj_D = s.calc_gamma_AiBiAjBj_D(D=[0], D_alleles=[(0, 1)])
+        assert gamma_AiBiAjBj_D.shape == (360, 8)
+
+    def test_calc_U_avg_squared_mean_epistatic_coeff(self):
+        f = np.array([-1.5, -0.5, 0.0, -1.5, -0.5, 0.0, -1.5, -0.5, 0.0])
+        s = GPmapSummarizer(3, 2, f=f)
+
+        U = [0]
+        asmec01 = s.calc_U_avg_squared_mean_epistatic_coeff(
+            U, U_alleles=[(0, 1)]
+        )
+        assert np.allclose(asmec01, 0.0)
+
+        asmec02 = s.calc_U_avg_squared_mean_epistatic_coeff(
+            U, U_alleles=[(0, 2)]
+        )
+        assert np.allclose(asmec02, 0.0)
+
+        U = [1]
+        asmec01 = s.calc_U_avg_squared_mean_epistatic_coeff(
+            U, U_alleles=[(0, 1)]
+        )
+        assert np.allclose(asmec01, 1.0)
+
+        asmec02 = s.calc_U_avg_squared_mean_epistatic_coeff(
+            U, U_alleles=[(0, 2)]
+        )
+        assert np.allclose(asmec02, 1.5**2)
+
+    def test_calc_U_avg_squared_mean_epistatic_coeff_binary_random(self):
+        f = np.random.normal(size=2**10)
+        self.summarizer = GPmapSummarizer(2, 10, f=f)
+
+        U = [1]
+        U_alleles = [(0, 1)]
+        asmec1 = self.summarizer.calc_U_avg_squared_mean_epistatic_coeff(U)
+        asmec2 = self.summarizer.calc_U_avg_squared_mean_epistatic_coeff(
+            U, U_alleles
+        )
+        assert np.allclose(asmec1, asmec2)
 
     def test_summarize_gb1(self):
         rmsec = self.gb1.calc_root_mean_squared_epistatic_coeff(P=2)

@@ -13,6 +13,7 @@ from gpmap.linop import (
     DeltaUDOperator,
     DeltaUOperator,
     ProjectionOperator,
+    VUMutationOperator,
     VUProjectionOperator,
 )
 from gpmap.matrix import kron, quad, reciprocal
@@ -329,7 +330,7 @@ class GPmapSummarizer:
         avg_squared_epistatic_coeff = quad(DeltaU, self.f) / DeltaU.n_U_faces
         return avg_squared_epistatic_coeff
 
-    def calc_U_avg_squared_mean_epistatic_coeff(self, U):
+    def calc_U_avg_squared_mean_epistatic_coeff(self, U, U_alleles=None):
         """
         Compute the average of squared mean epistatic coefficients at sites U
         across all genetic backgrounds.
@@ -338,6 +339,8 @@ class GPmapSummarizer:
         ----------
         U : tuple of int
             Subset of sites to consider epistatic coefficients.
+        U_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites U to consider.
 
         Returns
         -------
@@ -347,12 +350,21 @@ class GPmapSummarizer:
         k = len(U)
         a = self.n_alleles
         l = self.seq_length
-        c = 2**k / (a ** (l - k) * (a - 1) ** k)
-        W_U = VUProjectionOperator(self.n_alleles, self.seq_length, U)
-        avg_sq_mean_epistatic_coeff = c * quad(W_U, self.f)
+
+        if U_alleles is None:
+            # Use equivalence between VU quad and average squared mean epistatic coefficients
+            c = 2**k / (a ** (l - k) * (a - 1) ** k)
+            W_U = VUProjectionOperator(self.n_alleles, self.seq_length, U)
+            avg_sq_mean_epistatic_coeff = c * quad(W_U, self.f)
+        else:
+            W_mut = VUMutationOperator(
+                self.n_alleles, self.seq_length, U, U_alleles
+            )
+            avg_sq_mean_epistatic_coeff = quad(W_mut, self.f) / W_mut.dim
+
         return avg_sq_mean_epistatic_coeff
 
-    def calc_Gamma_U_D(self, U, D):
+    def calc_Gamma_U_D(self, U, D, U_alleles=None, D_alleles=None):
         """
         Compute the Gamma statistic measuring the predictability of
         epistatic coefficients between sites U across genetic backgrounds
@@ -362,19 +374,30 @@ class GPmapSummarizer:
         ----------
         U : tuple of int
             Subset of sites to consider epistatic coefficients.
-        D : int
+        D : tuple of int
             Subset of sites at which genetic backgrounds differ.
+        U_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites U to consider.
+        D_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites D to consider.
 
         Returns
         -------
         float
             The Gamma statistic for the specified subset of sites and distance.
         """
-        DeltaUD = DeltaUDOperator(self.n_alleles, self.seq_length, U, D)
+        DeltaUD = DeltaUDOperator(
+            self.n_alleles,
+            self.seq_length,
+            U,
+            D,
+            U_alleles=U_alleles,
+            D_alleles=D_alleles,
+        )
         Gamma_U_D = DeltaUD.c * quad(DeltaUD, self.f)
         return Gamma_U_D
 
-    def calc_gamma_U_D(self, U, D):
+    def calc_gamma_U_D(self, U, D, U_alleles=None, D_alleles=None):
         """
         Compute the gamma statistic measuring the predictability of
         epistatic coefficients between sites U across genetic backgrounds
@@ -385,20 +408,31 @@ class GPmapSummarizer:
         ----------
         U : tuple of int
             Subset of sites to consider epistatic coefficients.
-        D : int
+        D : tuple of int
             Subset of sites at which genetic backgrounds differ.
+        U_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites U to consider.
+        D_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites D to consider.
 
         Returns
         -------
         float
             The gamma statistic for the specified subset of sites and distance.
         """
-        Gamma_U_D = self.calc_Gamma_U_D(U, D)
-        Gamma_U_D0 = self.calc_Gamma_U_D(U, [])
+        Gamma_U_D = self.calc_Gamma_U_D(
+            U, D, U_alleles=U_alleles, D_alleles=D_alleles
+        )
+        Gamma_U_D0 = self.calc_Gamma_U_D(
+            U,
+            [],
+            U_alleles=U_alleles,
+            D_alleles=[],
+        )
         gamma_U_D = Gamma_U_D / Gamma_U_D0
         return gamma_U_D
 
-    def calc_covariance_U_D(self, U, D):
+    def calc_covariance_U_D(self, U, D, U_alleles=None, D_alleles=None):
         """
         Compute the covariance in epistatic coefficients at sites U
         across genetic backgrounds differing at sites D.
@@ -407,8 +441,12 @@ class GPmapSummarizer:
         ----------
         U : tuple of int
             Subset of sites to consider epistatic coefficients.
-        D : int
+        D : tuple of int
             Subset of sites at which genetic backgrounds differ.
+        U_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites U to consider.
+        D_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites D to consider.
 
         Returns
         -------
@@ -416,12 +454,16 @@ class GPmapSummarizer:
             The covariance in epistatic coefficients for the specified
             subset of sites and distance.
         """
-        Gamma_U_D = self.calc_Gamma_U_D(U, D)
-        asmec = self.calc_U_avg_squared_mean_epistatic_coeff(U)
+        Gamma_U_D = self.calc_Gamma_U_D(
+            U, D, U_alleles=U_alleles, D_alleles=D_alleles
+        )
+        asmec = self.calc_U_avg_squared_mean_epistatic_coeff(
+            U, U_alleles=U_alleles
+        )
         covariance_U_D = Gamma_U_D - asmec
         return covariance_U_D
 
-    def calc_correlation_U_D(self, U, D):
+    def calc_correlation_U_D(self, U, D, U_alleles=None, D_alleles=None):
         """
         Compute the correlation in epistatic coefficients at sites U
         across genetic backgrounds differing at sites D.
@@ -430,8 +472,12 @@ class GPmapSummarizer:
         ----------
         U : tuple of int
             Subset of sites to consider epistatic coefficients.
-        D : int
+        D : tuple of int
             Subset of sites at which genetic backgrounds differ.
+        U_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites U to consider.
+        D_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites D to consider.
 
         Returns
         -------
@@ -439,16 +485,24 @@ class GPmapSummarizer:
             The correlation in epistatic coefficients for the specified
             subset of sites and distance.
         """
-        covariance_U_D = self.calc_covariance_U_D(U, D)
-        covariance_U_D0 = self.calc_covariance_U_D(U, [])
+        covariance_U_D = self.calc_covariance_U_D(
+            U, D, U_alleles=U_alleles, D_alleles=D_alleles
+        )
+        covariance_U_D0 = self.calc_covariance_U_D(
+            U, [], U_alleles=U_alleles, D_alleles=[]
+        )
         correlation_U_D = covariance_U_D / covariance_U_D0
         return correlation_U_D
 
     def calc_gamma_i_to_j(self):
         """
-        Compute the gamma statistic measuring the predictability of
-        mutational effects at site i across genetic backgrounds
-        differing at site j.
+        Compute the gamma statistic measuring the effect of mutations
+        at site i on the predictability of the effects of mutations at
+        site j as described by
+
+        Ferreti et al. (2016). Measuring epistasis in fitness landscapes:
+        The correlation of fitness effects of mutations. Journal of Theoretical
+        Biology. 10.1016/j.jtbi.2016.01.037
 
         Returns
         -------
@@ -479,6 +533,150 @@ class GPmapSummarizer:
                     "correlation": corr_ji,
                 }
             )
+
+        return pd.DataFrame(gammas)
+
+    def calc_gamma_ij_D(self, D):
+        """
+        Compute the gamma statistics measuring the effect of mutations D
+        on the predictability of local epistatic coefficients between every
+        possible pair of sites.
+
+        Parameters
+        ----------
+        D : list of int
+            Subset of sites at which genetic backgrounds differ.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with columns 'site_i', 'site_j', 'gamma', and 'correlation'
+            containing the gamma statistics for all pairs of sites.
+        """
+        gammas = []
+        positions = [i for i in range(self.seq_length) if i not in D]
+        for i, j in combinations(positions, 2):
+            gamma_ij = self.calc_gamma_U_D([i, j], D=D)
+            corr_ij = self.calc_correlation_U_D([i, j], D=D)
+            gammas.append(
+                {
+                    "site_i": i,
+                    "site_j": j,
+                    "gamma": gamma_ij,
+                    "correlation": corr_ij,
+                }
+            )
+
+        return pd.DataFrame(gammas)
+
+    def calc_gamma_AiBi_to_AjBj(self):
+        """
+        Compute the gamma statistic measuring the effect of mutation
+        A_i to B_i at position i on the predictability of the effect
+        of mutation A_j to B_j at position j as introduced by
+
+        Bank et al. (2016). On the (un)predictability of a large
+        intragenic fitness landscape. PNAS. 10.1073/pnas.1612676113
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with columns 'AiBi', 'AjBj', 'gamma', and 'correlation'
+            containing the gamma statistics for all pairs of sites.
+        """
+
+        gammas = []
+        mutations = list(combinations(range(self.n_alleles), 2))
+        for i, j in combinations(self.positions, 2):
+            for (A_i, B_i), (A_j, B_j) in product(mutations, repeat=2):
+                D_alleles = [(A_i, B_i)]
+                U_alleles = [(A_j, B_j)]
+                gamma_ij = self.calc_gamma_U_D(
+                    [i], [j], U_alleles=U_alleles, D_alleles=D_alleles
+                )
+                corr_ij = self.calc_correlation_U_D(
+                    [i], [j], U_alleles=U_alleles, D_alleles=D_alleles
+                )
+                gammas.append(
+                    {
+                        "site_i": i,
+                        "A_i": A_i,
+                        "B_i": B_i,
+                        "site_j": j,
+                        "A_j": A_j,
+                        "B_j": B_j,
+                        "gamma": gamma_ij,
+                        "correlation": corr_ij,
+                    }
+                )
+
+                U_alleles = [(A_i, B_i)]
+                D_alleles = [(A_j, B_j)]
+                gamma_ji = self.calc_gamma_U_D(
+                    [j], [i], U_alleles=U_alleles, D_alleles=D_alleles
+                )
+                corr_ji = self.calc_correlation_U_D(
+                    [j], [i], U_alleles=U_alleles, D_alleles=D_alleles
+                )
+                gammas.append(
+                    {
+                        "site_i": j,
+                        "A_i": A_j,
+                        "B_i": B_j,
+                        "site_j": i,
+                        "A_j": A_i,
+                        "B_j": B_i,
+                        "gamma": gamma_ji,
+                        "correlation": corr_ji,
+                    }
+                )
+
+        return pd.DataFrame(gammas)
+
+    def calc_gamma_AiBiAjBj_D(self, D, D_alleles):
+        """
+        Compute the gamma statistics measuring the effect of mutations at
+        sites D specified by D_alleles on the predictability of local
+        epistatic coefficients between every possible pair of mutations
+        at other sites.
+
+        Parameters
+        ----------
+        D : tuple of int
+            Subset of sites at which genetic backgrounds differ.
+        D_alleles : tuple of tuples of int, optional
+            Specific allele pairs at sites D to consider.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with columns 'site_i', 'site_j', 'gamma', and 'correlation'
+            containing the gamma statistics for all pairs of sites.
+        """
+        gammas = []
+        allele_pairs = list(combinations(range(self.n_alleles), 2))
+        positions = [i for i in range(self.seq_length) if i not in D]
+        for i, j in combinations(positions, 2):
+            for (A_i, B_i), (A_j, B_j) in product(allele_pairs, repeat=2):
+                U_alleles = [(A_i, B_i), (A_j, B_j)]
+                gamma = self.calc_gamma_U_D(
+                    [i, j], D=D, U_alleles=U_alleles, D_alleles=D_alleles
+                )
+                corr = self.calc_correlation_U_D(
+                    [i, j], D=D, U_alleles=U_alleles, D_alleles=D_alleles
+                )
+                gammas.append(
+                    {
+                        "site_i": i,
+                        "A_i": A_i,
+                        "B_i": B_i,
+                        "site_j": j,
+                        "A_j": A_j,
+                        "B_j": B_j,
+                        "gamma": gamma,
+                        "correlation": corr,
+                    }
+                )
 
         return pd.DataFrame(gammas)
 
