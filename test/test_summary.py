@@ -159,6 +159,16 @@ class GPmapSummaryTests(unittest.TestCase):
         asec_UD = self.summarizer.calc_U_avg_squared_epistatic_coeff(U + D)
         assert np.allclose(gamma_UD, 1 - (asec_UD / (2 * asec_U)))
     
+    def test_calc_gamma_U_D_order(self):
+        f = np.array([1, 0, -5, -4])
+        self.summarizer.set_f(f)
+        
+        gamma_1_to_2 = self.summarizer.calc_gamma_U_D([1], [0])
+        assert np.allclose(gamma_1_to_2, -1.)
+        
+        gamma_2_to_1 = self.summarizer.calc_gamma_U_D([0], [1])
+        assert np.allclose(gamma_2_to_1, 0.92307692)
+    
     def test_calc_gamma_U_D_random(self):
         f = np.random.normal(size=4)
         self.summarizer.set_f(f)
