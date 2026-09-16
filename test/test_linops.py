@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import unittest
 from itertools import combinations, product
 from time import time
@@ -37,11 +36,13 @@ from gpmap.linop import (
     PolynomialOperator,
     ProjectionOperator,
     SelIdxOperator,
+    SiteAlleleLaplacianOperator,
     SiteLaplacianOperator,
     StackedOperator,
     SubMatrixOperator,
     TriangularInverseOperator,
     VUBasisOperator,
+    VUMutationOperator,
     VUProjectionOperator,
     VUProjectionWeightedSumOperator,
 )
@@ -83,7 +84,7 @@ class LinOpsTests(unittest.TestCase):
         B = np.random.normal(size=(n, 2))
         U = P @ B
         assert np.allclose(U, B.mean(axis=0, keepdims=True))
-        
+
     def test_Padd_operator(self):
         n = 3
         P = PaddOperator(n)
@@ -97,7 +98,7 @@ class LinOpsTests(unittest.TestCase):
         B = np.random.normal(size=(n, 2))
         U = P @ B
         assert np.allclose(U.mean(axis=0), 0.0)
-    
+
     def test_PconPaddWeightedSumOperator(self):
         n = 3
         lda0, lda1 = 1.2, 0.5
@@ -128,6 +129,24 @@ class LinOpsTests(unittest.TestCase):
         U = L @ B
         assert np.allclose(U.mean(axis=0), 0.0)
         assert np.allclose(U, n * P @ B)
+
+    def test_site_allele_laplacian_operator(self):
+        n = 3
+        Delta = SiteAlleleLaplacianOperator(n, c1=0, c2=2)
+
+        # With a vector
+        v = np.random.normal(size=n)
+        u = Delta @ v
+        assert np.allclose(u[1], 0.0)
+        assert np.allclose(u[0], v[0] - v[2])
+        assert np.allclose(u[0], -u[2])
+
+        # With a matrix
+        B = np.random.normal(size=(n, 2))
+        U = Delta @ B
+        assert np.allclose(U[1, :], 0.0)
+        assert np.allclose(U[0, :], B[0, :] - B[2, :])
+        assert np.allclose(U[0, :], -U[2, :])
 
     def test_tri_inv_operator(self):
         A = np.tril(np.random.normal(size=(5, 5)))
@@ -291,14 +310,14 @@ class LinOpsTests(unittest.TestCase):
             n_alleles=2, seq_length=3, P=2, lambdas0=np.array([1, 1.0])
         )
         assert np.allclose(op.lambdas, [1, 1, 4, 12])
-    
+
     def test_deltaU_operator(self):
         a, sl = 2, 3
-        n = a ** sl
+        n = a**sl
         v = np.random.normal(size=n)
         DU = DeltaUOperator(a, sl, U=[0, 1])
         u1 = DU @ v
-        
+
         # Ensure equivalence with the dense matrix
         C0 = np.eye(a)
         C1 = a * np.eye(a) - np.ones((a, a))
@@ -327,7 +346,7 @@ class LinOpsTests(unittest.TestCase):
         u1 = A1 @ v
         u2 = A2 @ v
         assert np.allclose(u1, u2)
-    
+
     def test_deltaU_operator_equivalences(self):
         a, sl = 2, 3
         n = a**sl
@@ -522,6 +541,55 @@ class LinOpsTests(unittest.TestCase):
         exp = np.sum(P_U.dot(y) ** 2)
         fsqn = P_U.dot_square_norm(y)
         assert np.allclose(fsqn, exp)
+
+    def test_VU_mut_operator(self):
+        a, sl = 2, 2
+        f = np.array([-1.5, -0.5, 0.5, 1.5])
+
+        A = VUMutationOperator(a, sl, U=[0, 1], U_alleles=[(0, 1), (0, 1)])
+        q = quad(A, f)
+        assert np.allclose(q, 0.0)
+
+        A = VUMutationOperator(a, sl, U=[0], U_alleles=[(0, 1)])
+        q = quad(A, f)
+        assert np.allclose(q, 8.0)
+
+        A = VUMutationOperator(a, sl, U=[1], U_alleles=[(0, 1)])
+        q = quad(A, f)
+        assert np.allclose(q, 2.0)
+
+        # With multiple alleles
+        a, sl = 3, 2
+        f = np.array([-1.5, -0.5, 0.0, -1.5, -0.5, 0.0, -1.5, -0.5, 0.0])
+
+        A = VUMutationOperator(a, sl, U=[0, 1], U_alleles=[(0, 1), (0, 1)])
+        q = quad(A, f)
+        assert np.allclose(q, 0.0)
+
+        A = VUMutationOperator(a, sl, U=[0], U_alleles=[(0, 1)])
+        q = quad(A, f)
+        assert np.allclose(q, 0.0)
+
+        A = VUMutationOperator(a, sl, U=[1], U_alleles=[(0, 1)])
+        q = quad(A, f)
+        assert np.allclose(q, 3.0)
+
+        A = VUMutationOperator(a, sl, U=[1], U_alleles=[(0, 2)])
+        q = quad(A, f)
+        assert np.allclose(q, 3.0 * 1.5**2)
+
+        # In arbitrary landscapes use equivalence with PU
+        a, sl = 4, 8
+        f = np.random.normal(size=a**sl)
+        alleles = list(range(a))
+        q1 = 0.0
+        for c1, c2 in combinations(alleles, 2):
+            A = VUMutationOperator(a, sl, U=[0], U_alleles=[(c1, c2)])
+            q1 += quad(A, f)
+
+        P = VUProjectionOperator(a, sl, [0])
+        q2 = quad(P, f)
+        assert np.allclose(q1, a * q2)
 
     def test_vj_basis_operator(self):
         # Test in small case

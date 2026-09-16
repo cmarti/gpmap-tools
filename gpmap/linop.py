@@ -233,6 +233,9 @@ class DiagonalOperator(SymmetricOperator):
 
 class IdentityOperator(DiagonalOperator):
     def __init__(self, n):
+        if not isinstance(n, int) or n <= 0:
+            raise ValueError("n must be a positive integer")
+
         self.shape = (n, n)
         self._init_dtype()
 
@@ -248,6 +251,9 @@ class IdentityOperator(DiagonalOperator):
 
 class PconOperator(SymmetricOperator):
     def __init__(self, n):
+        if not isinstance(n, int) or n <= 0:
+            raise ValueError("n must be a positive integer")
+
         self.shape = (n, n)
         self._init_dtype()
 
@@ -260,6 +266,9 @@ class PconOperator(SymmetricOperator):
 
 class PonesOperator(SymmetricOperator):
     def __init__(self, n):
+        if not isinstance(n, int) or n <= 0:
+            raise ValueError("n must be a positive integer")
+
         self.shape = (n, n)
         self._init_dtype()
 
@@ -272,6 +281,9 @@ class PonesOperator(SymmetricOperator):
 
 class PaddOperator(SymmetricOperator):
     def __init__(self, n):
+        if not isinstance(n, int) or n <= 0:
+            raise ValueError("n must be a positive integer")
+
         self.shape = (n, n)
         self._init_dtype()
 
@@ -300,6 +312,9 @@ class PconPaddWeightedSumOperator(SymmetricOperator):
 
 class SiteLaplacianOperator(SymmetricOperator):
     def __init__(self, n):
+        if not isinstance(n, int) or n <= 0:
+            raise ValueError("n must be a positive integer")
+
         self.n = n
         self.shape = (n, n)
         self._init_dtype()
@@ -309,6 +324,42 @@ class SiteLaplacianOperator(SymmetricOperator):
 
     def _matmat(self, B):
         return self.n * B - np.tile(np.sum(B, axis=0), (B.shape[0], 1))
+
+
+class SiteAlleleLaplacianOperator(SymmetricOperator):
+    def __init__(self, n, c1, c2):
+        if not isinstance(n, int) or n <= 0:
+            raise ValueError("n must be a positive integer")
+
+        if not isinstance(c1, int):
+            raise TypeError("c1 must be an integer")
+        if c1 < 0 or c1 >= n:
+            raise ValueError("c1 must be between 0 and n-1")
+
+        if not isinstance(c2, int):
+            raise TypeError("c2 must be an integer")
+        if c2 < 0 or c2 >= n:
+            raise ValueError("c2 must be between 0 and n-1")
+
+        self.alpha = n
+        self.shape = (n, n)
+        self.c1 = c1
+        self.c2 = c2
+        self._init_dtype()
+
+    def _matvec(self, v):
+        u = np.zeros_like(v)
+        d = v[self.c1] - v[self.c2]
+        u[self.c1] = d
+        u[self.c2] = -d
+        return u
+
+    def _matmat(self, v):
+        u = np.zeros_like(v)
+        d = v[self.c1] - v[self.c2]
+        u[self.c1] = d
+        u[self.c2] = -d
+        return u
 
 
 class StackedOperator(ExtendedLinearOperator):
@@ -701,7 +752,9 @@ class DeltaUOperator(SeqOperator, KronOperator):
         self.P = len(U)
         SeqOperator.__init__(self, n_alleles=n_alleles, seq_length=seq_length)
         KronOperator.__init__(self, self.get_matrices())
-        self.n_U_faces = comb(self.alpha, 2) ** self.P * self.alpha ** (self.seq_length - self.P)
+        self.n_U_faces = comb(self.alpha, 2) ** self.P * self.alpha ** (
+            self.seq_length - self.P
+        )
         self.L = SiteLaplacianOperator(self.alpha)
 
     def get_matrices(self):
@@ -962,39 +1015,130 @@ class CovarianceSitesOperator(SeqOperator, KronOperator):
         C0 = IdentityOperator(self.alpha)
         C1 = np.ones((self.alpha, self.alpha)) - np.eye(self.alpha)
         return [C1 if i in self.sites else C0 for i in range(self.seq_length)]
-    
+
 
 class DeltaUDOperator(SeqOperator, KronOperator):
     symmetric = True
 
-    def __init__(self, n_alleles, seq_length, U, D):
-        k, d = len(U), len(D)
+    def __init__(
+        self, n_alleles, seq_length, U, D, U_alleles=None, D_alleles=None
+    ):
+        self.U = U
+        self.D = D
+        self.k, self.d = len(U), len(D)
+        sites = list(range(seq_length))
+
         if len(set(U).intersection(set(D))) > 0:
             msg = "U and D must be disjoint sets"
             raise ValueError(msg)
-        sites = list(range(seq_length))
-        if len(set(sites).intersection(set(D))) > seq_length or d > seq_length:
+
+        if (
+            len(set(sites).intersection(set(D))) > seq_length
+            or self.d > seq_length
+        ):
             msg = "D must be a subset of the sites"
             raise ValueError(msg)
-        if len(set(sites).intersection(set(U))) > seq_length or k > seq_length:
+
+        if (
+            len(set(sites).intersection(set(U))) > seq_length
+            or self.k > seq_length
+        ):
             msg = "U must be a subset of the sites"
             raise ValueError(msg)
-        
+
+        if U_alleles is not None:
+            if len(U_alleles) != self.k:
+                msg = "U_alleles must have the same length as U"
+                raise ValueError(msg)
+            if any(len(a) != 2 for a in U_alleles):
+                msg = "Each element of U_alleles must have length 2"
+                raise ValueError(msg)
+
+        if D_alleles is not None:
+            if len(D_alleles) != self.d:
+                msg = "D_alleles must have the same length as D"
+                raise ValueError(msg)
+            if any(len(a) != 2 for a in D_alleles):
+                msg = "Each element of D_alleles must have length 2"
+                raise ValueError(msg)
+
         SeqOperator.__init__(self, n_alleles, seq_length)
-        self.U = U
-        self.D = D
-        self.c = 2 ** len(U) / (self.alpha ** self.seq_length * (self.alpha - 1) ** (len(D) + len(U)))
+
+        self.U_alleles = U_alleles
+        self.D_alleles = D_alleles
+
+        self.n_backgrounds = self.alpha ** (self.seq_length - self.k - self.d)
+        self.n_epistatic_coeffs = (
+            comb(self.alpha, 2) ** self.k if self.U_alleles is None else 1.0
+        )
+        self.n_D = (
+            (self.alpha * (self.alpha - 1)) ** self.d
+            if self.D_alleles is None
+            else 2**self.d
+        )
+        self.n_total = self.n_backgrounds * self.n_epistatic_coeffs * self.n_D
+        self.c = 1.0 / self.n_total
+
         KronOperator.__init__(self, self.get_matrices())
 
     def get_matrices(self):
         matrices = []
         for site in range(self.seq_length):
             if site in self.U:
-                m = self.alpha * PaddOperator(self.alpha)
+                if self.U_alleles is None:
+                    m = self.alpha * PaddOperator(self.alpha)
+                else:
+                    site_idx = self.U.index(site)
+                    a1, a2 = self.U_alleles[site_idx]
+                    m = np.zeros((self.alpha, self.alpha))
+                    m[a1, a1] = 1.0
+                    m[a2, a2] = 1.0
+                    m[a1, a2] = -1.0
+                    m[a2, a1] = -1.0
+
             elif site in self.D:
-                m = PonesOperator(self.alpha) - IdentityOperator(self.alpha)
+                if self.D_alleles is None:
+                    m = PonesOperator(self.alpha) - IdentityOperator(self.alpha)
+                else:
+                    site_idx = self.D.index(site)
+                    a1, a2 = self.D_alleles[site_idx]
+                    m = np.zeros((self.alpha, self.alpha))
+                    m[a1, a2] = 1.0
+                    m[a2, a1] = 1.0
+
             else:
                 m = IdentityOperator(self.alpha)
+            matrices.append(m)
+        return matrices
+
+
+class VUMutationOperator(KronOperator):
+    def __init__(self, n_alleles, seq_length, U, U_alleles):
+        self.U = U
+        self.no_U = tuple([i for i in range(seq_length) if i not in self.U])
+        self.k = len(U)
+        self.U_alleles = U_alleles
+        if len(U_alleles) != self.k:
+            msg = "U_alleles must have the same length as U"
+            raise ValueError(msg)
+        if any(len(a) != 2 for a in U_alleles):
+            msg = "Each element of U_alleles must have length 2"
+            raise ValueError(msg)
+
+        self.alpha = n_alleles
+        self.seq_length = seq_length
+        KronOperator.__init__(self, self.get_matrices())
+        self.dim = self.alpha ** (self.seq_length - self.k)
+
+    def get_matrices(self):
+        matrices = []
+        for site in range(self.seq_length):
+            if site in self.U:
+                idx = self.U.index(site)
+                c1, c2 = self.U_alleles[idx]
+                m = SiteAlleleLaplacianOperator(self.alpha, c1=c1, c2=c2)
+            else:
+                m = PconOperator(self.alpha)
             matrices.append(m)
         return matrices
 
@@ -1043,7 +1187,7 @@ class VUProjectionOperator(VUOperator):
             A = KronOperator([self.W1] * self.k)
             sqnorm = self.repeats * np.sum((A @ u.flatten()) ** 2)
         return sqnorm
-    
+
     def _matvec(self, v):
         t = self.contract_v(v)
         u = np.zeros_like(t)
@@ -1110,9 +1254,7 @@ class VUProjectionWeightedSumOperator(SeqOperator, SymmetricOperator):
 
     def _matvec(self, v):
         if self.lambdas is None:
-            msg = (
-                "lambdas must be defined for computing matrix-vector products"
-            )
+            msg = "lambdas must be defined for computing matrix-vector products"
             raise ValueError(msg)
 
         self.cached_matvecs = [None] * self.seq_length
